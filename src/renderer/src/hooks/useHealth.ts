@@ -1,13 +1,13 @@
 // Query hooks over the main process's domain-split health queries.
 //
-// TanStack Query gives every card its own cache entry: cached data renders
-// instantly (stale-while-revalidate), date changes keep the previous window
-// on screen while the new one loads, and a global refresh invalidates
-// everything after the main process drops its freshness markers.
+// TanStack Query gives every card its own cache entry: data already cached for
+// the selected date renders instantly, uncached dates show their skeletons,
+// and a global refresh invalidates everything after the main process drops its
+// freshness markers. We deliberately do not borrow data from another query
+// key: showing the previous date under a new date label is misleading.
 
 import { useCallback, useEffect, useState } from 'react'
 import {
-  keepPreviousData,
   useIsFetching,
   useQuery,
   useQueryClient,
@@ -30,8 +30,7 @@ export function useSeries(metrics: MetricKey[], start: string, end: string): Use
   return useQuery({
     queryKey: ['series', start, end, metrics.join('|')],
     queryFn: () => window.pulse.health.series(metrics, start, end),
-    staleTime: STALE_MS,
-    placeholderData: keepPreviousData
+    staleTime: STALE_MS
   })
 }
 
@@ -39,8 +38,7 @@ export function useSleepRange(start: string, end: string): UseQueryResult<SleepN
   return useQuery({
     queryKey: ['sleep', start, end],
     queryFn: async () => (await window.pulse.health.sleepRange(start, end)).nights,
-    staleTime: STALE_MS,
-    placeholderData: keepPreviousData
+    staleTime: STALE_MS
   })
 }
 
@@ -51,8 +49,7 @@ export function useSleepNight(date: string): UseQueryResult<SleepNight | null> {
       const result = await window.pulse.health.sleepRange(date, date)
       return result.nights.find((n) => n.date === date) ?? null
     },
-    staleTime: STALE_MS,
-    placeholderData: keepPreviousData
+    staleTime: STALE_MS
   })
 }
 
@@ -60,8 +57,7 @@ export function useWorkouts(start: string, end: string): UseQueryResult<Workout[
   return useQuery({
     queryKey: ['workouts', start, end],
     queryFn: async () => (await window.pulse.health.workouts(start, end)).workouts,
-    staleTime: STALE_MS,
-    placeholderData: keepPreviousData
+    staleTime: STALE_MS
   })
 }
 
@@ -69,8 +65,7 @@ export function useIntraday(date: string): UseQueryResult<IntradaySnapshot> {
   return useQuery({
     queryKey: ['intraday', date],
     queryFn: () => window.pulse.health.intraday(date),
-    staleTime: STALE_MS,
-    placeholderData: keepPreviousData
+    staleTime: STALE_MS
   })
 }
 

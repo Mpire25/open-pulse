@@ -3,7 +3,7 @@ import { Heartbeat } from '@phosphor-icons/react'
 import { Panel, DrillHeader } from '@/components/Panel'
 import { IntradayLine, TrendLine } from '@/components/charts'
 import { DeltaChip } from '@/components/DeltaChip'
-import { Skeleton } from '@/components/Skeleton'
+import { CARD_HEIGHT, Skeleton } from '@/components/Skeleton'
 import { ErrorState } from '@/components/ErrorState'
 import { useIntraday, useSeries } from '@/hooks/useHealth'
 import { METRICS } from '@/lib/metric-registry'
@@ -11,7 +11,6 @@ import { baseline, baselineDeltaPct, metricAbsent, rangeEnding, seriesPoints } f
 import { longDate, shortDate, weekdayShort } from '@/lib/format'
 import { fade } from '@/lib/motion'
 import type { MetricKey } from '@shared/types'
-import { cn } from '@/lib/utils'
 
 const VITAL_KEYS: MetricKey[] = ['restingHeartRate', 'hrvMs', 'spo2Pct', 'breathingRate', 'skinTempDeltaC', 'vo2Max']
 
@@ -30,12 +29,11 @@ export function HeartView({ date, onOpenMetric }: HeartViewProps): React.JSX.Ele
   }
 
   const days = series.data?.days
-  const dim = series.isPlaceholderData
   const pointsFor = (key: MetricKey) => seriesPoints(days, key, start, end)
   const visible = series.data ? VITAL_KEYS.filter((key) => !metricAbsent(pointsFor(key))) : []
 
   return (
-    <div className={cn('mx-auto flex max-w-[1180px] flex-col gap-5 px-8 pb-12 transition-opacity duration-300', dim && 'opacity-60')}>
+    <div className="mx-auto flex max-w-[1180px] flex-col gap-5 px-8 pb-12">
       <motion.header custom={0} variants={fade} initial="hidden" animate="show" className="pt-2">
         <h1 className="display text-[27px] font-bold text-ink">Heart</h1>
         <p className="mt-1 text-[13px] text-ink-dim">{longDate(date)}</p>
@@ -44,9 +42,9 @@ export function HeartView({ date, onOpenMetric }: HeartViewProps): React.JSX.Ele
       {/* Intraday heart rate */}
       <motion.div custom={1} variants={fade} initial="hidden" animate="show">
         {intraday.isPending ? (
-          <Skeleton className="h-64" />
+          <Skeleton className={CARD_HEIGHT.large} />
         ) : intraday.data && intraday.data.heartRate.length > 1 ? (
-          <Panel className="flex flex-col gap-4 p-6">
+          <Panel className={`flex flex-col gap-4 p-6 ${CARD_HEIGHT.large}`}>
             <DrillHeader
               title="Heart rate"
               hint="Across the day"
@@ -73,10 +71,10 @@ export function HeartView({ date, onOpenMetric }: HeartViewProps): React.JSX.Ele
 
       {series.isPending ? (
         <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-          <Skeleton className="h-56" />
-          <Skeleton className="h-56" />
-          <Skeleton className="h-56" />
-          <Skeleton className="h-56" />
+          <Skeleton className={CARD_HEIGHT.chart} />
+          <Skeleton className={CARD_HEIGHT.chart} />
+          <Skeleton className={CARD_HEIGHT.chart} />
+          <Skeleton className={CARD_HEIGHT.chart} />
         </div>
       ) : visible.length === 0 && (intraday.data?.heartRate.length ?? 0) <= 1 ? (
         <Panel className="grid place-items-center p-12 text-[13px] text-ink-faint">
@@ -119,7 +117,7 @@ function VitalCard({
   const Icon = def.icon
   return (
     <motion.div custom={index} variants={fade} initial="hidden" animate="show">
-      <Panel className="flex flex-col gap-4 p-6">
+      <Panel className={`flex flex-col gap-4 p-6 ${CARD_HEIGHT.chart}`}>
         <DrillHeader
           title={def.label}
           hint={def.hint}

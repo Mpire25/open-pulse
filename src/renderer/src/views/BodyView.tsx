@@ -1,7 +1,7 @@
 import { motion } from 'framer-motion'
 import { Panel, DrillHeader } from '@/components/Panel'
 import { TrendLine } from '@/components/charts'
-import { Skeleton } from '@/components/Skeleton'
+import { CARD_HEIGHT, Skeleton } from '@/components/Skeleton'
 import { ErrorState } from '@/components/ErrorState'
 import { useSeries } from '@/hooks/useHealth'
 import { METRICS } from '@/lib/metric-registry'
@@ -9,7 +9,6 @@ import { latestPoint, metricAbsent, rangeEnding, seriesPoints } from '@/lib/metr
 import { longDate, shortDate, weekdayShort } from '@/lib/format'
 import { fade } from '@/lib/motion'
 import type { MetricKey } from '@shared/types'
-import { cn } from '@/lib/utils'
 
 const BODY_KEYS: MetricKey[] = ['weightKg', 'bodyFatPct']
 
@@ -29,12 +28,11 @@ export function BodyView({ date, onOpenMetric }: BodyViewProps): React.JSX.Eleme
   }
 
   const days = series.data?.days
-  const dim = series.isPlaceholderData
   const pointsFor = (key: MetricKey) => seriesPoints(days, key, start, end)
   const visible = series.data ? BODY_KEYS.filter((key) => !metricAbsent(pointsFor(key))) : []
 
   return (
-    <div className={cn('mx-auto flex max-w-[1180px] flex-col gap-5 px-8 pb-12 transition-opacity duration-300', dim && 'opacity-60')}>
+    <div className="mx-auto flex max-w-[1180px] flex-col gap-5 px-8 pb-12">
       <motion.header custom={0} variants={fade} initial="hidden" animate="show" className="pt-2">
         <h1 className="display text-[27px] font-bold text-ink">Body</h1>
         <p className="mt-1 text-[13px] text-ink-dim">{longDate(date)} · last 30 days of measurements</p>
@@ -42,8 +40,8 @@ export function BodyView({ date, onOpenMetric }: BodyViewProps): React.JSX.Eleme
 
       {series.isPending ? (
         <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-          <Skeleton className="h-60" />
-          <Skeleton className="h-60" />
+          <Skeleton className={CARD_HEIGHT.chart} />
+          <Skeleton className={CARD_HEIGHT.chart} />
         </div>
       ) : visible.length === 0 ? (
         <Panel className="grid place-items-center p-12 text-center text-[13px] leading-relaxed text-ink-faint">
@@ -58,7 +56,7 @@ export function BodyView({ date, onOpenMetric }: BodyViewProps): React.JSX.Eleme
             const Icon = def.icon
             return (
               <motion.div key={key} custom={i + 1} variants={fade} initial="hidden" animate="show">
-                <Panel className="flex flex-col gap-4 p-6">
+                <Panel className={`flex flex-col gap-4 p-6 ${CARD_HEIGHT.chart}`}>
                   <DrillHeader
                     title={def.label}
                     hint={def.hint}

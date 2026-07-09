@@ -17,7 +17,7 @@ import {
 } from '@phosphor-icons/react'
 import { useQueryClient } from '@tanstack/react-query'
 import { Panel, SectionHeader } from '@/components/Panel'
-import { Skeleton } from '@/components/Skeleton'
+import { CARD_HEIGHT, Skeleton } from '@/components/Skeleton'
 import { useDevices, useSeries } from '@/hooks/useHealth'
 import { METRICS } from '@/lib/metric-registry'
 import { metricAbsent, rangeEnding, seriesPoints } from '@/lib/metrics'
@@ -76,7 +76,7 @@ export function DevicesView({ connected }: DevicesViewProps): React.JSX.Element 
         {/* Product hero */}
         <motion.div custom={1} variants={fade} initial="hidden" animate="show">
           {devices.isPending ? (
-            <Skeleton className="h-[380px]" />
+            <Skeleton className={CARD_HEIGHT.device} />
           ) : device ? (
             <DeviceHero device={device} connected={connected} />
           ) : (
@@ -89,9 +89,9 @@ export function DevicesView({ connected }: DevicesViewProps): React.JSX.Element 
         {/* Data coverage */}
         <motion.div custom={2} variants={fade} initial="hidden" animate="show">
           {series.isPending ? (
-            <Skeleton className="h-[380px]" />
+            <Skeleton className={CARD_HEIGHT.device} />
           ) : (
-            <Panel className="flex h-full flex-col p-6">
+            <Panel className={`flex h-full flex-col p-6 ${CARD_HEIGHT.device}`}>
               <SectionHeader
                 title="Data coverage"
                 hint="What arrived over the last 7 days"

@@ -3,13 +3,12 @@ import { Moon, Bed, Timer } from '@phosphor-icons/react'
 import { Panel, DrillHeader } from '@/components/Panel'
 import { ColumnChart, ProgressRing, TrendLine } from '@/components/charts'
 import { SleepStages, STAGE_COLOR } from '@/components/SleepStages'
-import { Skeleton } from '@/components/Skeleton'
+import { CARD_HEIGHT, Skeleton } from '@/components/Skeleton'
 import { useSleepRange } from '@/hooks/useHealth'
 import { listDates, rangeEnding } from '@/lib/metrics'
 import { formatMinutes, longDate, shortDate, weekdayShort } from '@/lib/format'
 import { fade } from '@/lib/motion'
 import type { Goals, MetricKey, SleepNight } from '@shared/types'
-import { cn } from '@/lib/utils'
 
 interface SleepViewProps {
   date: string
@@ -21,7 +20,6 @@ export function SleepView({ date, goals, onOpenMetric }: SleepViewProps): React.
   const { start, end } = rangeEnding(date, 7)
   const nights = useSleepRange(start, end)
 
-  const dim = nights.isPlaceholderData
   const byDate = new Map((nights.data ?? []).map((n) => [n.date, n]))
   const night = byDate.get(date) ?? null
   const recorded = nights.data?.filter((n) => n.minutesAsleep > 0) ?? []
@@ -32,7 +30,7 @@ export function SleepView({ date, goals, onOpenMetric }: SleepViewProps): React.
   const dates = listDates(start, end)
 
   return (
-    <div className={cn('mx-auto flex max-w-[1180px] flex-col gap-5 px-8 pb-12 transition-opacity duration-300', dim && 'opacity-60')}>
+    <div className="mx-auto flex max-w-[1180px] flex-col gap-5 px-8 pb-12">
       <motion.header custom={0} variants={fade} initial="hidden" animate="show" className="pt-2">
         <h1 className="display text-[27px] font-bold text-ink">Sleep</h1>
         <p className="mt-1 text-[13px] text-ink-dim">
@@ -44,9 +42,9 @@ export function SleepView({ date, goals, onOpenMetric }: SleepViewProps): React.
       {/* Selected night */}
       <motion.div custom={1} variants={fade} initial="hidden" animate="show">
         {nights.isPending ? (
-          <Skeleton className="h-64" />
+          <Skeleton className={CARD_HEIGHT.detail} />
         ) : night ? (
-          <Panel className="grid grid-cols-1 gap-8 p-7 lg:grid-cols-[auto_1fr]">
+          <Panel className={`grid grid-cols-1 gap-8 p-7 lg:grid-cols-[auto_1fr] ${CARD_HEIGHT.detail}`}>
             <div className="flex flex-col items-center justify-center gap-3">
               <ProgressRing
                 value={night.minutesAsleep}
@@ -95,14 +93,14 @@ export function SleepView({ date, goals, onOpenMetric }: SleepViewProps): React.
 
       {nights.isPending ? (
         <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-          <Skeleton className="h-56" />
-          <Skeleton className="h-56" />
+          <Skeleton className={CARD_HEIGHT.chart} />
+          <Skeleton className={CARD_HEIGHT.chart} />
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
           {/* Duration trend */}
           <motion.div custom={2} variants={fade} initial="hidden" animate="show">
-            <Panel className="flex h-full flex-col gap-4 p-6">
+            <Panel className={`flex h-full flex-col gap-4 p-6 ${CARD_HEIGHT.chart}`}>
               <DrillHeader
                 title="Duration"
                 hint="Last 7 nights"
@@ -129,7 +127,7 @@ export function SleepView({ date, goals, onOpenMetric }: SleepViewProps): React.
 
           {/* Efficiency trend */}
           <motion.div custom={3} variants={fade} initial="hidden" animate="show">
-            <Panel className="flex h-full flex-col gap-4 p-6">
+            <Panel className={`flex h-full flex-col gap-4 p-6 ${CARD_HEIGHT.chart}`}>
               <DrillHeader
                 title="Efficiency"
                 hint="Share of the night actually asleep"

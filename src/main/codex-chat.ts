@@ -9,7 +9,7 @@ import { getCodexTokens } from './codex-auth'
 import { getDevices, getHealthDay, getSleepHistory } from './health-service'
 
 const CODEX_URL = 'https://chatgpt.com/backend-api/codex/responses'
-const MODEL = 'gpt-5.1-codex'
+const MODEL = 'gpt-5.6-terra'
 const MAX_TOOL_TURNS = 8
 
 const INSTRUCTIONS = `You are OpenPulse, the built-in health assistant of a macOS app that displays the user's Google Fitbit Air data (via the Google Health API).
@@ -171,11 +171,13 @@ export async function runChat(
 
       if (!resp.ok || !resp.body) {
         const detail = await resp.text().catch(() => '')
-        throw new Error(
-          resp.status === 401
-            ? 'ChatGPT session expired. Reconnect in Settings.'
-            : `Codex request failed (${resp.status}): ${detail.slice(0, 300)}`
-        )
+        if (resp.status === 401) throw new Error('ChatGPT session expired. Reconnect in Settings.')
+        if (resp.status === 400 && /model.+not supported/i.test(detail)) {
+          throw new Error(
+            `${MODEL} is not enabled for this ChatGPT account yet. The model request was sent correctly, but the account rejected it.`
+          )
+        }
+        throw new Error(`Codex request failed (${resp.status}): ${detail.slice(0, 300)}`)
       }
 
       const functionCalls: FunctionCallItem[] = []

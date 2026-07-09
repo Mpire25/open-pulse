@@ -3,7 +3,7 @@ import { Barbell, Footprints } from '@phosphor-icons/react'
 import { Panel, DrillHeader, SectionHeader } from '@/components/Panel'
 import { ColumnChart } from '@/components/charts'
 import { MetricStat } from '@/components/MetricStat'
-import { Skeleton } from '@/components/Skeleton'
+import { CARD_HEIGHT, Skeleton } from '@/components/Skeleton'
 import { ErrorState } from '@/components/ErrorState'
 import { WorkoutList } from '@/components/WorkoutList'
 import { useIntraday, useSeries, useWorkouts } from '@/hooks/useHealth'
@@ -12,7 +12,6 @@ import { baseline, baselineDeltaPct, pointValues, rangeEnding, seriesPoints } fr
 import { formatHour, formatInt, longDate, weekdayShort } from '@/lib/format'
 import { fade } from '@/lib/motion'
 import type { Goals, MetricKey } from '@shared/types'
-import { cn } from '@/lib/utils'
 
 const ACTIVITY_METRICS: MetricKey[] = [
   'steps',
@@ -40,7 +39,6 @@ export function ActivityView({ date, goals, onOpenMetric }: ActivityViewProps): 
   }
 
   const days = series.data?.days
-  const dim = series.isPlaceholderData
   const pointsFor = (key: MetricKey) => seriesPoints(days, key, start, end)
   const emphasis = 6 // the selected day is the last of the 7-day window
 
@@ -49,7 +47,7 @@ export function ActivityView({ date, goals, onOpenMetric }: ActivityViewProps): 
     const points = pointsFor(key)
     return (
       <motion.div key={key} custom={index} variants={fade} initial="hidden" animate="show">
-        <Panel className="flex h-full flex-col gap-5 p-6">
+        <Panel className={`flex h-full flex-col gap-5 p-6 ${CARD_HEIGHT.chart}`}>
           <DrillHeader
             title={def.label}
             hint="Last 7 days"
@@ -77,7 +75,7 @@ export function ActivityView({ date, goals, onOpenMetric }: ActivityViewProps): 
   }
 
   return (
-    <div className={cn('mx-auto flex max-w-[1180px] flex-col gap-5 px-8 pb-12 transition-opacity duration-300', dim && 'opacity-60')}>
+    <div className="mx-auto flex max-w-[1180px] flex-col gap-5 px-8 pb-12">
       <motion.header custom={0} variants={fade} initial="hidden" animate="show" className="pt-2">
         <h1 className="display text-[27px] font-bold text-ink">Activity</h1>
         <p className="mt-1 text-[13px] text-ink-dim">{longDate(date)}</p>
@@ -86,9 +84,9 @@ export function ActivityView({ date, goals, onOpenMetric }: ActivityViewProps): 
       {/* Day totals */}
       <motion.div custom={1} variants={fade} initial="hidden" animate="show">
         {series.isPending ? (
-          <Skeleton className="h-28" />
+          <Skeleton className={CARD_HEIGHT.compact} />
         ) : (
-          <Panel className="grid grid-cols-2 divide-x divide-y divide-hairline overflow-hidden sm:grid-cols-3 lg:grid-cols-6 lg:divide-y-0">
+          <Panel className={`grid grid-cols-2 divide-x divide-y divide-hairline overflow-hidden sm:grid-cols-3 lg:grid-cols-6 lg:divide-y-0 ${CARD_HEIGHT.compact}`}>
             {ACTIVITY_METRICS.map((key) => {
               const def = METRICS[key]
               const points = pointsFor(key)
@@ -116,9 +114,9 @@ export function ActivityView({ date, goals, onOpenMetric }: ActivityViewProps): 
         {/* Hourly movement */}
         <motion.div custom={2} variants={fade} initial="hidden" animate="show">
           {intraday.isPending ? (
-            <Skeleton className="h-60" />
+            <Skeleton className={CARD_HEIGHT.large} />
           ) : (
-            <Panel className="flex h-full flex-col gap-4 p-6">
+            <Panel className={`flex h-full flex-col gap-4 p-6 ${CARD_HEIGHT.large}`}>
               <DrillHeader
                 title="Hourly steps"
                 hint="When did you move?"
@@ -150,9 +148,9 @@ export function ActivityView({ date, goals, onOpenMetric }: ActivityViewProps): 
         {/* Workouts */}
         <motion.div custom={3} variants={fade} initial="hidden" animate="show">
           {workouts.isPending ? (
-            <Skeleton className="h-60" />
+            <Skeleton className={CARD_HEIGHT.large} />
           ) : (
-            <Panel className="flex h-full flex-col gap-2 p-5">
+            <Panel className={`flex h-full flex-col gap-2 p-5 ${CARD_HEIGHT.large}`}>
               <SectionHeader
                 title="Workouts"
                 hint={
@@ -177,8 +175,8 @@ export function ActivityView({ date, goals, onOpenMetric }: ActivityViewProps): 
       {/* 7-day trends */}
       {series.isPending ? (
         <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-          <Skeleton className="h-56" />
-          <Skeleton className="h-56" />
+          <Skeleton className={CARD_HEIGHT.chart} />
+          <Skeleton className={CARD_HEIGHT.chart} />
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">

@@ -4,7 +4,7 @@ import { Panel, DrillHeader, SectionHeader } from '@/components/Panel'
 import { ColumnChart, ProgressRing } from '@/components/charts'
 import { MetricStat } from '@/components/MetricStat'
 import { SleepStages } from '@/components/SleepStages'
-import { Skeleton } from '@/components/Skeleton'
+import { CARD_HEIGHT, Skeleton } from '@/components/Skeleton'
 import { ErrorState } from '@/components/ErrorState'
 import { WorkoutList } from '@/components/WorkoutList'
 import type { View } from '@/components/Sidebar'
@@ -14,7 +14,6 @@ import { baseline, baselineDeltaPct, metricAbsent, pointValues, rangeEnding, ser
 import { formatClock, formatHour, formatInt, formatMinutes, greeting, isoToday, longDate } from '@/lib/format'
 import { fade } from '@/lib/motion'
 import type { Goals, MetricKey } from '@shared/types'
-import { cn } from '@/lib/utils'
 
 const HOME_METRICS: MetricKey[] = [
   'steps',
@@ -45,7 +44,6 @@ export function HomeView({ date, goals, onOpenMetric, onNavigate }: HomeViewProp
   const intraday = useIntraday(date)
 
   const isToday = date === isoToday()
-  const dim = series.isPlaceholderData
 
   if (series.isError) {
     return <ErrorState message={series.error instanceof Error ? series.error.message : undefined} onRetry={() => void series.refetch()} />
@@ -57,7 +55,7 @@ export function HomeView({ date, goals, onOpenMetric, onNavigate }: HomeViewProp
   const rhrBase = baseline(pointsFor('restingHeartRate'), date)
 
   return (
-    <div className={cn('mx-auto flex max-w-[1180px] flex-col gap-5 px-8 pb-12 transition-opacity duration-300', dim && 'opacity-60')}>
+    <div className="mx-auto flex max-w-[1180px] flex-col gap-5 px-8 pb-12">
       <motion.header custom={0} variants={fade} initial="hidden" animate="show" className="pt-2">
         <p className="text-[13px] font-medium text-ink-dim">{isToday ? greeting() : 'Reviewing'}</p>
         <h1 className="display mt-1 text-[27px] font-bold text-ink">{longDate(date)}</h1>
@@ -66,9 +64,9 @@ export function HomeView({ date, goals, onOpenMetric, onNavigate }: HomeViewProp
       {/* Hero: goal rings + how the night set the day up */}
       <motion.div custom={1} variants={fade} initial="hidden" animate="show">
         {series.isPending ? (
-          <Skeleton className="h-56" />
+          <Skeleton className={CARD_HEIGHT.hero} />
         ) : (
-          <Panel className="grid grid-cols-1 gap-6 p-6 lg:grid-cols-[1fr_auto]">
+          <Panel className={`grid grid-cols-1 gap-6 p-6 lg:grid-cols-[1fr_auto] ${CARD_HEIGHT.hero}`}>
             <div className="flex flex-wrap items-center justify-around gap-6">
               <GoalRing value={today.steps ?? null} goal={goals.steps} metricKey="steps" onOpen={onOpenMetric} />
               <GoalRing value={today.caloriesOut ?? null} goal={goals.caloriesOut} metricKey="caloriesOut" onOpen={onOpenMetric} />
@@ -125,9 +123,9 @@ export function HomeView({ date, goals, onOpenMetric, onNavigate }: HomeViewProp
         {/* Daily movement */}
         <motion.div custom={2} variants={fade} initial="hidden" animate="show">
           {intraday.isPending ? (
-            <Skeleton className="h-56" />
+            <Skeleton className={CARD_HEIGHT.large} />
           ) : (
-            <Panel className="flex h-full flex-col gap-4 p-6">
+            <Panel className={`flex h-full flex-col gap-4 p-6 ${CARD_HEIGHT.large}`}>
               <DrillHeader
                 title="Daily movement"
                 hint="Steps per hour"
@@ -160,9 +158,9 @@ export function HomeView({ date, goals, onOpenMetric, onNavigate }: HomeViewProp
         {/* Last night */}
         <motion.div custom={3} variants={fade} initial="hidden" animate="show">
           {night.isPending ? (
-            <Skeleton className="h-56" />
+            <Skeleton className={CARD_HEIGHT.large} />
           ) : (
-            <Panel className="flex h-full flex-col gap-4 p-6">
+            <Panel className={`flex h-full flex-col gap-4 p-6 ${CARD_HEIGHT.large}`}>
               <DrillHeader
                 title="Sleep"
                 hint={
@@ -188,7 +186,7 @@ export function HomeView({ date, goals, onOpenMetric, onNavigate }: HomeViewProp
       {/* Night signals vs personal baseline */}
       <motion.div custom={4} variants={fade} initial="hidden" animate="show">
         {series.isPending ? (
-          <Skeleton className="h-36" />
+          <Skeleton className={CARD_HEIGHT.summary} />
         ) : (
           <SignalsPanel date={date} pointsFor={pointsFor} today={todayValue(days, date)} onOpenMetric={onOpenMetric} />
         )}
@@ -224,7 +222,7 @@ function SignalsPanel({
   const visible = SIGNAL_KEYS.filter((key) => !metricAbsent(pointsFor(key)))
   if (visible.length === 0) return null
   return (
-    <Panel className="overflow-hidden">
+    <Panel className={`overflow-hidden ${CARD_HEIGHT.summary}`}>
       <div className="border-b border-hairline px-5 pb-3 pt-4">
         <SectionHeader title="Night signals" hint="Compared with your own recent baseline" />
       </div>

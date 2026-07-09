@@ -50,6 +50,7 @@ import {
   setWorkouts
 } from './metric-store'
 import { demoDevices, demoIntraday, demoSeries, demoSleepRange, demoWorkoutsRange } from './sample-data'
+import { nutrientGrams } from './nutrition'
 
 // ---------------------------------------------------------------------------
 // Dates & freshness
@@ -167,15 +168,6 @@ function dailyRecordGroup(
   }
 }
 
-// Nutrition rollups: energy is documented; macro fields vary by logger, so
-// probe a few plausible shapes and keep whatever answers.
-function nutrientSum(node: unknown): number | null {
-  if (node == null) return null
-  if (typeof node === 'number' || typeof node === 'string') return num(node)
-  const rec = node as Record<string, unknown>
-  return num(rec.gramsSum ?? rec.sum ?? rec.valueSum ?? rec.amountSum ?? rec.milligramsSum)
-}
-
 const GROUPS: FetchGroup[] = [
   rollupGroup('steps', 'steps', ['steps'], (p) => ({
     steps: num((p.steps as { countSum?: string })?.countSum)
@@ -227,7 +219,9 @@ const GROUPS: FetchGroup[] = [
     )
   })),
   rollupGroup(
-    'nutrition',
+    // Versioned so installs that cached a missing Protein value with the old
+    // parser refetch nutrition once and repair the archived day automatically.
+    'nutrition-v2',
     'nutrition-log',
     ['caloriesIn', 'proteinG', 'carbsG', 'fatG', 'fiberG', 'sugarG'],
     (p) => {
@@ -235,11 +229,11 @@ const GROUPS: FetchGroup[] = [
       if (!log) return { caloriesIn: null, proteinG: null, carbsG: null, fatG: null, fiberG: null, sugarG: null }
       return {
         caloriesIn: num((log.energy as { kcalSum?: number } | undefined)?.kcalSum),
-        proteinG: nutrientSum(log.protein),
-        carbsG: nutrientSum(log.carbohydrate ?? log.totalCarbohydrate ?? log.carbs),
-        fatG: nutrientSum(log.fat ?? log.totalFat),
-        fiberG: nutrientSum(log.fiber ?? log.dietaryFiber),
-        sugarG: nutrientSum(log.sugar ?? log.sugars)
+        proteinG: nutrientGrams(log, ['protein', 'proteins', 'proteinG', 'proteinGrams', 'totalProtein', 'dietaryProtein']),
+        carbsG: nutrientGrams(log, ['carbohydrate', 'carbohydrates', 'totalCarbohydrate', 'carbs', 'carbsG']),
+        fatG: nutrientGrams(log, ['fat', 'fats', 'totalFat', 'fatG']),
+        fiberG: nutrientGrams(log, ['fiber', 'fibre', 'dietaryFiber', 'dietaryFibre', 'fiberG']),
+        sugarG: nutrientGrams(log, ['sugar', 'sugars', 'totalSugar', 'sugarG'])
       }
     }
   ),
