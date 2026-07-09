@@ -4,13 +4,21 @@ import { Panel, DrillHeader, SectionHeader } from '@/components/Panel'
 import { ColumnChart, ProgressRing } from '@/components/charts'
 import { MetricStat } from '@/components/MetricStat'
 import { SleepStages } from '@/components/SleepStages'
-import { CARD_HEIGHT, Skeleton } from '@/components/Skeleton'
+import {
+  CARD_HEIGHT,
+  SkeletonChart,
+  SkeletonMetricStat,
+  SkeletonRing,
+  SkeletonRows,
+  SkeletonSleepStages,
+  SkeletonText
+} from '@/components/Skeleton'
 import { ErrorState } from '@/components/ErrorState'
 import { WorkoutList } from '@/components/WorkoutList'
 import type { View } from '@/components/Sidebar'
 import { useIntraday, useSeries, useSleepNight, useWorkouts } from '@/hooks/useHealth'
 import { METRICS } from '@/lib/metric-registry'
-import { baseline, baselineDeltaPct, metricAbsent, pointValues, rangeEnding, seriesPoints } from '@/lib/metrics'
+import { baseline, baselineDeltaPct, pointValues, rangeEnding, seriesPoints } from '@/lib/metrics'
 import { formatClock, formatHour, formatInt, formatMinutes, greeting, isoToday, longDate } from '@/lib/format'
 import { fade } from '@/lib/motion'
 import type { Goals, MetricKey } from '@shared/types'
@@ -63,140 +71,180 @@ export function HomeView({ date, goals, onOpenMetric, onNavigate }: HomeViewProp
 
       {/* Hero: goal rings + how the night set the day up */}
       <motion.div custom={1} variants={fade} initial="hidden" animate="show">
-        {series.isPending ? (
-          <Skeleton className={CARD_HEIGHT.hero} />
-        ) : (
-          <Panel className={`grid grid-cols-1 gap-6 p-6 lg:grid-cols-[1fr_auto] ${CARD_HEIGHT.hero}`}>
-            <div className="flex flex-wrap items-center justify-around gap-6">
+        <Panel className={`grid grid-cols-1 gap-6 p-6 lg:grid-cols-[1fr_auto] ${CARD_HEIGHT.hero}`}>
+          <div className="flex flex-wrap items-center justify-around gap-6">
+            {series.isMetricPending('steps') ? (
+              <GoalRingSkeleton />
+            ) : (
               <GoalRing value={today.steps ?? null} goal={goals.steps} metricKey="steps" onOpen={onOpenMetric} />
+            )}
+            {series.isMetricPending('caloriesOut') ? (
+              <GoalRingSkeleton />
+            ) : (
               <GoalRing value={today.caloriesOut ?? null} goal={goals.caloriesOut} metricKey="caloriesOut" onOpen={onOpenMetric} />
+            )}
+            {series.isMetricPending('activeZoneMinutes') ? (
+              <GoalRingSkeleton />
+            ) : (
               <GoalRing
                 value={today.activeZoneMinutes ?? null}
                 goal={goals.activeZoneMinutes}
                 metricKey="activeZoneMinutes"
                 onOpen={onOpenMetric}
               />
-            </div>
+            )}
+          </div>
 
-            <div className="flex min-w-[230px] flex-col justify-center gap-3 lg:border-l lg:border-hairline lg:pl-6">
-              <HeroRow
-                icon={<Moon size={15} weight="fill" style={{ color: 'var(--color-sleep)' }} />}
-                label="Sleep"
-                value={today.sleepMinutes != null ? formatMinutes(today.sleepMinutes) : 'No data'}
-                sub={
-                  today.sleepMinutes != null
-                    ? `${Math.round((today.sleepMinutes / goals.sleepMinutes) * 100)}% of ${formatMinutes(goals.sleepMinutes)} goal`
-                    : undefined
-                }
-                onClick={() => onNavigate('sleep')}
-              />
-              <HeroRow
-                icon={<Heartbeat size={15} weight="fill" style={{ color: 'var(--color-heart)' }} />}
-                label="Resting HR"
-                value={today.restingHeartRate != null ? `${today.restingHeartRate} bpm` : 'No data'}
-                sub={
-                  today.restingHeartRate != null && rhrBase != null
-                    ? `${today.restingHeartRate > Math.round(rhrBase) ? '+' : ''}${today.restingHeartRate - Math.round(rhrBase)} vs your average`
-                    : undefined
-                }
-                onClick={() => onNavigate('heart')}
-              />
-              <HeroRow
-                icon={<PersonSimpleRun size={15} weight="fill" style={{ color: 'var(--color-activity)' }} />}
-                label="Workouts"
-                value={
-                  workouts.data == null
-                    ? '…'
-                    : workouts.data.length > 0
-                      ? `${workouts.data.length} logged`
-                      : 'None yet'
-                }
-                sub={workouts.data?.length ? workouts.data.map((w) => w.name).slice(0, 2).join(', ') : undefined}
-                onClick={() => onNavigate('activity')}
-              />
-            </div>
-          </Panel>
-        )}
+          <div className="flex min-w-[230px] flex-col justify-center gap-3 lg:border-l lg:border-hairline lg:pl-6">
+            <HeroRow
+              icon={<Moon size={15} weight="fill" style={{ color: 'var(--color-sleep)' }} />}
+              label="Sleep"
+              value={
+                series.isMetricPending('sleepMinutes') ? (
+                  <SkeletonText className="h-3.5 w-20" />
+                ) : today.sleepMinutes != null ? (
+                  formatMinutes(today.sleepMinutes)
+                ) : (
+                  'No data'
+                )
+              }
+              sub={
+                series.isMetricPending('sleepMinutes') ? (
+                  <SkeletonText className="w-28" />
+                ) : today.sleepMinutes != null ? (
+                  `${Math.round((today.sleepMinutes / goals.sleepMinutes) * 100)}% of ${formatMinutes(goals.sleepMinutes)} goal`
+                ) : undefined
+              }
+              onClick={() => onNavigate('sleep')}
+            />
+            <HeroRow
+              icon={<Heartbeat size={15} weight="fill" style={{ color: 'var(--color-heart)' }} />}
+              label="Resting HR"
+              value={
+                series.isMetricPending('restingHeartRate') ? (
+                  <SkeletonText className="h-3.5 w-20" />
+                ) : today.restingHeartRate != null ? (
+                  `${today.restingHeartRate} bpm`
+                ) : (
+                  'No data'
+                )
+              }
+              sub={
+                series.isMetricPending('restingHeartRate') ? (
+                  <SkeletonText className="w-28" />
+                ) : today.restingHeartRate != null && rhrBase != null ? (
+                  `${today.restingHeartRate > Math.round(rhrBase) ? '+' : ''}${today.restingHeartRate - Math.round(rhrBase)} vs your average`
+                ) : undefined
+              }
+              onClick={() => onNavigate('heart')}
+            />
+            <HeroRow
+              icon={<PersonSimpleRun size={15} weight="fill" style={{ color: 'var(--color-activity)' }} />}
+              label="Workouts"
+              value={
+                workouts.isPending ? (
+                  <SkeletonText className="h-3.5 w-20" />
+                ) : workouts.data && workouts.data.length > 0 ? (
+                  `${workouts.data.length} logged`
+                ) : (
+                  'None yet'
+                )
+              }
+              sub={
+                workouts.isPending ? (
+                  <SkeletonText className="w-28" />
+                ) : workouts.data?.length ? (
+                  workouts.data.map((w) => w.name).slice(0, 2).join(', ')
+                ) : undefined
+              }
+              onClick={() => onNavigate('activity')}
+            />
+          </div>
+        </Panel>
       </motion.div>
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1.35fr_1fr]">
         {/* Daily movement */}
         <motion.div custom={2} variants={fade} initial="hidden" animate="show">
-          {intraday.isPending ? (
-            <Skeleton className={CARD_HEIGHT.large} />
-          ) : (
-            <Panel className={`flex h-full flex-col gap-4 p-6 ${CARD_HEIGHT.large}`}>
-              <DrillHeader
-                title="Daily movement"
-                hint="Steps per hour"
-                icon={<Footprints size={18} weight="fill" style={{ color: 'var(--color-activity)' }} />}
-                onOpen={() => onOpenMetric('steps')}
-              />
-              {intraday.data && intraday.data.stepsHourly.length > 0 ? (
-                <div className="mt-auto">
-                  <ColumnChart
-                    data={intraday.data.stepsHourly.map((h) => ({
-                      key: String(h.hour),
-                      label: formatHour(h.hour),
-                      value: h.steps,
-                      tick: h.hour % 6 === 0 ? formatHour(h.hour) : undefined
-                    }))}
-                    color="var(--color-activity)"
-                    format={formatInt}
-                    unitLabel="steps"
-                  />
-                </div>
-              ) : (
-                <div className="grid flex-1 place-items-center text-[13px] text-ink-faint">
-                  No movement recorded yet for this day.
-                </div>
-              )}
-            </Panel>
-          )}
+          <Panel className={`flex h-full flex-col gap-4 p-6 ${CARD_HEIGHT.large}`}>
+            <DrillHeader
+              title="Daily movement"
+              hint="Steps per hour"
+              icon={<Footprints size={18} weight="fill" style={{ color: 'var(--color-activity)' }} />}
+              onOpen={() => onOpenMetric('steps')}
+            />
+            {intraday.isPending ? (
+              <div className="mt-auto">
+                <SkeletonChart />
+              </div>
+            ) : intraday.data && intraday.data.stepsHourly.length > 0 ? (
+              <div className="mt-auto">
+                <ColumnChart
+                  data={intraday.data.stepsHourly.map((h) => ({
+                    key: String(h.hour),
+                    label: formatHour(h.hour),
+                    value: h.steps,
+                    tick: h.hour % 6 === 0 ? formatHour(h.hour) : undefined
+                  }))}
+                  color="var(--color-activity)"
+                  format={formatInt}
+                  unitLabel="steps"
+                />
+              </div>
+            ) : (
+              <div className="grid flex-1 place-items-center text-[13px] text-ink-faint">
+                No movement recorded yet for this day.
+              </div>
+            )}
+          </Panel>
         </motion.div>
 
         {/* Last night */}
         <motion.div custom={3} variants={fade} initial="hidden" animate="show">
-          {night.isPending ? (
-            <Skeleton className={CARD_HEIGHT.large} />
-          ) : (
-            <Panel className={`flex h-full flex-col gap-4 p-6 ${CARD_HEIGHT.large}`}>
-              <DrillHeader
-                title="Sleep"
-                hint={
-                  night.data
-                    ? `${formatMinutes(night.data.minutesAsleep)} asleep · ${formatClock(night.data.startTime)}–${formatClock(night.data.endTime)}`
-                    : 'No sleep recorded'
-                }
-                icon={<Moon size={18} weight="fill" style={{ color: 'var(--color-sleep)' }} />}
-                onOpen={() => onOpenMetric('sleepMinutes')}
-              />
-              {night.data ? (
-                <SleepStages night={night.data} />
-              ) : (
-                <div className="grid flex-1 place-items-center text-[13px] text-ink-faint">
-                  Wear your Fitbit Air to bed to see sleep stages.
-                </div>
-              )}
-            </Panel>
-          )}
+          <Panel className={`flex h-full flex-col gap-4 p-6 ${CARD_HEIGHT.large}`}>
+            <DrillHeader
+              title="Sleep"
+              hint={
+                night.isPending ? (
+                  <SkeletonText className="w-36" />
+                ) : night.data ? (
+                  `${formatMinutes(night.data.minutesAsleep)} asleep · ${formatClock(night.data.startTime)}–${formatClock(night.data.endTime)}`
+                ) : (
+                  'No sleep recorded'
+                )
+              }
+              icon={<Moon size={18} weight="fill" style={{ color: 'var(--color-sleep)' }} />}
+              onOpen={() => onOpenMetric('sleepMinutes')}
+            />
+            {night.isPending ? (
+              <SkeletonSleepStages />
+            ) : night.data ? (
+              <SleepStages night={night.data} />
+            ) : (
+              <div className="grid flex-1 place-items-center text-[13px] text-ink-faint">
+                Wear your Fitbit Air to bed to see sleep stages.
+              </div>
+            )}
+          </Panel>
         </motion.div>
       </div>
 
       {/* Night signals vs personal baseline */}
       <motion.div custom={4} variants={fade} initial="hidden" animate="show">
-        {series.isPending ? (
-          <Skeleton className={CARD_HEIGHT.summary} />
-        ) : (
-          <SignalsPanel date={date} pointsFor={pointsFor} today={todayValue(days, date)} onOpenMetric={onOpenMetric} />
-        )}
+        <SignalsPanel
+          date={date}
+          pointsFor={pointsFor}
+          today={todayValue(days, date)}
+          isPending={series.isMetricPending}
+          onOpenMetric={onOpenMetric}
+        />
       </motion.div>
 
       {/* Workouts */}
-      {workouts.data && workouts.data.length > 0 && (
+      {(workouts.isPending || (workouts.data && workouts.data.length > 0)) && (
         <motion.div custom={5} variants={fade} initial="hidden" animate="show">
-          <Panel className="p-3">
-            <WorkoutList workouts={workouts.data} />
+          <Panel className="min-h-[126px] p-3">
+            {workouts.isPending ? <SkeletonRows /> : <WorkoutList workouts={workouts.data ?? []} />}
           </Panel>
         </motion.div>
       )}
@@ -212,27 +260,29 @@ function SignalsPanel({
   date,
   pointsFor,
   today,
+  isPending,
   onOpenMetric
 }: {
   date: string
   pointsFor: (key: MetricKey) => ReturnType<typeof seriesPoints>
   today: (key: MetricKey) => number | null
+  isPending: (key: MetricKey) => boolean
   onOpenMetric: (metric: MetricKey) => void
-}): React.JSX.Element | null {
-  const visible = SIGNAL_KEYS.filter((key) => !metricAbsent(pointsFor(key)))
-  if (visible.length === 0) return null
+}): React.JSX.Element {
   return (
     <Panel className={`overflow-hidden ${CARD_HEIGHT.summary}`}>
       <div className="border-b border-hairline px-5 pb-3 pt-4">
         <SectionHeader title="Night signals" hint="Compared with your own recent baseline" />
       </div>
       <div className="grid grid-cols-2 divide-x divide-hairline lg:grid-cols-4">
-        {visible.map((key) => {
+        {SIGNAL_KEYS.map((key) => {
           const def = METRICS[key]
           const points = pointsFor(key)
           const value = today(key)
           const base = baseline(points, date)
-          return (
+          return isPending(key) ? (
+            <SkeletonMetricStat key={key} />
+          ) : (
             <MetricStat
               key={key}
               icon={def.icon}
@@ -250,6 +300,15 @@ function SignalsPanel({
         })}
       </div>
     </Panel>
+  )
+}
+
+function GoalRingSkeleton(): React.JSX.Element {
+  return (
+    <div className="flex flex-col items-center gap-2" aria-hidden>
+      <SkeletonRing />
+      <SkeletonText className="w-20" />
+    </div>
   )
 }
 
@@ -292,8 +351,8 @@ function HeroRow({
 }: {
   icon: React.ReactNode
   label: string
-  value: string
-  sub?: string
+  value: React.ReactNode
+  sub?: React.ReactNode
   onClick: () => void
 }): React.JSX.Element {
   return (

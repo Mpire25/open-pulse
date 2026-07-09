@@ -3,7 +3,7 @@ import { Moon, Bed, Timer } from '@phosphor-icons/react'
 import { Panel, DrillHeader } from '@/components/Panel'
 import { ColumnChart, ProgressRing, TrendLine } from '@/components/charts'
 import { SleepStages, STAGE_COLOR } from '@/components/SleepStages'
-import { CARD_HEIGHT, Skeleton } from '@/components/Skeleton'
+import { CARD_HEIGHT, SkeletonChart, SkeletonRing, SkeletonSleepStages, SkeletonText } from '@/components/Skeleton'
 import { useSleepRange } from '@/hooks/useHealth'
 import { listDates, rangeEnding } from '@/lib/metrics'
 import { formatMinutes, longDate, shortDate, weekdayShort } from '@/lib/format'
@@ -42,7 +42,33 @@ export function SleepView({ date, goals, onOpenMetric }: SleepViewProps): React.
       {/* Selected night */}
       <motion.div custom={1} variants={fade} initial="hidden" animate="show">
         {nights.isPending ? (
-          <Skeleton className={CARD_HEIGHT.detail} />
+          <Panel className={`grid grid-cols-1 gap-8 p-7 lg:grid-cols-[auto_1fr] ${CARD_HEIGHT.detail}`}>
+            <div className="flex flex-col items-center justify-center gap-3" aria-hidden>
+              <SkeletonRing size={140} stroke={12} />
+              <SkeletonText className="w-28" />
+              <div className="flex gap-4">
+                <div className="flex flex-col items-center gap-2">
+                  <SkeletonText className="w-12" />
+                  <SkeletonText className="w-10" />
+                </div>
+                <div className="flex flex-col items-center gap-2">
+                  <SkeletonText className="w-14" />
+                  <SkeletonText className="w-10" />
+                </div>
+              </div>
+            </div>
+            <div className="flex flex-col justify-center">
+              <DrillHeader
+                title="Stages"
+                hint={<SkeletonText className="w-32" />}
+                icon={<Moon size={18} weight="fill" style={{ color: 'var(--color-sleep)' }} />}
+                onOpen={() => onOpenMetric('sleepMinutes')}
+              />
+              <div className="mt-5">
+                <SkeletonSleepStages />
+              </div>
+            </div>
+          </Panel>
         ) : night ? (
           <Panel className={`grid grid-cols-1 gap-8 p-7 lg:grid-cols-[auto_1fr] ${CARD_HEIGHT.detail}`}>
             <div className="flex flex-col items-center justify-center gap-3">
@@ -91,13 +117,7 @@ export function SleepView({ date, goals, onOpenMetric }: SleepViewProps): React.
         )}
       </motion.div>
 
-      {nights.isPending ? (
-        <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-          <Skeleton className={CARD_HEIGHT.chart} />
-          <Skeleton className={CARD_HEIGHT.chart} />
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
           {/* Duration trend */}
           <motion.div custom={2} variants={fade} initial="hidden" animate="show">
             <Panel className={`flex h-full flex-col gap-4 p-6 ${CARD_HEIGHT.chart}`}>
@@ -108,19 +128,23 @@ export function SleepView({ date, goals, onOpenMetric }: SleepViewProps): React.
                 onOpen={() => onOpenMetric('sleepMinutes')}
               />
               <div className="mt-auto">
-                <ColumnChart
-                  data={dates.map((d) => ({
-                    key: d,
-                    label: `${weekdayShort(d)} · ${shortDate(d)}`,
-                    value: byDate.get(d)?.minutesAsleep ?? null,
-                    tick: weekdayShort(d).slice(0, 1)
-                  }))}
-                  color="var(--color-sleep)"
-                  goal={{ value: goals.sleepMinutes, label: 'goal' }}
-                  emphasisIndex={dates.indexOf(date)}
-                  format={(v) => formatMinutes(v)}
-                  unitLabel="asleep"
-                />
+                {nights.isPending ? (
+                  <SkeletonChart />
+                ) : (
+                  <ColumnChart
+                    data={dates.map((d) => ({
+                      key: d,
+                      label: `${weekdayShort(d)} · ${shortDate(d)}`,
+                      value: byDate.get(d)?.minutesAsleep ?? null,
+                      tick: weekdayShort(d).slice(0, 1)
+                    }))}
+                    color="var(--color-sleep)"
+                    goal={{ value: goals.sleepMinutes, label: 'goal' }}
+                    emphasisIndex={dates.indexOf(date)}
+                    format={(v) => formatMinutes(v)}
+                    unitLabel="asleep"
+                  />
+                )}
               </div>
             </Panel>
           </motion.div>
@@ -135,22 +159,25 @@ export function SleepView({ date, goals, onOpenMetric }: SleepViewProps): React.
                 onOpen={() => onOpenMetric('sleepEfficiency')}
               />
               <div className="mt-auto">
-                <TrendLine
-                  data={dates.map((d) => ({
-                    date: d,
-                    label: `${weekdayShort(d)} · ${shortDate(d)}`,
-                    value: byDate.get(d)?.efficiency ?? null
-                  }))}
-                  color="var(--color-sleep)"
-                  height={150}
-                  format={(v) => `${Math.round(v)}%`}
-                  unitLabel="efficiency"
-                />
+                {nights.isPending ? (
+                  <SkeletonChart />
+                ) : (
+                  <TrendLine
+                    data={dates.map((d) => ({
+                      date: d,
+                      label: `${weekdayShort(d)} · ${shortDate(d)}`,
+                      value: byDate.get(d)?.efficiency ?? null
+                    }))}
+                    color="var(--color-sleep)"
+                    height={150}
+                    format={(v) => `${Math.round(v)}%`}
+                    unitLabel="efficiency"
+                  />
+                )}
               </div>
             </Panel>
           </motion.div>
-        </div>
-      )}
+      </div>
 
       {/* Night-by-night stage mix */}
       {recorded.length > 1 && (

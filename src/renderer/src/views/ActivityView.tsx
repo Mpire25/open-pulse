@@ -3,7 +3,7 @@ import { Barbell, Footprints } from '@phosphor-icons/react'
 import { Panel, DrillHeader, SectionHeader } from '@/components/Panel'
 import { ColumnChart } from '@/components/charts'
 import { MetricStat } from '@/components/MetricStat'
-import { CARD_HEIGHT, Skeleton } from '@/components/Skeleton'
+import { CARD_HEIGHT, SkeletonChart, SkeletonMetricStat, SkeletonRows, SkeletonText } from '@/components/Skeleton'
 import { ErrorState } from '@/components/ErrorState'
 import { WorkoutList } from '@/components/WorkoutList'
 import { useIntraday, useSeries, useWorkouts } from '@/hooks/useHealth'
@@ -55,19 +55,23 @@ export function ActivityView({ date, goals, onOpenMetric }: ActivityViewProps): 
             onOpen={() => onOpenMetric(key)}
           />
           <div className="mt-auto">
-            <ColumnChart
-              data={points.map((p) => ({
-                key: p.date,
-                label: `${weekdayShort(p.date)} · ${p.date.slice(5)}`,
-                value: p.value,
-                tick: weekdayShort(p.date).slice(0, 1)
-              }))}
-              color={def.color}
-              goal={goal != null ? { value: goal, label: 'goal' } : null}
-              emphasisIndex={emphasis}
-              format={def.format}
-              unitLabel={def.unit}
-            />
+            {series.isMetricPending(key) ? (
+              <SkeletonChart />
+            ) : (
+              <ColumnChart
+                data={points.map((p) => ({
+                  key: p.date,
+                  label: `${weekdayShort(p.date)} · ${p.date.slice(5)}`,
+                  value: p.value,
+                  tick: weekdayShort(p.date).slice(0, 1)
+                }))}
+                color={def.color}
+                goal={goal != null ? { value: goal, label: 'goal' } : null}
+                emphasisIndex={emphasis}
+                format={def.format}
+                unitLabel={def.unit}
+              />
+            )}
           </div>
         </Panel>
       </motion.div>
@@ -83,15 +87,14 @@ export function ActivityView({ date, goals, onOpenMetric }: ActivityViewProps): 
 
       {/* Day totals */}
       <motion.div custom={1} variants={fade} initial="hidden" animate="show">
-        {series.isPending ? (
-          <Skeleton className={CARD_HEIGHT.compact} />
-        ) : (
-          <Panel className={`grid grid-cols-2 divide-x divide-y divide-hairline overflow-hidden sm:grid-cols-3 lg:grid-cols-6 lg:divide-y-0 ${CARD_HEIGHT.compact}`}>
-            {ACTIVITY_METRICS.map((key) => {
-              const def = METRICS[key]
-              const points = pointsFor(key)
-              const value = days?.[date]?.[key] ?? null
-              return (
+        <Panel className={`grid grid-cols-2 divide-x divide-y divide-hairline overflow-hidden sm:grid-cols-3 lg:grid-cols-6 lg:divide-y-0 ${CARD_HEIGHT.compact}`}>
+          {ACTIVITY_METRICS.map((key) => {
+            const def = METRICS[key]
+            const points = pointsFor(key)
+            const value = days?.[date]?.[key] ?? null
+            return series.isMetricPending(key) ? (
+              <SkeletonMetricStat key={key} />
+            ) : (
                 <MetricStat
                   key={key}
                   icon={def.icon}
@@ -104,26 +107,24 @@ export function ActivityView({ date, goals, onOpenMetric }: ActivityViewProps): 
                   spark={pointValues(points)}
                   onOpen={() => onOpenMetric(key)}
                 />
-              )
-            })}
-          </Panel>
-        )}
+            )
+          })}
+        </Panel>
       </motion.div>
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1.35fr_1fr]">
         {/* Hourly movement */}
         <motion.div custom={2} variants={fade} initial="hidden" animate="show">
-          {intraday.isPending ? (
-            <Skeleton className={CARD_HEIGHT.large} />
-          ) : (
-            <Panel className={`flex h-full flex-col gap-4 p-6 ${CARD_HEIGHT.large}`}>
-              <DrillHeader
-                title="Hourly steps"
-                hint="When did you move?"
-                icon={<Footprints size={18} weight="fill" style={{ color: 'var(--color-activity)' }} />}
-                onOpen={() => onOpenMetric('steps')}
-              />
-              {intraday.data && intraday.data.stepsHourly.length > 0 ? (
+          <Panel className={`flex h-full flex-col gap-4 p-6 ${CARD_HEIGHT.large}`}>
+            <DrillHeader
+              title="Hourly steps"
+              hint="When did you move?"
+              icon={<Footprints size={18} weight="fill" style={{ color: 'var(--color-activity)' }} />}
+              onOpen={() => onOpenMetric('steps')}
+            />
+            {intraday.isPending ? (
+              <SkeletonChart height={170} columns={12} />
+            ) : intraday.data && intraday.data.stepsHourly.length > 0 ? (
                 <ColumnChart
                   data={intraday.data.stepsHourly.map((h) => ({
                     key: String(h.hour),
@@ -136,56 +137,50 @@ export function ActivityView({ date, goals, onOpenMetric }: ActivityViewProps): 
                   format={formatInt}
                   unitLabel="steps"
                 />
-              ) : (
-                <div className="grid flex-1 place-items-center text-[13px] text-ink-faint">
-                  No movement recorded yet for this day.
-                </div>
-              )}
-            </Panel>
-          )}
+            ) : (
+              <div className="grid flex-1 place-items-center text-[13px] text-ink-faint">
+                No movement recorded yet for this day.
+              </div>
+            )}
+          </Panel>
         </motion.div>
 
         {/* Workouts */}
         <motion.div custom={3} variants={fade} initial="hidden" animate="show">
-          {workouts.isPending ? (
-            <Skeleton className={CARD_HEIGHT.large} />
-          ) : (
-            <Panel className={`flex h-full flex-col gap-2 p-5 ${CARD_HEIGHT.large}`}>
-              <SectionHeader
-                title="Workouts"
-                hint={
-                  workouts.data && workouts.data.length > 0
-                    ? `${workouts.data.length} session${workouts.data.length > 1 ? 's' : ''}`
-                    : 'No sessions logged'
-                }
-                icon={<Barbell size={18} weight="fill" style={{ color: 'var(--color-recovery)' }} />}
-              />
-              {workouts.data && workouts.data.length > 0 ? (
-                <WorkoutList workouts={workouts.data} />
-              ) : (
-                <div className="grid flex-1 place-items-center text-[13px] text-ink-faint">
-                  Tracked exercises appear here automatically.
-                </div>
-              )}
-            </Panel>
-          )}
+          <Panel className={`flex h-full flex-col gap-2 p-5 ${CARD_HEIGHT.large}`}>
+            <SectionHeader
+              title="Workouts"
+              hint={
+                workouts.isPending ? (
+                  <SkeletonText className="w-20" />
+                ) : workouts.data && workouts.data.length > 0 ? (
+                  `${workouts.data.length} session${workouts.data.length > 1 ? 's' : ''}`
+                ) : (
+                  'No sessions logged'
+                )
+              }
+              icon={<Barbell size={18} weight="fill" style={{ color: 'var(--color-recovery)' }} />}
+            />
+            {workouts.isPending ? (
+              <SkeletonRows />
+            ) : workouts.data && workouts.data.length > 0 ? (
+              <WorkoutList workouts={workouts.data} />
+            ) : (
+              <div className="grid flex-1 place-items-center text-[13px] text-ink-faint">
+                Tracked exercises appear here automatically.
+              </div>
+            )}
+          </Panel>
         </motion.div>
       </div>
 
       {/* 7-day trends */}
-      {series.isPending ? (
-        <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-          <Skeleton className={CARD_HEIGHT.chart} />
-          <Skeleton className={CARD_HEIGHT.chart} />
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-          {trendCard('steps', 4, goals.steps)}
-          {trendCard('activeZoneMinutes', 5, goals.activeZoneMinutes)}
-          {trendCard('caloriesOut', 6, goals.caloriesOut)}
-          {trendCard('distanceKm', 7)}
-        </div>
-      )}
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+        {trendCard('steps', 4, goals.steps)}
+        {trendCard('activeZoneMinutes', 5, goals.activeZoneMinutes)}
+        {trendCard('caloriesOut', 6, goals.caloriesOut)}
+        {trendCard('distanceKm', 7)}
+      </div>
     </div>
   )
 }

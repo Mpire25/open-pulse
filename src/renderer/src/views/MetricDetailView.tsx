@@ -9,7 +9,7 @@ import { ArrowLeft } from '@phosphor-icons/react'
 import { Panel, SectionHeader } from '@/components/Panel'
 import { ColumnChart, IntradayLine, ProgressRing, TrendLine } from '@/components/charts'
 import { DeltaChip } from '@/components/DeltaChip'
-import { CARD_HEIGHT, Skeleton } from '@/components/Skeleton'
+import { CARD_HEIGHT, SkeletonBlock, SkeletonChart, SkeletonRing, SkeletonText } from '@/components/Skeleton'
 import { ErrorState } from '@/components/ErrorState'
 import { useIntraday, useSeries } from '@/hooks/useHealth'
 import { METRICS } from '@/lib/metric-registry'
@@ -102,10 +102,7 @@ export function MetricDetailView({ metricKey, date, goals, onBack }: MetricDetai
       </motion.header>
 
       {series.isPending ? (
-        <>
-          <Skeleton className={range === 'D' ? CARD_HEIGHT.summary : CARD_HEIGHT.periodStats} />
-          <Skeleton className={range === 'D' ? CARD_HEIGHT.detail : CARD_HEIGHT.detailLarge} />
-        </>
+        <MetricDetailSkeleton range={range} hasGoal={goal != null} />
       ) : range === 'D' ? (
         <DayDetail
           metricKey={metricKey}
@@ -126,6 +123,44 @@ export function MetricDetailView({ metricKey, date, goals, onBack }: MetricDetai
         />
       )}
     </div>
+  )
+}
+
+function MetricDetailSkeleton({ range, hasGoal }: { range: Range; hasGoal: boolean }): React.JSX.Element {
+  if (range === 'D') {
+    return (
+      <>
+        <Panel className={`flex flex-wrap items-center justify-between gap-6 p-6 ${CARD_HEIGHT.summary}`}>
+          <div className="flex flex-col gap-3" aria-hidden>
+            <SkeletonText className="w-28" />
+            <SkeletonBlock className="h-9 w-32" />
+            <SkeletonText className="w-40" />
+          </div>
+          {hasGoal && <SkeletonRing size={108} stroke={10} />}
+        </Panel>
+        <Panel className={`flex flex-col gap-4 p-6 ${CARD_HEIGHT.detail}`}>
+          <SectionHeader title="In context" hint="The last 14 days, this day highlighted" />
+          <SkeletonChart height={200} columns={12} />
+        </Panel>
+      </>
+    )
+  }
+
+  return (
+    <>
+      <Panel className={`grid grid-cols-2 divide-x divide-hairline overflow-hidden sm:grid-cols-4 ${CARD_HEIGHT.periodStats}`}>
+        {Array.from({ length: 4 }, (_, index) => (
+          <div key={index} className="flex flex-col gap-2 px-5 py-4" aria-hidden>
+            <SkeletonText className="w-16" />
+            <SkeletonBlock className="h-5 w-20" />
+          </div>
+        ))}
+      </Panel>
+      <Panel className={`flex flex-col gap-4 p-6 ${CARD_HEIGHT.detailLarge}`}>
+        <SectionHeader title="Loading period" />
+        <SkeletonChart height={230} columns={range === 'Y' ? 12 : 7} />
+      </Panel>
+    </>
   )
 }
 
@@ -221,7 +256,10 @@ function DayDetail({
 
       <motion.div custom={2} variants={fade} initial="hidden" animate="show">
         {metricKey === 'steps' && intradayPending ? (
-          <Skeleton className={CARD_HEIGHT.detail} />
+          <Panel className={`flex flex-col gap-4 p-6 ${CARD_HEIGHT.detail}`}>
+            <SectionHeader title="Across the day" hint="Steps per hour" />
+            <SkeletonChart height={200} columns={12} />
+          </Panel>
         ) : metricKey === 'steps' && intradayData && intradayData.stepsHourly.length > 0 ? (
           <Panel className={`flex flex-col gap-4 p-6 ${CARD_HEIGHT.detail}`}>
             <SectionHeader title="Across the day" hint="Steps per hour" />
@@ -239,7 +277,10 @@ function DayDetail({
             />
           </Panel>
         ) : metricKey === 'restingHeartRate' && intradayPending ? (
-          <Skeleton className={CARD_HEIGHT.detail} />
+          <Panel className={`flex flex-col gap-4 p-6 ${CARD_HEIGHT.detail}`}>
+            <SectionHeader title="Across the day" hint="Heart rate samples" />
+            <SkeletonChart height={200} columns={12} />
+          </Panel>
         ) : metricKey === 'restingHeartRate' && intradayData && intradayData.heartRate.length > 1 ? (
           <Panel className={`flex flex-col gap-4 p-6 ${CARD_HEIGHT.detail}`}>
             <SectionHeader

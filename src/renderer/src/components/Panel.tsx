@@ -21,7 +21,7 @@ Panel.displayName = 'Panel'
 
 interface SectionHeaderProps {
   title: string
-  hint?: string
+  hint?: React.ReactNode
   icon?: React.ReactNode
   action?: React.ReactNode
 }

@@ -17,7 +17,7 @@ import {
 } from '@phosphor-icons/react'
 import { useQueryClient } from '@tanstack/react-query'
 import { Panel, SectionHeader } from '@/components/Panel'
-import { CARD_HEIGHT, Skeleton } from '@/components/Skeleton'
+import { CARD_HEIGHT, SkeletonBlock, SkeletonText } from '@/components/Skeleton'
 import { useDevices, useSeries } from '@/hooks/useHealth'
 import { METRICS } from '@/lib/metric-registry'
 import { metricAbsent, rangeEnding, seriesPoints } from '@/lib/metrics'
@@ -76,7 +76,18 @@ export function DevicesView({ connected }: DevicesViewProps): React.JSX.Element 
         {/* Product hero */}
         <motion.div custom={1} variants={fade} initial="hidden" animate="show">
           {devices.isPending ? (
-            <Skeleton className={CARD_HEIGHT.device} />
+            <Panel className={`flex flex-col overflow-hidden ${CARD_HEIGHT.device}`}>
+              <div className="grid h-[184px] place-items-center px-6 pt-8">
+                <SkeletonBlock className="h-36 w-24 rounded-[28px]" />
+              </div>
+              <div className="flex flex-1 flex-col gap-4 p-6 pt-3">
+                <SkeletonText className="h-5 w-24 rounded-full" />
+                <SkeletonBlock className="h-5 w-40" />
+                <SkeletonText className="w-32" />
+                <SkeletonBlock className="mt-2 h-2 w-full rounded-full" />
+                <SkeletonText className="mt-auto w-28" />
+              </div>
+            </Panel>
           ) : device ? (
             <DeviceHero device={device} connected={connected} />
           ) : (
@@ -88,43 +99,44 @@ export function DevicesView({ connected }: DevicesViewProps): React.JSX.Element 
 
         {/* Data coverage */}
         <motion.div custom={2} variants={fade} initial="hidden" animate="show">
-          {series.isPending ? (
-            <Skeleton className={CARD_HEIGHT.device} />
-          ) : (
-            <Panel className={`flex h-full flex-col p-6 ${CARD_HEIGHT.device}`}>
-              <SectionHeader
-                title="Data coverage"
-                hint="What arrived over the last 7 days"
-                icon={<Cloud size={18} weight="fill" className="text-ink-dim" />}
-              />
-              <div className="mt-4 flex flex-1 flex-col justify-between gap-1">
-                {COVERAGE.map((row) => {
-                  const available = row.keys.filter(
-                    (key) => !metricAbsent(seriesPoints(series.data?.days, key, start, end))
-                  )
-                  const Icon = row.icon
-                  return (
-                    <div key={row.label} className="flex items-center gap-3 border-b border-hairline py-3 last:border-0">
-                      <div className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-white/[0.04]">
-                        <Icon size={16} weight="fill" className="text-ink-dim" />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="text-[13px] font-semibold text-ink">{row.label}</div>
+          <Panel className={`flex h-full flex-col p-6 ${CARD_HEIGHT.device}`}>
+            <SectionHeader
+              title="Data coverage"
+              hint="What arrived over the last 7 days"
+              icon={<Cloud size={18} weight="fill" className="text-ink-dim" />}
+            />
+            <div className="mt-4 flex flex-1 flex-col justify-between gap-1">
+              {COVERAGE.map((row) => {
+                const pending = row.keys.some((key) => series.isMetricPending(key))
+                const available = row.keys.filter(
+                  (key) => !metricAbsent(seriesPoints(series.data?.days, key, start, end))
+                )
+                const Icon = row.icon
+                return (
+                  <div key={row.label} className="flex items-center gap-3 border-b border-hairline py-3 last:border-0">
+                    <div className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-white/[0.04]">
+                      <Icon size={16} weight="fill" className="text-ink-dim" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="text-[13px] font-semibold text-ink">{row.label}</div>
+                      {pending ? (
+                        <SkeletonText className="mt-1 w-32" />
+                      ) : (
                         <div className="truncate text-[11.5px] text-ink-faint">
                           {available.length
-                            ? available.map((k) => METRICS[k].shortLabel ?? METRICS[k].label).join(' · ')
+                            ? available.map((key) => METRICS[key].shortLabel ?? METRICS[key].label).join(' · ')
                             : 'No data in this window'}
                         </div>
-                      </div>
-                      {available.length > 0 && (
-                        <CheckCircle size={17} weight="fill" style={{ color: 'var(--color-recovery)' }} />
                       )}
                     </div>
-                  )
-                })}
-              </div>
-            </Panel>
-          )}
+                    {!pending && available.length > 0 && (
+                      <CheckCircle size={17} weight="fill" style={{ color: 'var(--color-recovery)' }} />
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          </Panel>
         </motion.div>
       </div>
     </div>
