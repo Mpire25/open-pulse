@@ -69,7 +69,6 @@ export interface Goals {
 
 export interface AppSettings {
   googleClientId: string
-  demoMode: boolean
   goals: Goals
 }
 

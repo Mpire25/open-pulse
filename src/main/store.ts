@@ -11,7 +11,6 @@ interface StoreFile {
 
 const DEFAULTS: AppSettings = {
   googleClientId: '',
-  demoMode: true,
   goals: { steps: 10000, activeZoneMinutes: 30, activeEnergyKcal: 500 }
 }
 

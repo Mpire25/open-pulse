@@ -22,10 +22,10 @@ const NAV: { id: View; label: string; icon: Icon }[] = [
 interface SidebarProps {
   view: View
   onSelect: (view: View) => void
-  demoMode: boolean
+  connected: boolean
 }
 
-export function Sidebar({ view, onSelect, demoMode }: SidebarProps): React.JSX.Element {
+export function Sidebar({ view, onSelect, connected }: SidebarProps): React.JSX.Element {
   return (
     <nav className="drag-region flex w-[212px] shrink-0 flex-col px-3 pb-4 pt-[54px]">
       <div className="no-drag mb-6 flex items-center gap-2.5 px-2">
@@ -40,11 +40,14 @@ export function Sidebar({ view, onSelect, demoMode }: SidebarProps): React.JSX.E
       </div>
 
       <div className="no-drag mt-auto flex flex-col gap-0.5">
-        {demoMode && (
+        {!connected && (
           <div className="mb-2 mx-1 rounded-xl border border-hairline bg-white/[0.03] px-3 py-2.5">
-            <p className="text-[11px] font-medium text-ink-dim">Sample data</p>
-            <p className="mt-0.5 text-[11px] leading-snug text-ink-faint">
-              Connect your Fitbit Air in Settings to see live metrics.
+            <div className="flex items-center gap-1.5">
+              <span className="h-1.5 w-1.5 rounded-full bg-[#ffb340]" />
+              <p className="text-[11px] font-medium text-ink-dim">Sample data</p>
+            </div>
+            <p className="mt-1 text-[11px] leading-snug text-ink-faint">
+              Connect your Fitbit Air to see your own metrics.
             </p>
           </div>
         )}

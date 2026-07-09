@@ -26,8 +26,8 @@ function shiftDays(base: Date, days: number): Date {
   return d
 }
 
+// Live data when a Google access token is available, demo data otherwise.
 async function liveToken(): Promise<string | null> {
-  if (getSettings().demoMode) return null
   return getGoogleAccessToken()
 }
 

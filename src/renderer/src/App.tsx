@@ -6,6 +6,7 @@ import { TrendsView } from '@/views/TrendsView'
 import { SleepView } from '@/views/SleepView'
 import { AssistantView } from '@/views/AssistantView'
 import { SettingsView } from '@/views/SettingsView'
+import { ConnectGate } from '@/components/ConnectGate'
 import type { AppSettings, CodexAuthStatus, GoogleAuthStatus } from '@shared/types'
 
 export default function App(): React.JSX.Element {
@@ -32,7 +33,7 @@ export default function App(): React.JSX.Element {
 
   return (
     <div className="flex h-full w-full overflow-hidden bg-canvas/60 text-ink">
-      <Sidebar view={view} onSelect={setView} demoMode={settings.demoMode && !google.connected} />
+      <Sidebar view={view} onSelect={setView} connected={google.connected} />
 
       <main className="relative flex flex-1 flex-col overflow-hidden rounded-tl-[14px] border-l border-t border-hairline bg-canvas/85">
         {/* Draggable title bar strip: lets the window be moved from the top edge,
@@ -43,17 +44,28 @@ export default function App(): React.JSX.Element {
         <div className="pointer-events-none absolute inset-x-0 top-0 h-40 bg-gradient-to-b from-white/[0.025] to-transparent" />
         <div className="min-h-0 flex-1 overflow-y-auto">
           <AnimatePresence mode="wait">
+            {/* Keying on connection state remounts the data views when Google
+                connects, so their hooks refetch live data in place of demo. */}
             <motion.div
-              key={view}
+              key={`${view}-${google.connected}`}
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -6 }}
               transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
               className="h-full"
             >
-              {view === 'today' && <TodayView />}
-              {view === 'trends' && <TrendsView />}
-              {view === 'sleep' && <SleepView />}
+              {(view === 'today' || view === 'trends' || view === 'sleep') && (
+                <ConnectGate
+                  connected={google.connected}
+                  clientId={settings.googleClientId}
+                  onConnected={setGoogle}
+                  onClientIdChange={(googleClientId) => setSettings({ ...settings, googleClientId })}
+                >
+                  {view === 'today' && <TodayView />}
+                  {view === 'trends' && <TrendsView />}
+                  {view === 'sleep' && <SleepView />}
+                </ConnectGate>
+              )}
               {view === 'assistant' && (
                 <AssistantView codex={codex} onOpenSettings={() => setView('settings')} />
               )}

@@ -3,8 +3,7 @@ import { motion } from 'framer-motion'
 import { CheckCircle, GoogleLogo, Sparkle, Watch, ArrowClockwise, Warning } from '@phosphor-icons/react'
 import { Panel, SectionHeader } from '@/components/Panel'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Switch } from '@/components/ui/switch'
+import { GoogleSetup } from '@/components/GoogleSetup'
 import type { AppSettings, CodexAuthStatus, GoogleAuthStatus, PairedDevice } from '@shared/types'
 
 interface SettingsViewProps {
@@ -72,42 +71,15 @@ function GoogleCard({
   onSettingsChange: (s: AppSettings) => void
   onGoogleChange: (s: GoogleAuthStatus) => void
 }): React.JSX.Element {
-  const [clientId, setClientId] = useState(settings.googleClientId)
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
   const [devices, setDevices] = useState<PairedDevice[]>([])
 
   useEffect(() => {
     if (google.connected) window.pulse.health.devices().then(setDevices)
   }, [google.connected])
 
-  const saveClientId = async (): Promise<void> => {
-    const updated = await window.pulse.settings.update({ googleClientId: clientId.trim() })
-    onSettingsChange(updated)
-  }
-
-  const connect = async (): Promise<void> => {
-    setError(null)
-    setBusy(true)
-    try {
-      await saveClientId()
-      const status = await window.pulse.google.connect()
-      onGoogleChange(status)
-      // Connecting live data implies leaving demo mode.
-      const updated = await window.pulse.settings.update({ demoMode: false })
-      onSettingsChange(updated)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
-    } finally {
-      setBusy(false)
-    }
-  }
-
   const disconnect = async (): Promise<void> => {
     await window.pulse.google.disconnect()
     onGoogleChange({ connected: false })
-    const updated = await window.pulse.settings.update({ demoMode: true })
-    onSettingsChange(updated)
   }
 
   return (
@@ -150,34 +122,12 @@ function GoogleCard({
           </div>
         </div>
       ) : (
-        <div className="flex flex-col gap-4">
-          <div className="flex flex-col gap-2">
-            <label className="text-[12px] font-medium text-ink-dim">OAuth Client ID</label>
-            <Input
-              value={clientId}
-              onChange={(e) => setClientId(e.target.value)}
-              placeholder="xxxxxxxx.apps.googleusercontent.com"
-              spellCheck={false}
-            />
-            <p className="text-[11px] leading-relaxed text-ink-faint">
-              Create a <span className="text-ink-dim">Desktop app</span> OAuth client in Google Cloud
-              Console with the Health API enabled, then paste its Client ID. The app uses a loopback PKCE
-              flow, so no client secret is stored.
-            </p>
-          </div>
-          {error && (
-            <div className="flex items-start gap-2 rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-[12px] text-danger">
-              <Warning size={15} weight="fill" className="mt-0.5 shrink-0" />
-              {error}
-            </div>
-          )}
-          <div>
-            <Button onClick={connect} disabled={busy || !clientId.trim()}>
-              {busy ? <ArrowClockwise size={15} className="animate-spin" /> : <GoogleLogo size={15} weight="bold" />}
-              {busy ? 'Waiting for Google…' : 'Connect Google Health'}
-            </Button>
-          </div>
-        </div>
+        <GoogleSetup
+          showHeader={false}
+          initialClientId={settings.googleClientId}
+          onConnected={onGoogleChange}
+          onClientIdChange={(googleClientId) => onSettingsChange({ ...settings, googleClientId })}
+        />
       )}
     </Card>
   )
@@ -301,17 +251,6 @@ function GoalsCard({
           value={settings.goals.steps}
           step={500}
           onChange={(v) => setGoal('steps', v)}
-        />
-      </div>
-
-      <div className="mt-2 flex items-center justify-between rounded-xl border border-hairline bg-white/[0.02] px-4 py-3">
-        <div>
-          <div className="text-[13px] font-medium text-ink">Demo mode</div>
-          <div className="text-[11px] text-ink-faint">Explore with realistic sample data</div>
-        </div>
-        <Switch
-          checked={settings.demoMode}
-          onCheckedChange={(checked) => void update({ demoMode: checked })}
         />
       </div>
     </Card>
