@@ -169,6 +169,17 @@ function shiftBack(isoDate: string): string {
   return new Date(Date.UTC(y, m - 1, d - 1, 12)).toISOString().slice(0, 10)
 }
 
+function axisLabelFor(metricKey: MetricKey, unit: string): string {
+  if (metricKey === 'sleepMinutes' || metricKey === 'sedentaryMinutes') return 'min'
+  if (metricKey === 'steps') return 'steps'
+  if (metricKey === 'floors') return 'floors'
+  return unit
+}
+
+function axisDomainFor(metricKey: MetricKey): { max: number } | undefined {
+  return metricKey === 'sleepEfficiency' || metricKey === 'spo2Pct' ? { max: 100 } : undefined
+}
+
 function RangeTabs({ range, onChange }: { range: Range; onChange: (r: Range) => void }): React.JSX.Element {
   return (
     <div className="flex rounded-xl border border-hairline bg-white/[0.03] p-0.5">
@@ -217,6 +228,7 @@ function DayDetail({
   const value = points.find((p) => p.date === date)?.value ?? null
   const base = baseline(points, date)
   const emphasis = points.findIndex((p) => p.date === date)
+  const axisLabel = axisLabelFor(metricKey, def.unit)
 
   return (
     <>
@@ -314,6 +326,7 @@ function DayDetail({
                 emphasisIndex={emphasis}
                 format={def.format}
                 unitLabel={def.unit}
+                axisLabel={axisLabel}
               />
             ) : (
               <TrendLine
@@ -327,6 +340,8 @@ function DayDetail({
                 format={def.format}
                 baseline={base != null && def.deltaMode !== 'abs' ? { value: base, label: '7d avg' } : null}
                 unitLabel={def.unit}
+                axisLabel={axisLabel}
+                domain={axisDomainFor(metricKey)}
               />
             )}
           </Panel>
@@ -357,6 +372,7 @@ function PeriodDetail({
   goal: number | null
 }): React.JSX.Element {
   const def = METRICS[metricKey]
+  const axisLabel = axisLabelFor(metricKey, def.unit)
   const present = points.filter((p) => p.value != null).map((p) => p.value as number)
 
   const current = aggregatePoints(points, def.aggregate)
@@ -434,6 +450,7 @@ function PeriodDetail({
               emphasisIndex={buckets ? undefined : chartPoints.findIndex((p) => p.date === date)}
               format={def.format}
               unitLabel={def.unit}
+              axisLabel={axisLabel}
             />
           ) : (
             <TrendLine
@@ -447,6 +464,8 @@ function PeriodDetail({
               format={def.format}
               baseline={avg != null ? { value: avg, label: 'avg' } : null}
               unitLabel={def.unit}
+              axisLabel={axisLabel}
+              domain={axisDomainFor(metricKey)}
             />
           )}
         </Panel>

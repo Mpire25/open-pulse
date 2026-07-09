@@ -149,6 +149,7 @@ export function SleepView({ date, goals, onOpenMetric }: SleepViewProps): React.
                     emphasisIndex={dates.indexOf(date)}
                     format={(v) => formatMinutes(v)}
                     unitLabel="asleep"
+                    axisLabel="min"
                   />
                 )}
               </div>
@@ -178,8 +179,10 @@ export function SleepView({ date, goals, onOpenMetric }: SleepViewProps): React.
                     }))}
                     color="var(--color-sleep)"
                     height={150}
-                    format={(v) => `${Math.round(v)}%`}
-                    unitLabel="efficiency"
+                    format={(v) => String(Math.round(v))}
+                    unitLabel="%"
+                    axisLabel="%"
+                    domain={{ max: 100 }}
                   />
                 )}
               </div>

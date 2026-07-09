@@ -158,6 +158,7 @@ function VitalCard({
                   : null
             }
             unitLabel={def.unit}
+            domain={metricKey === 'spo2Pct' ? { max: 100 } : undefined}
           />
         ) : (
           <div className="grid h-[130px] place-items-center text-[12px] text-ink-faint">

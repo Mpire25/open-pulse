@@ -72,6 +72,7 @@ export function ActivityView({ date, goals, onOpenMetric }: ActivityViewProps): 
                 emphasisIndex={emphasis}
                 format={def.format}
                 unitLabel={def.unit}
+                axisLabel={key === 'steps' ? 'steps' : def.unit}
               />
             )}
           </div>
