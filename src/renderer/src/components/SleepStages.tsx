@@ -16,6 +16,8 @@ export const STAGE_LABEL: Record<SleepStageType, string> = {
 }
 // Vertical band order, awake on top.
 const ROW_ORDER: SleepStageType[] = ['AWAKE', 'REM', 'LIGHT', 'DEEP']
+const ROW_HEIGHT = 22
+const ROW_GAP = 8
 
 interface SleepStagesProps {
   night: SleepNight
@@ -27,8 +29,6 @@ export function SleepStages({ night }: SleepStagesProps): React.JSX.Element {
   const start = new Date(night.startTime).getTime()
   const end = new Date(night.endTime).getTime()
   const total = Math.max(1, end - start)
-  const rowHeight = 22
-  const rowGap = 8
   const [hover, setHover] = useState<{ i: number; text: string; left: number; top: number } | null>(null)
 
   const blocks = useMemo(
@@ -45,21 +45,45 @@ export function SleepStages({ night }: SleepStagesProps): React.JSX.Element {
           type: seg.type,
           left,
           width,
-          top: row * (rowHeight + rowGap),
+          top: row * (ROW_HEIGHT + ROW_GAP),
           tip: `${STAGE_LABEL[seg.type]} · ${formatMinutes(minutes)} · ${formatClock(seg.startTime)}`
         }
       }),
     [night.stages, start, total]
   )
 
-  const chartHeight = ROW_ORDER.length * rowHeight + (ROW_ORDER.length - 1) * rowGap
+  const connectors = blocks.slice(1).flatMap((next, index) => {
+    const previous = blocks[index]
+    if (!previous || previous.type === next.type) return []
+
+    const previousIsAbove = previous.top < next.top
+    const upper = previousIsAbove ? previous : next
+    const lower = previousIsAbove ? next : previous
+    const upperCenter = upper.top + ROW_HEIGHT / 2
+    const lowerCenter = lower.top + ROW_HEIGHT / 2
+
+    return [
+      {
+        key: `${previous.key}-${next.key}`,
+        from: previous.key,
+        to: next.key,
+        left: next.left,
+        top: upperCenter,
+        height: lowerCenter - upperCenter,
+        topColor: STAGE_COLOR[upper.type],
+        bottomColor: STAGE_COLOR[lower.type]
+      }
+    ]
+  })
+
+  const chartHeight = ROW_ORDER.length * ROW_HEIGHT + (ROW_ORDER.length - 1) * ROW_GAP
 
   return (
     <div>
       <div className="flex gap-3">
         <div className="flex flex-col justify-between py-0.5" style={{ height: chartHeight }}>
           {ROW_ORDER.map((t) => (
-            <span key={t} className="text-[11px] leading-none text-ink-faint" style={{ height: rowHeight }}>
+            <span key={t} className="text-[11px] leading-none text-ink-faint" style={{ height: ROW_HEIGHT }}>
               {STAGE_LABEL[t]}
             </span>
           ))}
@@ -69,25 +93,46 @@ export function SleepStages({ night }: SleepStagesProps): React.JSX.Element {
             <div
               key={r}
               className="absolute inset-x-0 rounded-full bg-white/[0.03]"
-              style={{ top: r * (rowHeight + rowGap), height: rowHeight }}
+              style={{ top: r * (ROW_HEIGHT + ROW_GAP), height: ROW_HEIGHT }}
             />
           ))}
-          {blocks.map((b) => (
+          {connectors.map((connector) => (
             <div
-              key={b.key}
-              className="absolute rounded-[5px] transition-opacity"
+              key={connector.key}
+              aria-hidden
+              className="pointer-events-none absolute w-[1.5px] -translate-x-1/2 rounded-full transition-opacity duration-150"
               style={{
-                left: `${b.left}%`,
-                width: `${b.width}%`,
-                top: b.top,
-                height: rowHeight,
-                background: STAGE_COLOR[b.type],
-                opacity: hover && hover.i !== b.key ? 0.55 : 1
+                left: `${connector.left}%`,
+                top: connector.top,
+                height: connector.height,
+                background: `linear-gradient(to bottom, ${connector.topColor}, ${connector.bottomColor})`,
+                opacity:
+                  hover && hover.i !== connector.from && hover.i !== connector.to
+                    ? 0.35
+                    : 0.85
               }}
-              onPointerMove={() => setHover({ i: b.key, text: b.tip, left: b.left + b.width / 2, top: b.top })}
-              onPointerLeave={() => setHover(null)}
             />
           ))}
+          {blocks.map((b) => {
+            const overlapLeft = b.left > 0.01 ? 1 : 0
+            const overlapRight = b.left + b.width < 99.99 ? 1 : 0
+            return (
+              <div
+                key={b.key}
+                className="absolute z-[1] rounded-[5px] transition-opacity"
+                style={{
+                  left: `calc(${b.left}% - ${overlapLeft}px)`,
+                  width: `calc(${b.width}% + ${overlapLeft + overlapRight}px)`,
+                  top: b.top,
+                  height: ROW_HEIGHT,
+                  background: STAGE_COLOR[b.type],
+                  opacity: hover && hover.i !== b.key ? 0.55 : 1
+                }}
+                onPointerMove={() => setHover({ i: b.key, text: b.tip, left: b.left + b.width / 2, top: b.top })}
+                onPointerLeave={() => setHover(null)}
+              />
+            )
+          })}
           {hover && (
             <div
               className="pointer-events-none absolute z-20 -translate-x-1/2 -translate-y-[calc(100%+8px)] whitespace-nowrap rounded-lg border border-hairline bg-panel-2/95 px-2 py-1 text-[11px] font-medium text-ink shadow-lg backdrop-blur-md"
