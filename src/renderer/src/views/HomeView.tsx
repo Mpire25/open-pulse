@@ -1,6 +1,6 @@
 import { motion } from 'framer-motion'
 import { Footprints, Heartbeat, Moon, PersonSimpleRun } from '@phosphor-icons/react'
-import { Panel, DrillHeader, SectionHeader } from '@/components/Panel'
+import { Panel, DrillHeader, InteractivePanel, SectionHeader } from '@/components/Panel'
 import { ColumnChart, ProgressRing } from '@/components/charts'
 import { MetricStat } from '@/components/MetricStat'
 import { SleepStages } from '@/components/SleepStages'
@@ -26,7 +26,7 @@ import type { Goals, MetricKey } from '@shared/types'
 const HOME_METRICS: MetricKey[] = [
   'steps',
   'caloriesOut',
-  'activeZoneMinutes',
+  'caloriesIn',
   'sleepMinutes',
   'restingHeartRate',
   'hrvMs',
@@ -81,15 +81,22 @@ export function HomeView({ date, goals, onOpenMetric, onNavigate }: HomeViewProp
             {series.isMetricPending('caloriesOut') ? (
               <GoalRingSkeleton />
             ) : (
-              <GoalRing value={today.caloriesOut ?? null} goal={goals.caloriesOut} metricKey="caloriesOut" onOpen={onOpenMetric} />
+              <GoalRing
+                value={today.caloriesOut ?? null}
+                goal={goals.caloriesOut}
+                metricKey="caloriesOut"
+                label="Calories burned"
+                onOpen={onOpenMetric}
+              />
             )}
-            {series.isMetricPending('activeZoneMinutes') ? (
+            {series.isMetricPending('caloriesIn') ? (
               <GoalRingSkeleton />
             ) : (
               <GoalRing
-                value={today.activeZoneMinutes ?? null}
-                goal={goals.activeZoneMinutes}
-                metricKey="activeZoneMinutes"
+                value={today.caloriesIn ?? null}
+                goal={goals.caloriesIn}
+                metricKey="caloriesIn"
+                label="Calories eaten"
                 onOpen={onOpenMetric}
               />
             )}
@@ -166,12 +173,14 @@ export function HomeView({ date, goals, onOpenMetric, onNavigate }: HomeViewProp
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1.35fr_1fr]">
         {/* Daily movement */}
         <motion.div custom={2} variants={fade} initial="hidden" animate="show">
-          <Panel className={`flex h-full flex-col gap-4 p-6 ${CARD_HEIGHT.large}`}>
+          <InteractivePanel
+            className={`flex h-full flex-col gap-4 p-6 ${CARD_HEIGHT.large}`}
+            onOpen={() => onOpenMetric('steps')}
+          >
             <DrillHeader
               title="Daily movement"
               hint="Steps per hour"
               icon={<Footprints size={18} weight="fill" style={{ color: 'var(--color-activity)' }} />}
-              onOpen={() => onOpenMetric('steps')}
             />
             {intraday.isPending ? (
               <div className="mt-auto">
@@ -196,12 +205,15 @@ export function HomeView({ date, goals, onOpenMetric, onNavigate }: HomeViewProp
                 No movement recorded yet for this day.
               </div>
             )}
-          </Panel>
+          </InteractivePanel>
         </motion.div>
 
         {/* Last night */}
         <motion.div custom={3} variants={fade} initial="hidden" animate="show">
-          <Panel className={`flex h-full flex-col gap-4 p-6 ${CARD_HEIGHT.large}`}>
+          <InteractivePanel
+            className={`flex h-full flex-col gap-4 p-6 ${CARD_HEIGHT.large}`}
+            onOpen={() => onOpenMetric('sleepMinutes')}
+          >
             <DrillHeader
               title="Sleep"
               hint={
@@ -214,7 +226,6 @@ export function HomeView({ date, goals, onOpenMetric, onNavigate }: HomeViewProp
                 )
               }
               icon={<Moon size={18} weight="fill" style={{ color: 'var(--color-sleep)' }} />}
-              onOpen={() => onOpenMetric('sleepMinutes')}
             />
             {night.isPending ? (
               <SkeletonSleepStages />
@@ -225,7 +236,7 @@ export function HomeView({ date, goals, onOpenMetric, onNavigate }: HomeViewProp
                 Wear your Fitbit Air to bed to see sleep stages.
               </div>
             )}
-          </Panel>
+          </InteractivePanel>
         </motion.div>
       </div>
 
@@ -306,7 +317,7 @@ function SignalsPanel({
 function GoalRingSkeleton(): React.JSX.Element {
   return (
     <div className="flex flex-col items-center gap-2" aria-hidden>
-      <SkeletonRing />
+      <SkeletonRing size={148} stroke={17} />
       <SkeletonText className="w-20" />
     </div>
   )
@@ -316,23 +327,25 @@ function GoalRing({
   value,
   goal,
   metricKey,
+  label,
   onOpen
 }: {
   value: number | null
   goal: number
   metricKey: MetricKey
+  label?: string
   onOpen: (metric: MetricKey) => void
 }): React.JSX.Element {
   const def = METRICS[metricKey]
   const pct = value != null && goal > 0 ? Math.round((value / goal) * 100) : null
   return (
     <button onClick={() => onOpen(metricKey)} className="group flex flex-col items-center gap-2">
-      <ProgressRing value={value ?? 0} goal={goal} color={def.color} size={128} stroke={11}>
+      <ProgressRing value={value ?? 0} goal={goal} color={def.color} size={148} stroke={17}>
         <div className="text-center">
           <div className="text-[22px] font-semibold leading-none tracking-tight text-ink">
             {value != null ? def.format(value) : '—'}
           </div>
-          <div className="mt-1 text-[10px] uppercase tracking-wide text-ink-faint">{def.shortLabel ?? def.label}</div>
+          <div className="mt-1 text-[10px] uppercase tracking-wide text-ink-faint">{label ?? def.shortLabel ?? def.label}</div>
         </div>
       </ProgressRing>
       <span className="font-mono text-[11px] text-ink-dim transition-colors group-hover:text-ink">

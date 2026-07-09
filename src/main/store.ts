@@ -28,6 +28,10 @@ function normalizeGoals(raw?: Partial<Goals>): Goals {
     steps: positive(raw?.steps, DEFAULT_GOALS.steps),
     activeZoneMinutes: positive(raw?.activeZoneMinutes, DEFAULT_GOALS.activeZoneMinutes),
     caloriesOut: positive(raw?.caloriesOut, DEFAULT_GOALS.caloriesOut),
+    caloriesIn: positive(raw?.caloriesIn, DEFAULT_GOALS.caloriesIn),
+    proteinG: positive(raw?.proteinG, DEFAULT_GOALS.proteinG),
+    carbsG: positive(raw?.carbsG, DEFAULT_GOALS.carbsG),
+    fatG: positive(raw?.fatG, DEFAULT_GOALS.fatG),
     sleepMinutes: positive(raw?.sleepMinutes, DEFAULT_GOALS.sleepMinutes)
   }
 }

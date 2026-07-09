@@ -1,6 +1,6 @@
 import { motion } from 'framer-motion'
 import { Moon, Bed, Timer } from '@phosphor-icons/react'
-import { Panel, DrillHeader } from '@/components/Panel'
+import { Panel, DrillHeader, InteractivePanel } from '@/components/Panel'
 import { ColumnChart, ProgressRing, TrendLine } from '@/components/charts'
 import { SleepStages, STAGE_COLOR } from '@/components/SleepStages'
 import { CARD_HEIGHT, SkeletonChart, SkeletonRing, SkeletonSleepStages, SkeletonText } from '@/components/Skeleton'
@@ -42,7 +42,10 @@ export function SleepView({ date, goals, onOpenMetric }: SleepViewProps): React.
       {/* Selected night */}
       <motion.div custom={1} variants={fade} initial="hidden" animate="show">
         {nights.isPending ? (
-          <Panel className={`grid grid-cols-1 gap-8 p-7 lg:grid-cols-[auto_1fr] ${CARD_HEIGHT.detail}`}>
+          <InteractivePanel
+            className={`grid grid-cols-1 gap-8 p-7 lg:grid-cols-[auto_1fr] ${CARD_HEIGHT.detail}`}
+            onOpen={() => onOpenMetric('sleepMinutes')}
+          >
             <div className="flex flex-col items-center justify-center gap-3" aria-hidden>
               <SkeletonRing size={140} stroke={12} />
               <SkeletonText className="w-28" />
@@ -62,15 +65,17 @@ export function SleepView({ date, goals, onOpenMetric }: SleepViewProps): React.
                 title="Stages"
                 hint={<SkeletonText className="w-32" />}
                 icon={<Moon size={18} weight="fill" style={{ color: 'var(--color-sleep)' }} />}
-                onOpen={() => onOpenMetric('sleepMinutes')}
               />
               <div className="mt-5">
                 <SkeletonSleepStages />
               </div>
             </div>
-          </Panel>
+          </InteractivePanel>
         ) : night ? (
-          <Panel className={`grid grid-cols-1 gap-8 p-7 lg:grid-cols-[auto_1fr] ${CARD_HEIGHT.detail}`}>
+          <InteractivePanel
+            className={`grid grid-cols-1 gap-8 p-7 lg:grid-cols-[auto_1fr] ${CARD_HEIGHT.detail}`}
+            onOpen={() => onOpenMetric('sleepMinutes')}
+          >
             <div className="flex flex-col items-center justify-center gap-3">
               <ProgressRing
                 value={night.minutesAsleep}
@@ -103,13 +108,12 @@ export function SleepView({ date, goals, onOpenMetric }: SleepViewProps): React.
                 title="Stages"
                 hint="Hover a block for its timing"
                 icon={<Moon size={18} weight="fill" style={{ color: 'var(--color-sleep)' }} />}
-                onOpen={() => onOpenMetric('sleepMinutes')}
               />
               <div className="mt-5">
                 <SleepStages night={night} />
               </div>
             </div>
-          </Panel>
+          </InteractivePanel>
         ) : (
           <Panel className="grid place-items-center p-12 text-[13px] text-ink-faint">
             No sleep recorded for this night.
@@ -120,12 +124,14 @@ export function SleepView({ date, goals, onOpenMetric }: SleepViewProps): React.
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
           {/* Duration trend */}
           <motion.div custom={2} variants={fade} initial="hidden" animate="show">
-            <Panel className={`flex h-full flex-col gap-4 p-6 ${CARD_HEIGHT.chart}`}>
+            <InteractivePanel
+              className={`flex h-full flex-col gap-4 p-6 ${CARD_HEIGHT.chart}`}
+              onOpen={() => onOpenMetric('sleepMinutes')}
+            >
               <DrillHeader
                 title="Duration"
                 hint="Last 7 nights"
                 icon={<Moon size={18} weight="fill" style={{ color: 'var(--color-sleep)' }} />}
-                onOpen={() => onOpenMetric('sleepMinutes')}
               />
               <div className="mt-auto">
                 {nights.isPending ? (
@@ -146,17 +152,19 @@ export function SleepView({ date, goals, onOpenMetric }: SleepViewProps): React.
                   />
                 )}
               </div>
-            </Panel>
+            </InteractivePanel>
           </motion.div>
 
           {/* Efficiency trend */}
           <motion.div custom={3} variants={fade} initial="hidden" animate="show">
-            <Panel className={`flex h-full flex-col gap-4 p-6 ${CARD_HEIGHT.chart}`}>
+            <InteractivePanel
+              className={`flex h-full flex-col gap-4 p-6 ${CARD_HEIGHT.chart}`}
+              onOpen={() => onOpenMetric('sleepEfficiency')}
+            >
               <DrillHeader
                 title="Efficiency"
                 hint="Share of the night actually asleep"
                 icon={<Timer size={18} weight="fill" style={{ color: 'var(--color-sleep)' }} />}
-                onOpen={() => onOpenMetric('sleepEfficiency')}
               />
               <div className="mt-auto">
                 {nights.isPending ? (
@@ -175,7 +183,7 @@ export function SleepView({ date, goals, onOpenMetric }: SleepViewProps): React.
                   />
                 )}
               </div>
-            </Panel>
+            </InteractivePanel>
           </motion.div>
       </div>
 

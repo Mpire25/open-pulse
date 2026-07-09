@@ -1,6 +1,6 @@
 import { motion } from 'framer-motion'
 import { ForkKnife } from '@phosphor-icons/react'
-import { Panel, DrillHeader, SectionHeader } from '@/components/Panel'
+import { Panel, DrillHeader, InteractivePanel, SectionHeader } from '@/components/Panel'
 import { ColumnChart } from '@/components/charts'
 import { DeltaChip } from '@/components/DeltaChip'
 import { CARD_HEIGHT, SkeletonBlock, SkeletonChart, SkeletonText } from '@/components/Skeleton'
@@ -10,7 +10,7 @@ import { METRICS } from '@/lib/metric-registry'
 import { metricAbsent, rangeEnding, seriesPoints } from '@/lib/metrics'
 import { formatInt, longDate, weekdayShort } from '@/lib/format'
 import { fade } from '@/lib/motion'
-import type { DayValues, MetricKey } from '@shared/types'
+import type { DayValues, Goals, MetricKey } from '@shared/types'
 
 const NUTRITION_METRICS: MetricKey[] = [
   'caloriesIn',
@@ -18,8 +18,7 @@ const NUTRITION_METRICS: MetricKey[] = [
   'proteinG',
   'carbsG',
   'fatG',
-  'fiberG',
-  'waterMl'
+  'fiberG'
 ]
 
 // Macro energy densities, kcal per gram.
@@ -31,10 +30,11 @@ const MACROS = [
 
 interface NutritionViewProps {
   date: string
+  goals: Goals
   onOpenMetric: (metric: MetricKey) => void
 }
 
-export function NutritionView({ date, onOpenMetric }: NutritionViewProps): React.JSX.Element {
+export function NutritionView({ date, goals, onOpenMetric }: NutritionViewProps): React.JSX.Element {
   const { start, end } = rangeEnding(date, 7)
   const series = useSeries(NUTRITION_METRICS, start, end)
 
@@ -59,7 +59,10 @@ export function NutritionView({ date, onOpenMetric }: NutritionViewProps): React
     const pending = series.isMetricPending(key)
     return (
       <motion.div key={key} custom={index} variants={fade} initial="hidden" animate="show">
-        <Panel className={`flex h-full flex-col gap-4 p-6 ${CARD_HEIGHT.chart}`}>
+        <InteractivePanel
+          className={`flex h-full flex-col gap-4 p-6 ${CARD_HEIGHT.chart}`}
+          onOpen={() => onOpenMetric(key)}
+        >
           <DrillHeader
             title={def.label}
             hint="Last 7 days"
@@ -74,7 +77,6 @@ export function NutritionView({ date, onOpenMetric }: NutritionViewProps): React
                 </span>
               ) : undefined
             }
-            onOpen={() => onOpenMetric(key)}
           />
           <div className="mt-auto">
             {pending ? (
@@ -94,7 +96,7 @@ export function NutritionView({ date, onOpenMetric }: NutritionViewProps): React
               />
             )}
           </div>
-        </Panel>
+        </InteractivePanel>
       </motion.div>
     )
   }
@@ -103,7 +105,7 @@ export function NutritionView({ date, onOpenMetric }: NutritionViewProps): React
     <div className="mx-auto flex max-w-[1180px] flex-col gap-5 px-8 pb-12">
       <motion.header custom={0} variants={fade} initial="hidden" animate="show" className="pt-2">
         <h1 className="display text-[27px] font-bold text-ink">Nutrition</h1>
-        <p className="mt-1 text-[13px] text-ink-dim">{longDate(date)} · logged food and water</p>
+        <p className="mt-1 text-[13px] text-ink-dim">{longDate(date)} · logged food</p>
       </motion.header>
 
       {!anyIntake ? (
@@ -131,6 +133,15 @@ export function NutritionView({ date, onOpenMetric }: NutritionViewProps): React
                   )}
                   <span className="text-[13px] text-ink-dim">kcal eaten</span>
                 </div>
+                {intakePending ? (
+                  <SkeletonText className="mt-1 w-32" />
+                ) : (
+                  <div className="text-[11px] text-ink-faint">
+                    {today.caloriesIn != null
+                      ? `${Math.round((today.caloriesIn / goals.caloriesIn) * 100)}% of ${formatInt(goals.caloriesIn)} kcal goal`
+                      : `${formatInt(goals.caloriesIn)} kcal goal`}
+                  </div>
+                )}
                 {series.isMetricPending('caloriesOut') ? (
                   <SkeletonText className="mt-1 w-36" />
                 ) : today.caloriesOut != null ? (
@@ -152,7 +163,7 @@ export function NutritionView({ date, onOpenMetric }: NutritionViewProps): React
                 {macrosPending ? (
                   <MacroBreakdownSkeleton />
                 ) : hasMacrosToday ? (
-                  <MacroBreakdown today={today} onOpenMetric={onOpenMetric} />
+                  <MacroBreakdown today={today} goals={goals} onOpenMetric={onOpenMetric} />
                 ) : (
                   <div className="grid h-full min-h-[120px] place-items-center text-[13px] text-ink-faint">
                     No macro detail for this day — log meals in the Fitbit app to break energy into protein, carbs, and fat.
@@ -163,9 +174,8 @@ export function NutritionView({ date, onOpenMetric }: NutritionViewProps): React
           </motion.div>
 
           {/* Trends */}
-          <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+          <div className="grid grid-cols-1 gap-5">
             {barCard('caloriesIn', 2)}
-            {barCard('waterMl', 3)}
           </div>
         </>
       )}
@@ -192,9 +202,11 @@ function MacroBreakdownSkeleton(): React.JSX.Element {
 
 function MacroBreakdown({
   today,
+  goals,
   onOpenMetric
 }: {
   today: DayValues
+  goals: Goals
   onOpenMetric: (metric: MetricKey) => void
 }): React.JSX.Element {
   const parts = MACROS.map((m) => ({ ...m, grams: today[m.key] ?? null, kcal: (today[m.key] ?? 0) * m.kcalPerG }))
@@ -225,7 +237,11 @@ function MacroBreakdown({
             <div className="mt-1 text-[17px] font-semibold text-ink">
               {p.grams != null ? `${formatInt(p.grams)} g` : '—'}
             </div>
-            <div className="text-[10.5px] text-ink-faint">{Math.round((p.kcal / totalKcal) * 100)}% of energy</div>
+            <div className="text-[10.5px] text-ink-faint">
+              {p.grams != null
+                ? `${Math.round((p.grams / goals[p.key]) * 100)}% of ${formatInt(goals[p.key])} g goal`
+                : `${formatInt(goals[p.key])} g goal`}
+            </div>
           </button>
         ))}
       </div>

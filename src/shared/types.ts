@@ -155,6 +155,10 @@ export interface Goals {
   steps: number
   activeZoneMinutes: number
   caloriesOut: number
+  caloriesIn: number
+  proteinG: number
+  carbsG: number
+  fatG: number
   sleepMinutes: number
 }
 
@@ -162,6 +166,10 @@ export const DEFAULT_GOALS: Goals = {
   steps: 10000,
   activeZoneMinutes: 30,
   caloriesOut: 2600,
+  caloriesIn: 2200,
+  proteinG: 150,
+  carbsG: 250,
+  fatG: 70,
   sleepMinutes: 8 * 60
 }
 

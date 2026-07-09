@@ -125,7 +125,9 @@ export default function App(): React.JSX.Element {
                           <SleepView date={selectedDate} goals={settings.goals} onOpenMetric={setDetailMetric} />
                         )}
                         {view === 'body' && <BodyView date={selectedDate} onOpenMetric={setDetailMetric} />}
-                        {view === 'nutrition' && <NutritionView date={selectedDate} onOpenMetric={setDetailMetric} />}
+                        {view === 'nutrition' && (
+                          <NutritionView date={selectedDate} goals={settings.goals} onOpenMetric={setDetailMetric} />
+                        )}
                       </>
                     )}
                   </ConnectGate>

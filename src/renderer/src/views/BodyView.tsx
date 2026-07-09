@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion'
-import { Panel, DrillHeader } from '@/components/Panel'
+import { DrillHeader, InteractivePanel } from '@/components/Panel'
 import { TrendLine } from '@/components/charts'
 import { CARD_HEIGHT, SkeletonChart, SkeletonText } from '@/components/Skeleton'
 import { ErrorState } from '@/components/ErrorState'
@@ -47,7 +47,10 @@ export function BodyView({ date, onOpenMetric }: BodyViewProps): React.JSX.Eleme
             const hasData = points.some((point) => point.value != null)
             return (
               <motion.div key={key} custom={i + 1} variants={fade} initial="hidden" animate="show">
-                <Panel className={`flex flex-col gap-4 p-6 ${CARD_HEIGHT.chart}`}>
+                <InteractivePanel
+                  className={`flex flex-col gap-4 p-6 ${CARD_HEIGHT.chart}`}
+                  onOpen={() => onOpenMetric(key)}
+                >
                   <DrillHeader
                     title={def.label}
                     hint={def.hint}
@@ -62,7 +65,6 @@ export function BodyView({ date, onOpenMetric }: BodyViewProps): React.JSX.Eleme
                         </span>
                       ) : undefined
                     }
-                    onOpen={() => onOpenMetric(key)}
                   />
                   {pending ? (
                     <SkeletonChart />
@@ -82,7 +84,7 @@ export function BodyView({ date, onOpenMetric }: BodyViewProps): React.JSX.Eleme
                       Nothing logged in this window
                     </div>
                   )}
-                </Panel>
+                </InteractivePanel>
               </motion.div>
             )
         })}

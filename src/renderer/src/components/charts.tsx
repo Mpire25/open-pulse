@@ -2,7 +2,8 @@
 // gridlines, a hover layer on every plot (full-band hit targets, one tooltip
 // with the value leading), previous render held while data refetches.
 
-import { useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { animate, motion, useMotionValue, useReducedMotion, useTransform } from 'framer-motion'
 import { formatMinuteOfDay } from '@/lib/format'
 
 // ---------------------------------------------------------------------------
@@ -603,18 +604,49 @@ interface ProgressRingProps {
   children?: React.ReactNode
 }
 
+const RING_EASE = [0.19, 1, 0.22, 1] as const
+
 export function ProgressRing({ value, goal, color, size = 120, stroke = 10, children }: ProgressRingProps): React.JSX.Element {
+  const reduceMotion = useReducedMotion()
   const r = (size - stroke) / 2
   const c = size / 2
   const circumference = 2 * Math.PI * r
-  const progress = goal > 0 ? Math.max(0, Math.min(1, value / goal)) : 0
+  const ratio = goal > 0 ? Math.max(0, value / goal) : 0
+  const isOverGoal = ratio > 1
+  const animatedRatio = useMotionValue(reduceMotion ? ratio : 0)
+  const firstLapOffset = useTransform(animatedRatio, (current) => {
+    const lap = Math.min(1, Math.max(0, current))
+    return circumference * (1 - lap)
+  })
+  const extraLapProgress = useTransform(animatedRatio, (current) => visibleExtraLap(current))
+  const extraLapOffset = useTransform(extraLapProgress, (lap) => circumference * (1 - lap))
+  const capX = useTransform(extraLapProgress, (lap) => c + r * Math.cos(Math.PI * 2 * lap))
+  const capY = useTransform(extraLapProgress, (lap) => c + r * Math.sin(Math.PI * 2 * lap))
+  const capRotation = useTransform(extraLapProgress, (lap) => lap * 360)
+  const capOpacity = useTransform(animatedRatio, [0.995, 1.005], [0, 1])
+  const capShadowOpacity = useTransform(animatedRatio, [0.995, 1.005], [0, 0.34])
+  const capEdgeOpacity = useTransform(animatedRatio, [0.995, 1.005], [0, 0.48])
+
+  useEffect(() => {
+    if (reduceMotion) {
+      animatedRatio.set(ratio)
+      return
+    }
+
+    animatedRatio.set(0)
+    const controls = animate(animatedRatio, ratio, {
+      duration: Math.min(2.6, 0.75 + Math.min(ratio, 2.5) * 0.72),
+      ease: RING_EASE
+    })
+    return () => controls.stop()
+  }, [animatedRatio, ratio, reduceMotion])
 
   return (
     <div className="relative" style={{ width: size, height: size }}>
-      <svg width={size} height={size} className="block -rotate-90">
+      <svg width={size} height={size} className="block overflow-visible -rotate-90" aria-hidden>
         <circle cx={c} cy={c} r={r} fill="none" stroke={color} opacity={0.15} strokeWidth={stroke} />
-        {progress > 0.004 && (
-          <circle
+        {ratio > 0.004 && (
+          <motion.circle
             cx={c}
             cy={c}
             r={r}
@@ -623,12 +655,79 @@ export function ProgressRing({ value, goal, color, size = 120, stroke = 10, chil
             strokeWidth={stroke}
             strokeLinecap="round"
             strokeDasharray={circumference}
-            strokeDashoffset={circumference * (1 - progress)}
-            className="transition-[stroke-dashoffset] duration-700 ease-out"
+            style={{ strokeDashoffset: firstLapOffset }}
           />
         )}
+        {isOverGoal && (
+          <>
+            <motion.circle
+              cx={c}
+              cy={c}
+              r={r}
+              fill="none"
+              stroke={color}
+              strokeWidth={stroke}
+              strokeLinecap="round"
+              strokeDasharray={circumference}
+              style={{ strokeDashoffset: extraLapOffset }}
+            />
+            <motion.circle
+              cx={capX}
+              cy={capY}
+              r={stroke / 2 + 0.4}
+              fill="none"
+              stroke="var(--color-canvas)"
+              strokeWidth={3.4}
+              strokeDasharray={`${Math.PI * (stroke / 2 + 0.4)} ${Math.PI * (stroke / 2 + 0.4)}`}
+              style={{
+                filter: 'blur(1.2px)',
+                opacity: capShadowOpacity,
+                rotate: capRotation,
+                transformBox: 'fill-box',
+                transformOrigin: 'center'
+              }}
+            />
+            <motion.circle
+              cx={capX}
+              cy={capY}
+              r={stroke / 2}
+              fill={color}
+              style={{ opacity: capOpacity }}
+            />
+            <motion.circle
+              cx={capX}
+              cy={capY}
+              r={stroke / 2 + 0.15}
+              fill="none"
+              stroke="var(--color-canvas)"
+              strokeWidth={1.4}
+              strokeDasharray={`${(Math.PI * stroke) / 2} ${(Math.PI * stroke) / 2}`}
+              style={{
+                filter: 'blur(0.3px)',
+                opacity: capEdgeOpacity,
+                rotate: capRotation,
+                transformBox: 'fill-box',
+                transformOrigin: 'center'
+              }}
+            />
+          </>
+        )}
       </svg>
-      <div className="absolute inset-0 grid place-items-center">{children}</div>
+      <motion.div
+        className="absolute inset-0 grid place-items-center"
+        initial={{ opacity: 0, scale: 0.96 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ duration: reduceMotion ? 0 : 0.7, delay: reduceMotion ? 0 : 0.12, ease: RING_EASE }}
+      >
+        {children}
+      </motion.div>
     </div>
   )
+}
+
+function visibleExtraLap(ratio: number): number {
+  if (ratio <= 1) return 0
+  const extra = ratio - 1
+  const remainder = extra - Math.floor(extra)
+  return remainder < 0.0001 && extra > 0 ? 1 : remainder
 }

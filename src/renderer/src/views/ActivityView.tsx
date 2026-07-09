@@ -1,6 +1,6 @@
 import { motion } from 'framer-motion'
 import { Barbell, Footprints } from '@phosphor-icons/react'
-import { Panel, DrillHeader, SectionHeader } from '@/components/Panel'
+import { Panel, DrillHeader, InteractivePanel, SectionHeader } from '@/components/Panel'
 import { ColumnChart } from '@/components/charts'
 import { MetricStat } from '@/components/MetricStat'
 import { CARD_HEIGHT, SkeletonChart, SkeletonMetricStat, SkeletonRows, SkeletonText } from '@/components/Skeleton'
@@ -47,12 +47,14 @@ export function ActivityView({ date, goals, onOpenMetric }: ActivityViewProps): 
     const points = pointsFor(key)
     return (
       <motion.div key={key} custom={index} variants={fade} initial="hidden" animate="show">
-        <Panel className={`flex h-full flex-col gap-5 p-6 ${CARD_HEIGHT.chart}`}>
+        <InteractivePanel
+          className={`flex h-full flex-col gap-5 p-6 ${CARD_HEIGHT.chart}`}
+          onOpen={() => onOpenMetric(key)}
+        >
           <DrillHeader
             title={def.label}
             hint="Last 7 days"
             icon={<span className="h-2 w-2 rounded-full" style={{ background: def.color }} />}
-            onOpen={() => onOpenMetric(key)}
           />
           <div className="mt-auto">
             {series.isMetricPending(key) ? (
@@ -73,7 +75,7 @@ export function ActivityView({ date, goals, onOpenMetric }: ActivityViewProps): 
               />
             )}
           </div>
-        </Panel>
+        </InteractivePanel>
       </motion.div>
     )
   }
@@ -115,12 +117,14 @@ export function ActivityView({ date, goals, onOpenMetric }: ActivityViewProps): 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1.35fr_1fr]">
         {/* Hourly movement */}
         <motion.div custom={2} variants={fade} initial="hidden" animate="show">
-          <Panel className={`flex h-full flex-col gap-4 p-6 ${CARD_HEIGHT.large}`}>
+          <InteractivePanel
+            className={`flex h-full flex-col gap-4 p-6 ${CARD_HEIGHT.large}`}
+            onOpen={() => onOpenMetric('steps')}
+          >
             <DrillHeader
               title="Hourly steps"
               hint="When did you move?"
               icon={<Footprints size={18} weight="fill" style={{ color: 'var(--color-activity)' }} />}
-              onOpen={() => onOpenMetric('steps')}
             />
             {intraday.isPending ? (
               <SkeletonChart height={170} columns={12} />
@@ -142,7 +146,7 @@ export function ActivityView({ date, goals, onOpenMetric }: ActivityViewProps): 
                 No movement recorded yet for this day.
               </div>
             )}
-          </Panel>
+          </InteractivePanel>
         </motion.div>
 
         {/* Workouts */}

@@ -19,6 +19,36 @@ export const Panel = forwardRef<HTMLDivElement, HTMLAttributes<HTMLDivElement>>(
 )
 Panel.displayName = 'Panel'
 
+type InteractivePanelProps = Omit<HTMLAttributes<HTMLDivElement>, 'onClick'> & {
+  onOpen: () => void
+}
+
+/** A single-destination panel whose entire surface is the navigation target. */
+export const InteractivePanel = forwardRef<HTMLDivElement, InteractivePanelProps>(
+  ({ className, onOpen, onKeyDown, ...props }, ref) => (
+    <Panel
+      ref={ref}
+      {...props}
+      role="button"
+      tabIndex={0}
+      className={cn(
+        'group/drill cursor-pointer transition-[background-color,border-color,box-shadow,transform] hover:border-hairline-strong hover:bg-panel-2/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 active:translate-y-px',
+        className
+      )}
+      onClick={onOpen}
+      onKeyDown={(event) => {
+        onKeyDown?.(event)
+        if (event.defaultPrevented) return
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault()
+          onOpen()
+        }
+      }}
+    />
+  )
+)
+InteractivePanel.displayName = 'InteractivePanel'
+
 interface SectionHeaderProps {
   title: string
   hint?: React.ReactNode
@@ -42,17 +72,14 @@ export function SectionHeader({ title, hint, icon, action }: SectionHeaderProps)
 }
 
 interface DrillHeaderProps extends SectionHeaderProps {
-  /** Opens the metric's detail page; renders the whole header as a button with a chevron. */
-  onOpen: () => void
+  /** When omitted, the surrounding InteractivePanel owns the navigation. */
+  onOpen?: () => void
 }
 
 /** Card header that drills into a detail page — the "›" affordance. */
 export function DrillHeader({ title, hint, icon, action, onOpen }: DrillHeaderProps): React.JSX.Element {
-  return (
-    <button
-      onClick={onOpen}
-      className="group -mx-2 -my-1 flex items-center justify-between gap-3 rounded-xl px-2 py-1 text-left transition-colors hover:bg-white/[0.04]"
-    >
+  const content = (
+    <>
       <div className="flex items-center gap-2.5">
         {icon && <span className="text-ink-dim">{icon}</span>}
         <div>
@@ -65,9 +92,20 @@ export function DrillHeader({ title, hint, icon, action, onOpen }: DrillHeaderPr
         <CaretRight
           size={14}
           weight="bold"
-          className="text-ink-faint transition-all group-hover:translate-x-0.5 group-hover:text-ink"
+          className="text-ink-faint transition-all group-hover/drill:translate-x-0.5 group-hover/drill:text-ink"
         />
       </div>
+    </>
+  )
+
+  return onOpen ? (
+    <button
+      onClick={onOpen}
+      className="group/drill -mx-2 -my-1 flex items-center justify-between gap-3 rounded-xl px-2 py-1 text-left transition-colors hover:bg-white/[0.04]"
+    >
+      {content}
     </button>
+  ) : (
+    <div className="flex items-center justify-between gap-3">{content}</div>
   )
 }
