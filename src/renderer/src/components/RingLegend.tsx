@@ -3,7 +3,7 @@ import { formatInt } from '@/lib/format'
 interface RingLegendItem {
   label: string
   value: number
-  goal: number
+  goal: number | null
   unit: string
   color: string
 }
@@ -12,7 +12,7 @@ export function RingLegend({ items }: { items: RingLegendItem[] }): React.JSX.El
   return (
     <div className="flex flex-col divide-y divide-hairline">
       {items.map((item) => {
-        const pct = Math.round((item.value / item.goal) * 100)
+        const pct = item.goal ? Math.round((item.value / item.goal) * 100) : null
         return (
           <div key={item.label} className="flex items-center justify-between py-3 first:pt-0 last:pb-0">
             <div className="flex items-center gap-2.5">
@@ -23,10 +23,16 @@ export function RingLegend({ items }: { items: RingLegendItem[] }): React.JSX.El
               <span className="font-mono text-[15px] font-medium text-ink" style={{ color: item.color }}>
                 {formatInt(item.value)}
               </span>
-              <span className="font-mono text-[12px] text-ink-faint">
-                / {formatInt(item.goal)} {item.unit}
-              </span>
-              <span className="ml-1 w-9 text-right font-mono text-[11px] text-ink-faint">{pct}%</span>
+              {item.goal ? (
+                <>
+                  <span className="font-mono text-[12px] text-ink-faint">
+                    / {formatInt(item.goal)} {item.unit}
+                  </span>
+                  <span className="ml-1 w-9 text-right font-mono text-[11px] text-ink-faint">{pct}%</span>
+                </>
+              ) : (
+                <span className="font-mono text-[12px] text-ink-faint">{item.unit}</span>
+              )}
             </div>
           </div>
         )

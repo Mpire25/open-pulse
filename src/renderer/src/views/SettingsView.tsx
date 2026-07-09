@@ -32,7 +32,7 @@ export function SettingsView({
         className="pt-2"
       >
         <h1 className="text-[28px] font-semibold tracking-tight text-ink">Settings</h1>
-        <p className="mt-1 text-[13px] text-ink-dim">Connect your accounts and tune your goals.</p>
+        <p className="mt-1 text-[13px] text-ink-dim">Connect your accounts.</p>
       </motion.header>
 
       <GoogleCard
@@ -42,7 +42,6 @@ export function SettingsView({
         onGoogleChange={onGoogleChange}
       />
       <CodexCard codex={codex} onCodexChange={onCodexChange} />
-      <GoalsCard settings={settings} onSettingsChange={onSettingsChange} />
     </div>
   )
 }
@@ -209,99 +208,6 @@ function CodexCard({
         </div>
       )}
     </Card>
-  )
-}
-
-function GoalsCard({
-  settings,
-  onSettingsChange
-}: {
-  settings: AppSettings
-  onSettingsChange: (s: AppSettings) => void
-}): React.JSX.Element {
-  const update = async (patch: Partial<AppSettings>): Promise<void> => {
-    onSettingsChange(await window.pulse.settings.update(patch))
-  }
-
-  const setGoal = (key: keyof AppSettings['goals'], value: number): void => {
-    void update({ goals: { ...settings.goals, [key]: value } })
-  }
-
-  return (
-    <Card index={2}>
-      <SectionHeader title="Daily goals" hint="Targets for your activity rings" />
-      <div className="flex flex-col divide-y divide-hairline">
-        <GoalRow
-          label="Move"
-          unit="kcal"
-          color="var(--color-move)"
-          value={settings.goals.activeEnergyKcal}
-          step={50}
-          onChange={(v) => setGoal('activeEnergyKcal', v)}
-        />
-        <GoalRow
-          label="Exercise"
-          unit="min"
-          color="var(--color-exercise)"
-          value={settings.goals.activeZoneMinutes}
-          step={5}
-          onChange={(v) => setGoal('activeZoneMinutes', v)}
-        />
-        <GoalRow
-          label="Steps"
-          unit="steps"
-          color="var(--color-stand)"
-          value={settings.goals.steps}
-          step={500}
-          onChange={(v) => setGoal('steps', v)}
-        />
-      </div>
-    </Card>
-  )
-}
-
-function GoalRow({
-  label,
-  unit,
-  color,
-  value,
-  step,
-  onChange
-}: {
-  label: string
-  unit: string
-  color: string
-  value: number
-  step: number
-  onChange: (v: number) => void
-}): React.JSX.Element {
-  return (
-    <div className="flex items-center justify-between py-3 first:pt-0">
-      <div className="flex items-center gap-2.5">
-        <span className="h-2.5 w-2.5 rounded-full" style={{ background: color }} />
-        <span className="text-[13px] font-medium text-ink">{label}</span>
-      </div>
-      <div className="flex items-center gap-2">
-        <button
-          onClick={() => onChange(Math.max(step, value - step))}
-          className="grid h-7 w-7 place-items-center rounded-lg bg-white/5 text-ink-dim transition-colors hover:bg-white/10 hover:text-ink active:scale-95"
-        >
-          −
-        </button>
-        <div className="flex w-24 items-baseline justify-center gap-1">
-          <span className="font-mono text-[15px] font-medium text-ink">
-            {new Intl.NumberFormat('en-US').format(value)}
-          </span>
-          <span className="text-[11px] text-ink-faint">{unit}</span>
-        </div>
-        <button
-          onClick={() => onChange(value + step)}
-          className="grid h-7 w-7 place-items-center rounded-lg bg-white/5 text-ink-dim transition-colors hover:bg-white/10 hover:text-ink active:scale-95"
-        >
-          +
-        </button>
-      </div>
-    </div>
   )
 }
 

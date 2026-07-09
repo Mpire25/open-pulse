@@ -13,6 +13,8 @@ import type {
   Goals
 } from '../shared/types'
 
+const DEMO_GOALS: Goals = { steps: 10000, activeZoneMinutes: 30, activeEnergyKcal: 500 }
+
 function mulberry32(seed: number): () => number {
   let a = seed >>> 0
   return () => {
@@ -125,7 +127,7 @@ function generateHeartSeries(date: string, rand: () => number, upTo: number): He
   return samples
 }
 
-export function demoDashboard(goals: Goals): DashboardToday {
+export function demoDashboard(): DashboardToday {
   const date = isoDate(new Date())
   const rand = mulberry32(seedFor(date))
   const progress = dayProgress()
@@ -139,9 +141,9 @@ export function demoDashboard(goals: Goals): DashboardToday {
 
   return {
     date,
-    steps: { current: steps, goal: goals.steps },
-    activeZoneMinutes: { current: azm, goal: goals.activeZoneMinutes },
-    activeEnergyKcal: { current: kcal, goal: goals.activeEnergyKcal },
+    steps: { current: steps, goal: DEMO_GOALS.steps },
+    activeZoneMinutes: { current: azm, goal: DEMO_GOALS.activeZoneMinutes },
+    activeEnergyKcal: { current: kcal, goal: DEMO_GOALS.activeEnergyKcal },
     distanceKm: +(steps * 0.00074).toFixed(2),
     floors: Math.floor(steps / 1300),
     restingHeartRate: Math.round(52 + rand() * 8),

@@ -13,7 +13,6 @@ import type {
 import { getGoogleAccessToken } from './google-auth'
 import { dailyRollUp, listDataPoints, listPairedDevices, type RawDataPoint } from './health-api'
 import { demoDashboard, demoSleepHistory, demoWeek } from './sample-data'
-import { getSettings } from './store'
 
 function isoDate(d: Date): string {
   const tz = d.getTimezoneOffset() * 60_000
@@ -104,9 +103,8 @@ function firstNumber(obj: unknown): number {
 // Public service
 
 export async function getDashboardToday(): Promise<DashboardToday> {
-  const goals = getSettings().goals
   const token = await liveToken()
-  if (!token) return demoDashboard(goals)
+  if (!token) return demoDashboard()
 
   try {
     const now = new Date()
@@ -184,11 +182,11 @@ export async function getDashboardToday(): Promise<DashboardToday> {
 
     return {
       date: today,
-      steps: { current: firstNumber(stepsRoll[0]?.steps), goal: goals.steps },
-      activeZoneMinutes: { current: firstNumber(azmRoll[0]?.activeZoneMinutes), goal: goals.activeZoneMinutes },
+      steps: { current: firstNumber(stepsRoll[0]?.steps), goal: null },
+      activeZoneMinutes: { current: firstNumber(azmRoll[0]?.activeZoneMinutes), goal: null },
       activeEnergyKcal: {
         current: Math.round(firstNumber(energyRoll[0]?.activeEnergyBurned)),
-        goal: goals.activeEnergyKcal
+        goal: null
       },
       distanceKm: +(firstNumber(distanceRoll[0]?.distance) / 1000).toFixed(2),
       floors: firstNumber(floorsRoll[0]?.floors),
@@ -203,7 +201,7 @@ export async function getDashboardToday(): Promise<DashboardToday> {
     }
   } catch (err) {
     console.error('[health] live dashboard failed, serving demo data:', err)
-    return demoDashboard(goals)
+    return demoDashboard()
   }
 }
 

@@ -7,8 +7,6 @@ import { ProgressRing } from '@/components/ProgressRing'
 import { formatMinutes, longDate } from '@/lib/format'
 import type { SleepNight } from '@shared/types'
 
-const SLEEP_GOAL_MIN = 8 * 60
-
 export function SleepView(): React.JSX.Element {
   const [nights, setNights] = useState<SleepNight[] | null>(null)
 
@@ -57,7 +55,6 @@ export function SleepView(): React.JSX.Element {
             <div className="flex flex-col items-center justify-center gap-3">
               <ProgressRing
                 value={latest.minutesAsleep}
-                goal={SLEEP_GOAL_MIN}
                 color="var(--color-sleep-core)"
                 trackColor="rgb(63 142 246 / 0.16)"
                 size={132}

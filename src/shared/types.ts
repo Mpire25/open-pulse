@@ -2,7 +2,7 @@
 
 export interface RingMetric {
   current: number
-  goal: number
+  goal: number | null
 }
 
 export type SleepStageType = 'AWAKE' | 'LIGHT' | 'DEEP' | 'REM'
@@ -71,7 +71,6 @@ export interface AppSettings {
   googleClientId: string
   googleClientSecret: string
   googleClientSecretConfigured: boolean
-  goals: Goals
 }
 
 export interface GoogleAuthStatus {

@@ -7,7 +7,6 @@ import type { WebContents } from 'electron'
 import type { AiEvent, ChatMessage } from '../shared/types'
 import { getCodexTokens } from './codex-auth'
 import { getDashboardToday, getSleepHistory, getWeekSeries } from './health-service'
-import { getSettings } from './store'
 
 const CODEX_URL = 'https://chatgpt.com/backend-api/codex/responses'
 const MODEL = 'gpt-5.1-codex'
@@ -32,7 +31,7 @@ const TOOLS: ToolSpec[] = [
     type: 'function',
     name: 'get_today_dashboard',
     description:
-      "Today's snapshot: steps, active zone minutes, active energy (kcal) each with goals, distance, floors, resting/current heart rate, intraday heart-rate series, HRV, SpO2, breathing rate, and last night's sleep.",
+      "Today's snapshot: steps, active zone minutes, active energy (kcal), distance, floors, resting/current heart rate, intraday heart-rate series, HRV, SpO2, breathing rate, and last night's sleep.",
     strict: false,
     parameters: { type: 'object', properties: {}, additionalProperties: false }
   },
@@ -56,21 +55,13 @@ const TOOLS: ToolSpec[] = [
       },
       additionalProperties: false
     }
-  },
-  {
-    type: 'function',
-    name: 'get_user_goals',
-    description: "The user's configured daily goals (steps, active zone minutes, active energy kcal).",
-    strict: false,
-    parameters: { type: 'object', properties: {}, additionalProperties: false }
   }
 ]
 
 const TOOL_LABELS: Record<string, string> = {
   get_today_dashboard: 'Reading today’s metrics',
   get_week_series: 'Reading the last 7 days',
-  get_sleep_history: 'Reading sleep history',
-  get_user_goals: 'Reading your goals'
+  get_sleep_history: 'Reading sleep history'
 }
 
 async function runTool(name: string, args: Record<string, unknown>): Promise<string> {
@@ -92,8 +83,6 @@ async function runTool(name: string, args: Record<string, unknown>): Promise<str
         history.map(({ stages, ...rest }) => ({ ...rest, stageSegmentCount: stages.length }))
       )
     }
-    case 'get_user_goals':
-      return JSON.stringify(getSettings().goals)
     default:
       return JSON.stringify({ error: `Unknown tool: ${name}` })
   }

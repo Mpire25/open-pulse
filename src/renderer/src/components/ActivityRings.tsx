@@ -5,7 +5,7 @@ export interface RingSpec {
   key: string
   label: string
   value: number
-  goal: number
+  goal: number | null
   color: string
   trackColor: string
   unit: string
@@ -47,8 +47,8 @@ function ActivityRingsBase({
         const radius = center - strokeWidth / 2 - i * (strokeWidth + gap)
         if (radius <= 0) return null
         const circumference = 2 * Math.PI * radius
-        const fraction = Math.min(ring.value / ring.goal, 1)
-        const overshoot = ring.value / ring.goal > 1
+        const fraction = ring.goal ? Math.min(ring.value / ring.goal, 1) : 0
+        const overshoot = ring.goal ? ring.value / ring.goal > 1 : false
         return (
           <g key={ring.key} transform={`rotate(-90 ${center} ${center})`}>
             <circle

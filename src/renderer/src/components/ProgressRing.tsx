@@ -3,7 +3,7 @@ import { motion } from 'framer-motion'
 
 interface ProgressRingProps {
   value: number
-  goal: number
+  goal?: number | null
   color: string
   trackColor: string
   size?: number
@@ -24,7 +24,7 @@ function ProgressRingBase({
   const center = size / 2
   const radius = center - strokeWidth / 2
   const circumference = 2 * Math.PI * radius
-  const fraction = Math.min(goal > 0 ? value / goal : 0, 1)
+  const fraction = Math.min(goal && goal > 0 ? value / goal : 0, 1)
 
   return (
     <div className="relative inline-grid place-items-center" style={{ width: size, height: size }}>

@@ -14,10 +14,10 @@ Built with Electron + React 19, Radix primitives, Tailwind v4, and Framer Motion
   last night's sleep hypnogram.
 - **Trends** — 7-day bar charts for steps, active zone minutes, sleep and resting
   heart rate, with goal lines and weekly summaries.
-- **Sleep** — a sleep-goal ring, detailed stage breakdown, and a scrollable
+- **Sleep** — detailed stage breakdown, latest-night summary, and a scrollable
   history of recent nights.
 - **Assistant** — a streaming chat agent that calls tools to read your real
-  metrics (today, last 7 days, sleep history, goals) before answering.
+  metrics (today, last 7 days, sleep history) before answering.
 - **Demo mode** — realistic, deterministic sample data so the whole app is
   explorable before you connect anything.
 

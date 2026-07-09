@@ -12,12 +12,19 @@ interface StoreFile {
 const DEFAULTS: AppSettings = {
   googleClientId: '',
   googleClientSecret: '',
-  googleClientSecretConfigured: false,
-  goals: { steps: 10000, activeZoneMinutes: 30, activeEnergyKcal: 500 }
+  googleClientSecretConfigured: false
 }
 const GOOGLE_CLIENT_SECRET_KEY = 'google-client-secret'
 
 let cache: StoreFile | null = null
+
+function normalizeSettings(raw?: Partial<AppSettings>): AppSettings {
+  return {
+    googleClientId: raw?.googleClientId ?? DEFAULTS.googleClientId,
+    googleClientSecret: '',
+    googleClientSecretConfigured: false
+  }
+}
 
 function filePath(): string {
   return join(app.getPath('userData'), 'pulse-store.json')
@@ -29,13 +36,7 @@ function load(): StoreFile {
     try {
       const raw = JSON.parse(readFileSync(filePath(), 'utf8')) as Partial<StoreFile>
       cache = {
-        settings: {
-          ...DEFAULTS,
-          ...raw.settings,
-          googleClientSecret: '',
-          googleClientSecretConfigured: false,
-          goals: { ...DEFAULTS.goals, ...raw.settings?.goals }
-        },
+        settings: normalizeSettings(raw.settings),
         secrets: raw.secrets ?? {}
       }
       return cache
@@ -63,7 +64,7 @@ export function getSettings(): AppSettings {
 export function updateSettings(patch: Partial<AppSettings>): AppSettings {
   const store = load()
   const { googleClientSecret, googleClientSecretConfigured, ...settingsPatch } = patch
-  store.settings = { ...store.settings, ...settingsPatch, goals: { ...store.settings.goals, ...settingsPatch.goals } }
+  store.settings = normalizeSettings({ ...store.settings, ...settingsPatch })
   store.settings.googleClientSecret = ''
   store.settings.googleClientSecretConfigured = false
   if (googleClientSecret != null) {
