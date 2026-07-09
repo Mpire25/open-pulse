@@ -320,6 +320,7 @@ export const METRICS: Record<MetricKey, MetricDef> = {
     chart: 'bar',
     upIsGood: null,
     format: int,
+    goalKey: 'caloriesIn',
     hint: 'Logged food energy'
   },
   proteinG: {
@@ -333,6 +334,7 @@ export const METRICS: Record<MetricKey, MetricDef> = {
     chart: 'bar',
     upIsGood: null,
     format: int,
+    goalKey: 'proteinG',
     hint: 'Logged protein'
   },
   carbsG: {
@@ -346,6 +348,7 @@ export const METRICS: Record<MetricKey, MetricDef> = {
     chart: 'bar',
     upIsGood: null,
     format: int,
+    goalKey: 'carbsG',
     hint: 'Logged carbohydrates'
   },
   fatG: {
@@ -359,6 +362,7 @@ export const METRICS: Record<MetricKey, MetricDef> = {
     chart: 'bar',
     upIsGood: null,
     format: int,
+    goalKey: 'fatG',
     hint: 'Logged fat'
   },
   fiberG: {

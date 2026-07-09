@@ -92,7 +92,11 @@ function GoalsCard({
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
         {field('steps', 'Steps', 'count')}
         {field('activeZoneMinutes', 'Zone minutes', 'min')}
-        {field('caloriesOut', 'Calories', 'kcal')}
+        {field('caloriesOut', 'Calories burned', 'kcal')}
+        {field('caloriesIn', 'Calories eaten', 'kcal')}
+        {field('proteinG', 'Protein', 'g')}
+        {field('carbsG', 'Carbs', 'g')}
+        {field('fatG', 'Fat', 'g')}
         {field('sleepMinutes', 'Sleep', 'min')}
       </div>
       {dirty && (

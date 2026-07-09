@@ -9,7 +9,7 @@ import { ArrowLeft } from '@phosphor-icons/react'
 import { Panel, SectionHeader } from '@/components/Panel'
 import { ColumnChart, IntradayLine, ProgressRing, TrendLine } from '@/components/charts'
 import { DeltaChip } from '@/components/DeltaChip'
-import { Skeleton } from '@/components/Skeleton'
+import { CARD_HEIGHT, SkeletonBlock, SkeletonChart, SkeletonRing, SkeletonText } from '@/components/Skeleton'
 import { ErrorState } from '@/components/ErrorState'
 import { useIntraday, useSeries } from '@/hooks/useHealth'
 import { METRICS } from '@/lib/metric-registry'
@@ -61,7 +61,6 @@ export function MetricDetailView({ metricKey, date, goals, onBack }: MetricDetai
   }
 
   const days = series.data?.days
-  const dim = series.isPlaceholderData
   const shown = rangeEnding(date, spec.days)
   const points = seriesPoints(days, metricKey, shown.start, shown.end)
   const prevPoints = seriesPoints(
@@ -76,7 +75,7 @@ export function MetricDetailView({ metricKey, date, goals, onBack }: MetricDetai
   const Icon = def.icon
 
   return (
-    <div className={cn('mx-auto flex max-w-[1180px] flex-col gap-5 px-8 pb-12 transition-opacity duration-300', dim && 'opacity-60')}>
+    <div className="mx-auto flex max-w-[1180px] flex-col gap-5 px-8 pb-12">
       <motion.header custom={0} variants={fade} initial="hidden" animate="show" className="pt-2">
         <button
           onClick={onBack}
@@ -103,10 +102,7 @@ export function MetricDetailView({ metricKey, date, goals, onBack }: MetricDetai
       </motion.header>
 
       {series.isPending ? (
-        <>
-          <Skeleton className="h-32" />
-          <Skeleton className="h-72" />
-        </>
+        <MetricDetailSkeleton range={range} hasGoal={goal != null} />
       ) : range === 'D' ? (
         <DayDetail
           metricKey={metricKey}
@@ -127,6 +123,44 @@ export function MetricDetailView({ metricKey, date, goals, onBack }: MetricDetai
         />
       )}
     </div>
+  )
+}
+
+function MetricDetailSkeleton({ range, hasGoal }: { range: Range; hasGoal: boolean }): React.JSX.Element {
+  if (range === 'D') {
+    return (
+      <>
+        <Panel className={`flex flex-wrap items-center justify-between gap-6 p-6 ${CARD_HEIGHT.summary}`}>
+          <div className="flex flex-col gap-3" aria-hidden>
+            <SkeletonText className="w-28" />
+            <SkeletonBlock className="h-9 w-32" />
+            <SkeletonText className="w-40" />
+          </div>
+          {hasGoal && <SkeletonRing size={108} stroke={10} />}
+        </Panel>
+        <Panel className={`flex flex-col gap-4 p-6 ${CARD_HEIGHT.detail}`}>
+          <SectionHeader title="In context" hint="The last 14 days, this day highlighted" />
+          <SkeletonChart height={200} columns={12} />
+        </Panel>
+      </>
+    )
+  }
+
+  return (
+    <>
+      <Panel className={`grid grid-cols-2 divide-x divide-hairline overflow-hidden sm:grid-cols-4 ${CARD_HEIGHT.periodStats}`}>
+        {Array.from({ length: 4 }, (_, index) => (
+          <div key={index} className="flex flex-col gap-2 px-5 py-4" aria-hidden>
+            <SkeletonText className="w-16" />
+            <SkeletonBlock className="h-5 w-20" />
+          </div>
+        ))}
+      </Panel>
+      <Panel className={`flex flex-col gap-4 p-6 ${CARD_HEIGHT.detailLarge}`}>
+        <SectionHeader title="Loading period" />
+        <SkeletonChart height={230} columns={range === 'Y' ? 12 : 7} />
+      </Panel>
+    </>
   )
 }
 
@@ -187,7 +221,7 @@ function DayDetail({
   return (
     <>
       <motion.div custom={1} variants={fade} initial="hidden" animate="show">
-        <Panel className="flex flex-wrap items-center justify-between gap-6 p-6">
+        <Panel className={`flex flex-wrap items-center justify-between gap-6 p-6 ${CARD_HEIGHT.summary}`}>
           <div>
             <p className="text-[12px] font-medium text-ink-faint">{longDate(date)}</p>
             <div className="mt-1 flex items-baseline gap-2">
@@ -222,9 +256,12 @@ function DayDetail({
 
       <motion.div custom={2} variants={fade} initial="hidden" animate="show">
         {metricKey === 'steps' && intradayPending ? (
-          <Skeleton className="h-64" />
+          <Panel className={`flex flex-col gap-4 p-6 ${CARD_HEIGHT.detail}`}>
+            <SectionHeader title="Across the day" hint="Steps per hour" />
+            <SkeletonChart height={200} columns={12} />
+          </Panel>
         ) : metricKey === 'steps' && intradayData && intradayData.stepsHourly.length > 0 ? (
-          <Panel className="flex flex-col gap-4 p-6">
+          <Panel className={`flex flex-col gap-4 p-6 ${CARD_HEIGHT.detail}`}>
             <SectionHeader title="Across the day" hint="Steps per hour" />
             <ColumnChart
               data={intradayData.stepsHourly.map((h) => ({
@@ -240,9 +277,12 @@ function DayDetail({
             />
           </Panel>
         ) : metricKey === 'restingHeartRate' && intradayPending ? (
-          <Skeleton className="h-64" />
+          <Panel className={`flex flex-col gap-4 p-6 ${CARD_HEIGHT.detail}`}>
+            <SectionHeader title="Across the day" hint="Heart rate samples" />
+            <SkeletonChart height={200} columns={12} />
+          </Panel>
         ) : metricKey === 'restingHeartRate' && intradayData && intradayData.heartRate.length > 1 ? (
-          <Panel className="flex flex-col gap-4 p-6">
+          <Panel className={`flex flex-col gap-4 p-6 ${CARD_HEIGHT.detail}`}>
             <SectionHeader
               title="Across the day"
               hint="Heart rate samples"
@@ -258,7 +298,7 @@ function DayDetail({
             <IntradayLine points={intradayData.heartRate} color={def.color} height={200} />
           </Panel>
         ) : (
-          <Panel className="flex flex-col gap-4 p-6">
+          <Panel className={`flex flex-col gap-4 p-6 ${CARD_HEIGHT.detail}`}>
             <SectionHeader title="In context" hint="The last 14 days, this day highlighted" />
             {def.chart === 'bar' ? (
               <ColumnChart
@@ -351,7 +391,7 @@ function PeriodDetail({
   return (
     <>
       <motion.div custom={1} variants={fade} initial="hidden" animate="show">
-        <Panel className="grid grid-cols-2 divide-x divide-hairline overflow-hidden sm:grid-cols-4">
+        <Panel className={`grid grid-cols-2 divide-x divide-hairline overflow-hidden sm:grid-cols-4 ${CARD_HEIGHT.periodStats}`}>
           {stats.map((s) => (
             <div key={s.label} className="flex flex-col gap-1.5 px-5 py-4">
               <span className="text-[11px] font-medium tracking-wide text-ink-faint">{s.label}</span>
@@ -375,7 +415,7 @@ function PeriodDetail({
       </motion.div>
 
       <motion.div custom={2} variants={fade} initial="hidden" animate="show">
-        <Panel className="flex flex-col gap-4 p-6">
+        <Panel className={`flex flex-col gap-4 p-6 ${CARD_HEIGHT.detailLarge}`}>
           <SectionHeader
             title={rangeTitle(range, date)}
             hint={range === 'Y' ? (def.aggregate === 'sum' ? 'Daily average per month' : 'Monthly values') : undefined}

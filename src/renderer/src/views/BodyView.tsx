@@ -1,15 +1,14 @@
 import { motion } from 'framer-motion'
-import { Panel, DrillHeader } from '@/components/Panel'
+import { DrillHeader, InteractivePanel } from '@/components/Panel'
 import { TrendLine } from '@/components/charts'
-import { Skeleton } from '@/components/Skeleton'
+import { CARD_HEIGHT, SkeletonChart, SkeletonText } from '@/components/Skeleton'
 import { ErrorState } from '@/components/ErrorState'
 import { useSeries } from '@/hooks/useHealth'
 import { METRICS } from '@/lib/metric-registry'
-import { latestPoint, metricAbsent, rangeEnding, seriesPoints } from '@/lib/metrics'
+import { latestPoint, rangeEnding, seriesPoints } from '@/lib/metrics'
 import { longDate, shortDate, weekdayShort } from '@/lib/format'
 import { fade } from '@/lib/motion'
 import type { MetricKey } from '@shared/types'
-import { cn } from '@/lib/utils'
 
 const BODY_KEYS: MetricKey[] = ['weightKg', 'bodyFatPct']
 
@@ -29,66 +28,67 @@ export function BodyView({ date, onOpenMetric }: BodyViewProps): React.JSX.Eleme
   }
 
   const days = series.data?.days
-  const dim = series.isPlaceholderData
   const pointsFor = (key: MetricKey) => seriesPoints(days, key, start, end)
-  const visible = series.data ? BODY_KEYS.filter((key) => !metricAbsent(pointsFor(key))) : []
 
   return (
-    <div className={cn('mx-auto flex max-w-[1180px] flex-col gap-5 px-8 pb-12 transition-opacity duration-300', dim && 'opacity-60')}>
+    <div className="mx-auto flex max-w-[1180px] flex-col gap-5 px-8 pb-12">
       <motion.header custom={0} variants={fade} initial="hidden" animate="show" className="pt-2">
         <h1 className="display text-[27px] font-bold text-ink">Body</h1>
         <p className="mt-1 text-[13px] text-ink-dim">{longDate(date)} · last 30 days of measurements</p>
       </motion.header>
 
-      {series.isPending ? (
-        <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-          <Skeleton className="h-60" />
-          <Skeleton className="h-60" />
-        </div>
-      ) : visible.length === 0 ? (
-        <Panel className="grid place-items-center p-12 text-center text-[13px] leading-relaxed text-ink-faint">
-          Nothing logged in this window. Weight and body-fat entries from the Fitbit app appear here.
-        </Panel>
-      ) : (
-        <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-          {visible.map((key, i) => {
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+        {BODY_KEYS.map((key, i) => {
             const def = METRICS[key]
             const points = pointsFor(key)
             const last = latestPoint(points)
             const Icon = def.icon
+            const pending = series.isMetricPending(key)
+            const hasData = points.some((point) => point.value != null)
             return (
               <motion.div key={key} custom={i + 1} variants={fade} initial="hidden" animate="show">
-                <Panel className="flex flex-col gap-4 p-6">
+                <InteractivePanel
+                  className={`flex flex-col gap-4 p-6 ${CARD_HEIGHT.chart}`}
+                  onOpen={() => onOpenMetric(key)}
+                >
                   <DrillHeader
                     title={def.label}
                     hint={def.hint}
                     icon={<Icon size={18} weight="fill" style={{ color: def.color }} />}
                     action={
-                      last?.value != null ? (
+                      pending ? (
+                        <SkeletonText className="h-5 w-20" />
+                      ) : last?.value != null ? (
                         <span className="text-[20px] font-semibold text-ink">
                           {def.format(last.value)}{' '}
                           <span className="text-[12px] font-normal text-ink-dim">{def.unit}</span>
                         </span>
                       ) : undefined
                     }
-                    onOpen={() => onOpenMetric(key)}
                   />
-                  <TrendLine
-                    data={points.map((p) => ({
-                      date: p.date,
-                      label: `${weekdayShort(p.date)} · ${shortDate(p.date)}`,
-                      value: p.value
-                    }))}
-                    color={def.color}
-                    format={def.format}
-                    unitLabel={def.unit}
-                  />
-                </Panel>
+                  {pending ? (
+                    <SkeletonChart />
+                  ) : hasData ? (
+                    <TrendLine
+                      data={points.map((p) => ({
+                        date: p.date,
+                        label: `${weekdayShort(p.date)} · ${shortDate(p.date)}`,
+                        value: p.value
+                      }))}
+                      color={def.color}
+                      format={def.format}
+                      unitLabel={def.unit}
+                    />
+                  ) : (
+                    <div className="grid h-[150px] place-items-center text-center text-[12px] text-ink-faint">
+                      Nothing logged in this window
+                    </div>
+                  )}
+                </InteractivePanel>
               </motion.div>
             )
-          })}
-        </div>
-      )}
+        })}
+      </div>
     </div>
   )
 }

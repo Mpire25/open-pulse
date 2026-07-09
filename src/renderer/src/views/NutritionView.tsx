@@ -1,17 +1,16 @@
 import { motion } from 'framer-motion'
 import { ForkKnife } from '@phosphor-icons/react'
-import { Panel, DrillHeader, SectionHeader } from '@/components/Panel'
+import { Panel, DrillHeader, InteractivePanel, SectionHeader } from '@/components/Panel'
 import { ColumnChart } from '@/components/charts'
 import { DeltaChip } from '@/components/DeltaChip'
-import { Skeleton } from '@/components/Skeleton'
+import { CARD_HEIGHT, SkeletonBlock, SkeletonChart, SkeletonText } from '@/components/Skeleton'
 import { ErrorState } from '@/components/ErrorState'
 import { useSeries } from '@/hooks/useHealth'
 import { METRICS } from '@/lib/metric-registry'
 import { metricAbsent, rangeEnding, seriesPoints } from '@/lib/metrics'
 import { formatInt, longDate, weekdayShort } from '@/lib/format'
 import { fade } from '@/lib/motion'
-import type { DayValues, MetricKey } from '@shared/types'
-import { cn } from '@/lib/utils'
+import type { DayValues, Goals, MetricKey } from '@shared/types'
 
 const NUTRITION_METRICS: MetricKey[] = [
   'caloriesIn',
@@ -19,9 +18,7 @@ const NUTRITION_METRICS: MetricKey[] = [
   'proteinG',
   'carbsG',
   'fatG',
-  'fiberG',
-  'sugarG',
-  'waterMl'
+  'fiberG'
 ]
 
 // Macro energy densities, kcal per gram.
@@ -33,10 +30,11 @@ const MACROS = [
 
 interface NutritionViewProps {
   date: string
+  goals: Goals
   onOpenMetric: (metric: MetricKey) => void
 }
 
-export function NutritionView({ date, onOpenMetric }: NutritionViewProps): React.JSX.Element {
+export function NutritionView({ date, goals, onOpenMetric }: NutritionViewProps): React.JSX.Element {
   const { start, end } = rangeEnding(date, 7)
   const series = useSeries(NUTRITION_METRICS, start, end)
 
@@ -45,70 +43,72 @@ export function NutritionView({ date, onOpenMetric }: NutritionViewProps): React
   }
 
   const days = series.data?.days
-  const dim = series.isPlaceholderData
   const today: DayValues = days?.[date] ?? {}
   const pointsFor = (key: MetricKey) => seriesPoints(days, key, start, end)
 
-  const anyIntake = series.data ? !metricAbsent(pointsFor('caloriesIn')) : true
+  const intakePending = series.isMetricPending('caloriesIn')
+  const anyIntake = intakePending || (series.data ? !metricAbsent(pointsFor('caloriesIn')) : true)
   const hasMacrosToday = MACROS.some((m) => today[m.key] != null)
+  const macrosPending = MACROS.some((macro) => series.isMetricPending(macro.key))
   const net =
     today.caloriesIn != null && today.caloriesOut != null ? today.caloriesIn - today.caloriesOut : null
 
   const barCard = (key: MetricKey, index: number): React.JSX.Element => {
     const def = METRICS[key]
     const points = pointsFor(key)
+    const pending = series.isMetricPending(key)
     return (
       <motion.div key={key} custom={index} variants={fade} initial="hidden" animate="show">
-        <Panel className="flex h-full flex-col gap-4 p-6">
+        <InteractivePanel
+          className={`flex h-full flex-col gap-4 p-6 ${CARD_HEIGHT.chart}`}
+          onOpen={() => onOpenMetric(key)}
+        >
           <DrillHeader
             title={def.label}
             hint="Last 7 days"
             icon={<def.icon size={18} weight="fill" style={{ color: def.color }} />}
             action={
-              today[key] != null ? (
+              pending ? (
+                <SkeletonText className="h-5 w-20" />
+              ) : today[key] != null ? (
                 <span className="text-[20px] font-semibold text-ink">
                   {def.format(today[key] as number)}{' '}
                   <span className="text-[12px] font-normal text-ink-dim">{def.unit}</span>
                 </span>
               ) : undefined
             }
-            onOpen={() => onOpenMetric(key)}
           />
           <div className="mt-auto">
-            <ColumnChart
-              data={points.map((p) => ({
-                key: p.date,
-                label: `${weekdayShort(p.date)} · ${p.date.slice(5)}`,
-                value: p.value,
-                tick: weekdayShort(p.date).slice(0, 1)
-              }))}
-              color={def.color}
-              emphasisIndex={6}
-              format={def.format}
-              unitLabel={def.unit}
-            />
+            {pending ? (
+              <SkeletonChart />
+            ) : (
+              <ColumnChart
+                data={points.map((p) => ({
+                  key: p.date,
+                  label: `${weekdayShort(p.date)} · ${p.date.slice(5)}`,
+                  value: p.value,
+                  tick: weekdayShort(p.date).slice(0, 1)
+                }))}
+                color={def.color}
+                emphasisIndex={6}
+                format={def.format}
+                unitLabel={def.unit}
+              />
+            )}
           </div>
-        </Panel>
+        </InteractivePanel>
       </motion.div>
     )
   }
 
   return (
-    <div className={cn('mx-auto flex max-w-[1180px] flex-col gap-5 px-8 pb-12 transition-opacity duration-300', dim && 'opacity-60')}>
+    <div className="mx-auto flex max-w-[1180px] flex-col gap-5 px-8 pb-12">
       <motion.header custom={0} variants={fade} initial="hidden" animate="show" className="pt-2">
         <h1 className="display text-[27px] font-bold text-ink">Nutrition</h1>
-        <p className="mt-1 text-[13px] text-ink-dim">{longDate(date)} · logged food and water</p>
+        <p className="mt-1 text-[13px] text-ink-dim">{longDate(date)} · logged food</p>
       </motion.header>
 
-      {series.isPending ? (
-        <>
-          <Skeleton className="h-52" />
-          <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-            <Skeleton className="h-56" />
-            <Skeleton className="h-56" />
-          </div>
-        </>
-      ) : !anyIntake ? (
+      {!anyIntake ? (
         <Panel className="grid place-items-center p-12 text-center text-[13px] leading-relaxed text-ink-faint">
           No food logged in this window. Meals logged in the Fitbit app — calories and macros — appear here.
         </Panel>
@@ -116,7 +116,7 @@ export function NutritionView({ date, onOpenMetric }: NutritionViewProps): React
         <>
           {/* Today: energy + macro split */}
           <motion.div custom={1} variants={fade} initial="hidden" animate="show">
-            <Panel className="grid grid-cols-1 gap-6 p-6 lg:grid-cols-[auto_1fr]">
+            <Panel className={`grid grid-cols-1 gap-6 p-6 lg:grid-cols-[auto_1fr] ${CARD_HEIGHT.hero}`}>
               <div className="flex min-w-[220px] flex-col justify-center gap-2">
                 <SectionHeader
                   title="Energy"
@@ -124,12 +124,27 @@ export function NutritionView({ date, onOpenMetric }: NutritionViewProps): React
                   icon={<ForkKnife size={18} weight="fill" style={{ color: 'var(--color-activity)' }} />}
                 />
                 <div className="mt-2 flex items-baseline gap-2">
-                  <span className="text-[34px] font-semibold leading-none tracking-tight text-ink">
-                    {today.caloriesIn != null ? formatInt(today.caloriesIn) : '—'}
-                  </span>
+                  {intakePending ? (
+                    <SkeletonText className="h-8 w-24" />
+                  ) : (
+                    <span className="text-[34px] font-semibold leading-none tracking-tight text-ink">
+                      {today.caloriesIn != null ? formatInt(today.caloriesIn) : '—'}
+                    </span>
+                  )}
                   <span className="text-[13px] text-ink-dim">kcal eaten</span>
                 </div>
-                {today.caloriesOut != null && (
+                {intakePending ? (
+                  <SkeletonText className="mt-1 w-32" />
+                ) : (
+                  <div className="text-[11px] text-ink-faint">
+                    {today.caloriesIn != null
+                      ? `${Math.round((today.caloriesIn / goals.caloriesIn) * 100)}% of ${formatInt(goals.caloriesIn)} kcal goal`
+                      : `${formatInt(goals.caloriesIn)} kcal goal`}
+                  </div>
+                )}
+                {series.isMetricPending('caloriesOut') ? (
+                  <SkeletonText className="mt-1 w-36" />
+                ) : today.caloriesOut != null ? (
                   <div className="flex items-center gap-2 text-[12.5px] text-ink-dim">
                     {formatInt(today.caloriesOut)} kcal burned
                     {net != null && (
@@ -141,12 +156,14 @@ export function NutritionView({ date, onOpenMetric }: NutritionViewProps): React
                       />
                     )}
                   </div>
-                )}
+                ) : null}
               </div>
 
               <div className="lg:border-l lg:border-hairline lg:pl-6">
-                {hasMacrosToday ? (
-                  <MacroBreakdown today={today} onOpenMetric={onOpenMetric} />
+                {macrosPending ? (
+                  <MacroBreakdownSkeleton />
+                ) : hasMacrosToday ? (
+                  <MacroBreakdown today={today} goals={goals} onOpenMetric={onOpenMetric} />
                 ) : (
                   <div className="grid h-full min-h-[120px] place-items-center text-[13px] text-ink-faint">
                     No macro detail for this day — log meals in the Fitbit app to break energy into protein, carbs, and fat.
@@ -157,11 +174,8 @@ export function NutritionView({ date, onOpenMetric }: NutritionViewProps): React
           </motion.div>
 
           {/* Trends */}
-          <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+          <div className="grid grid-cols-1 gap-5">
             {barCard('caloriesIn', 2)}
-            {barCard('waterMl', 3)}
-            {!metricAbsent(pointsFor('proteinG')) && barCard('proteinG', 4)}
-            {!metricAbsent(pointsFor('sugarG')) && barCard('sugarG', 5)}
           </div>
         </>
       )}
@@ -169,11 +183,30 @@ export function NutritionView({ date, onOpenMetric }: NutritionViewProps): React
   )
 }
 
+function MacroBreakdownSkeleton(): React.JSX.Element {
+  return (
+    <div className="flex h-full flex-col justify-center gap-4" aria-hidden>
+      <SkeletonBlock className="h-3 w-full rounded-full" />
+      <div className="grid grid-cols-3 gap-3">
+        {MACROS.map((macro) => (
+          <div key={macro.key} className="flex flex-col gap-2 px-2 py-1.5">
+            <SkeletonText className="w-14" />
+            <SkeletonBlock className="h-4 w-12" />
+            <SkeletonText className="w-16" />
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 function MacroBreakdown({
   today,
+  goals,
   onOpenMetric
 }: {
   today: DayValues
+  goals: Goals
   onOpenMetric: (metric: MetricKey) => void
 }): React.JSX.Element {
   const parts = MACROS.map((m) => ({ ...m, grams: today[m.key] ?? null, kcal: (today[m.key] ?? 0) * m.kcalPerG }))
@@ -204,14 +237,17 @@ function MacroBreakdown({
             <div className="mt-1 text-[17px] font-semibold text-ink">
               {p.grams != null ? `${formatInt(p.grams)} g` : '—'}
             </div>
-            <div className="text-[10.5px] text-ink-faint">{Math.round((p.kcal / totalKcal) * 100)}% of energy</div>
+            <div className="text-[10.5px] text-ink-faint">
+              {p.grams != null
+                ? `${Math.round((p.grams / goals[p.key]) * 100)}% of ${formatInt(goals[p.key])} g goal`
+                : `${formatInt(goals[p.key])} g goal`}
+            </div>
           </button>
         ))}
       </div>
-      {(today.fiberG != null || today.sugarG != null) && (
-        <div className="flex gap-4 border-t border-hairline pt-3 text-[12px] text-ink-dim">
-          {today.fiberG != null && <span>Fiber {formatInt(today.fiberG)} g</span>}
-          {today.sugarG != null && <span>Sugar {formatInt(today.sugarG)} g</span>}
+      {today.fiberG != null && (
+        <div className="border-t border-hairline pt-3 text-[12px] text-ink-dim">
+          Fiber {formatInt(today.fiberG)} g
         </div>
       )}
     </div>

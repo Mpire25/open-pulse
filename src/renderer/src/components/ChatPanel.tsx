@@ -38,8 +38,15 @@ export function ChatPanel({ chat, codexConnected, onOpenSettings, compact }: Cha
   const inputRef = useRef<HTMLTextAreaElement>(null)
 
   useLayoutEffect(() => {
-    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' })
-  }, [turns])
+    const frame = requestAnimationFrame(() => {
+      scrollRef.current?.scrollTo({
+        top: scrollRef.current.scrollHeight,
+        // Repeated smooth-scroll animations fight each other on every token.
+        behavior: busy ? 'auto' : 'smooth'
+      })
+    })
+    return () => cancelAnimationFrame(frame)
+  }, [turns, busy])
 
   useEffect(() => {
     if (codexConnected && !compact) inputRef.current?.focus()
@@ -119,7 +126,6 @@ function Bubble({ turn, compact }: { turn: ChatTurn; compact?: boolean }): React
   const isUser = turn.role === 'user'
   return (
     <motion.div
-      layout
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ type: 'spring', stiffness: 220, damping: 26 }}
@@ -130,7 +136,7 @@ function Bubble({ turn, compact }: { turn: ChatTurn; compact?: boolean }): React
           {turn.text}
         </div>
       ) : (
-        <div className={cn('select-text', compact ? 'max-w-full' : 'max-w-[88%]')}>
+        <div className={cn('w-full min-w-0 select-text', compact ? 'max-w-full' : 'max-w-[88%]')}>
           {turn.toolLabel && !turn.text ? (
             <ToolThinking label={turn.toolLabel} />
           ) : turn.error ? (

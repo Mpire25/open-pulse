@@ -29,11 +29,11 @@ export function DateNav({ date, onChange }: DateNavProps): React.JSX.Element {
       <button
         onClick={() => setOpen((o) => !o)}
         className={cn(
-          'flex h-7 w-[124px] items-center justify-center gap-1.5 rounded-lg border border-transparent text-[12.5px] font-semibold text-ink transition-colors',
+          'flex h-[22px] w-[108px] items-center justify-center gap-1.5 rounded-[6px] border border-transparent text-[11.5px] font-semibold text-ink transition-colors',
           open ? 'border-hairline bg-white/[0.07]' : 'hover:bg-white/[0.05]'
         )}
       >
-        <CalendarBlank size={13} weight="bold" className="text-ink-dim" />
+        <CalendarBlank size={11} weight="bold" className="text-ink-dim" />
         <span className="truncate">{navDateLabel(date)}</span>
       </button>
 
@@ -50,7 +50,7 @@ export function DateNav({ date, onChange }: DateNavProps): React.JSX.Element {
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: -6, scale: 0.98 }}
               transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
-              className="absolute left-1/2 top-9 z-50 w-[264px] -translate-x-1/2 rounded-2xl border border-hairline bg-panel-2/95 p-3 shadow-[0_24px_60px_-20px_rgb(0_0_0/0.9)] backdrop-blur-2xl"
+              className="absolute left-1/2 top-[30px] z-50 w-[264px] -translate-x-1/2 rounded-2xl border border-hairline bg-panel-2/95 p-3 shadow-[0_24px_60px_-20px_rgb(0_0_0/0.9)] backdrop-blur-2xl"
             >
               <Presets
                 date={date}
