@@ -23,11 +23,14 @@ interface GoogleTokens {
 }
 
 const SECRET_KEY = 'google-tokens'
+const GOOGLE_SIGN_IN_TIMEOUT_MS = 60_000
 
 const LANDING_HTML = `<!doctype html><meta charset="utf-8"><title>OpenPulse</title>
 <body style="font-family:-apple-system,system-ui;background:#0a0a0c;color:#f5f5f7;display:grid;place-items:center;height:100vh;margin:0">
 <div style="text-align:center"><h2 style="font-weight:600">Connected to Google Health</h2>
 <p style="color:#a1a1a8">You can close this window and return to OpenPulse.</p></div></body>`
+
+let activeConnectReject: ((err: Error) => void) | null = null
 
 export function getGoogleStatus(): GoogleAuthStatus {
   const tokens = getSecret<GoogleTokens>(SECRET_KEY)
@@ -53,7 +56,13 @@ export async function connectGoogle(): Promise<GoogleAuthStatus> {
   const { verifier, challenge } = createPkcePair()
   const state = randomState()
 
-  const code = await new Promise<string>((resolve, reject) => {
+  activeConnectReject?.(new Error('Google sign-in was restarted.'))
+
+  const { code, redirectPort } = await new Promise<{ code: string; redirectPort: number }>((resolve, reject) => {
+    let settled = false
+    let redirectPort = 0
+    let timer: ReturnType<typeof setTimeout> | null = null
+
     const server = createServer((req, res) => {
       const url = new URL(req.url ?? '/', 'http://127.0.0.1')
       if (url.pathname !== '/oauth2callback') {
@@ -61,25 +70,50 @@ export async function connectGoogle(): Promise<GoogleAuthStatus> {
         return
       }
       res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' }).end(LANDING_HTML)
-      server.close()
-      clearTimeout(timer)
       const err = url.searchParams.get('error')
       const returnedState = url.searchParams.get('state')
       const authCode = url.searchParams.get('code')
-      if (err) reject(new Error(`Google sign-in failed: ${err}`))
-      else if (returnedState !== state) reject(new Error('OAuth state mismatch.'))
-      else if (!authCode) reject(new Error('Google did not return an authorization code.'))
-      else resolve(authCode)
+      if (err) settleReject(new Error(`Google sign-in failed: ${err}`))
+      else if (returnedState !== state) settleReject(new Error('OAuth state mismatch.'))
+      else if (!authCode) settleReject(new Error('Google did not return an authorization code.'))
+      else settleResolve({ code: authCode, redirectPort })
     })
-    const timer = setTimeout(
+
+    const cleanup = (): void => {
+      if (timer) {
+        clearTimeout(timer)
+        timer = null
+      }
+      if (server.listening) server.close()
+      if (activeConnectReject === settleReject) activeConnectReject = null
+    }
+
+    const settleResolve = (value: { code: string; redirectPort: number }): void => {
+      if (settled) return
+      settled = true
+      cleanup()
+      resolve(value)
+    }
+
+    function settleReject(err: Error): void {
+      if (settled) return
+      settled = true
+      cleanup()
+      reject(err)
+    }
+
+    activeConnectReject = settleReject
+    server.on('error', settleReject)
+
+    timer = setTimeout(
       () => {
-        server.close()
-        reject(new Error('Timed out waiting for Google sign-in.'))
+        settleReject(new Error('Timed out waiting for Google sign-in. Check the Client ID, then try again.'))
       },
-      5 * 60 * 1000
+      GOOGLE_SIGN_IN_TIMEOUT_MS
     )
     server.listen(0, '127.0.0.1', () => {
       const port = (server.address() as AddressInfo).port
+      redirectPort = port
       const authUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth')
       authUrl.search = new URLSearchParams({
         client_id: clientId,
@@ -92,8 +126,6 @@ export async function connectGoogle(): Promise<GoogleAuthStatus> {
         access_type: 'offline',
         prompt: 'consent'
       }).toString()
-      // The token exchange must send the identical redirect URI.
-      redirectPort = port
       void shell.openExternal(authUrl.toString())
     })
   })
@@ -129,8 +161,6 @@ export async function connectGoogle(): Promise<GoogleAuthStatus> {
   setSecret(SECRET_KEY, tokens)
   return { connected: true, email: tokens.email }
 }
-
-let redirectPort = 0
 
 /** Returns a valid access token, refreshing it if needed, or null when not connected. */
 export async function getGoogleAccessToken(): Promise<string | null> {

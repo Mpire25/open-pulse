@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { motion } from 'framer-motion'
 import { ArrowClockwise, ArrowSquareOut, GoogleLogo, Warning } from '@phosphor-icons/react'
 import { Button } from '@/components/ui/button'
@@ -22,8 +22,8 @@ const STEPS: Step[] = [
     title: 'Create an OAuth client ID',
     body: (
       <>
-        Type <span className="text-ink">Desktop app</span>. Add your Google account as a test user on the
-        consent screen.
+        Type <span className="text-ink">Desktop app</span>. On the consent screen, add this browser's Google
+        account under <span className="text-ink">Audience / Test users</span>.
       </>
     ),
     link: { label: 'Credentials', href: 'https://console.cloud.google.com/apis/credentials' }
@@ -50,23 +50,35 @@ export function GoogleSetup({
 }: GoogleSetupProps): React.JSX.Element {
   const [clientId, setClientId] = useState(initialClientId)
   const [busy, setBusy] = useState(false)
+  const [activeClientId, setActiveClientId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const attemptRef = useRef(0)
 
   const connect = async (): Promise<void> => {
     const trimmed = clientId.trim()
-    if (!trimmed || busy) return
+    if (!trimmed || (busy && trimmed === activeClientId)) return
+    const attempt = attemptRef.current + 1
+    attemptRef.current = attempt
     setError(null)
     setBusy(true)
+    setActiveClientId(trimmed)
     try {
       await window.pulse.settings.update({ googleClientId: trimmed })
       onClientIdChange?.(trimmed)
-      onConnected(await window.pulse.google.connect())
+      const status = await window.pulse.google.connect()
+      if (attemptRef.current === attempt) onConnected(status)
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
+      if (attemptRef.current === attempt) setError(err instanceof Error ? err.message : String(err))
     } finally {
-      setBusy(false)
+      if (attemptRef.current === attempt) {
+        setBusy(false)
+        setActiveClientId(null)
+      }
     }
   }
+
+  const trimmedClientId = clientId.trim()
+  const clientIdChangedDuringConnect = busy && Boolean(activeClientId) && trimmedClientId !== activeClientId
 
   return (
     <div className="w-full">
@@ -108,11 +120,19 @@ export function GoogleSetup({
       <div className="mt-5 flex flex-col gap-2">
         <Input
           value={clientId}
-          onChange={(e) => setClientId(e.target.value)}
+          onChange={(e) => {
+            setClientId(e.target.value)
+            if (error) setError(null)
+          }}
           onKeyDown={(e) => e.key === 'Enter' && void connect()}
           placeholder="Client ID · xxxx.apps.googleusercontent.com"
           spellCheck={false}
         />
+        {busy && (
+          <p className="text-[12px] leading-relaxed text-ink-dim">
+            Waiting for Google. This will time out in about a minute; edit the Client ID to retry now.
+          </p>
+        )}
         {error && (
           <motion.div
             initial={{ opacity: 0, y: -4 }}
@@ -123,9 +143,9 @@ export function GoogleSetup({
             {error}
           </motion.div>
         )}
-        <Button className="mt-1 w-full" onClick={connect} disabled={busy || !clientId.trim()}>
+        <Button className="mt-1 w-full" onClick={connect} disabled={!trimmedClientId || (busy && !clientIdChangedDuringConnect)}>
           {busy ? <ArrowClockwise size={15} className="animate-spin" /> : <GoogleLogo size={15} weight="bold" />}
-          {busy ? 'Waiting for Google…' : 'Connect Google Health'}
+          {clientIdChangedDuringConnect ? 'Retry with New Client ID' : busy ? 'Waiting for Google…' : 'Connect Google Health'}
         </Button>
       </div>
     </div>
