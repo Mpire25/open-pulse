@@ -1,0 +1,92 @@
+# OpenPulse
+
+A macOS companion app for the **Google Fitbit Air**. OpenPulse reads your health data
+from the **Google Health API v4**, shows it through Apple-Fitness-style activity
+rings and charts, and includes an AI assistant that analyzes your data — powered
+by your own **ChatGPT account** via the Codex OAuth flow.
+
+Built with Electron + React 19, Radix primitives, Tailwind v4, and Framer Motion.
+
+## Features
+
+- **Today** — three concentric activity rings (Move / Exercise / Steps) with a
+  live vitals row (heart rate, HRV, SpO₂, breathing rate, distance, floors) and
+  last night's sleep hypnogram.
+- **Trends** — 7-day bar charts for steps, active zone minutes, sleep and resting
+  heart rate, with goal lines and weekly summaries.
+- **Sleep** — a sleep-goal ring, detailed stage breakdown, and a scrollable
+  history of recent nights.
+- **Assistant** — a streaming chat agent that calls tools to read your real
+  metrics (today, last 7 days, sleep history, goals) before answering.
+- **Demo mode** — realistic, deterministic sample data so the whole app is
+  explorable before you connect anything.
+
+## Running
+
+```bash
+bun install
+bun run dev      # launch in development with HMR
+bun run build    # type-check-clean production build into out/
+bun run build:mac # package a .dmg (needs electron-builder toolchain)
+```
+
+The app opens in demo mode. Connect your accounts in **Settings**.
+
+## Connecting Google Health (your Fitbit Air data)
+
+The Google Health API uses Google OAuth 2.0. OpenPulse runs the flow locally with a
+loopback redirect + PKCE, so **no client secret is ever stored**.
+
+1. In the [Google Cloud Console](https://console.cloud.google.com), create a
+   project and enable the **Google Health API**.
+2. Configure the OAuth consent screen and add yourself as a test user.
+3. Create an **OAuth client ID** of type **Desktop app**.
+4. Copy the Client ID into **Settings → Google Health → OAuth Client ID**, then
+   click **Connect**. A browser window opens for consent; approve the requested
+   read scopes (activity & fitness, health metrics, sleep, profile).
+
+Scopes requested (read-only):
+`googlehealth.activity_and_fitness.readonly`,
+`googlehealth.health_metrics_and_measurements.readonly`,
+`googlehealth.sleep.readonly`, `googlehealth.profile.readonly`.
+
+## Connecting the AI assistant (Sign in with ChatGPT)
+
+The assistant uses the **Codex OAuth flow**
+([docs](https://developers.openai.com/codex/auth)) — the same "Sign in with
+ChatGPT" mechanism the Codex CLI uses. It runs on your existing ChatGPT plan; no
+API key required.
+
+In **Settings → AI Assistant**, click **Sign in with ChatGPT**. A browser window
+opens on `auth.openai.com`; after you authorize, the app receives tokens on its
+`localhost:1455` callback. Make sure no other Codex sign-in is occupying port
+1455 at the time.
+
+## How data flows
+
+```
+Renderer (React)  ──IPC──▶  Main process  ──HTTPS──▶  health.googleapis.com/v4
+   rings, charts,            OAuth + PKCE,             (or demo generator)
+   chat UI                   token storage,
+        ▲                    tool loop
+        └────── ai:event stream ◀── chatgpt.com/backend-api/codex/responses
+```
+
+- **`src/main`** — Electron main: OAuth flows (`google-auth.ts`, `codex-auth.ts`),
+  the Health API client (`health-api.ts`), the live/demo service layer
+  (`health-service.ts`), the streaming AI agent (`codex-chat.ts`), and encrypted
+  token storage (`store.ts`, via Electron `safeStorage`).
+- **`src/preload`** — the `window.pulse` bridge (context-isolated).
+- **`src/renderer`** — the React app: views, ring/chart components, hooks.
+- **`src/shared`** — types shared across processes.
+
+## Security notes
+
+- Tokens are encrypted at rest with the OS keychain via Electron `safeStorage`.
+- The renderer is context-isolated with `nodeIntegration` off; all privileged
+  work happens in the main process over a typed IPC surface.
+- Production builds run under a strict Content-Security-Policy.
+- All network access is read-only against your own accounts.
+
+> OpenPulse is an independent project and is not affiliated with or endorsed by
+> Google or OpenAI. It is not a medical device; do not use it for diagnosis.

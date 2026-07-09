@@ -1,0 +1,84 @@
+@import 'tailwindcss';
+
+@theme {
+  --font-sans:
+    -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Helvetica Neue',
+    'Segoe UI', sans-serif;
+  --font-mono: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, 'JetBrains Mono', monospace;
+
+  --color-canvas: #0a0a0c;
+  --color-panel: #131318;
+  --color-panel-2: #1b1b22;
+  --color-hairline: rgb(255 255 255 / 0.08);
+  --color-hairline-strong: rgb(255 255 255 / 0.14);
+
+  --color-ink: #f5f5f7;
+  --color-ink-dim: #a2a2ab;
+  --color-ink-faint: #66666f;
+
+  /* Activity ring palette, matched to Apple Fitness */
+  --color-move: #fa2e55;
+  --color-move-soft: rgb(250 46 85 / 0.16);
+  --color-exercise: #a3e635;
+  --color-exercise-soft: rgb(163 230 53 / 0.14);
+  --color-stand: #06c8d9;
+  --color-stand-soft: rgb(6 200 217 / 0.14);
+
+  --color-accent: #0a84ff;
+  --color-accent-soft: rgb(10 132 255 / 0.16);
+
+  --color-sleep-deep: #3634a3;
+  --color-sleep-core: #3f8ef6;
+  --color-sleep-rem: #7bcff0;
+  --color-sleep-awake: #f2745f;
+
+  --color-danger: #ff453a;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: transparent;
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  overflow: hidden;
+  user-select: none;
+}
+
+::selection {
+  background: rgb(10 132 255 / 0.35);
+}
+
+/* macOS window chrome */
+.drag-region {
+  -webkit-app-region: drag;
+}
+.no-drag {
+  -webkit-app-region: no-drag;
+}
+
+/* Understated overlay scrollbars, like AppKit */
+*::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+*::-webkit-scrollbar-thumb {
+  background: rgb(255 255 255 / 0.14);
+  border-radius: 9999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: rgb(255 255 255 / 0.28);
+  background-clip: content-box;
+}
+*::-webkit-scrollbar-corner {
+  background: transparent;
+}
