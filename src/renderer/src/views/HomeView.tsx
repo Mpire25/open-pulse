@@ -213,7 +213,7 @@ export function HomeView({ date, goals, onOpenMetric, onNavigate }: HomeViewProp
         <motion.div custom={3} variants={fade} initial="hidden" animate="show">
           <InteractivePanel
             className={`flex h-full flex-col gap-4 p-6 ${CARD_HEIGHT.large}`}
-            onOpen={() => onOpenMetric('sleepMinutes')}
+            onOpen={() => onNavigate('sleep')}
           >
             <DrillHeader
               title="Sleep"
