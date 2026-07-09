@@ -161,6 +161,17 @@ export interface RollupPoint {
   [key: string]: unknown
 }
 
+const SHORT_ROLLUP_DATA_TYPES = new Set([
+  'calories-in-heart-rate-zone',
+  'heart-rate',
+  'active-minutes',
+  'total-calories'
+])
+
+function maxRollupRangeDays(dataType: string): number {
+  return SHORT_ROLLUP_DATA_TYPES.has(dataType) ? 14 : 90
+}
+
 /**
  * Daily rollup for a data type over a closed civil date range
  * (`startDate`..`endDateExclusive`, YYYY-MM-DD).
@@ -172,20 +183,33 @@ export async function dailyRollUp(
   endDateExclusive: string,
   priority: Priority = 1
 ): Promise<RollupPoint[]> {
-  const body = {
-    range: {
-      start: civilDateTime(startDate),
-      end: civilDateTime(shiftIsoDate(endDateExclusive, -1), true)
-    },
-    windowSizeDays: 1
+  const points: RollupPoint[] = []
+  const maxDays = maxRollupRangeDays(dataType)
+
+  // The API rejects rollup ranges longer than 90 days (14 for a few data
+  // types), even when the user has less data than that in the interval.
+  for (let chunkStart = startDate; chunkStart < endDateExclusive; ) {
+    const candidateEnd = shiftIsoDate(chunkStart, maxDays)
+    const chunkEndExclusive = candidateEnd < endDateExclusive ? candidateEnd : endDateExclusive
+    const body = {
+      range: {
+        start: civilDateTime(chunkStart),
+        end: civilDateTime(shiftIsoDate(chunkEndExclusive, -1), true)
+      },
+      windowSizeDays: 1,
+      pageSize: maxDays
+    }
+    const json = await request<{ rollupDataPoints?: RollupPoint[] }>(
+      token,
+      `/users/me/dataTypes/${dataType}/dataPoints:dailyRollUp`,
+      { method: 'POST', body: JSON.stringify(body) },
+      priority
+    )
+    points.push(...(json.rollupDataPoints ?? []))
+    chunkStart = chunkEndExclusive
   }
-  const json = await request<{ rollupDataPoints?: RollupPoint[] }>(
-    token,
-    `/users/me/dataTypes/${dataType}/dataPoints:dailyRollUp`,
-    { method: 'POST', body: JSON.stringify(body) },
-    priority
-  )
-  return json.rollupDataPoints ?? []
+
+  return points
 }
 
 export interface RawDataPoint {
