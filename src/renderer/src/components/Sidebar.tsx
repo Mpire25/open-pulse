@@ -7,6 +7,7 @@ import {
   GearSix,
   type Icon
 } from '@phosphor-icons/react'
+import { AppLogo } from '@/components/AppLogo'
 import { cn } from '@/lib/utils'
 
 export type View = 'today' | 'trends' | 'sleep' | 'assistant' | 'settings'
@@ -26,11 +27,9 @@ interface SidebarProps {
 
 export function Sidebar({ view, onSelect, demoMode }: SidebarProps): React.JSX.Element {
   return (
-    <nav className="drag-region flex w-[212px] shrink-0 flex-col px-3 pb-4 pt-11">
-      <div className="no-drag mb-6 flex items-center gap-2.5 px-3">
-        <div className="grid h-7 w-7 place-items-center rounded-[9px] bg-gradient-to-br from-move to-[#ff6f8b] shadow-[inset_0_1px_0_rgb(255_255_255/0.3)]">
-          <Heartbeat weight="fill" size={16} className="text-white" />
-        </div>
+    <nav className="drag-region flex w-[212px] shrink-0 flex-col px-3 pb-4 pt-[54px]">
+      <div className="no-drag mb-6 flex items-center gap-2.5 px-2">
+        <AppLogo size={28} />
         <span className="text-[17px] font-semibold tracking-tight">OpenPulse</span>
       </div>
 
@@ -40,7 +39,7 @@ export function Sidebar({ view, onSelect, demoMode }: SidebarProps): React.JSX.E
         ))}
       </div>
 
-      <div className="mt-auto flex flex-col gap-0.5">
+      <div className="no-drag mt-auto flex flex-col gap-0.5">
         {demoMode && (
           <div className="mb-2 mx-1 rounded-xl border border-hairline bg-white/[0.03] px-3 py-2.5">
             <p className="text-[11px] font-medium text-ink-dim">Sample data</p>

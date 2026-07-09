@@ -34,10 +34,14 @@ export default function App(): React.JSX.Element {
     <div className="flex h-full w-full overflow-hidden bg-canvas/60 text-ink">
       <Sidebar view={view} onSelect={setView} demoMode={settings.demoMode && !google.connected} />
 
-      <main className="relative flex-1 overflow-hidden rounded-tl-[14px] border-l border-t border-hairline bg-canvas/85">
+      <main className="relative flex flex-1 flex-col overflow-hidden rounded-tl-[14px] border-l border-t border-hairline bg-canvas/85">
+        {/* Draggable title bar strip: lets the window be moved from the top edge,
+            like any Mac app. A flex item (not an overlay) so it never covers or
+            blocks interactive content below it. */}
+        <div className="drag-region h-11 shrink-0" />
         {/* Ambient top glow for depth without a heavy header */}
         <div className="pointer-events-none absolute inset-x-0 top-0 h-40 bg-gradient-to-b from-white/[0.025] to-transparent" />
-        <div className="h-full overflow-y-auto pt-3">
+        <div className="min-h-0 flex-1 overflow-y-auto">
           <AnimatePresence mode="wait">
             <motion.div
               key={view}
