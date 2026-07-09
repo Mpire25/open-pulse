@@ -11,8 +11,11 @@ interface StoreFile {
 
 const DEFAULTS: AppSettings = {
   googleClientId: '',
+  googleClientSecret: '',
+  googleClientSecretConfigured: false,
   goals: { steps: 10000, activeZoneMinutes: 30, activeEnergyKcal: 500 }
 }
+const GOOGLE_CLIENT_SECRET_KEY = 'google-client-secret'
 
 let cache: StoreFile | null = null
 
@@ -26,7 +29,13 @@ function load(): StoreFile {
     try {
       const raw = JSON.parse(readFileSync(filePath(), 'utf8')) as Partial<StoreFile>
       cache = {
-        settings: { ...DEFAULTS, ...raw.settings, goals: { ...DEFAULTS.goals, ...raw.settings?.goals } },
+        settings: {
+          ...DEFAULTS,
+          ...raw.settings,
+          googleClientSecret: '',
+          googleClientSecretConfigured: false,
+          goals: { ...DEFAULTS.goals, ...raw.settings?.goals }
+        },
         secrets: raw.secrets ?? {}
       }
       return cache
@@ -43,14 +52,30 @@ function persist(): void {
 }
 
 export function getSettings(): AppSettings {
-  return load().settings
+  const settings = load().settings
+  return {
+    ...settings,
+    googleClientSecret: '',
+    googleClientSecretConfigured: Boolean(getGoogleClientSecret())
+  }
 }
 
 export function updateSettings(patch: Partial<AppSettings>): AppSettings {
   const store = load()
-  store.settings = { ...store.settings, ...patch, goals: { ...store.settings.goals, ...patch.goals } }
+  const { googleClientSecret, googleClientSecretConfigured, ...settingsPatch } = patch
+  store.settings = { ...store.settings, ...settingsPatch, goals: { ...store.settings.goals, ...settingsPatch.goals } }
+  store.settings.googleClientSecret = ''
+  store.settings.googleClientSecretConfigured = false
+  if (googleClientSecret != null) {
+    if (googleClientSecret) setSecret(GOOGLE_CLIENT_SECRET_KEY, googleClientSecret)
+    else deleteSecret(GOOGLE_CLIENT_SECRET_KEY)
+  }
   persist()
-  return store.settings
+  return getSettings()
+}
+
+export function getGoogleClientSecret(): string {
+  return getSecret<string>(GOOGLE_CLIENT_SECRET_KEY) ?? ''
 }
 
 export function setSecret(name: string, value: unknown): void {

@@ -125,8 +125,11 @@ function GoogleCard({
         <GoogleSetup
           showHeader={false}
           initialClientId={settings.googleClientId}
+          clientSecretConfigured={settings.googleClientSecretConfigured}
           onConnected={onGoogleChange}
-          onClientIdChange={(googleClientId) => onSettingsChange({ ...settings, googleClientId })}
+          onCredentialsChange={(googleClientId, googleClientSecretConfigured) =>
+            onSettingsChange({ ...settings, googleClientId, googleClientSecretConfigured })
+          }
         />
       )}
     </Card>

@@ -1,18 +1,23 @@
 import { shell } from 'electron'
 import { createServer } from 'node:http'
-import type { AddressInfo } from 'node:net'
 import { createPkcePair, randomState, decodeJwtPayload } from './pkce'
-import { getSecret, setSecret, deleteSecret, getSettings } from './store'
+import { getSecret, setSecret, deleteSecret, getSettings, getGoogleClientSecret } from './store'
 import type { GoogleAuthStatus } from '../shared/types'
 
 // Google Health API scopes (from the v4 discovery document) plus identity.
 const SCOPES = [
   'openid',
   'email',
+  'profile',
   'https://www.googleapis.com/auth/googlehealth.activity_and_fitness.readonly',
+  'https://www.googleapis.com/auth/googlehealth.ecg.readonly',
   'https://www.googleapis.com/auth/googlehealth.health_metrics_and_measurements.readonly',
-  'https://www.googleapis.com/auth/googlehealth.sleep.readonly',
-  'https://www.googleapis.com/auth/googlehealth.profile.readonly'
+  'https://www.googleapis.com/auth/googlehealth.irn.readonly',
+  'https://www.googleapis.com/auth/googlehealth.location.readonly',
+  'https://www.googleapis.com/auth/googlehealth.nutrition.readonly',
+  'https://www.googleapis.com/auth/googlehealth.profile.readonly',
+  'https://www.googleapis.com/auth/googlehealth.settings.readonly',
+  'https://www.googleapis.com/auth/googlehealth.sleep.readonly'
 ]
 
 interface GoogleTokens {
@@ -24,6 +29,9 @@ interface GoogleTokens {
 
 const SECRET_KEY = 'google-tokens'
 const GOOGLE_SIGN_IN_TIMEOUT_MS = 60_000
+const GOOGLE_REDIRECT_PORT = 42813
+const GOOGLE_REDIRECT_PATH = '/oauth/callback'
+const GOOGLE_REDIRECT_URI = `http://127.0.0.1:${GOOGLE_REDIRECT_PORT}${GOOGLE_REDIRECT_PATH}`
 
 const LANDING_HTML = `<!doctype html><meta charset="utf-8"><title>OpenPulse</title>
 <body style="font-family:-apple-system,system-ui;background:#0a0a0c;color:#f5f5f7;display:grid;place-items:center;height:100vh;margin:0">
@@ -31,6 +39,11 @@ const LANDING_HTML = `<!doctype html><meta charset="utf-8"><title>OpenPulse</tit
 <p style="color:#a1a1a8">You can close this window and return to OpenPulse.</p></div></body>`
 
 let activeConnectReject: ((err: Error) => void) | null = null
+
+interface GoogleTokenError {
+  error?: string
+  error_description?: string
+}
 
 export function getGoogleStatus(): GoogleAuthStatus {
   const tokens = getSecret<GoogleTokens>(SECRET_KEY)
@@ -42,15 +55,19 @@ export function disconnectGoogle(): void {
 }
 
 /**
- * Runs the OAuth 2.0 authorization-code + PKCE flow for a Google "Desktop app"
- * client using a loopback redirect, per Google's native-app guidance.
+ * Runs the OAuth 2.0 authorization-code + PKCE flow for a Google "Web application"
+ * client using a fixed loopback redirect.
  */
 export async function connectGoogle(): Promise<GoogleAuthStatus> {
   const clientId = getSettings().googleClientId.trim()
+  const clientSecret = getGoogleClientSecret()
   if (!clientId) {
     throw new Error(
-      'No Google OAuth Client ID configured. Create a "Desktop app" OAuth client in Google Cloud Console (with the Health API enabled) and paste its Client ID in Settings.'
+      'No Google OAuth Client ID configured. Create a "Web application" OAuth client in Google Cloud Console, register http://127.0.0.1:42813/oauth/callback as its redirect URI, then paste its Client ID and Client Secret here.'
     )
+  }
+  if (!clientSecret) {
+    throw new Error('No Google OAuth Client Secret configured. Paste the Client Secret from the same Web application OAuth client as the Client ID.')
   }
 
   const { verifier, challenge } = createPkcePair()
@@ -58,14 +75,13 @@ export async function connectGoogle(): Promise<GoogleAuthStatus> {
 
   activeConnectReject?.(new Error('Google sign-in was restarted.'))
 
-  const { code, redirectPort } = await new Promise<{ code: string; redirectPort: number }>((resolve, reject) => {
+  const code = await new Promise<string>((resolve, reject) => {
     let settled = false
-    let redirectPort = 0
     let timer: ReturnType<typeof setTimeout> | null = null
 
     const server = createServer((req, res) => {
       const url = new URL(req.url ?? '/', 'http://127.0.0.1')
-      if (url.pathname !== '/oauth2callback') {
+      if (url.pathname !== GOOGLE_REDIRECT_PATH) {
         res.writeHead(404).end()
         return
       }
@@ -76,7 +92,7 @@ export async function connectGoogle(): Promise<GoogleAuthStatus> {
       if (err) settleReject(new Error(`Google sign-in failed: ${err}`))
       else if (returnedState !== state) settleReject(new Error('OAuth state mismatch.'))
       else if (!authCode) settleReject(new Error('Google did not return an authorization code.'))
-      else settleResolve({ code: authCode, redirectPort })
+      else settleResolve(authCode)
     })
 
     const cleanup = (): void => {
@@ -88,7 +104,7 @@ export async function connectGoogle(): Promise<GoogleAuthStatus> {
       if (activeConnectReject === settleReject) activeConnectReject = null
     }
 
-    const settleResolve = (value: { code: string; redirectPort: number }): void => {
+    const settleResolve = (value: string): void => {
       if (settled) return
       settled = true
       cleanup()
@@ -103,7 +119,11 @@ export async function connectGoogle(): Promise<GoogleAuthStatus> {
     }
 
     activeConnectReject = settleReject
-    server.on('error', settleReject)
+    server.on('error', (err) => {
+      const message =
+        'Could not start the Google callback listener on http://127.0.0.1:42813/oauth/callback. Close any other OpenPulse/OpenFit process using that port, then try again.'
+      settleReject(err instanceof Error && 'code' in err && err.code === 'EADDRINUSE' ? new Error(message) : err)
+    })
 
     timer = setTimeout(
       () => {
@@ -111,13 +131,11 @@ export async function connectGoogle(): Promise<GoogleAuthStatus> {
       },
       GOOGLE_SIGN_IN_TIMEOUT_MS
     )
-    server.listen(0, '127.0.0.1', () => {
-      const port = (server.address() as AddressInfo).port
-      redirectPort = port
+    server.listen(GOOGLE_REDIRECT_PORT, '127.0.0.1', () => {
       const authUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth')
       authUrl.search = new URLSearchParams({
         client_id: clientId,
-        redirect_uri: `http://127.0.0.1:${port}/oauth2callback`,
+        redirect_uri: GOOGLE_REDIRECT_URI,
         response_type: 'code',
         scope: SCOPES.join(' '),
         code_challenge: challenge,
@@ -132,10 +150,11 @@ export async function connectGoogle(): Promise<GoogleAuthStatus> {
 
   const body = new URLSearchParams({
     client_id: clientId,
+    client_secret: clientSecret,
     code,
     code_verifier: verifier,
     grant_type: 'authorization_code',
-    redirect_uri: `http://127.0.0.1:${redirectPort}/oauth2callback`
+    redirect_uri: GOOGLE_REDIRECT_URI
   })
   const resp = await fetch('https://oauth2.googleapis.com/token', {
     method: 'POST',
@@ -143,7 +162,7 @@ export async function connectGoogle(): Promise<GoogleAuthStatus> {
     body: body.toString()
   })
   if (!resp.ok) {
-    throw new Error(`Google token exchange failed (${resp.status}): ${await resp.text()}`)
+    throw new Error(await formatGoogleTokenError(resp))
   }
   const json = (await resp.json()) as {
     access_token: string
@@ -162,6 +181,27 @@ export async function connectGoogle(): Promise<GoogleAuthStatus> {
   return { connected: true, email: tokens.email }
 }
 
+async function formatGoogleTokenError(resp: Response): Promise<string> {
+  const text = await resp.text()
+  let payload: GoogleTokenError | null = null
+
+  try {
+    payload = JSON.parse(text) as GoogleTokenError
+  } catch {
+    // Keep the raw response below when Google returns something unexpected.
+  }
+
+  const description = payload?.error_description ?? ''
+  if (payload?.error === 'invalid_request' && description.includes('client_secret')) {
+    return (
+      'This Google OAuth Client ID expects a client secret. Paste the Client Secret from the same Web application OAuth client, then try again.'
+    )
+  }
+
+  const detail = description || payload?.error || text
+  return `Google token exchange failed (${resp.status}): ${detail}`
+}
+
 /** Returns a valid access token, refreshing it if needed, or null when not connected. */
 export async function getGoogleAccessToken(): Promise<string | null> {
   const tokens = getSecret<GoogleTokens>(SECRET_KEY)
@@ -169,8 +209,11 @@ export async function getGoogleAccessToken(): Promise<string | null> {
   if (Date.now() < tokens.expiresAt - 60_000) return tokens.accessToken
   if (!tokens.refreshToken) return null
 
+  const clientSecret = getGoogleClientSecret()
+  if (!clientSecret) return null
   const body = new URLSearchParams({
     client_id: getSettings().googleClientId.trim(),
+    client_secret: clientSecret,
     grant_type: 'refresh_token',
     refresh_token: tokens.refreshToken
   })

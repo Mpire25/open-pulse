@@ -69,6 +69,8 @@ export interface Goals {
 
 export interface AppSettings {
   googleClientId: string
+  googleClientSecret: string
+  googleClientSecretConfigured: boolean
   goals: Goals
 }
 

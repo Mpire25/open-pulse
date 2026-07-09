@@ -35,20 +35,29 @@ The app opens in demo mode. Connect your accounts in **Settings**.
 ## Connecting Google Health (your Fitbit Air data)
 
 The Google Health API uses Google OAuth 2.0. OpenPulse runs the flow locally with a
-loopback redirect + PKCE, so **no client secret is ever stored**.
+loopback redirect + PKCE. Your Client Secret and OAuth tokens are stored by
+Electron `safeStorage`.
 
 1. In the [Google Cloud Console](https://console.cloud.google.com), create a
    project and enable the **Google Health API**.
-2. Configure the OAuth consent screen and add yourself as a test user.
-3. Create an **OAuth client ID** of type **Desktop app**.
-4. Copy the Client ID into **Settings → Google Health → OAuth Client ID**, then
+2. Configure the OAuth consent screen. While the app is in **Testing**, open
+   **Audience → Test users** and add the exact Google account you will sign in
+   with. Otherwise Google will stop the flow with `Error 403: access_denied`
+   before OpenPulse receives an authorization code.
+3. Create an **OAuth client ID** of type **Web application**.
+4. Add this exact **Authorized redirect URI**:
+   `http://127.0.0.1:42813/oauth/callback`.
+5. Copy the Client ID and Client Secret into **Settings → Google Health**, then
    click **Connect**. A browser window opens for consent; approve the requested
-   read scopes (activity & fitness, health metrics, sleep, profile).
+   read scopes.
 
 Scopes requested (read-only):
 `googlehealth.activity_and_fitness.readonly`,
+`googlehealth.ecg.readonly`,
 `googlehealth.health_metrics_and_measurements.readonly`,
-`googlehealth.sleep.readonly`, `googlehealth.profile.readonly`.
+`googlehealth.irn.readonly`, `googlehealth.location.readonly`,
+`googlehealth.nutrition.readonly`, `googlehealth.profile.readonly`,
+`googlehealth.settings.readonly`, `googlehealth.sleep.readonly`.
 
 ## Connecting the AI assistant (Sign in with ChatGPT)
 

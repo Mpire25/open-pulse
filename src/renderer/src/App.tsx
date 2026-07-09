@@ -58,8 +58,11 @@ export default function App(): React.JSX.Element {
                 <ConnectGate
                   connected={google.connected}
                   clientId={settings.googleClientId}
+                  clientSecretConfigured={settings.googleClientSecretConfigured}
                   onConnected={setGoogle}
-                  onClientIdChange={(googleClientId) => setSettings({ ...settings, googleClientId })}
+                  onCredentialsChange={(googleClientId, googleClientSecretConfigured) =>
+                    setSettings({ ...settings, googleClientId, googleClientSecretConfigured })
+                  }
                 >
                   {view === 'today' && <TodayView />}
                   {view === 'trends' && <TrendsView />}

@@ -1,10 +1,12 @@
 import { useRef, useState } from 'react'
 import { motion } from 'framer-motion'
-import { ArrowClockwise, ArrowSquareOut, GoogleLogo, Warning } from '@phosphor-icons/react'
+import { ArrowClockwise, ArrowSquareOut, Check, Copy, GoogleLogo, Warning } from '@phosphor-icons/react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { AppLogo } from '@/components/AppLogo'
 import type { GoogleAuthStatus } from '@shared/types'
+
+const GOOGLE_REDIRECT_URI = 'http://127.0.0.1:42813/oauth/callback'
 
 interface Step {
   title: string
@@ -22,63 +24,100 @@ const STEPS: Step[] = [
     title: 'Create an OAuth client ID',
     body: (
       <>
-        Type <span className="text-ink">Desktop app</span>. On the consent screen, add this browser's Google
-        account under <span className="text-ink">Audience / Test users</span>.
+        Type <span className="text-ink">Web application</span>. Add this exact redirect URI:
+        <CopyRedirectUri />.
       </>
     ),
     link: { label: 'Credentials', href: 'https://console.cloud.google.com/apis/credentials' }
   },
   {
-    title: 'Paste the Client ID below',
-    body: 'Ends in .apps.googleusercontent.com — no client secret needed.'
+    title: 'Paste the credentials below',
+    body: 'Use the Client ID and Client Secret from that same Web application OAuth client.'
   }
 ]
 
+function formatConnectError(err: unknown): string {
+  const message = err instanceof Error ? err.message : String(err)
+  return message.replace(/^Error invoking remote method 'google:connect': Error:\s*/, '')
+}
+
+function CopyRedirectUri(): React.JSX.Element {
+  const [copied, setCopied] = useState(false)
+
+  const copy = async (): Promise<void> => {
+    await navigator.clipboard.writeText(GOOGLE_REDIRECT_URI)
+    setCopied(true)
+    window.setTimeout(() => setCopied(false), 1600)
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={() => void copy()}
+      className="no-drag ml-1 inline-flex items-center gap-1 rounded-md border border-hairline bg-white/[0.04] px-1.5 py-0.5 font-mono text-[11px] leading-none text-ink transition-colors hover:border-accent/50 hover:bg-accent/10"
+      title="Copy redirect URI"
+    >
+      {copied ? <Check size={11} weight="bold" /> : <Copy size={11} weight="bold" />}
+      {copied ? 'Copied' : GOOGLE_REDIRECT_URI}
+    </button>
+  )
+}
+
 interface GoogleSetupProps {
   initialClientId: string
+  clientSecretConfigured: boolean
   onConnected: (status: GoogleAuthStatus) => void
-  onClientIdChange?: (clientId: string) => void
+  onCredentialsChange?: (clientId: string, clientSecretConfigured: boolean) => void
   /** Show the logo + title header (used in the floating overlay, hidden in Settings). */
   showHeader?: boolean
 }
 
 export function GoogleSetup({
   initialClientId,
+  clientSecretConfigured,
   onConnected,
-  onClientIdChange,
+  onCredentialsChange,
   showHeader = true
 }: GoogleSetupProps): React.JSX.Element {
   const [clientId, setClientId] = useState(initialClientId)
+  const [clientSecret, setClientSecret] = useState('')
   const [busy, setBusy] = useState(false)
-  const [activeClientId, setActiveClientId] = useState<string | null>(null)
+  const [activeCredentialKey, setActiveCredentialKey] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const attemptRef = useRef(0)
 
   const connect = async (): Promise<void> => {
     const trimmed = clientId.trim()
-    if (!trimmed || (busy && trimmed === activeClientId)) return
+    const trimmedSecret = clientSecret.trim()
+    const credentialKey = `${trimmed}\n${trimmedSecret || clientSecretConfigured}`
+    if (!trimmed || (busy && credentialKey === activeCredentialKey)) return
     const attempt = attemptRef.current + 1
     attemptRef.current = attempt
     setError(null)
     setBusy(true)
-    setActiveClientId(trimmed)
+    setActiveCredentialKey(credentialKey)
     try {
-      await window.pulse.settings.update({ googleClientId: trimmed })
-      onClientIdChange?.(trimmed)
+      const patch = trimmedSecret
+        ? { googleClientId: trimmed, googleClientSecret: trimmedSecret }
+        : { googleClientId: trimmed }
+      const updatedSettings = await window.pulse.settings.update(patch)
+      onCredentialsChange?.(trimmed, updatedSettings.googleClientSecretConfigured)
       const status = await window.pulse.google.connect()
       if (attemptRef.current === attempt) onConnected(status)
     } catch (err) {
-      if (attemptRef.current === attempt) setError(err instanceof Error ? err.message : String(err))
+      if (attemptRef.current === attempt) setError(formatConnectError(err))
     } finally {
       if (attemptRef.current === attempt) {
         setBusy(false)
-        setActiveClientId(null)
+        setActiveCredentialKey(null)
       }
     }
   }
 
   const trimmedClientId = clientId.trim()
-  const clientIdChangedDuringConnect = busy && Boolean(activeClientId) && trimmedClientId !== activeClientId
+  const currentCredentialKey = `${trimmedClientId}\n${clientSecret.trim() || clientSecretConfigured}`
+  const credentialsChangedDuringConnect =
+    busy && Boolean(activeCredentialKey) && currentCredentialKey !== activeCredentialKey
 
   return (
     <div className="w-full">
@@ -128,9 +167,20 @@ export function GoogleSetup({
           placeholder="Client ID · xxxx.apps.googleusercontent.com"
           spellCheck={false}
         />
+        <Input
+          value={clientSecret}
+          onChange={(e) => {
+            setClientSecret(e.target.value)
+            if (error) setError(null)
+          }}
+          onKeyDown={(e) => e.key === 'Enter' && void connect()}
+          placeholder={clientSecretConfigured ? 'Client secret saved · type to replace' : 'Client secret'}
+          spellCheck={false}
+          type="password"
+        />
         {busy && (
           <p className="text-[12px] leading-relaxed text-ink-dim">
-            Waiting for Google. This will time out in about a minute; edit the Client ID to retry now.
+            Waiting for Google. This will time out in about a minute; edit the credentials to retry now.
           </p>
         )}
         {error && (
@@ -143,9 +193,9 @@ export function GoogleSetup({
             {error}
           </motion.div>
         )}
-        <Button className="mt-1 w-full" onClick={connect} disabled={!trimmedClientId || (busy && !clientIdChangedDuringConnect)}>
+        <Button className="mt-1 w-full" onClick={connect} disabled={!trimmedClientId || (busy && !credentialsChangedDuringConnect)}>
           {busy ? <ArrowClockwise size={15} className="animate-spin" /> : <GoogleLogo size={15} weight="bold" />}
-          {clientIdChangedDuringConnect ? 'Retry with New Client ID' : busy ? 'Waiting for Google…' : 'Connect Google Health'}
+          {credentialsChangedDuringConnect ? 'Retry with New Credentials' : busy ? 'Waiting for Google…' : 'Connect Google Health'}
         </Button>
       </div>
     </div>

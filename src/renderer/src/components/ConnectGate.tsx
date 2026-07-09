@@ -6,8 +6,9 @@ import type { GoogleAuthStatus } from '@shared/types'
 interface ConnectGateProps {
   connected: boolean
   clientId: string
+  clientSecretConfigured: boolean
   onConnected: (status: GoogleAuthStatus) => void
-  onClientIdChange: (clientId: string) => void
+  onCredentialsChange: (clientId: string, clientSecretConfigured: boolean) => void
   children: React.ReactNode
 }
 
@@ -17,8 +18,9 @@ interface ConnectGateProps {
 export function ConnectGate({
   connected,
   clientId,
+  clientSecretConfigured,
   onConnected,
-  onClientIdChange,
+  onCredentialsChange,
   children
 }: ConnectGateProps): React.JSX.Element {
   return (
@@ -46,8 +48,9 @@ export function ConnectGate({
             >
               <GoogleSetup
                 initialClientId={clientId}
+                clientSecretConfigured={clientSecretConfigured}
                 onConnected={onConnected}
-                onClientIdChange={onClientIdChange}
+                onCredentialsChange={onCredentialsChange}
               />
             </motion.div>
           </div>
