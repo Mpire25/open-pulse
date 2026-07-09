@@ -186,6 +186,7 @@ function mapWorkout(point: RawDataPoint): Workout | null {
 // Live sync
 
 type Raw = Partial<Record<string, unknown>>
+const dayInFlight = new Map<string, Promise<HealthDay>>()
 
 async function syncDay(token: string, date: string): Promise<HealthDay> {
   const trendStart = shiftIsoDate(date, -(TREND_DAYS - 1))
@@ -214,8 +215,7 @@ async function syncDay(token: string, date: string): Promise<HealthDay> {
     // Sessions and intraday detail
     ['sleep', () => listData(token, 'sleep', 'sleep', trendStart, dayAfter, 'google-wearables')],
     ['workouts', () => listData(token, 'exercise', 'session', trendStart, dayAfter)],
-    ['stepsIntraday', () => listData(token, 'steps', 'interval', date, dayAfter, 'google-wearables')],
-    ['heartIntraday', () => listData(token, 'heart-rate', 'sample', date, dayAfter, 'google-wearables')]
+    ['stepsIntraday', () => listData(token, 'steps', 'interval', date, dayAfter, 'google-wearables')]
   ]
 
   const raw: Raw = {}
@@ -398,22 +398,34 @@ export async function getHealthDay(date: string, force = false): Promise<HealthD
   const day = /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : todayIso()
   const clamped = day > todayIso() ? todayIso() : day
 
-  const token = await getGoogleAccessToken()
-  if (!token) return demoHealthDay(clamped)
-
   if (!force) {
     const cached = cachedDay(clamped)
     if (cached) return cached
   }
 
+  const pending = dayInFlight.get(clamped)
+  if (pending) return pending
+
+  const load = (async (): Promise<HealthDay> => {
+    const token = await getGoogleAccessToken()
+    if (!token) return demoHealthDay(clamped)
+
+    try {
+      const snapshot = await syncDay(token, clamped)
+      dayCache.set(clamped, { day: snapshot, fetchedAt: Date.now() })
+      return snapshot
+    } catch (err) {
+      console.error(`[health] sync failed for ${clamped}:`, err)
+      // Serve a stale snapshot over nothing; fall back to demo as a last resort.
+      return dayCache.get(clamped)?.day ?? demoHealthDay(clamped)
+    }
+  })()
+
+  dayInFlight.set(clamped, load)
   try {
-    const snapshot = await syncDay(token, clamped)
-    dayCache.set(clamped, { day: snapshot, fetchedAt: Date.now() })
-    return snapshot
-  } catch (err) {
-    console.error(`[health] sync failed for ${clamped}:`, err)
-    // Serve a stale snapshot over nothing; fall back to demo as a last resort.
-    return dayCache.get(clamped)?.day ?? demoHealthDay(clamped)
+    return await load
+  } finally {
+    dayInFlight.delete(clamped)
   }
 }
 
