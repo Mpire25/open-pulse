@@ -9,14 +9,19 @@ interface DateNavProps {
   onChange: (date: string) => void
 }
 
-/** Prev/next day arrows, a friendly label, and a calendar popover. */
+/**
+ * Prev/next day arrows around a fixed-width label with a calendar popover.
+ * The width never changes with the label ("Today" vs "Wed, Jun 24"), so the
+ * control never shifts its neighbors; jumping back to today lives in the
+ * popover presets instead of a layout-shifting button.
+ */
 export function DateNav({ date, onChange }: DateNavProps): React.JSX.Element {
   const [open, setOpen] = useState(false)
   const today = isoToday()
   const atToday = date >= today
 
   return (
-    <div className="no-drag relative flex items-center gap-1">
+    <div className="no-drag relative flex items-center gap-0.5">
       <NavArrow label="Previous day" onClick={() => onChange(shiftDate(date, -1))}>
         <CaretLeft size={14} weight="bold" />
       </NavArrow>
@@ -24,26 +29,17 @@ export function DateNav({ date, onChange }: DateNavProps): React.JSX.Element {
       <button
         onClick={() => setOpen((o) => !o)}
         className={cn(
-          'flex h-7 items-center gap-1.5 rounded-lg border border-transparent px-2.5 text-[12.5px] font-semibold text-ink transition-colors',
+          'flex h-7 w-[124px] items-center justify-center gap-1.5 rounded-lg border border-transparent text-[12.5px] font-semibold text-ink transition-colors',
           open ? 'border-hairline bg-white/[0.07]' : 'hover:bg-white/[0.05]'
         )}
       >
         <CalendarBlank size={13} weight="bold" className="text-ink-dim" />
-        {navDateLabel(date)}
+        <span className="truncate">{navDateLabel(date)}</span>
       </button>
 
       <NavArrow label="Next day" disabled={atToday} onClick={() => onChange(shiftDate(date, 1))}>
         <CaretRight size={14} weight="bold" />
       </NavArrow>
-
-      {!atToday && (
-        <button
-          onClick={() => onChange(today)}
-          className="ml-1 h-7 rounded-lg px-2 text-[11.5px] font-semibold text-accent transition-colors hover:bg-accent-soft"
-        >
-          Today
-        </button>
-      )}
 
       <AnimatePresence>
         {open && (

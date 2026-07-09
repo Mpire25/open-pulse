@@ -592,9 +592,9 @@ export function Spark({ values, color, width = 72, height = 24 }: { values: Arra
 }
 
 // ---------------------------------------------------------------------------
-// Gauge ring — 260° instrument arc with etched ticks (not an Apple ring)
+// Progress ring — a clean full-circle goal ring with round caps
 
-interface GaugeRingProps {
+interface ProgressRingProps {
   value: number
   goal: number
   color: string
@@ -603,45 +603,30 @@ interface GaugeRingProps {
   children?: React.ReactNode
 }
 
-export function GaugeRing({ value, goal, color, size = 120, stroke = 10, children }: GaugeRingProps): React.JSX.Element {
-  const sweep = 260
-  const startAngle = 140 // degrees, clockwise from 12 o'clock
+export function ProgressRing({ value, goal, color, size = 120, stroke = 10, children }: ProgressRingProps): React.JSX.Element {
   const r = (size - stroke) / 2
   const c = size / 2
-  const progress = goal > 0 ? Math.min(1, value / goal) : 0
+  const circumference = 2 * Math.PI * r
+  const progress = goal > 0 ? Math.max(0, Math.min(1, value / goal)) : 0
 
-  const polar = (angleDeg: number, radius: number): [number, number] => {
-    const rad = ((angleDeg - 90) * Math.PI) / 180
-    return [c + radius * Math.cos(rad), c + radius * Math.sin(rad)]
-  }
-  const arc = (from: number, to: number): string => {
-    const [x1, y1] = polar(from, r)
-    const [x2, y2] = polar(to, r)
-    const large = to - from > 180 ? 1 : 0
-    return `M ${x1} ${y1} A ${r} ${r} 0 ${large} 1 ${x2} ${y2}`
-  }
-
-  const ticks = 26
   return (
     <div className="relative" style={{ width: size, height: size }}>
-      <svg width={size} height={size} className="block">
-        <path d={arc(startAngle, startAngle + sweep)} fill="none" stroke={color} opacity={0.16} strokeWidth={stroke} strokeLinecap="round" />
-        {progress > 0.005 && (
-          <path
-            d={arc(startAngle, startAngle + sweep * progress)}
+      <svg width={size} height={size} className="block -rotate-90">
+        <circle cx={c} cy={c} r={r} fill="none" stroke={color} opacity={0.15} strokeWidth={stroke} />
+        {progress > 0.004 && (
+          <circle
+            cx={c}
+            cy={c}
+            r={r}
             fill="none"
             stroke={color}
             strokeWidth={stroke}
             strokeLinecap="round"
+            strokeDasharray={circumference}
+            strokeDashoffset={circumference * (1 - progress)}
+            className="transition-[stroke-dashoffset] duration-700 ease-out"
           />
         )}
-        {/* Etched ticks over the band give it an instrument feel */}
-        {Array.from({ length: ticks }, (_, i) => {
-          const a = startAngle + (sweep * (i + 0.5)) / ticks
-          const [x1, y1] = polar(a, r - stroke / 2)
-          const [x2, y2] = polar(a, r + stroke / 2)
-          return <line key={i} x1={x1} y1={y1} x2={x2} y2={y2} stroke="var(--color-panel)" strokeWidth={2} />
-        })}
       </svg>
       <div className="absolute inset-0 grid place-items-center">{children}</div>
     </div>

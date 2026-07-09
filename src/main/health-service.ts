@@ -1,22 +1,30 @@
-// Produces renderer-facing health data, from the Google Health API when
-// connected and from the demo generator otherwise.
+// Domain-split health queries over the per-day archive.
 //
-// The sync is anchored to a selected civil date: one call fetches everything
-// the app shows for that day (activity, vitals, sleep, body, workouts,
-// intraday series) plus a 14-day trend window ending on it. Each endpoint is
-// an independent job — one failing type never sinks the whole snapshot.
+// Every query answers from the archive first and fetches only the days that
+// are missing or stale, so switching dates reuses everything already synced
+// and an app restart renders instantly from the encrypted disk cache.
+// Requests are priority-ordered: the selected day's numbers arrive before
+// history backfills.
 
 import type {
+  DailySeries,
   DayMetrics,
+  DayValues,
   HealthDay,
   HeartRatePoint,
   HourlySteps,
+  IntradaySnapshot,
+  MetricKey,
   PairedDevice,
+  SeriesResult,
   SleepNight,
+  SleepRangeResult,
   SleepStageSegment,
   SleepStageType,
-  Workout
+  Workout,
+  WorkoutsResult
 } from '../shared/types'
+import { METRIC_KEYS } from '../shared/types'
 import { getGoogleAccessToken } from './google-auth'
 import {
   dailyRollUp,
@@ -26,12 +34,25 @@ import {
   minuteFromCivil,
   shiftIsoDate,
   type CivilDateTime,
+  type Priority,
   type RawDataPoint,
   type RollupPoint
 } from './health-api'
-import { demoDevices, demoHealthDay, demoSleepHistory } from './sample-data'
+import {
+  fetchedAt,
+  markAllStale,
+  markFetched,
+  mergeValues,
+  peekDay,
+  setIntradayHeart,
+  setIntradaySteps,
+  setSleep,
+  setWorkouts
+} from './metric-store'
+import { demoDevices, demoIntraday, demoSeries, demoSleepRange, demoWorkoutsRange } from './sample-data'
 
-const TREND_DAYS = 14
+// ---------------------------------------------------------------------------
+// Dates & freshness
 
 function isoDate(d: Date): string {
   const tz = d.getTimezoneOffset() * 60_000
@@ -40,6 +61,42 @@ function isoDate(d: Date): string {
 
 function todayIso(): string {
   return isoDate(new Date())
+}
+
+function listDates(start: string, end: string): string[] {
+  const out: string[] = []
+  for (let d = start; d <= end; d = shiftIsoDate(d, 1)) out.push(d)
+  return out
+}
+
+/** Clamp to [something sane, today] and make sure start <= end. */
+function normalizeRange(start: string, end: string): [string, string] {
+  const today = todayIso()
+  const valid = (d: string): string => (/^\d{4}-\d{2}-\d{2}$/.test(d) ? d : today)
+  let s = valid(start)
+  let e = valid(end)
+  if (e > today) e = today
+  if (s > e) s = e
+  return [s, e]
+}
+
+const TTL_TODAY_MS = 2 * 60_000
+const TTL_RECENT_MS = 30 * 60_000 // late device syncs still land on recent days
+
+function isFresh(group: string, date: string, now = Date.now()): boolean {
+  const at = fetchedAt(group, date)
+  if (at == null) return false
+  const today = todayIso()
+  if (date >= today) return now - at < TTL_TODAY_MS
+  if (date >= shiftIsoDate(today, -2)) return now - at < TTL_RECENT_MS
+  return true // settled history: only a forced refresh refetches
+}
+
+/** Small spans are what the user is looking at; long spans are backfill. */
+function spanPriority(days: number): Priority {
+  if (days <= 2) return 0
+  if (days <= 31) return 1
+  return 2
 }
 
 function num(value: unknown): number | null {
@@ -55,26 +112,209 @@ function durationSeconds(value: unknown): number {
 }
 
 // ---------------------------------------------------------------------------
-// Cache: date -> snapshot. Past days barely change once synced; today does.
+// Fetch groups
+//
+// A group is the unit of fetching and freshness: one API call that yields one
+// or more daily metrics over a date range.
 
-interface CacheEntry {
-  day: HealthDay
-  fetchedAt: number
+interface FetchGroup {
+  id: string
+  metrics: MetricKey[]
+  fetch: (token: string, start: string, endExclusive: string, priority: Priority) => Promise<Map<string, DayValues>>
 }
 
-const dayCache = new Map<string, CacheEntry>()
-const TTL_TODAY_MS = 2 * 60_000
-const TTL_PAST_MS = 30 * 60_000
+function rollupGroup(
+  id: string,
+  dataType: string,
+  metrics: MetricKey[],
+  extract: (p: RollupPoint) => DayValues
+): FetchGroup {
+  return {
+    id,
+    metrics,
+    fetch: async (token, start, endExclusive, priority) => {
+      const points = await dailyRollUp(token, dataType, start, endExclusive, priority)
+      const map = new Map<string, DayValues>()
+      for (const p of points) {
+        const date = dateFromCivil(p.civilStartTime)
+        if (date) map.set(date, extract(p))
+      }
+      return map
+    }
+  }
+}
 
-function cachedDay(date: string): HealthDay | null {
-  const entry = dayCache.get(date)
-  if (!entry) return null
-  const ttl = date === todayIso() ? TTL_TODAY_MS : TTL_PAST_MS
-  return Date.now() - entry.fetchedAt < ttl ? entry.day : null
+function dailyRecordGroup(
+  id: string,
+  dataType: string,
+  recordKey: string,
+  metrics: MetricKey[],
+  extract: (record: Record<string, unknown>) => DayValues
+): FetchGroup {
+  return {
+    id,
+    metrics,
+    fetch: async (token, start, endExclusive, priority) => {
+      const points = await listData(token, dataType, 'daily', start, endExclusive, 'all-sources', priority)
+      const map = new Map<string, DayValues>()
+      for (const p of points) {
+        const record = p[recordKey] as Record<string, unknown> | undefined
+        const date = dateFromCivil(record?.date as CivilDateTime | undefined)
+        if (record && date) map.set(date, extract(record))
+      }
+      return map
+    }
+  }
+}
+
+// Nutrition rollups: energy is documented; macro fields vary by logger, so
+// probe a few plausible shapes and keep whatever answers.
+function nutrientSum(node: unknown): number | null {
+  if (node == null) return null
+  if (typeof node === 'number' || typeof node === 'string') return num(node)
+  const rec = node as Record<string, unknown>
+  return num(rec.gramsSum ?? rec.sum ?? rec.valueSum ?? rec.amountSum ?? rec.milligramsSum)
+}
+
+const GROUPS: FetchGroup[] = [
+  rollupGroup('steps', 'steps', ['steps'], (p) => ({
+    steps: num((p.steps as { countSum?: string })?.countSum)
+  })),
+  rollupGroup('calories-out', 'total-calories', ['caloriesOut'], (p) => ({
+    caloriesOut: num((p.totalCalories as { kcalSum?: number })?.kcalSum)
+  })),
+  rollupGroup('distance', 'distance', ['distanceKm'], (p) => {
+    const mm = num((p.distance as { millimetersSum?: number })?.millimetersSum)
+    return { distanceKm: mm == null ? null : +(mm / 1_000_000).toFixed(2) }
+  }),
+  rollupGroup('floors', 'floors', ['floors'], (p) => ({
+    floors: num((p.floors as { countSum?: string })?.countSum)
+  })),
+  rollupGroup('active-minutes', 'active-minutes', ['activeMinutes'], (p) => {
+    const levels = (
+      p.activeMinutes as
+        | { activeMinutesRollupByActivityLevel?: Array<{ activityLevel?: string; activeMinutesSum?: string }> }
+        | undefined
+    )?.activeMinutesRollupByActivityLevel
+    if (!levels) return { activeMinutes: null }
+    let total: number | null = null
+    for (const level of levels) {
+      if (level.activityLevel === 'MODERATE' || level.activityLevel === 'VIGOROUS') {
+        total = (total ?? 0) + (num(level.activeMinutesSum) ?? 0)
+      }
+    }
+    return { activeMinutes: total }
+  }),
+  rollupGroup('zone-minutes', 'active-zone-minutes', ['activeZoneMinutes'], (p) => {
+    const zones = p.activeZoneMinutes as Record<string, unknown> | undefined
+    if (!zones) return { activeZoneMinutes: null }
+    return { activeZoneMinutes: Object.values(zones).reduce<number>((sum, v) => sum + (num(v) ?? 0), 0) }
+  }),
+  rollupGroup('sedentary', 'sedentary-period', ['sedentaryMinutes'], (p) => {
+    const dur = (p.sedentaryPeriod as { durationSum?: string })?.durationSum
+    return { sedentaryMinutes: dur === undefined ? null : Math.round(durationSeconds(dur) / 60) }
+  }),
+  rollupGroup('weight', 'weight', ['weightKg'], (p) => {
+    const grams = num((p.weight as { weightGramsAvg?: number })?.weightGramsAvg)
+    return { weightKg: grams == null ? null : +(grams / 1000).toFixed(1) }
+  }),
+  rollupGroup('body-fat', 'body-fat', ['bodyFatPct'], (p) => ({
+    bodyFatPct: num((p.bodyFat as { bodyFatPercentageAvg?: number })?.bodyFatPercentageAvg)
+  })),
+  rollupGroup('water', 'hydration-log', ['waterMl'], (p) => ({
+    waterMl: num(
+      (p.hydrationLog as { amountConsumed?: { millilitersSum?: number } })?.amountConsumed?.millilitersSum
+    )
+  })),
+  rollupGroup(
+    'nutrition',
+    'nutrition-log',
+    ['caloriesIn', 'proteinG', 'carbsG', 'fatG', 'fiberG', 'sugarG'],
+    (p) => {
+      const log = p.nutritionLog as Record<string, unknown> | undefined
+      if (!log) return { caloriesIn: null, proteinG: null, carbsG: null, fatG: null, fiberG: null, sugarG: null }
+      return {
+        caloriesIn: num((log.energy as { kcalSum?: number } | undefined)?.kcalSum),
+        proteinG: nutrientSum(log.protein),
+        carbsG: nutrientSum(log.carbohydrate ?? log.totalCarbohydrate ?? log.carbs),
+        fatG: nutrientSum(log.fat ?? log.totalFat),
+        fiberG: nutrientSum(log.fiber ?? log.dietaryFiber),
+        sugarG: nutrientSum(log.sugar ?? log.sugars)
+      }
+    }
+  ),
+  dailyRecordGroup('rhr', 'daily-resting-heart-rate', 'dailyRestingHeartRate', ['restingHeartRate'], (r) => ({
+    restingHeartRate: num(r.beatsPerMinute)
+  })),
+  dailyRecordGroup('hrv', 'daily-heart-rate-variability', 'dailyHeartRateVariability', ['hrvMs'], (r) => ({
+    hrvMs: num(r.averageHeartRateVariabilityMilliseconds ?? r.deepSleepRootMeanSquareOfSuccessiveDifferencesMilliseconds)
+  })),
+  dailyRecordGroup('spo2', 'daily-oxygen-saturation', 'dailyOxygenSaturation', ['spo2Pct'], (r) => ({
+    spo2Pct: num(r.averagePercentage)
+  })),
+  dailyRecordGroup('breathing', 'daily-respiratory-rate', 'dailyRespiratoryRate', ['breathingRate'], (r) => ({
+    breathingRate: num(r.breathsPerMinute)
+  })),
+  dailyRecordGroup(
+    'skin-temp',
+    'daily-sleep-temperature-derivations',
+    'dailySleepTemperatureDerivations',
+    ['skinTempDeltaC'],
+    (r) => {
+      const nightly = num(r.nightlyTemperatureCelsius)
+      const baseline = num(r.baselineTemperatureCelsius)
+      return { skinTempDeltaC: nightly == null || baseline == null ? null : +(nightly - baseline).toFixed(2) }
+    }
+  ),
+  dailyRecordGroup('vo2', 'daily-vo2-max', 'dailyVo2Max', ['vo2Max'], (r) => ({ vo2Max: num(r.vo2Max) }))
+]
+
+const GROUP_BY_METRIC = new Map<MetricKey, FetchGroup>()
+for (const group of GROUPS) {
+  for (const metric of group.metrics) GROUP_BY_METRIC.set(metric, group)
+}
+
+// Sleep summary metrics come from the sleep-session group, handled separately.
+const SLEEP_METRICS: MetricKey[] = ['sleepMinutes', 'sleepEfficiency']
+
+// ---------------------------------------------------------------------------
+// Group syncing
+
+/**
+ * Makes `group` fresh for every day in [start, end]. Fetches one span that
+ * covers all missing days; days that come back empty are stored as explicit
+ * nulls so they count as known.
+ */
+async function ensureGroup(token: string, group: FetchGroup, start: string, end: string, force: boolean): Promise<void> {
+  const missing = listDates(start, end).filter((d) => force || !isFresh(group.id, d))
+  if (missing.length === 0) return
+  const spanStart = missing[0]
+  const spanEnd = missing[missing.length - 1]
+  const spanDates = listDates(spanStart, spanEnd)
+  const map = await group.fetch(token, spanStart, shiftIsoDate(spanEnd, 1), spanPriority(spanDates.length))
+  for (const date of spanDates) {
+    const fetched = map.get(date)
+    const merged: DayValues = {}
+    for (const key of group.metrics) merged[key] = fetched?.[key] ?? null
+    mergeValues(date, merged)
+  }
+  markFetched(group.id, spanDates)
+}
+
+const inFlight = new Map<string, Promise<void>>()
+
+/** Dedupes concurrent syncs of the same group+span (several views share windows). */
+function ensureGroupOnce(token: string, group: FetchGroup, start: string, end: string, force: boolean): Promise<void> {
+  const key = `${group.id}:${start}:${end}:${force}`
+  const pending = inFlight.get(key)
+  if (pending) return pending
+  const job = ensureGroup(token, group, start, end, force).finally(() => inFlight.delete(key))
+  inFlight.set(key, job)
+  return job
 }
 
 // ---------------------------------------------------------------------------
-// Raw payload mapping
+// Sleep sessions
 
 const STAGE_MAP: Record<string, SleepStageType> = {
   AWAKE: 'AWAKE',
@@ -122,30 +362,53 @@ function mapSleep(point: RawDataPoint): SleepNight | null {
   }
 }
 
-/** rollup points -> date-keyed map via an extractor. */
-function dailyMap<T>(points: RollupPoint[], extract: (p: RollupPoint) => T): Map<string, T> {
-  const map = new Map<string, T>()
-  for (const p of points) {
-    const date = dateFromCivil(p.civilStartTime)
-    if (date) map.set(date, extract(p))
+async function ensureSleepRange(token: string, start: string, end: string, force: boolean): Promise<void> {
+  const missing = listDates(start, end).filter((d) => force || !isFresh('sleep', d))
+  if (missing.length === 0) return
+  const spanStart = missing[0]
+  const spanEnd = missing[missing.length - 1]
+  const spanDates = listDates(spanStart, spanEnd)
+  const points = await listData(
+    token,
+    'sleep',
+    'sleep',
+    spanStart,
+    shiftIsoDate(spanEnd, 1),
+    'google-wearables',
+    spanPriority(spanDates.length)
+  )
+  const byDate = new Map<string, SleepNight>()
+  for (const point of points) {
+    const night = mapSleep(point)
+    if (!night) continue
+    const existing = byDate.get(night.date)
+    // Prefer the main sleep, then the longest session per date.
+    if (!existing || (night.isMainSleep && !existing.isMainSleep) || night.minutesAsleep > existing.minutesAsleep) {
+      if (!existing || night.isMainSleep || !existing.isMainSleep) byDate.set(night.date, night)
+    }
   }
-  return map
+  for (const date of spanDates) {
+    const night = byDate.get(date) ?? null
+    setSleep(date, night)
+    mergeValues(date, {
+      sleepMinutes: night?.minutesAsleep ?? null,
+      sleepEfficiency: night?.efficiency ?? null
+    })
+  }
+  markFetched('sleep', spanDates)
 }
 
-/** daily record data points (dailyRestingHeartRate & co) -> date-keyed map. */
-function dailyRecordMap<T>(
-  points: RawDataPoint[],
-  key: string,
-  extract: (record: Record<string, unknown>) => T
-): Map<string, T> {
-  const map = new Map<string, T>()
-  for (const p of points) {
-    const record = p[key] as Record<string, unknown> | undefined
-    const date = dateFromCivil(record?.date as CivilDateTime | undefined)
-    if (record && date) map.set(date, extract(record))
-  }
-  return map
+function ensureSleepOnce(token: string, start: string, end: string, force: boolean): Promise<void> {
+  const key = `sleep:${start}:${end}:${force}`
+  const pending = inFlight.get(key)
+  if (pending) return pending
+  const job = ensureSleepRange(token, start, end, force).finally(() => inFlight.delete(key))
+  inFlight.set(key, job)
+  return job
 }
+
+// ---------------------------------------------------------------------------
+// Workouts
 
 function mapWorkout(point: RawDataPoint): Workout | null {
   const exercise = point.exercise as
@@ -175,187 +438,74 @@ function mapWorkout(point: RawDataPoint): Workout | null {
     startTime: exercise.interval.startTime,
     durationMin: Math.round(durationSec / 60),
     calories: num(summary.caloriesKcal),
-    distanceKm: num(summary.distanceMillimeters) != null ? +(Number(summary.distanceMillimeters) / 1_000_000).toFixed(2) : null,
+    distanceKm:
+      num(summary.distanceMillimeters) != null ? +(Number(summary.distanceMillimeters) / 1_000_000).toFixed(2) : null,
     avgHeartRate: num(summary.averageHeartRateBeatsPerMinute),
     steps: num(summary.steps),
     activeZoneMinutes: num(summary.activeZoneMinutes)
   }
 }
 
+async function ensureWorkoutsRange(token: string, start: string, end: string, force: boolean): Promise<void> {
+  const missing = listDates(start, end).filter((d) => force || !isFresh('workouts', d))
+  if (missing.length === 0) return
+  const spanStart = missing[0]
+  const spanEnd = missing[missing.length - 1]
+  const spanDates = listDates(spanStart, spanEnd)
+  const points = await listData(
+    token,
+    'exercise',
+    'session',
+    spanStart,
+    shiftIsoDate(spanEnd, 1),
+    'all-sources',
+    spanPriority(spanDates.length)
+  )
+  const byDate = new Map<string, Workout[]>()
+  for (const point of points) {
+    const workout = mapWorkout(point)
+    if (!workout) continue
+    const date = workout.startTime.slice(0, 10)
+    const list = byDate.get(date) ?? []
+    list.push(workout)
+    byDate.set(date, list)
+  }
+  for (const date of spanDates) {
+    const list = (byDate.get(date) ?? []).sort((a, b) => a.startTime.localeCompare(b.startTime))
+    setWorkouts(date, list)
+  }
+  markFetched('workouts', spanDates)
+}
+
 // ---------------------------------------------------------------------------
-// Live sync
+// Intraday (selected day only — always priority 0)
 
-type Raw = Partial<Record<string, unknown>>
-const dayInFlight = new Map<string, Promise<HealthDay>>()
-
-async function syncDay(token: string, date: string): Promise<HealthDay> {
-  const trendStart = shiftIsoDate(date, -(TREND_DAYS - 1))
-  const dayAfter = shiftIsoDate(date, 1)
-
-  const jobs: Array<[string, () => Promise<unknown>]> = [
-    // Daily rollups over the trend window
-    ['steps', () => dailyRollUp(token, 'steps', trendStart, dayAfter)],
-    ['calories', () => dailyRollUp(token, 'total-calories', trendStart, dayAfter)],
-    ['distance', () => dailyRollUp(token, 'distance', trendStart, dayAfter)],
-    ['floors', () => dailyRollUp(token, 'floors', trendStart, dayAfter)],
-    ['activeMinutes', () => dailyRollUp(token, 'active-minutes', trendStart, dayAfter)],
-    ['zoneMinutes', () => dailyRollUp(token, 'active-zone-minutes', trendStart, dayAfter)],
-    ['sedentary', () => dailyRollUp(token, 'sedentary-period', trendStart, dayAfter)],
-    ['weight', () => dailyRollUp(token, 'weight', trendStart, dayAfter)],
-    ['bodyFat', () => dailyRollUp(token, 'body-fat', trendStart, dayAfter)],
-    ['water', () => dailyRollUp(token, 'hydration-log', trendStart, dayAfter)],
-    ['nutrition', () => dailyRollUp(token, 'nutrition-log', trendStart, dayAfter)],
-    // Daily records over the trend window
-    ['rhr', () => listData(token, 'daily-resting-heart-rate', 'daily', trendStart, dayAfter)],
-    ['hrv', () => listData(token, 'daily-heart-rate-variability', 'daily', trendStart, dayAfter)],
-    ['spo2', () => listData(token, 'daily-oxygen-saturation', 'daily', trendStart, dayAfter)],
-    ['breathing', () => listData(token, 'daily-respiratory-rate', 'daily', trendStart, dayAfter)],
-    ['skinTemp', () => listData(token, 'daily-sleep-temperature-derivations', 'daily', trendStart, dayAfter)],
-    ['vo2', () => listData(token, 'daily-vo2-max', 'daily', trendStart, dayAfter)],
-    // Sessions and intraday detail
-    ['sleep', () => listData(token, 'sleep', 'sleep', trendStart, dayAfter, 'google-wearables')],
-    ['workouts', () => listData(token, 'exercise', 'session', trendStart, dayAfter)],
-    ['stepsIntraday', () => listData(token, 'steps', 'interval', date, dayAfter, 'google-wearables')]
-  ]
-
-  const raw: Raw = {}
-  const failures: string[] = []
-  await Promise.all(
-    jobs.map(async ([key, run]) => {
-      try {
-        raw[key] = await run()
-      } catch (err) {
-        failures.push(key)
-        console.error(`[health] ${key} failed for ${date}:`, err)
-      }
-    })
-  )
-  if (failures.length === jobs.length) {
-    throw new Error('Every Google Health read failed — token likely expired or scopes missing.')
-  }
-
-  return translate(raw, date)
-}
-
-function rollup(raw: Raw, key: string): RollupPoint[] {
-  return (raw[key] as RollupPoint[] | undefined) ?? []
-}
-
-function points(raw: Raw, key: string): RawDataPoint[] {
-  return (raw[key] as RawDataPoint[] | undefined) ?? []
-}
-
-function translate(raw: Raw, date: string): HealthDay {
-  const steps = dailyMap(rollup(raw, 'steps'), (p) => num((p.steps as { countSum?: string })?.countSum))
-  const calories = dailyMap(rollup(raw, 'calories'), (p) => num((p.totalCalories as { kcalSum?: number })?.kcalSum))
-  const distance = dailyMap(rollup(raw, 'distance'), (p) => {
-    const mm = num((p.distance as { millimetersSum?: number })?.millimetersSum)
-    return mm == null ? null : +(mm / 1_000_000).toFixed(2)
-  })
-  const floors = dailyMap(rollup(raw, 'floors'), (p) => num((p.floors as { countSum?: string })?.countSum))
-  const activeMinutes = dailyMap(rollup(raw, 'activeMinutes'), (p) => {
-    const levels = (p.activeMinutes as { activeMinutesRollupByActivityLevel?: Array<{ activityLevel?: string; activeMinutesSum?: string }> })
-      ?.activeMinutesRollupByActivityLevel
-    if (!levels) return null
-    let total: number | null = null
-    for (const level of levels) {
-      if (level.activityLevel === 'MODERATE' || level.activityLevel === 'VIGOROUS') {
-        total = (total ?? 0) + (num(level.activeMinutesSum) ?? 0)
-      }
-    }
-    return total
-  })
-  const zoneMinutes = dailyMap(rollup(raw, 'zoneMinutes'), (p) => {
-    const zones = p.activeZoneMinutes as Record<string, unknown> | undefined
-    if (!zones) return null
-    return Object.values(zones).reduce<number>((sum, v) => sum + (num(v) ?? 0), 0)
-  })
-  const sedentary = dailyMap(rollup(raw, 'sedentary'), (p) => {
-    const dur = (p.sedentaryPeriod as { durationSum?: string })?.durationSum
-    return dur === undefined ? null : Math.round(durationSeconds(dur) / 60)
-  })
-  const weight = dailyMap(rollup(raw, 'weight'), (p) => {
-    const grams = num((p.weight as { weightGramsAvg?: number })?.weightGramsAvg)
-    return grams == null ? null : +(grams / 1000).toFixed(1)
-  })
-  const bodyFat = dailyMap(rollup(raw, 'bodyFat'), (p) => num((p.bodyFat as { bodyFatPercentageAvg?: number })?.bodyFatPercentageAvg))
-  const water = dailyMap(rollup(raw, 'water'), (p) =>
-    num((p.hydrationLog as { amountConsumed?: { millilitersSum?: number } })?.amountConsumed?.millilitersSum)
-  )
-  const nutrition = dailyMap(rollup(raw, 'nutrition'), (p) => num((p.nutritionLog as { energy?: { kcalSum?: number } })?.energy?.kcalSum))
-
-  const rhr = dailyRecordMap(points(raw, 'rhr'), 'dailyRestingHeartRate', (r) => num(r.beatsPerMinute))
-  const hrv = dailyRecordMap(points(raw, 'hrv'), 'dailyHeartRateVariability', (r) =>
-    num(r.averageHeartRateVariabilityMilliseconds ?? r.deepSleepRootMeanSquareOfSuccessiveDifferencesMilliseconds)
-  )
-  const spo2 = dailyRecordMap(points(raw, 'spo2'), 'dailyOxygenSaturation', (r) => num(r.averagePercentage))
-  const breathing = dailyRecordMap(points(raw, 'breathing'), 'dailyRespiratoryRate', (r) => num(r.breathsPerMinute))
-  const skinTemp = dailyRecordMap(points(raw, 'skinTemp'), 'dailySleepTemperatureDerivations', (r) => {
-    const nightly = num(r.nightlyTemperatureCelsius)
-    const baseline = num(r.baselineTemperatureCelsius)
-    return nightly == null || baseline == null ? null : +(nightly - baseline).toFixed(2)
-  })
-  const vo2 = dailyRecordMap(points(raw, 'vo2'), 'dailyVo2Max', (r) => num(r.vo2Max))
-
-  const sleepNights = points(raw, 'sleep')
-    .map(mapSleep)
-    .filter((s): s is SleepNight => s !== null)
-  const sleepByDate = new Map<string, SleepNight>()
-  for (const night of sleepNights) {
-    const existing = sleepByDate.get(night.date)
-    // Prefer the main sleep, then the longest session per date.
-    if (!existing || (night.isMainSleep && !existing.isMainSleep) || night.minutesAsleep > existing.minutesAsleep) {
-      if (!existing || night.isMainSleep || !existing.isMainSleep) sleepByDate.set(night.date, night)
-    }
-  }
-
-  const metricsFor = (d: string): DayMetrics => ({
-    date: d,
-    steps: steps.get(d) ?? null,
-    distanceKm: distance.get(d) ?? null,
-    floors: floors.get(d) ?? null,
-    caloriesOut: calories.get(d) ?? null,
-    activeMinutes: activeMinutes.get(d) ?? null,
-    activeZoneMinutes: zoneMinutes.get(d) ?? null,
-    sedentaryMinutes: sedentary.get(d) ?? null,
-    restingHeartRate: rhr.get(d) ?? null,
-    hrvMs: hrv.get(d) ?? null,
-    spo2Pct: spo2.get(d) ?? null,
-    breathingRate: breathing.get(d) ?? null,
-    skinTempDeltaC: skinTemp.get(d) ?? null,
-    vo2Max: vo2.get(d) ?? null,
-    sleepMinutes: sleepByDate.get(d)?.minutesAsleep ?? null,
-    sleepEfficiency: sleepByDate.get(d)?.efficiency ?? null,
-    weightKg: weight.get(d) ?? null,
-    bodyFatPct: bodyFat.get(d) ?? null,
-    waterMl: water.get(d) ?? null,
-    caloriesIn: nutrition.get(d) ?? null
-  })
-
-  const trend: DayMetrics[] = []
-  for (let i = TREND_DAYS - 1; i >= 0; i--) {
-    trend.push(metricsFor(shiftIsoDate(date, -i)))
-  }
-
-  // Intraday steps -> 24 hourly buckets.
+async function ensureIntradaySteps(token: string, date: string, force: boolean): Promise<void> {
+  if (!force && isFresh('intraday-steps', date)) return
+  const points = await listData(token, 'steps', 'interval', date, shiftIsoDate(date, 1), 'google-wearables', 0)
   const hourly = new Array(24).fill(0) as number[]
-  let sawIntradaySteps = false
-  for (const p of points(raw, 'stepsIntraday')) {
-    const record = p.steps as { interval?: { civilStartTime?: CivilDateTime; startTime?: string }; count?: string } | undefined
+  let saw = false
+  for (const p of points) {
+    const record = p.steps as
+      | { interval?: { civilStartTime?: CivilDateTime; startTime?: string }; count?: string }
+      | undefined
     const minute = minuteFromCivil(record?.interval?.civilStartTime)
     const fallback = record?.interval?.startTime
       ? new Date(record.interval.startTime).getHours() * 60 + new Date(record.interval.startTime).getMinutes()
       : null
     const m = minute ?? fallback
     if (m == null) continue
-    sawIntradaySteps = true
+    saw = true
     hourly[Math.min(23, Math.floor(m / 60))] += num(record?.count) ?? 0
   }
-  const stepsHourly: HourlySteps[] = sawIntradaySteps
-    ? hourly.map((value, hour) => ({ hour, steps: Math.round(value) }))
-    : []
+  setIntradaySteps(date, saw ? hourly.map((value, hour) => ({ hour, steps: Math.round(value) })) : [])
+  markFetched('intraday-steps', [date])
+}
 
-  const heartRate: HeartRatePoint[] = points(raw, 'heartIntraday')
+async function ensureIntradayHeart(token: string, date: string, force: boolean): Promise<void> {
+  if (!force && isFresh('intraday-heart', date)) return
+  const points = await listData(token, 'heart-rate', 'sample', date, shiftIsoDate(date, 1), 'google-wearables', 0)
+  const series: HeartRatePoint[] = points
     .map((p) => {
       const record = p.heartRate as
         | { sampleTime?: { civilTime?: CivilDateTime; physicalTime?: string }; beatsPerMinute?: string }
@@ -371,88 +521,114 @@ function translate(raw: Raw, date: string): HealthDay {
     })
     .filter((p): p is HeartRatePoint => p !== null)
     .sort((a, b) => a.minute - b.minute)
+  setIntradayHeart(date, series)
+  markFetched('intraday-heart', [date])
+}
 
-  const workouts = points(raw, 'workouts')
-    .map(mapWorkout)
-    .filter((w): w is Workout => w !== null && w.startTime.slice(0, 10) === date)
-    .sort((a, b) => a.startTime.localeCompare(b.startTime))
+// ---------------------------------------------------------------------------
+// Public queries
 
+export async function getSeries(metrics: MetricKey[], start: string, end: string, force = false): Promise<SeriesResult> {
+  const [s, e] = normalizeRange(start, end)
+  const token = await getGoogleAccessToken()
+  if (!token) return { source: 'demo', start: s, end: e, days: demoSeries(metrics, s, e) }
+
+  const groups = [...new Set(metrics.map((m) => GROUP_BY_METRIC.get(m)).filter((g): g is FetchGroup => g != null))]
+  const jobs: Array<Promise<unknown>> = groups.map((group) =>
+    ensureGroupOnce(token, group, s, e, force).catch((err) => {
+      console.error(`[health] ${group.id} failed for ${s}..${e}:`, err)
+      return 'failed'
+    })
+  )
+  if (metrics.some((m) => SLEEP_METRICS.includes(m))) {
+    jobs.push(
+      ensureSleepOnce(token, s, e, force).catch((err) => {
+        console.error(`[health] sleep failed for ${s}..${e}:`, err)
+        return 'failed'
+      })
+    )
+  }
+  const results = await Promise.all(jobs)
+  if (jobs.length > 0 && results.every((r) => r === 'failed')) {
+    // Serve whatever the archive has; only give up when it's empty too.
+    const anyCached = listDates(s, e).some((d) => peekDay(d) != null)
+    if (!anyCached) throw new Error('Every Google Health read failed — token likely expired or scopes missing.')
+  }
+
+  const days: DailySeries = {}
+  for (const date of listDates(s, e)) {
+    const record = peekDay(date)
+    const out: DayValues = {}
+    for (const metric of metrics) out[metric] = record?.values[metric] ?? null
+    days[date] = out
+  }
+  return { source: 'live', start: s, end: e, days }
+}
+
+export async function getSleepRange(start: string, end: string, force = false): Promise<SleepRangeResult> {
+  const [s, e] = normalizeRange(start, end)
+  const token = await getGoogleAccessToken()
+  if (!token) return { source: 'demo', nights: demoSleepRange(s, e) }
+  try {
+    await ensureSleepOnce(token, s, e, force)
+  } catch (err) {
+    console.error(`[health] sleep range failed for ${s}..${e}:`, err)
+  }
+  const nights = listDates(s, e)
+    .map((d) => peekDay(d)?.sleep)
+    .filter((n): n is SleepNight => n != null)
+  return { source: 'live', nights }
+}
+
+export async function getWorkoutsRange(start: string, end: string, force = false): Promise<WorkoutsResult> {
+  const [s, e] = normalizeRange(start, end)
+  const token = await getGoogleAccessToken()
+  if (!token) return { source: 'demo', workouts: demoWorkoutsRange(s, e) }
+  try {
+    await ensureWorkoutsRange(token, s, e, force)
+  } catch (err) {
+    console.error(`[health] workouts failed for ${s}..${e}:`, err)
+  }
+  const workouts = listDates(s, e).flatMap((d) => peekDay(d)?.workouts ?? [])
+  return { source: 'live', workouts }
+}
+
+export async function getIntraday(date: string, force = false): Promise<IntradaySnapshot> {
+  const [d] = normalizeRange(date, date)
+  const token = await getGoogleAccessToken()
+  if (!token) return demoIntraday(d)
+  await Promise.all([
+    ensureIntradaySteps(token, d, force).catch((err) => console.error(`[health] intraday steps failed for ${d}:`, err)),
+    ensureIntradayHeart(token, d, force).catch((err) => console.error(`[health] intraday heart failed for ${d}:`, err))
+  ])
+  const record = peekDay(d)
+  const heartRate = record?.heartRate ?? []
   return {
-    date,
+    date: d,
     source: 'live',
-    syncedAt: new Date().toISOString(),
-    metrics: metricsFor(date),
-    stepsHourly,
+    stepsHourly: record?.stepsHourly ?? [],
     heartRate,
-    currentHeartRate: date === todayIso() ? (heartRate.at(-1)?.bpm ?? null) : null,
-    sleep: sleepByDate.get(date) ?? null,
-    workouts,
-    trend
+    currentHeartRate: d === todayIso() ? (heartRate.at(-1)?.bpm ?? null) : null
   }
 }
 
 // ---------------------------------------------------------------------------
-// Public service
+// Devices
 
-export async function getHealthDay(date: string, force = false): Promise<HealthDay> {
-  const day = /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : todayIso()
-  const clamped = day > todayIso() ? todayIso() : day
-
-  if (!force) {
-    const cached = cachedDay(clamped)
-    if (cached) return cached
-  }
-
-  const pending = dayInFlight.get(clamped)
-  if (pending) return pending
-
-  const load = (async (): Promise<HealthDay> => {
-    const token = await getGoogleAccessToken()
-    if (!token) return demoHealthDay(clamped)
-
-    try {
-      const snapshot = await syncDay(token, clamped)
-      dayCache.set(clamped, { day: snapshot, fetchedAt: Date.now() })
-      return snapshot
-    } catch (err) {
-      console.error(`[health] sync failed for ${clamped}:`, err)
-      // Serve a stale snapshot over nothing; fall back to demo as a last resort.
-      return dayCache.get(clamped)?.day ?? demoHealthDay(clamped)
-    }
-  })()
-
-  dayInFlight.set(clamped, load)
-  try {
-    return await load
-  } finally {
-    dayInFlight.delete(clamped)
-  }
+interface DevicesCache {
+  devices: PairedDevice[]
+  fetchedAt: number
 }
 
-export async function getSleepHistory(nights: number, endDate = todayIso()): Promise<SleepNight[]> {
-  const token = await getGoogleAccessToken()
-  if (!token) return demoSleepHistory(nights, endDate)
-  try {
-    const start = shiftIsoDate(endDate, -nights)
-    const dayAfter = shiftIsoDate(endDate, 1)
-    const points = await listData(token, 'sleep', 'sleep', start, dayAfter, 'google-wearables')
-    const mapped = points
-      .map(mapSleep)
-      .filter((s): s is SleepNight => s !== null && s.isMainSleep)
-      .sort((a, b) => a.date.localeCompare(b.date))
-    return mapped
-  } catch (err) {
-    console.error('[health] sleep history failed:', err)
-    return []
-  }
-}
+let devicesCache: DevicesCache | null = null
+const DEVICES_TTL_MS = 5 * 60_000
 
-export async function getDevices(): Promise<PairedDevice[]> {
+export async function getDevices(force = false): Promise<PairedDevice[]> {
   const token = await getGoogleAccessToken()
   if (!token) return demoDevices()
+  if (!force && devicesCache && Date.now() - devicesCache.fetchedAt < DEVICES_TTL_MS) return devicesCache.devices
   try {
-    const devices = await listPairedDevices(token)
-    return devices.map((d) => ({
+    const devices = (await listPairedDevices(token)).map((d) => ({
       name: d.displayName ?? d.model ?? d.deviceVersion ?? 'Tracker',
       model: d.deviceVersion ?? d.model ?? 'Unknown model',
       type: d.deviceType ?? null,
@@ -461,8 +637,56 @@ export async function getDevices(): Promise<PairedDevice[]> {
       lastSync: d.lastSyncTime ?? null,
       features: Array.isArray(d.features) ? d.features.map(String) : undefined
     }))
+    devicesCache = { devices, fetchedAt: Date.now() }
+    return devices
   } catch (err) {
     console.error('[health] devices failed:', err)
-    return []
+    return devicesCache?.devices ?? []
   }
+}
+
+// ---------------------------------------------------------------------------
+// Refresh
+
+/** Keeps values on screen but makes every next query hit the API again. */
+export function clearHealthCache(): void {
+  markAllStale()
+  devicesCache = null
+}
+
+// ---------------------------------------------------------------------------
+// AI snapshot (assistant tools want one self-describing day blob)
+
+function emptyMetrics(date: string): DayMetrics {
+  return { date, ...(Object.fromEntries(METRIC_KEYS.map((k) => [k, null])) as Record<MetricKey, null>) }
+}
+
+export async function getHealthDay(date: string): Promise<HealthDay> {
+  const [, end] = normalizeRange(date, date)
+  const start = shiftIsoDate(end, -13)
+  const [series, sleep, workouts, intraday] = await Promise.all([
+    getSeries([...METRIC_KEYS], start, end),
+    getSleepRange(end, end),
+    getWorkoutsRange(end, end),
+    getIntraday(end)
+  ])
+  const trend = listDates(start, end).map((d) => ({ ...emptyMetrics(d), ...series.days[d] }))
+  return {
+    date: end,
+    source: series.source,
+    syncedAt: new Date().toISOString(),
+    metrics: trend[trend.length - 1],
+    stepsHourly: intraday.stepsHourly,
+    heartRate: intraday.heartRate,
+    currentHeartRate: intraday.currentHeartRate,
+    sleep: sleep.nights.find((n) => n.date === end) ?? null,
+    workouts: workouts.workouts,
+    trend
+  }
+}
+
+export async function getSleepHistory(nights: number, endDate = todayIso()): Promise<SleepNight[]> {
+  const [, end] = normalizeRange(endDate, endDate)
+  const result = await getSleepRange(shiftIsoDate(end, -(Math.max(1, nights) - 1)), end)
+  return result.nights
 }

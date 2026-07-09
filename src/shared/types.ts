@@ -2,6 +2,63 @@
 
 export type DataSource = 'demo' | 'live'
 
+// ---------------------------------------------------------------------------
+// Daily metrics
+//
+// Everything the app charts by day is one of these keys. The main process
+// stores values per (metric, day) so queries can reuse any day that another
+// view — or a previous session — already synced.
+
+export const METRIC_KEYS = [
+  // Activity
+  'steps',
+  'distanceKm',
+  'floors',
+  'caloriesOut',
+  'activeMinutes',
+  'activeZoneMinutes',
+  'sedentaryMinutes',
+  // Heart & night signals
+  'restingHeartRate',
+  'hrvMs',
+  'spo2Pct',
+  'breathingRate',
+  'skinTempDeltaC',
+  'vo2Max',
+  // Sleep summary (derived from sleep sessions)
+  'sleepMinutes',
+  'sleepEfficiency',
+  // Body
+  'weightKg',
+  'bodyFatPct',
+  // Nutrition & intake
+  'waterMl',
+  'caloriesIn',
+  'proteinG',
+  'carbsG',
+  'fatG',
+  'fiberG',
+  'sugarG'
+] as const
+
+export type MetricKey = (typeof METRIC_KEYS)[number]
+
+/** One civil day's recorded values. Missing or null = the tracker/user didn't log it. */
+export type DayValues = Partial<Record<MetricKey, number | null>>
+
+/** date (YYYY-MM-DD) -> that day's values, one entry per day in the queried range. */
+export type DailySeries = Record<string, DayValues>
+
+export interface SeriesResult {
+  source: DataSource
+  start: string
+  end: string
+  days: DailySeries
+}
+
+// ---------------------------------------------------------------------------
+// Sleep
+
 export type SleepStageType = 'AWAKE' | 'LIGHT' | 'DEEP' | 'REM'
 
 export interface SleepStageSegment {
@@ -22,37 +79,13 @@ export interface SleepNight {
   stageMinutes: Partial<Record<SleepStageType, number>>
 }
 
-/**
- * Everything we know about a single civil day. Every field is nullable:
- * absence means the tracker or the user simply didn't record it, and the UI
- * hides the corresponding section.
- */
-export interface DayMetrics {
-  date: string // YYYY-MM-DD
-  // Activity
-  steps: number | null
-  distanceKm: number | null
-  floors: number | null
-  caloriesOut: number | null
-  activeMinutes: number | null // moderate + vigorous
-  activeZoneMinutes: number | null
-  sedentaryMinutes: number | null
-  // Heart & night signals
-  restingHeartRate: number | null
-  hrvMs: number | null
-  spo2Pct: number | null
-  breathingRate: number | null
-  skinTempDeltaC: number | null // deviation from personal baseline
-  vo2Max: number | null
-  // Sleep summary
-  sleepMinutes: number | null
-  sleepEfficiency: number | null
-  // Body & intake
-  weightKg: number | null
-  bodyFatPct: number | null
-  waterMl: number | null
-  caloriesIn: number | null
+export interface SleepRangeResult {
+  source: DataSource
+  nights: SleepNight[]
 }
+
+// ---------------------------------------------------------------------------
+// Intraday & sessions
 
 export interface HourlySteps {
   hour: number // 0-23
@@ -62,6 +95,14 @@ export interface HourlySteps {
 export interface HeartRatePoint {
   minute: number // minute of day, 0-1439
   bpm: number
+}
+
+export interface IntradaySnapshot {
+  date: string
+  source: DataSource
+  stepsHourly: HourlySteps[]
+  heartRate: HeartRatePoint[]
+  currentHeartRate: number | null // only set when date is today
 }
 
 export interface Workout {
@@ -76,20 +117,39 @@ export interface Workout {
   activeZoneMinutes: number | null
 }
 
-/** Full snapshot for a selected date, including its 14-day trend window. */
+export interface WorkoutsResult {
+  source: DataSource
+  workouts: Workout[]
+}
+
+// ---------------------------------------------------------------------------
+// AI snapshot (assistant tools want one self-describing day blob)
+
+export type DayMetrics = { date: string } & Record<MetricKey, number | null>
+
 export interface HealthDay {
-  date: string // YYYY-MM-DD
+  date: string
   source: DataSource
   syncedAt: string // ISO
   metrics: DayMetrics
   stepsHourly: HourlySteps[]
   heartRate: HeartRatePoint[]
-  currentHeartRate: number | null // only set when date is today
+  currentHeartRate: number | null
   sleep: SleepNight | null
   workouts: Workout[]
   /** Daily metrics for the 14 days ending on `date`, oldest first. */
   trend: DayMetrics[]
 }
+
+// ---------------------------------------------------------------------------
+// Sync activity (renderer shows a live indicator while API calls are queued)
+
+export interface SyncActivity {
+  pending: number
+}
+
+// ---------------------------------------------------------------------------
+// Settings, auth, devices
 
 export interface Goals {
   steps: number
@@ -132,6 +192,9 @@ export interface PairedDevice {
   lastSync?: string | null
   features?: string[]
 }
+
+// ---------------------------------------------------------------------------
+// Chat
 
 export type ChatRole = 'user' | 'assistant'
 

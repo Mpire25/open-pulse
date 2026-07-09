@@ -1,6 +1,7 @@
 import type { Icon } from '@phosphor-icons/react'
-import { ArrowDownRight, ArrowUpRight } from '@phosphor-icons/react'
+import { CaretRight } from '@phosphor-icons/react'
 import { Spark } from '@/components/charts'
+import { DeltaChip } from '@/components/DeltaChip'
 import { cn } from '@/lib/utils'
 
 interface MetricStatProps {
@@ -9,12 +10,14 @@ interface MetricStatProps {
   value: string
   unit?: string
   accent: string
-  /** Signed % vs the personal baseline; direction colors follow `upIsGood`. */
+  /** Signed % vs the personal baseline; colored by `upIsGood`. */
   deltaPct?: number | null
-  upIsGood?: boolean
-  /** 14-day history for the corner sparkline. */
+  upIsGood?: boolean | null
+  /** Recent history for the corner sparkline. */
   spark?: Array<number | null>
   sub?: string
+  /** When set, the tile is a button that opens the metric's detail page. */
+  onOpen?: () => void
 }
 
 /** Stat tile: label, sans-semibold value, optional baseline delta + sparkline. */
@@ -27,15 +30,23 @@ export function MetricStat({
   deltaPct,
   upIsGood = true,
   spark,
-  sub
+  sub,
+  onOpen
 }: MetricStatProps): React.JSX.Element {
-  const showDelta = deltaPct != null && Math.abs(deltaPct) >= 1
-  const good = deltaPct != null && (deltaPct > 0 ? upIsGood : !upIsGood)
-  return (
-    <div className="flex flex-col gap-2 px-5 py-4">
-      <div className="flex items-center gap-1.5">
-        {IconCmp && <IconCmp size={13} weight="fill" style={{ color: accent }} />}
-        <span className="text-[11px] font-medium tracking-wide text-ink-faint">{label}</span>
+  const body = (
+    <>
+      <div className="flex items-center justify-between gap-1.5">
+        <div className="flex items-center gap-1.5">
+          {IconCmp && <IconCmp size={13} weight="fill" style={{ color: accent }} />}
+          <span className="text-[11px] font-medium tracking-wide text-ink-faint">{label}</span>
+        </div>
+        {onOpen && (
+          <CaretRight
+            size={11}
+            weight="bold"
+            className="text-ink-faint opacity-0 transition-opacity group-hover/stat:opacity-100"
+          />
+        )}
       </div>
       <div className="flex items-end justify-between gap-2">
         <div className="flex items-baseline gap-1">
@@ -44,22 +55,24 @@ export function MetricStat({
         </div>
         {spark && <Spark values={spark} color={accent} />}
       </div>
-      {(showDelta || sub) && (
+      {(deltaPct != null || sub) && (
         <div className="flex items-center gap-1.5 text-[11px] leading-none">
-          {showDelta && (
-            <span
-              className={cn(
-                'flex items-center gap-0.5 font-semibold',
-                good ? 'text-recovery' : 'text-heart'
-              )}
-            >
-              {deltaPct! > 0 ? <ArrowUpRight size={11} weight="bold" /> : <ArrowDownRight size={11} weight="bold" />}
-              {Math.abs(deltaPct!).toFixed(0)}%
-            </span>
-          )}
+          <DeltaChip delta={deltaPct ?? null} upIsGood={upIsGood} />
           <span className="text-ink-faint">{sub ?? 'vs 7-day baseline'}</span>
         </div>
       )}
-    </div>
+    </>
   )
+
+  if (onOpen) {
+    return (
+      <button
+        onClick={onOpen}
+        className="group/stat flex flex-col gap-2 px-5 py-4 text-left transition-colors hover:bg-white/[0.03]"
+      >
+        {body}
+      </button>
+    )
+  }
+  return <div className="flex flex-col gap-2 px-5 py-4">{body}</div>
 }

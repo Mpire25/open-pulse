@@ -80,6 +80,12 @@ body {
   -webkit-app-region: no-drag;
 }
 
+/* The main scroll area reserves gutter space so entrance animations that
+   momentarily extend the page never shift the layout. */
+.scroll-stable {
+  scrollbar-gutter: stable;
+}
+
 /* Understated overlay scrollbars, like AppKit */
 *::-webkit-scrollbar {
   width: 9px;

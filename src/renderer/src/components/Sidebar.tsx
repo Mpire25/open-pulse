@@ -5,6 +5,7 @@ import {
   Heartbeat,
   Moon,
   Scales,
+  ForkKnife,
   Watch,
   Sparkle,
   GearSix,
@@ -16,20 +17,35 @@ import { cn } from '@/lib/utils'
 export type View =
   | 'home'
   | 'activity'
-  | 'health'
+  | 'heart'
   | 'sleep'
   | 'body'
+  | 'nutrition'
   | 'devices'
   | 'assistant'
   | 'settings'
 
-const NAV: { id: View; label: string; icon: Icon }[] = [
+interface NavItem {
+  id: View
+  label: string
+  icon: Icon
+}
+
+// The wellbeing pages people live in…
+const WELLBEING: NavItem[] = [
   { id: 'home', label: 'Home', icon: SquaresFour },
   { id: 'activity', label: 'Activity', icon: PersonSimpleRun },
-  { id: 'health', label: 'Health', icon: Heartbeat },
+  { id: 'heart', label: 'Heart', icon: Heartbeat },
   { id: 'sleep', label: 'Sleep', icon: Moon },
   { id: 'body', label: 'Body', icon: Scales },
-  { id: 'devices', label: 'Devices', icon: Watch }
+  { id: 'nutrition', label: 'Nutrition', icon: ForkKnife }
+]
+
+// …and the management pages that only matter occasionally live at the bottom.
+const MANAGEMENT: NavItem[] = [
+  { id: 'devices', label: 'Devices', icon: Watch },
+  { id: 'assistant', label: 'Assistant', icon: Sparkle },
+  { id: 'settings', label: 'Settings', icon: GearSix }
 ]
 
 interface SidebarProps {
@@ -47,7 +63,7 @@ export function Sidebar({ view, onSelect, connected }: SidebarProps): React.JSX.
       </div>
 
       <div className="no-drag flex flex-col gap-0.5">
-        {NAV.map((item) => (
+        {WELLBEING.map((item) => (
           <NavButton key={item.id} item={item} active={view === item.id} onSelect={onSelect} />
         ))}
       </div>
@@ -64,16 +80,10 @@ export function Sidebar({ view, onSelect, connected }: SidebarProps): React.JSX.
             </p>
           </div>
         )}
-        <NavButton
-          item={{ id: 'assistant', label: 'Assistant', icon: Sparkle }}
-          active={view === 'assistant'}
-          onSelect={onSelect}
-        />
-        <NavButton
-          item={{ id: 'settings', label: 'Settings', icon: GearSix }}
-          active={view === 'settings'}
-          onSelect={onSelect}
-        />
+        <div className="mx-2 mb-2 h-px bg-hairline" />
+        {MANAGEMENT.map((item) => (
+          <NavButton key={item.id} item={item} active={view === item.id} onSelect={onSelect} />
+        ))}
       </div>
     </nav>
   )
@@ -84,7 +94,7 @@ function NavButton({
   active,
   onSelect
 }: {
-  item: { id: View; label: string; icon: Icon }
+  item: NavItem
   active: boolean
   onSelect: (view: View) => void
 }): React.JSX.Element {

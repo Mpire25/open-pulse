@@ -3,10 +3,12 @@
 // across reloads but differ day to day, and any date can be traversed.
 
 import type {
-  DayMetrics,
-  HealthDay,
+  DailySeries,
+  DayValues,
   HeartRatePoint,
   HourlySteps,
+  IntradaySnapshot,
+  MetricKey,
   PairedDevice,
   SleepNight,
   SleepStageSegment,
@@ -43,6 +45,12 @@ function shiftDate(date: string, days: number): string {
 
 function today(): string {
   return isoDate(new Date())
+}
+
+function listDates(start: string, end: string): string[] {
+  const out: string[] = []
+  for (let d = start; d <= end; d = shiftDate(d, 1)) out.push(d)
+  return out
 }
 
 /** Fraction of the current day elapsed, so "today" metrics look in-progress. */
@@ -120,15 +128,20 @@ function demoSleep(date: string): SleepNight {
 }
 
 // ---------------------------------------------------------------------------
-// Day metrics
+// Day values
 
-function demoMetrics(date: string): DayMetrics {
+function demoDayValues(date: string): DayValues {
   const rand = mulberry32(seedFor(date))
   const steps = 6200 + Math.floor(rand() * 7800)
   const sleep = demoSleep(date)
   const restDay = rand() < 0.2
+
+  const caloriesIn = rand() < 0.65 ? Math.round(1800 + rand() * 800) : null
+  // Macros track logged energy: ~22/46/30% of kcal with jitter.
+  const macro = (share: number, perGramKcal: number, jitter: number): number | null =>
+    caloriesIn == null ? null : Math.round((caloriesIn * (share + (rand() - 0.5) * jitter)) / perGramKcal)
+
   return {
-    date,
     steps,
     distanceKm: +(steps * 0.00074).toFixed(2),
     floors: Math.floor(steps / 1300),
@@ -147,26 +160,46 @@ function demoMetrics(date: string): DayMetrics {
     weightKg: rand() < 0.45 ? +(76.5 + Math.sin(seedFor(date) % 30) * 1.4 + rand()).toFixed(1) : null,
     bodyFatPct: rand() < 0.3 ? +(18 + rand() * 3).toFixed(1) : null,
     waterMl: rand() < 0.6 ? Math.round(900 + rand() * 1400) : null,
-    caloriesIn: rand() < 0.5 ? Math.round(1800 + rand() * 800) : null
+    caloriesIn,
+    proteinG: macro(0.22, 4, 0.05),
+    carbsG: macro(0.46, 4, 0.08),
+    fatG: macro(0.3, 9, 0.05),
+    fiberG: caloriesIn == null ? null : Math.round(16 + rand() * 18),
+    sugarG: caloriesIn == null ? null : Math.round(38 + rand() * 50)
   }
 }
 
 // Scales an in-progress day so "today" doesn't show full-day totals at 9am.
-function scaleForToday(m: DayMetrics): DayMetrics {
+const PROGRESS_SCALED: MetricKey[] = [
+  'steps',
+  'floors',
+  'caloriesOut',
+  'activeMinutes',
+  'activeZoneMinutes',
+  'sedentaryMinutes',
+  'waterMl',
+  'caloriesIn',
+  'proteinG',
+  'carbsG',
+  'fatG',
+  'fiberG',
+  'sugarG'
+]
+
+function scaleForToday(values: DayValues): DayValues {
   const p = Math.min(1, dayProgress() * 1.35)
-  const scale = (v: number | null): number | null => (v == null ? null : Math.round(v * p))
-  return {
-    ...m,
-    steps: scale(m.steps),
-    distanceKm: m.distanceKm == null ? null : +(m.distanceKm * p).toFixed(2),
-    floors: scale(m.floors),
-    caloriesOut: scale(m.caloriesOut),
-    activeMinutes: scale(m.activeMinutes),
-    activeZoneMinutes: scale(m.activeZoneMinutes),
-    sedentaryMinutes: scale(m.sedentaryMinutes),
-    waterMl: scale(m.waterMl),
-    caloriesIn: scale(m.caloriesIn)
+  const out: DayValues = { ...values }
+  for (const key of PROGRESS_SCALED) {
+    const v = out[key]
+    if (v != null) out[key] = Math.round(v * p)
   }
+  if (out.distanceKm != null) out.distanceKm = +(out.distanceKm * p).toFixed(2)
+  return out
+}
+
+function valuesFor(date: string): DayValues {
+  const base = demoDayValues(date)
+  return date === today() ? scaleForToday(base) : base
 }
 
 // ---------------------------------------------------------------------------
@@ -210,7 +243,7 @@ function demoHeartSeries(date: string, uptoMinute: number): HeartRatePoint[] {
 
 const WORKOUT_TYPES = ['Run', 'Walk', 'Strength training', 'Bike ride', 'Yoga']
 
-function demoWorkouts(date: string, uptoMinute: number): Workout[] {
+function demoWorkoutsFor(date: string, uptoMinute: number): Workout[] {
   const rand = mulberry32(seedFor(date + 'workout'))
   if (rand() < 0.35) return [] // rest day
   const count = rand() < 0.25 ? 2 : 1
@@ -238,43 +271,42 @@ function demoWorkouts(date: string, uptoMinute: number): Workout[] {
   return workouts
 }
 
+function uptoMinuteFor(date: string): number {
+  return date === today() ? Math.max(60, Math.floor(dayProgress() * 1440)) : 1440
+}
+
 // ---------------------------------------------------------------------------
-// Public generators
+// Public generators — mirror the live domain queries
 
-export function demoHealthDay(date: string): HealthDay {
-  const isToday = date === today()
-  const uptoMinute = isToday ? Math.max(60, Math.floor(dayProgress() * 1440)) : 1440
-
-  const base = demoMetrics(date)
-  const metrics = isToday ? scaleForToday(base) : base
-
-  const trend: DayMetrics[] = []
-  for (let i = 13; i >= 0; i--) {
-    const d = shiftDate(date, -i)
-    trend.push(d === date ? metrics : demoMetrics(d))
+export function demoSeries(metrics: MetricKey[], start: string, end: string): DailySeries {
+  const days: DailySeries = {}
+  for (const date of listDates(start, end)) {
+    const all = valuesFor(date)
+    const out: DayValues = {}
+    for (const key of metrics) out[key] = all[key] ?? null
+    days[date] = out
   }
+  return days
+}
 
+export function demoSleepRange(start: string, end: string): SleepNight[] {
+  return listDates(start, end).map((date) => demoSleep(date))
+}
+
+export function demoWorkoutsRange(start: string, end: string): Workout[] {
+  return listDates(start, end).flatMap((date) => demoWorkoutsFor(date, uptoMinuteFor(date)))
+}
+
+export function demoIntraday(date: string): IntradaySnapshot {
+  const uptoMinute = uptoMinuteFor(date)
   const heartRate = demoHeartSeries(date, uptoMinute)
   return {
     date,
     source: 'demo',
-    syncedAt: new Date().toISOString(),
-    metrics,
-    stepsHourly: demoHourlySteps(date, uptoMinute, metrics.steps ?? 0),
+    stepsHourly: demoHourlySteps(date, uptoMinute, valuesFor(date).steps ?? 0),
     heartRate,
-    currentHeartRate: isToday ? (heartRate.at(-1)?.bpm ?? null) : null,
-    sleep: demoSleep(date),
-    workouts: demoWorkouts(date, uptoMinute),
-    trend
+    currentHeartRate: date === today() ? (heartRate.at(-1)?.bpm ?? null) : null
   }
-}
-
-export function demoSleepHistory(nights: number, endDate = today()): SleepNight[] {
-  const out: SleepNight[] = []
-  for (let i = nights - 1; i >= 0; i--) {
-    out.push(demoSleep(shiftDate(endDate, -i)))
-  }
-  return out
 }
 
 export function demoDevices(): PairedDevice[] {

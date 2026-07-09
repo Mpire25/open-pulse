@@ -1,52 +1,54 @@
 import { motion } from 'framer-motion'
 import { Moon, Bed, Timer } from '@phosphor-icons/react'
-import { Panel, SectionHeader } from '@/components/Panel'
-import { ColumnChart, GaugeRing } from '@/components/charts'
+import { Panel, DrillHeader } from '@/components/Panel'
+import { ColumnChart, ProgressRing, TrendLine } from '@/components/charts'
 import { SleepStages, STAGE_COLOR } from '@/components/SleepStages'
-import { useSleepHistory } from '@/hooks/useHealth'
+import { Skeleton } from '@/components/Skeleton'
+import { useSleepRange } from '@/hooks/useHealth'
+import { listDates, rangeEnding } from '@/lib/metrics'
 import { formatMinutes, longDate, shortDate, weekdayShort } from '@/lib/format'
-import type { Goals, HealthDay, SleepNight } from '@shared/types'
+import { fade } from '@/lib/motion'
+import type { Goals, MetricKey, SleepNight } from '@shared/types'
 import { cn } from '@/lib/utils'
 
-const fade = {
-  hidden: { opacity: 0, y: 14 },
-  show: (i: number) => ({
-    opacity: 1,
-    y: 0,
-    transition: { delay: 0.04 * i, duration: 0.5, ease: [0.16, 1, 0.3, 1] as const }
-  })
-}
-
 interface SleepViewProps {
-  day: HealthDay
+  date: string
   goals: Goals
-  loading: boolean
+  onOpenMetric: (metric: MetricKey) => void
 }
 
-export function SleepView({ day, goals, loading }: SleepViewProps): React.JSX.Element {
-  const nights = useSleepHistory(14, day.date)
-  const night = day.sleep
-  const emphasis = day.trend.findIndex((d) => d.date === day.date)
-  const avgAsleep =
-    day.trend.reduce((s, d) => s + (d.sleepMinutes ?? 0), 0) /
-    Math.max(1, day.trend.filter((d) => d.sleepMinutes != null).length)
+export function SleepView({ date, goals, onOpenMetric }: SleepViewProps): React.JSX.Element {
+  const { start, end } = rangeEnding(date, 7)
+  const nights = useSleepRange(start, end)
+
+  const dim = nights.isPlaceholderData
+  const byDate = new Map((nights.data ?? []).map((n) => [n.date, n]))
+  const night = byDate.get(date) ?? null
+  const recorded = nights.data?.filter((n) => n.minutesAsleep > 0) ?? []
+  const avgAsleep = recorded.length
+    ? recorded.reduce((s, n) => s + n.minutesAsleep, 0) / recorded.length
+    : 0
+
+  const dates = listDates(start, end)
 
   return (
-    <div className={cn('mx-auto flex max-w-[1180px] flex-col gap-5 px-8 pb-12 transition-opacity', loading && 'opacity-60')}>
+    <div className={cn('mx-auto flex max-w-[1180px] flex-col gap-5 px-8 pb-12 transition-opacity duration-300', dim && 'opacity-60')}>
       <motion.header custom={0} variants={fade} initial="hidden" animate="show" className="pt-2">
         <h1 className="display text-[27px] font-bold text-ink">Sleep</h1>
         <p className="mt-1 text-[13px] text-ink-dim">
-          Night ending {longDate(day.date)}
-          {avgAsleep > 0 && ` · ${formatMinutes(avgAsleep)} average over the window`}
+          Night ending {longDate(date)}
+          {avgAsleep > 0 && ` · ${formatMinutes(avgAsleep)} average this week`}
         </p>
       </motion.header>
 
       {/* Selected night */}
       <motion.div custom={1} variants={fade} initial="hidden" animate="show">
-        {night ? (
+        {nights.isPending ? (
+          <Skeleton className="h-64" />
+        ) : night ? (
           <Panel className="grid grid-cols-1 gap-8 p-7 lg:grid-cols-[auto_1fr]">
             <div className="flex flex-col items-center justify-center gap-3">
-              <GaugeRing
+              <ProgressRing
                 value={night.minutesAsleep}
                 goal={goals.sleepMinutes}
                 color="var(--color-sleep)"
@@ -59,7 +61,7 @@ export function SleepView({ day, goals, loading }: SleepViewProps): React.JSX.El
                   </div>
                   <div className="mt-1 text-[10px] uppercase tracking-wide text-ink-faint">asleep</div>
                 </div>
-              </GaugeRing>
+              </ProgressRing>
               <span className="font-mono text-[11px] text-ink-dim">
                 {Math.round((night.minutesAsleep / goals.sleepMinutes) * 100)}% of {formatMinutes(goals.sleepMinutes)} goal
               </span>
@@ -73,10 +75,11 @@ export function SleepView({ day, goals, loading }: SleepViewProps): React.JSX.El
               </div>
             </div>
             <div className="flex flex-col justify-center">
-              <SectionHeader
+              <DrillHeader
                 title="Stages"
                 hint="Hover a block for its timing"
                 icon={<Moon size={18} weight="fill" style={{ color: 'var(--color-sleep)' }} />}
+                onOpen={() => onOpenMetric('sleepMinutes')}
               />
               <div className="mt-5">
                 <SleepStages night={night} />
@@ -90,50 +93,80 @@ export function SleepView({ day, goals, loading }: SleepViewProps): React.JSX.El
         )}
       </motion.div>
 
-      {/* Duration trend */}
-      <motion.div custom={2} variants={fade} initial="hidden" animate="show">
-        <Panel className="flex flex-col gap-4 p-6">
-          <SectionHeader
-            title="Duration, last 14 nights"
-            hint="Is your sleep consistent?"
-            icon={<Moon size={18} weight="fill" style={{ color: 'var(--color-sleep)' }} />}
-          />
-          <ColumnChart
-            data={day.trend.map((d) => ({
-              key: d.date,
-              label: `${weekdayShort(d.date)} · ${shortDate(d.date)}`,
-              value: d.sleepMinutes,
-              tick: weekdayShort(d.date).slice(0, 1)
-            }))}
-            color="var(--color-sleep)"
-            goal={{ value: goals.sleepMinutes, label: 'goal' }}
-            emphasisIndex={emphasis}
-            format={(v) => formatMinutes(v)}
-            unitLabel="asleep"
-          />
-        </Panel>
-      </motion.div>
+      {nights.isPending ? (
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+          <Skeleton className="h-56" />
+          <Skeleton className="h-56" />
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+          {/* Duration trend */}
+          <motion.div custom={2} variants={fade} initial="hidden" animate="show">
+            <Panel className="flex h-full flex-col gap-4 p-6">
+              <DrillHeader
+                title="Duration"
+                hint="Last 7 nights"
+                icon={<Moon size={18} weight="fill" style={{ color: 'var(--color-sleep)' }} />}
+                onOpen={() => onOpenMetric('sleepMinutes')}
+              />
+              <div className="mt-auto">
+                <ColumnChart
+                  data={dates.map((d) => ({
+                    key: d,
+                    label: `${weekdayShort(d)} · ${shortDate(d)}`,
+                    value: byDate.get(d)?.minutesAsleep ?? null,
+                    tick: weekdayShort(d).slice(0, 1)
+                  }))}
+                  color="var(--color-sleep)"
+                  goal={{ value: goals.sleepMinutes, label: 'goal' }}
+                  emphasisIndex={dates.indexOf(date)}
+                  format={(v) => formatMinutes(v)}
+                  unitLabel="asleep"
+                />
+              </div>
+            </Panel>
+          </motion.div>
+
+          {/* Efficiency trend */}
+          <motion.div custom={3} variants={fade} initial="hidden" animate="show">
+            <Panel className="flex h-full flex-col gap-4 p-6">
+              <DrillHeader
+                title="Efficiency"
+                hint="Share of the night actually asleep"
+                icon={<Timer size={18} weight="fill" style={{ color: 'var(--color-sleep)' }} />}
+                onOpen={() => onOpenMetric('sleepEfficiency')}
+              />
+              <div className="mt-auto">
+                <TrendLine
+                  data={dates.map((d) => ({
+                    date: d,
+                    label: `${weekdayShort(d)} · ${shortDate(d)}`,
+                    value: byDate.get(d)?.efficiency ?? null
+                  }))}
+                  color="var(--color-sleep)"
+                  height={150}
+                  format={(v) => `${Math.round(v)}%`}
+                  unitLabel="efficiency"
+                />
+              </div>
+            </Panel>
+          </motion.div>
+        </div>
+      )}
 
       {/* Night-by-night stage mix */}
-      {nights && nights.length > 1 && (
-        <div>
+      {recorded.length > 1 && (
+        <motion.div custom={4} variants={fade} initial="hidden" animate="show">
           <h2 className="mb-3 px-1 text-[13px] font-semibold text-ink-dim">Recent nights</h2>
           <div className="flex flex-col gap-2.5">
-            {[...nights]
+            {[...recorded]
               .reverse()
-              .filter((n) => n.date !== day.date)
-              .map((n, i) => (
-                <motion.div
-                  key={n.date}
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.03 * i, duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
-                >
-                  <NightRow night={n} />
-                </motion.div>
+              .filter((n) => n.date !== date)
+              .map((n) => (
+                <NightRow key={n.date} night={n} />
               ))}
           </div>
-        </div>
+        </motion.div>
       )}
     </div>
   )

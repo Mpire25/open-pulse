@@ -1,66 +1,103 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
-import type { HealthDay, PairedDevice, SleepNight } from '@shared/types'
+// Query hooks over the main process's domain-split health queries.
+//
+// TanStack Query gives every card its own cache entry: cached data renders
+// instantly (stale-while-revalidate), date changes keep the previous window
+// on screen while the new one loads, and a global refresh invalidates
+// everything after the main process drops its freshness markers.
 
-interface DayState {
-  day: HealthDay | null
-  loading: boolean
-  error: string | null
-  refresh: () => void
+import { useCallback, useEffect, useState } from 'react'
+import {
+  keepPreviousData,
+  useIsFetching,
+  useQuery,
+  useQueryClient,
+  type UseQueryResult
+} from '@tanstack/react-query'
+import type {
+  IntradaySnapshot,
+  MetricKey,
+  PairedDevice,
+  SeriesResult,
+  SleepNight,
+  Workout
+} from '@shared/types'
+
+// Past days barely change once synced; today does. Query-side staleness is
+// short — the main process's per-day freshness rules do the real work.
+const STALE_MS = 60_000
+
+export function useSeries(metrics: MetricKey[], start: string, end: string): UseQueryResult<SeriesResult> {
+  return useQuery({
+    queryKey: ['series', start, end, metrics.join('|')],
+    queryFn: () => window.pulse.health.series(metrics, start, end),
+    staleTime: STALE_MS,
+    placeholderData: keepPreviousData
+  })
+}
+
+export function useSleepRange(start: string, end: string): UseQueryResult<SleepNight[]> {
+  return useQuery({
+    queryKey: ['sleep', start, end],
+    queryFn: async () => (await window.pulse.health.sleepRange(start, end)).nights,
+    staleTime: STALE_MS,
+    placeholderData: keepPreviousData
+  })
+}
+
+export function useSleepNight(date: string): UseQueryResult<SleepNight | null> {
+  return useQuery({
+    queryKey: ['sleep-night', date],
+    queryFn: async () => {
+      const result = await window.pulse.health.sleepRange(date, date)
+      return result.nights.find((n) => n.date === date) ?? null
+    },
+    staleTime: STALE_MS,
+    placeholderData: keepPreviousData
+  })
+}
+
+export function useWorkouts(start: string, end: string): UseQueryResult<Workout[]> {
+  return useQuery({
+    queryKey: ['workouts', start, end],
+    queryFn: async () => (await window.pulse.health.workouts(start, end)).workouts,
+    staleTime: STALE_MS,
+    placeholderData: keepPreviousData
+  })
+}
+
+export function useIntraday(date: string): UseQueryResult<IntradaySnapshot> {
+  return useQuery({
+    queryKey: ['intraday', date],
+    queryFn: () => window.pulse.health.intraday(date),
+    staleTime: STALE_MS,
+    placeholderData: keepPreviousData
+  })
+}
+
+export function useDevices(): UseQueryResult<PairedDevice[]> {
+  return useQuery({
+    queryKey: ['devices'],
+    queryFn: () => window.pulse.health.devices(),
+    staleTime: 5 * 60_000
+  })
 }
 
 /**
- * Snapshot for the selected date. While a new date loads, the previous
- * snapshot is kept so views can hold their last render at reduced opacity
- * instead of flashing a skeleton.
+ * Global refresh: the main process drops freshness (keeping values so the UI
+ * stays populated), then every mounted query refetches.
  */
-export function useHealthDay(date: string): DayState {
-  const [day, setDay] = useState<HealthDay | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const requestSeq = useRef(0)
-
-  const load = useCallback((force: boolean) => {
-    const seq = ++requestSeq.current
-    setLoading(true)
-    setError(null)
-    window.pulse.health
-      .day(date, force)
-      .then((d) => {
-        if (seq === requestSeq.current) setDay(d)
-      })
-      .catch((err: unknown) => {
-        if (seq === requestSeq.current) setError(err instanceof Error ? err.message : String(err))
-      })
-      .finally(() => {
-        if (seq === requestSeq.current) setLoading(false)
-      })
-  }, [date])
-
-  useEffect(() => load(false), [load])
-  const refresh = useCallback(() => load(true), [load])
-
-  return { day, loading, error, refresh }
+export function useRefresh(): () => Promise<void> {
+  const queryClient = useQueryClient()
+  return useCallback(async () => {
+    await window.pulse.health.refresh()
+    await queryClient.invalidateQueries()
+  }, [queryClient])
 }
 
-export function useSleepHistory(nights: number, endDate: string): SleepNight[] | null {
-  const [data, setData] = useState<SleepNight[] | null>(null)
-  useEffect(() => {
-    let active = true
-    window.pulse.health.sleep(nights, endDate).then((d) => {
-      if (active) setData(d)
-    })
-    return () => {
-      active = false
-    }
-  }, [nights, endDate])
-  return data
-}
-
-export function useDevices(): { devices: PairedDevice[] | null; refresh: () => void } {
-  const [devices, setDevices] = useState<PairedDevice[] | null>(null)
-  const refresh = useCallback(() => {
-    void window.pulse.health.devices().then(setDevices)
-  }, [])
-  useEffect(refresh, [refresh])
-  return { devices, refresh }
+/** True while anything is loading — renderer queries or main-process API calls. */
+export function useSyncBusy(): boolean {
+  const fetching = useIsFetching()
+  const [pending, setPending] = useState(0)
+  useEffect(() => window.pulse.health.onActivity((activity) => setPending(activity.pending)), [])
+  return fetching > 0 || pending > 0
 }

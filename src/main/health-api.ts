@@ -16,41 +16,99 @@ export class HealthApiError extends Error {
   }
 }
 
-// The v4 API rate-limits aggressively; a sync fires ~20 requests, so space
-// them out client-side and honor Retry-After on 429s.
-let nextRequestAt = 0
+// ---------------------------------------------------------------------------
+// Request scheduler
+//
+// The v4 API rate-limits aggressively, so requests are spaced client-side.
+// The queue is priority-ordered: the numbers on screen (selected-day data)
+// jump ahead of history backfills instead of waiting behind them.
 
-async function waitForSlot(): Promise<void> {
-  const now = Date.now()
-  const slot = Math.max(now, nextRequestAt)
-  nextRequestAt = slot + 225
-  if (slot > now) await new Promise((r) => setTimeout(r, slot - now))
+/** 0 = selected-day essentials, 1 = short trend windows, 2 = long history. */
+export type Priority = 0 | 1 | 2
+
+const SPACING_MS = 225
+
+interface Waiter {
+  priority: Priority
+  seq: number
+  resolve: () => void
 }
 
-async function request<T>(token: string, path: string, init?: RequestInit, retry = 0): Promise<T> {
-  await waitForSlot()
-  const resp = await fetch(`${BASE}${path}`, {
-    ...init,
-    headers: {
-      authorization: `Bearer ${token}`,
-      'content-type': 'application/json',
-      ...init?.headers
-    }
+let seq = 0
+let nextSlotAt = 0
+let slotTimer: NodeJS.Timeout | null = null
+const waiters: Waiter[] = []
+
+function acquireSlot(priority: Priority): Promise<void> {
+  return new Promise((resolve) => {
+    waiters.push({ priority, seq: seq++, resolve })
+    waiters.sort((a, b) => a.priority - b.priority || a.seq - b.seq)
+    pumpQueue()
   })
-  if (resp.status === 429 && retry < 2) {
-    const retryAfter = Number(resp.headers.get('retry-after'))
-    const delay =
-      Number.isFinite(retryAfter) && retryAfter > 0
-        ? Math.min(30_000, retryAfter * 1000)
-        : Math.min(30_000, 1100 * 2 ** retry)
-    await new Promise((r) => setTimeout(r, delay))
-    return request(token, path, init, retry + 1)
-  }
-  if (!resp.ok) {
-    throw new HealthApiError(resp.status, `Health API ${path} failed (${resp.status}): ${await resp.text()}`)
-  }
-  return (await resp.json()) as T
 }
+
+function pumpQueue(): void {
+  if (slotTimer || waiters.length === 0) return
+  slotTimer = setTimeout(
+    () => {
+      slotTimer = null
+      const next = waiters.shift()
+      if (!next) return
+      nextSlotAt = Date.now() + SPACING_MS
+      next.resolve()
+      pumpQueue()
+    },
+    Math.max(0, nextSlotAt - Date.now())
+  )
+}
+
+// In-flight counter so the renderer can show a live sync indicator.
+let pendingCount = 0
+let activityListener: ((pending: number) => void) | null = null
+
+export function setApiActivityListener(listener: (pending: number) => void): void {
+  activityListener = listener
+}
+
+function bumpPending(delta: number): void {
+  pendingCount = Math.max(0, pendingCount + delta)
+  activityListener?.(pendingCount)
+}
+
+async function request<T>(token: string, path: string, init?: RequestInit, priority: Priority = 1): Promise<T> {
+  bumpPending(1)
+  try {
+    for (let retry = 0; ; retry++) {
+      await acquireSlot(priority)
+      const resp = await fetch(`${BASE}${path}`, {
+        ...init,
+        headers: {
+          authorization: `Bearer ${token}`,
+          'content-type': 'application/json',
+          ...init?.headers
+        }
+      })
+      if (resp.status === 429 && retry < 2) {
+        const retryAfter = Number(resp.headers.get('retry-after'))
+        const delay =
+          Number.isFinite(retryAfter) && retryAfter > 0
+            ? Math.min(30_000, retryAfter * 1000)
+            : Math.min(30_000, 1100 * 2 ** retry)
+        await new Promise((r) => setTimeout(r, delay))
+        continue
+      }
+      if (!resp.ok) {
+        throw new HealthApiError(resp.status, `Health API ${path} failed (${resp.status}): ${await resp.text()}`)
+      }
+      return (await resp.json()) as T
+    }
+  } finally {
+    bumpPending(-1)
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Civil date plumbing
 
 interface ApiDate {
   year: number
@@ -95,6 +153,9 @@ export function minuteFromCivil(value?: CivilDateTime | null): number | null {
   return time.hours * 60 + (time.minutes ?? 0)
 }
 
+// ---------------------------------------------------------------------------
+// Endpoints
+
 export interface RollupPoint {
   civilStartTime?: CivilDateTime
   [key: string]: unknown
@@ -108,7 +169,8 @@ export async function dailyRollUp(
   token: string,
   dataType: string,
   startDate: string,
-  endDateExclusive: string
+  endDateExclusive: string,
+  priority: Priority = 1
 ): Promise<RollupPoint[]> {
   const body = {
     range: {
@@ -120,7 +182,8 @@ export async function dailyRollUp(
   const json = await request<{ rollupDataPoints?: RollupPoint[] }>(
     token,
     `/users/me/dataTypes/${dataType}/dataPoints:dailyRollUp`,
-    { method: 'POST', body: JSON.stringify(body) }
+    { method: 'POST', body: JSON.stringify(body) },
+    priority
   )
   return json.rollupDataPoints ?? []
 }
@@ -159,7 +222,8 @@ export async function listData(
   kind: RecordKind,
   startDate: string,
   endDateExclusive: string,
-  dataSourceFamily: 'all-sources' | 'google-wearables' = 'all-sources'
+  dataSourceFamily: 'all-sources' | 'google-wearables' = 'all-sources',
+  priority: Priority = 1
 ): Promise<RawDataPoint[]> {
   const params = new URLSearchParams({
     filter: dataFilter(dataType, kind, startDate, endDateExclusive),
@@ -173,7 +237,9 @@ export async function listData(
     if (pageToken) params.set('pageToken', pageToken)
     const json = await request<{ dataPoints?: RawDataPoint[]; nextPageToken?: string }>(
       token,
-      `/users/me/dataTypes/${dataType}/dataPoints:reconcile?${params}`
+      `/users/me/dataTypes/${dataType}/dataPoints:reconcile?${params}`,
+      undefined,
+      priority
     )
     points.push(...(json.dataPoints ?? []))
     pageToken = json.nextPageToken ?? ''
@@ -199,7 +265,9 @@ export interface ApiPairedDevice {
 export async function listPairedDevices(token: string): Promise<ApiPairedDevice[]> {
   const json = await request<{ pairedDevices?: ApiPairedDevice[] }>(
     token,
-    '/users/me/pairedDevices?pageSize=100'
+    '/users/me/pairedDevices?pageSize=100',
+    undefined,
+    0
   )
   return json.pairedDevices ?? []
 }
