@@ -1,38 +1,48 @@
 @import 'tailwindcss';
 
 @theme {
-  --font-sans:
-    -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Helvetica Neue',
-    'Segoe UI', sans-serif;
-  --font-mono: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, 'JetBrains Mono', monospace;
+  /* Archivo carries the whole UI (its width axis gives headers their voice);
+     IBM Plex Mono is reserved for aligned figures: axis ticks and table rows. */
+  --font-sans: 'Archivo Variable', 'Archivo', 'Helvetica Neue', 'Segoe UI', sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, monospace;
 
-  --color-canvas: #0a0a0c;
-  --color-panel: #131318;
-  --color-panel-2: #1b1b22;
-  --color-hairline: rgb(255 255 255 / 0.08);
+  /* Graphite surfaces with a cool cast — deliberately not Apple's neutral black */
+  --color-canvas: #0e0f12;
+  --color-panel: #15171c;
+  --color-panel-2: #1d2026;
+  --color-hairline: rgb(255 255 255 / 0.07);
   --color-hairline-strong: rgb(255 255 255 / 0.14);
 
-  --color-ink: #f5f5f7;
-  --color-ink-dim: #a2a2ab;
-  --color-ink-faint: #66666f;
+  --color-ink: #edeef2;
+  --color-ink-dim: #9ba0ab;
+  --color-ink-faint: #5e636e;
 
-  /* Activity ring palette, matched to Apple Fitness */
-  --color-move: #fa2e55;
-  --color-move-soft: rgb(250 46 85 / 0.16);
-  --color-exercise: #a3e635;
-  --color-exercise-soft: rgb(163 230 53 / 0.14);
-  --color-stand: #06c8d9;
-  --color-stand-soft: rgb(6 200 217 / 0.14);
+  /* Metric palette — validated (dark surface, OKLCH band + CVD separation).
+     One hue per metric family; color follows the metric, never the value. */
+  --color-activity: #c08122;
+  --color-activity-soft: rgb(192 129 34 / 0.14);
+  --color-heart: #e4604f;
+  --color-heart-soft: rgb(228 96 79 / 0.13);
+  --color-recovery: #189e74;
+  --color-recovery-soft: rgb(24 158 116 / 0.14);
+  --color-sleep: #7d7bf0;
+  --color-sleep-soft: rgb(125 123 240 / 0.14);
+  --color-hydration: #2b8fc4;
+  --color-hydration-soft: rgb(43 143 196 / 0.14);
+  --color-body-metric: #b44ba9;
+  --color-body-metric-soft: rgb(180 75 169 / 0.14);
 
-  --color-accent: #0a84ff;
-  --color-accent-soft: rgb(10 132 255 / 0.16);
+  /* Sleep stage set — validated as an adjacent (stacked) group */
+  --color-stage-deep: #5b5be0;
+  --color-stage-light: #8487ec;
+  --color-stage-rem: #2496b8;
+  --color-stage-awake: #c08122;
 
-  --color-sleep-deep: #3634a3;
-  --color-sleep-core: #3f8ef6;
-  --color-sleep-rem: #7bcff0;
-  --color-sleep-awake: #f2745f;
+  /* Interactive accent = the sleep violet family, the app's signature hue */
+  --color-accent: #7d7bf0;
+  --color-accent-soft: rgb(125 123 240 / 0.16);
 
-  --color-danger: #ff453a;
+  --color-danger: #e0544e;
 }
 
 html,
@@ -52,8 +62,14 @@ body {
   user-select: none;
 }
 
+/* Display voice: Archivo widened via its variable width axis */
+.display {
+  font-stretch: 115%;
+  letter-spacing: -0.02em;
+}
+
 ::selection {
-  background: rgb(10 132 255 / 0.35);
+  background: rgb(125 123 240 / 0.35);
 }
 
 /* macOS window chrome */

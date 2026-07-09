@@ -1,8 +1,11 @@
 import { motion } from 'framer-motion'
 import {
-  ChartLineUp,
+  SquaresFour,
+  PersonSimpleRun,
   Heartbeat,
   Moon,
+  Scales,
+  Watch,
   Sparkle,
   GearSix,
   type Icon
@@ -10,13 +13,23 @@ import {
 import { AppLogo } from '@/components/AppLogo'
 import { cn } from '@/lib/utils'
 
-export type View = 'today' | 'trends' | 'sleep' | 'assistant' | 'settings'
+export type View =
+  | 'home'
+  | 'activity'
+  | 'health'
+  | 'sleep'
+  | 'body'
+  | 'devices'
+  | 'assistant'
+  | 'settings'
 
 const NAV: { id: View; label: string; icon: Icon }[] = [
-  { id: 'today', label: 'Today', icon: Heartbeat },
-  { id: 'trends', label: 'Trends', icon: ChartLineUp },
+  { id: 'home', label: 'Home', icon: SquaresFour },
+  { id: 'activity', label: 'Activity', icon: PersonSimpleRun },
+  { id: 'health', label: 'Health', icon: Heartbeat },
   { id: 'sleep', label: 'Sleep', icon: Moon },
-  { id: 'assistant', label: 'Assistant', icon: Sparkle }
+  { id: 'body', label: 'Body', icon: Scales },
+  { id: 'devices', label: 'Devices', icon: Watch }
 ]
 
 interface SidebarProps {
@@ -27,10 +40,10 @@ interface SidebarProps {
 
 export function Sidebar({ view, onSelect, connected }: SidebarProps): React.JSX.Element {
   return (
-    <nav className="drag-region flex w-[212px] shrink-0 flex-col px-3 pb-4 pt-[54px]">
+    <nav className="drag-region flex w-[204px] shrink-0 flex-col px-3 pb-4 pt-[54px]">
       <div className="no-drag mb-6 flex items-center gap-2.5 px-2">
         <AppLogo size={28} />
-        <span className="text-[17px] font-semibold tracking-tight">OpenPulse</span>
+        <span className="display text-[16px] font-bold">OpenPulse</span>
       </div>
 
       <div className="no-drag flex flex-col gap-0.5">
@@ -43,7 +56,7 @@ export function Sidebar({ view, onSelect, connected }: SidebarProps): React.JSX.
         {!connected && (
           <div className="mb-2 mx-1 rounded-xl border border-hairline bg-white/[0.03] px-3 py-2.5">
             <div className="flex items-center gap-1.5">
-              <span className="h-1.5 w-1.5 rounded-full bg-[#ffb340]" />
+              <span className="h-1.5 w-1.5 rounded-full bg-activity" />
               <p className="text-[11px] font-medium text-ink-dim">Sample data</p>
             </div>
             <p className="mt-1 text-[11px] leading-snug text-ink-faint">
@@ -51,6 +64,11 @@ export function Sidebar({ view, onSelect, connected }: SidebarProps): React.JSX.
             </p>
           </div>
         )}
+        <NavButton
+          item={{ id: 'assistant', label: 'Assistant', icon: Sparkle }}
+          active={view === 'assistant'}
+          onSelect={onSelect}
+        />
         <NavButton
           item={{ id: 'settings', label: 'Settings', icon: GearSix }}
           active={view === 'settings'}

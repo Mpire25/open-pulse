@@ -1,25 +1,38 @@
 # OpenPulse
 
 A macOS companion app for the **Google Fitbit Air**. OpenPulse reads your health data
-from the **Google Health API v4**, shows it through Apple-Fitness-style activity
-rings and charts, and includes an AI assistant that analyzes your data — powered
-by your own **ChatGPT account** via the Codex OAuth flow.
+from the **Google Health API v4**, presents it as a day-anchored dashboard with
+interactive charts and goal gauges, and includes an AI assistant that analyzes
+your data — powered by your own **ChatGPT account** via the Codex OAuth flow.
 
 Built with Electron + React 19, Radix primitives, Tailwind v4, and Framer Motion.
 
 ## Features
 
-- **Today** — three concentric activity rings (Move / Exercise / Steps) with a
-  live vitals row (heart rate, HRV, SpO₂, breathing rate, distance, floors) and
-  last night's sleep hypnogram.
-- **Trends** — 7-day bar charts for steps, active zone minutes, sleep and resting
-  heart rate, with goal lines and weekly summaries.
-- **Sleep** — detailed stage breakdown, latest-night summary, and a scrollable
-  history of recent nights.
+- **Date traversal** — every page is anchored to a selected day. Step back and
+  forward, or jump anywhere with the calendar in the title bar; each day loads
+  with its own 14-day trend window (cached per date).
+- **Home** — how the day is going: goal gauges (steps / calories / zone
+  minutes), hourly movement, last night's hypnogram, night signals (HRV, SpO₂,
+  breathing, skin temperature) compared against your own recent baseline, and
+  the day's workouts.
+- **Activity** — day totals with baseline deltas and sparklines, hourly steps,
+  logged workouts (duration, calories, avg HR, zone minutes), and 14-day trends
+  with goal lines.
+- **Health** — intraday heart rate plus dedicated trend charts for resting HR,
+  HRV, SpO₂, respiratory rate, skin-temperature deviation, and VO₂ max — each
+  drawn against your personal 7-day average.
+- **Sleep** — stage hypnogram with hover timing, duration vs goal, efficiency,
+  a 14-night duration chart, and a night-by-night stage-mix history.
+- **Body** — weight, body fat, logged water, and calories in (with net energy
+  balance), shown as trends. Sections hide themselves when nothing is logged.
+- **Devices** — paired trackers with battery level and state, last sync time,
+  and hardware features.
 - **Assistant** — a streaming chat agent that calls tools to read your real
-  metrics (today, last 7 days, sleep history) before answering.
-- **Demo mode** — realistic, deterministic sample data so the whole app is
-  explorable before you connect anything.
+  metrics (any day's full snapshot, sleep history, devices) before answering.
+  Available as a full page and as a slide-over panel on every view.
+- **Demo mode** — realistic, deterministic sample data for any date, so the
+  whole app is explorable before you connect anything.
 
 ## Running
 

@@ -4,11 +4,10 @@ import type {
   AppSettings,
   ChatMessage,
   CodexAuthStatus,
-  DashboardToday,
   GoogleAuthStatus,
+  HealthDay,
   PairedDevice,
-  SleepNight,
-  WeekSeries
+  SleepNight
 } from '../shared/types'
 
 const api = {
@@ -28,9 +27,10 @@ const api = {
     disconnect: (): Promise<void> => ipcRenderer.invoke('codex:disconnect')
   },
   health: {
-    today: (): Promise<DashboardToday> => ipcRenderer.invoke('health:today'),
-    week: (): Promise<WeekSeries> => ipcRenderer.invoke('health:week'),
-    sleep: (nights: number): Promise<SleepNight[]> => ipcRenderer.invoke('health:sleep', nights),
+    day: (date: string, force?: boolean): Promise<HealthDay> =>
+      ipcRenderer.invoke('health:day', date, force),
+    sleep: (nights: number, endDate?: string): Promise<SleepNight[]> =>
+      ipcRenderer.invoke('health:sleep', nights, endDate),
     devices: (): Promise<PairedDevice[]> => ipcRenderer.invoke('health:devices')
   },
   ai: {

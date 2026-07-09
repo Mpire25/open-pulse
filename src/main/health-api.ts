@@ -1,6 +1,9 @@
 // Thin client for the Google Health API v4 (https://health.googleapis.com).
 // Endpoint shapes are taken from the published discovery document:
 //   https://health.googleapis.com/$discovery/rest?version=v4
+//
+// All reads are anchored to civil (device-local) time, so a "day" here means
+// the day as the tracker experienced it, regardless of this machine's zone.
 
 const BASE = 'https://health.googleapis.com/v4'
 
@@ -13,7 +16,19 @@ export class HealthApiError extends Error {
   }
 }
 
-async function request<T>(token: string, path: string, init?: RequestInit): Promise<T> {
+// The v4 API rate-limits aggressively; a sync fires ~20 requests, so space
+// them out client-side and honor Retry-After on 429s.
+let nextRequestAt = 0
+
+async function waitForSlot(): Promise<void> {
+  const now = Date.now()
+  const slot = Math.max(now, nextRequestAt)
+  nextRequestAt = slot + 225
+  if (slot > now) await new Promise((r) => setTimeout(r, slot - now))
+}
+
+async function request<T>(token: string, path: string, init?: RequestInit, retry = 0): Promise<T> {
+  await waitForSlot()
   const resp = await fetch(`${BASE}${path}`, {
     ...init,
     headers: {
@@ -22,6 +37,15 @@ async function request<T>(token: string, path: string, init?: RequestInit): Prom
       ...init?.headers
     }
   })
+  if (resp.status === 429 && retry < 2) {
+    const retryAfter = Number(resp.headers.get('retry-after'))
+    const delay =
+      Number.isFinite(retryAfter) && retryAfter > 0
+        ? Math.min(30_000, retryAfter * 1000)
+        : Math.min(30_000, 1100 * 2 ** retry)
+    await new Promise((r) => setTimeout(r, delay))
+    return request(token, path, init, retry + 1)
+  }
   if (!resp.ok) {
     throw new HealthApiError(resp.status, `Health API ${path} failed (${resp.status}): ${await resp.text()}`)
   }
@@ -34,34 +58,64 @@ interface ApiDate {
   day: number
 }
 
+export interface CivilDateTime {
+  date?: ApiDate
+  time?: { hours?: number; minutes?: number; seconds?: number }
+}
+
 function toApiDate(isoDate: string): ApiDate {
   const [year, month, day] = isoDate.split('-').map(Number)
   return { year, month, day }
 }
 
+export function shiftIsoDate(isoDate: string, days: number): string {
+  const [year, month, day] = isoDate.split('-').map(Number)
+  return new Date(Date.UTC(year, month - 1, day + days, 12)).toISOString().slice(0, 10)
+}
+
+// Although the schema describes a closed-open interval, the current v4
+// endpoint expects the final civil day at 23:59:59 rather than the following
+// day at midnight.
+function civilDateTime(isoDate: string, endOfDay = false): CivilDateTime {
+  return {
+    date: toApiDate(isoDate),
+    time: endOfDay ? { hours: 23, minutes: 59, seconds: 59 } : { hours: 0, minutes: 0, seconds: 0 }
+  }
+}
+
+export function dateFromCivil(value?: CivilDateTime | ApiDate | null): string | null {
+  const date = (value as CivilDateTime)?.date ?? (value as ApiDate)
+  if (!date?.year || !date.month || !date.day) return null
+  return `${date.year}-${String(date.month).padStart(2, '0')}-${String(date.day).padStart(2, '0')}`
+}
+
+export function minuteFromCivil(value?: CivilDateTime | null): number | null {
+  const time = value?.time
+  if (typeof time?.hours !== 'number') return null
+  return time.hours * 60 + (time.minutes ?? 0)
+}
+
 export interface RollupPoint {
-  civilStartTime?: { date?: ApiDate }
-  steps?: { countSum?: string }
-  distance?: { distanceSumMeters?: number; sumMeters?: number }
-  activeZoneMinutes?: { activeZoneMinutesSum?: string; minutesSum?: string }
-  activeEnergyBurned?: { energySum?: { kilocalories?: number } }
-  floors?: { floorsSum?: string; countSum?: string }
-  heartRate?: { beatsPerMinuteAvg?: number; beatsPerMinuteMin?: number; beatsPerMinuteMax?: number }
+  civilStartTime?: CivilDateTime
   [key: string]: unknown
 }
 
 /**
- * Daily rollup for a data type over a closed-open civil date range.
- * `startDate`/`endDate` are YYYY-MM-DD; end is exclusive.
+ * Daily rollup for a data type over a closed civil date range
+ * (`startDate`..`endDateExclusive`, YYYY-MM-DD).
  */
 export async function dailyRollUp(
   token: string,
   dataType: string,
   startDate: string,
-  endDate: string
+  endDateExclusive: string
 ): Promise<RollupPoint[]> {
   const body = {
-    range: { start: { date: toApiDate(startDate) }, end: { date: toApiDate(endDate) } }
+    range: {
+      start: civilDateTime(startDate),
+      end: civilDateTime(shiftIsoDate(endDateExclusive, -1), true)
+    },
+    windowSizeDays: 1
   }
   const json = await request<{ rollupDataPoints?: RollupPoint[] }>(
     token,
@@ -73,68 +127,58 @@ export async function dailyRollUp(
 
 export interface RawDataPoint {
   name?: string
+  dataPointName?: string
   [key: string]: unknown
 }
 
-const DAILY_DATA_TYPES = new Set([
-  'daily-resting-heart-rate',
-  'daily-heart-rate-variability',
-  'daily-oxygen-saturation',
-  'daily-respiratory-rate'
-])
+/** How a data type's points are keyed, which decides the AIP-160 filter shape. */
+export type RecordKind = 'daily' | 'sample' | 'interval' | 'session' | 'sleep'
 
-function toFilterDataType(dataType: string): string {
-  return dataType.replaceAll('-', '_')
-}
-
-function toLocalDate(iso: string): string {
-  const d = new Date(iso)
-  const tz = d.getTimezoneOffset() * 60_000
-  return new Date(d.getTime() - tz).toISOString().slice(0, 10)
-}
-
-function nextLocalDate(iso: string): string {
-  const d = new Date(iso)
-  d.setDate(d.getDate() + 1)
-  return toLocalDate(d.toISOString())
-}
-
-function dataPointFilter(dataType: string, startIso: string, endIso: string): string {
-  if (dataType === 'sleep') {
-    return `sleep.interval.end_time >= "${startIso}" AND sleep.interval.end_time < "${endIso}"`
+function dataFilter(dataType: string, kind: RecordKind, startDate: string, endDateExclusive: string): string {
+  const field = dataType.replaceAll('-', '_')
+  switch (kind) {
+    case 'daily':
+      return `${field}.date >= "${startDate}" AND ${field}.date < "${endDateExclusive}"`
+    case 'sleep':
+      return `sleep.interval.civil_end_time >= "${startDate}" AND sleep.interval.civil_end_time < "${endDateExclusive}"`
+    case 'sample':
+      return `${field}.sample_time.civil_time >= "${startDate}" AND ${field}.sample_time.civil_time < "${endDateExclusive}"`
+    default:
+      return `${field}.interval.civil_start_time >= "${startDate}" AND ${field}.interval.civil_start_time < "${endDateExclusive}"`
   }
-
-  const filterDataType = toFilterDataType(dataType)
-  if (DAILY_DATA_TYPES.has(dataType)) {
-    return `${filterDataType}.date >= "${toLocalDate(startIso)}" AND ${filterDataType}.date < "${nextLocalDate(endIso)}"`
-  }
-
-  return `${filterDataType}.sample_time.physical_time >= "${startIso}" AND ${filterDataType}.sample_time.physical_time < "${endIso}"`
 }
 
 /**
- * Lists granular data points for a data type, filtered to a physical time range
- * (AIP-160 filter, as documented on the list method).
+ * Lists data points for a type over a civil date range. Uses the reconcile
+ * endpoint so points from multiple sources (watch + phone) are deduplicated
+ * within the requested data-source family.
  */
-export async function listDataPoints(
+export async function listData(
   token: string,
   dataType: string,
-  startIso: string,
-  endIso: string,
-  pageSize = 1440
+  kind: RecordKind,
+  startDate: string,
+  endDateExclusive: string,
+  dataSourceFamily: 'all-sources' | 'google-wearables' = 'all-sources'
 ): Promise<RawDataPoint[]> {
-  const filter = encodeURIComponent(dataPointFilter(dataType, startIso, endIso))
+  const params = new URLSearchParams({
+    filter: dataFilter(dataType, kind, startDate, endDateExclusive),
+    pageSize: kind === 'sleep' || kind === 'session' ? '25' : '10000',
+    dataSourceFamily: `users/me/dataSourceFamilies/${dataSourceFamily}`
+  })
   const points: RawDataPoint[] = []
   let pageToken = ''
+  let pages = 0
   do {
-    const tokenParam = pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : ''
+    if (pageToken) params.set('pageToken', pageToken)
     const json = await request<{ dataPoints?: RawDataPoint[]; nextPageToken?: string }>(
       token,
-      `/users/me/dataTypes/${dataType}/dataPoints?filter=${filter}&pageSize=${pageSize}${tokenParam}`
+      `/users/me/dataTypes/${dataType}/dataPoints:reconcile?${params}`
     )
     points.push(...(json.dataPoints ?? []))
     pageToken = json.nextPageToken ?? ''
-  } while (pageToken && points.length < 10_000)
+    pages++
+  } while (pageToken && pages < 50)
   return points
 }
 
@@ -142,13 +186,21 @@ export interface ApiPairedDevice {
   name?: string
   displayName?: string
   model?: string
+  deviceType?: string
+  deviceVersion?: string
+  batteryStatus?: string
+  batteryLevel?: number
   batteryLevelPercentage?: number
   lastSyncTime?: string
+  features?: string[]
   [key: string]: unknown
 }
 
 export async function listPairedDevices(token: string): Promise<ApiPairedDevice[]> {
-  const json = await request<{ pairedDevices?: ApiPairedDevice[] }>(token, '/users/me/pairedDevices')
+  const json = await request<{ pairedDevices?: ApiPairedDevice[] }>(
+    token,
+    '/users/me/pairedDevices?pageSize=100'
+  )
   return json.pairedDevices ?? []
 }
 

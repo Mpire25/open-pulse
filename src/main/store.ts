@@ -1,7 +1,7 @@
 import { app, safeStorage } from 'electron'
 import { join } from 'node:path'
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
-import type { AppSettings } from '../shared/types'
+import { DEFAULT_GOALS, type AppSettings, type Goals } from '../shared/types'
 
 interface StoreFile {
   settings: AppSettings
@@ -12,17 +12,32 @@ interface StoreFile {
 const DEFAULTS: AppSettings = {
   googleClientId: '',
   googleClientSecret: '',
-  googleClientSecretConfigured: false
+  googleClientSecretConfigured: false,
+  goals: { ...DEFAULT_GOALS }
 }
 const GOOGLE_CLIENT_SECRET_KEY = 'google-client-secret'
 
 let cache: StoreFile | null = null
 
+function normalizeGoals(raw?: Partial<Goals>): Goals {
+  const positive = (v: unknown, fallback: number): number => {
+    const n = Number(v)
+    return Number.isFinite(n) && n > 0 ? Math.round(n) : fallback
+  }
+  return {
+    steps: positive(raw?.steps, DEFAULT_GOALS.steps),
+    activeZoneMinutes: positive(raw?.activeZoneMinutes, DEFAULT_GOALS.activeZoneMinutes),
+    caloriesOut: positive(raw?.caloriesOut, DEFAULT_GOALS.caloriesOut),
+    sleepMinutes: positive(raw?.sleepMinutes, DEFAULT_GOALS.sleepMinutes)
+  }
+}
+
 function normalizeSettings(raw?: Partial<AppSettings>): AppSettings {
   return {
     googleClientId: raw?.googleClientId ?? DEFAULTS.googleClientId,
     googleClientSecret: '',
-    googleClientSecretConfigured: false
+    googleClientSecretConfigured: false,
+    goals: normalizeGoals(raw?.goals)
   }
 }
 

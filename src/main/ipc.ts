@@ -2,7 +2,7 @@ import { ipcMain } from 'electron'
 import type { AppSettings, ChatMessage } from '../shared/types'
 import { connectGoogle, disconnectGoogle, getGoogleStatus } from './google-auth'
 import { connectCodex, disconnectCodex, getCodexStatus } from './codex-auth'
-import { getDashboardToday, getDevices, getSleepHistory, getWeekSeries } from './health-service'
+import { getDevices, getHealthDay, getSleepHistory } from './health-service'
 import { getSettings, updateSettings } from './store'
 import { runChat } from './codex-chat'
 
@@ -18,9 +18,8 @@ export function registerIpc(): void {
   ipcMain.handle('codex:connect', () => connectCodex())
   ipcMain.handle('codex:disconnect', () => disconnectCodex())
 
-  ipcMain.handle('health:today', () => getDashboardToday())
-  ipcMain.handle('health:week', () => getWeekSeries())
-  ipcMain.handle('health:sleep', (_e, nights: number) => getSleepHistory(nights))
+  ipcMain.handle('health:day', (_e, date: string, force?: boolean) => getHealthDay(date, force))
+  ipcMain.handle('health:sleep', (_e, nights: number, endDate?: string) => getSleepHistory(nights, endDate))
   ipcMain.handle('health:devices', () => getDevices())
 
   ipcMain.handle('ai:send', (event, chatId: string, history: ChatMessage[]) => {

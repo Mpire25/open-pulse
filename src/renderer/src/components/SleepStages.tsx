@@ -1,17 +1,17 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import type { SleepNight, SleepStageType } from '@shared/types'
 import { formatClock, formatMinutes } from '@/lib/format'
 
-const STAGE_COLOR: Record<SleepStageType, string> = {
-  AWAKE: 'var(--color-sleep-awake)',
-  REM: 'var(--color-sleep-rem)',
-  LIGHT: 'var(--color-sleep-core)',
-  DEEP: 'var(--color-sleep-deep)'
+export const STAGE_COLOR: Record<SleepStageType, string> = {
+  AWAKE: 'var(--color-stage-awake)',
+  REM: 'var(--color-stage-rem)',
+  LIGHT: 'var(--color-stage-light)',
+  DEEP: 'var(--color-stage-deep)'
 }
-const STAGE_LABEL: Record<SleepStageType, string> = {
+export const STAGE_LABEL: Record<SleepStageType, string> = {
   AWAKE: 'Awake',
   REM: 'REM',
-  LIGHT: 'Core',
+  LIGHT: 'Light',
   DEEP: 'Deep'
 }
 // Vertical band order, awake on top.
@@ -21,13 +21,15 @@ interface SleepStagesProps {
   night: SleepNight
 }
 
-// Hypnogram: each stage segment drawn as a rounded block on its own row.
+// Hypnogram: each stage segment drawn as a rounded block on its own row,
+// with a per-segment hover readout.
 export function SleepStages({ night }: SleepStagesProps): React.JSX.Element {
   const start = new Date(night.startTime).getTime()
   const end = new Date(night.endTime).getTime()
   const total = Math.max(1, end - start)
   const rowHeight = 22
   const rowGap = 8
+  const [hover, setHover] = useState<{ i: number; text: string; left: number; top: number } | null>(null)
 
   const blocks = useMemo(
     () =>
@@ -37,7 +39,15 @@ export function SleepStages({ night }: SleepStagesProps): React.JSX.Element {
         const left = ((segStart - start) / total) * 100
         const width = Math.max(((segEnd - segStart) / total) * 100, 0.4)
         const row = ROW_ORDER.indexOf(seg.type)
-        return { key: i, type: seg.type, left, width, top: row * (rowHeight + rowGap) }
+        const minutes = Math.round((segEnd - segStart) / 60_000)
+        return {
+          key: i,
+          type: seg.type,
+          left,
+          width,
+          top: row * (rowHeight + rowGap),
+          tip: `${STAGE_LABEL[seg.type]} · ${formatMinutes(minutes)} · ${formatClock(seg.startTime)}`
+        }
       }),
     [night.stages, start, total]
   )
@@ -65,16 +75,27 @@ export function SleepStages({ night }: SleepStagesProps): React.JSX.Element {
           {blocks.map((b) => (
             <div
               key={b.key}
-              className="absolute rounded-[5px]"
+              className="absolute rounded-[5px] transition-opacity"
               style={{
                 left: `${b.left}%`,
                 width: `${b.width}%`,
                 top: b.top,
                 height: rowHeight,
-                background: STAGE_COLOR[b.type]
+                background: STAGE_COLOR[b.type],
+                opacity: hover && hover.i !== b.key ? 0.55 : 1
               }}
+              onPointerMove={() => setHover({ i: b.key, text: b.tip, left: b.left + b.width / 2, top: b.top })}
+              onPointerLeave={() => setHover(null)}
             />
           ))}
+          {hover && (
+            <div
+              className="pointer-events-none absolute z-20 -translate-x-1/2 -translate-y-[calc(100%+8px)] whitespace-nowrap rounded-lg border border-hairline bg-panel-2/95 px-2 py-1 text-[11px] font-medium text-ink shadow-lg backdrop-blur-md"
+              style={{ left: `${Math.min(88, Math.max(12, hover.left))}%`, top: hover.top }}
+            >
+              {hover.text}
+            </div>
+          )}
         </div>
       </div>
       <div className="mt-3 flex items-center justify-between pl-[52px] font-mono text-[11px] text-ink-faint">
@@ -88,7 +109,7 @@ export function SleepStages({ night }: SleepStagesProps): React.JSX.Element {
               <span className="h-2 w-2 rounded-full" style={{ background: STAGE_COLOR[t] }} />
               <span className="text-[11px] text-ink-dim">{STAGE_LABEL[t]}</span>
             </div>
-            <span className="font-mono text-[13px] text-ink">
+            <span className="text-[13px] font-semibold text-ink">
               {formatMinutes(night.stageMinutes[t] ?? 0)}
             </span>
           </div>

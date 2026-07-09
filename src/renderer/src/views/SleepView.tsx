@@ -1,110 +1,140 @@
-import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
 import { Moon, Bed, Timer } from '@phosphor-icons/react'
 import { Panel, SectionHeader } from '@/components/Panel'
-import { SleepStages } from '@/components/SleepStages'
-import { ProgressRing } from '@/components/ProgressRing'
-import { formatMinutes, longDate } from '@/lib/format'
-import type { SleepNight } from '@shared/types'
+import { ColumnChart, GaugeRing } from '@/components/charts'
+import { SleepStages, STAGE_COLOR } from '@/components/SleepStages'
+import { useSleepHistory } from '@/hooks/useHealth'
+import { formatMinutes, longDate, shortDate, weekdayShort } from '@/lib/format'
+import type { Goals, HealthDay, SleepNight } from '@shared/types'
+import { cn } from '@/lib/utils'
 
-export function SleepView(): React.JSX.Element {
-  const [nights, setNights] = useState<SleepNight[] | null>(null)
+const fade = {
+  hidden: { opacity: 0, y: 14 },
+  show: (i: number) => ({
+    opacity: 1,
+    y: 0,
+    transition: { delay: 0.04 * i, duration: 0.5, ease: [0.16, 1, 0.3, 1] as const }
+  })
+}
 
-  useEffect(() => {
-    let active = true
-    window.pulse.health.sleep(14).then((data) => {
-      if (active) setNights(data)
-    })
-    return () => {
-      active = false
-    }
-  }, [])
+interface SleepViewProps {
+  day: HealthDay
+  goals: Goals
+  loading: boolean
+}
 
-  if (!nights) {
-    return (
-      <div className="mx-auto max-w-[1180px] animate-pulse px-8 pt-2">
-        <div className="h-9 w-40 rounded-lg bg-white/5" />
-        <div className="mt-5 h-80 rounded-[22px] bg-white/5" />
-      </div>
-    )
-  }
-
-  const latest = nights.at(-1)
-  const history = [...nights].reverse()
-  const avgAsleep = nights.reduce((s, n) => s + n.minutesAsleep, 0) / (nights.length || 1)
+export function SleepView({ day, goals, loading }: SleepViewProps): React.JSX.Element {
+  const nights = useSleepHistory(14, day.date)
+  const night = day.sleep
+  const emphasis = day.trend.findIndex((d) => d.date === day.date)
+  const avgAsleep =
+    day.trend.reduce((s, d) => s + (d.sleepMinutes ?? 0), 0) /
+    Math.max(1, day.trend.filter((d) => d.sleepMinutes != null).length)
 
   return (
-    <div className="mx-auto flex max-w-[1180px] flex-col gap-5 px-8 pb-12">
-      <motion.header
-        initial={{ opacity: 0, y: 12 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
-        className="pt-2"
-      >
-        <h1 className="text-[28px] font-semibold tracking-tight text-ink">Sleep</h1>
-        <p className="mt-1 text-[13px] text-ink-dim">{formatMinutes(avgAsleep)} average over {nights.length} nights.</p>
+    <div className={cn('mx-auto flex max-w-[1180px] flex-col gap-5 px-8 pb-12 transition-opacity', loading && 'opacity-60')}>
+      <motion.header custom={0} variants={fade} initial="hidden" animate="show" className="pt-2">
+        <h1 className="display text-[27px] font-bold text-ink">Sleep</h1>
+        <p className="mt-1 text-[13px] text-ink-dim">
+          Night ending {longDate(day.date)}
+          {avgAsleep > 0 && ` · ${formatMinutes(avgAsleep)} average over the window`}
+        </p>
       </motion.header>
 
-      {latest && (
-        <motion.div
-          initial={{ opacity: 0, y: 14 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.05, duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
-        >
+      {/* Selected night */}
+      <motion.div custom={1} variants={fade} initial="hidden" animate="show">
+        {night ? (
           <Panel className="grid grid-cols-1 gap-8 p-7 lg:grid-cols-[auto_1fr]">
             <div className="flex flex-col items-center justify-center gap-3">
-              <ProgressRing
-                value={latest.minutesAsleep}
-                color="var(--color-sleep-core)"
-                trackColor="rgb(63 142 246 / 0.16)"
-                size={132}
-                strokeWidth={12}
+              <GaugeRing
+                value={night.minutesAsleep}
+                goal={goals.sleepMinutes}
+                color="var(--color-sleep)"
+                size={140}
+                stroke={12}
               >
                 <div className="text-center">
-                  <div className="font-mono text-[19px] font-semibold leading-none text-ink">
-                    {formatMinutes(latest.minutesAsleep)}
+                  <div className="text-[19px] font-semibold leading-none text-ink">
+                    {formatMinutes(night.minutesAsleep)}
                   </div>
                   <div className="mt-1 text-[10px] uppercase tracking-wide text-ink-faint">asleep</div>
                 </div>
-              </ProgressRing>
+              </GaugeRing>
+              <span className="font-mono text-[11px] text-ink-dim">
+                {Math.round((night.minutesAsleep / goals.sleepMinutes) * 100)}% of {formatMinutes(goals.sleepMinutes)} goal
+              </span>
               <div className="flex gap-4">
-                <MiniStat icon={<Bed size={13} weight="fill" />} label="In bed" value={formatMinutes(latest.minutesInSleepPeriod)} />
+                <MiniStat icon={<Bed size={13} weight="fill" />} label="In bed" value={formatMinutes(night.minutesInSleepPeriod)} />
                 <MiniStat
                   icon={<Timer size={13} weight="fill" />}
                   label="Efficiency"
-                  value={`${Math.round((latest.minutesAsleep / Math.max(1, latest.minutesInSleepPeriod)) * 100)}%`}
+                  value={night.efficiency != null ? `${night.efficiency}%` : '—'}
                 />
               </div>
             </div>
             <div className="flex flex-col justify-center">
               <SectionHeader
-                title={longDate(latest.date)}
-                hint="Last night’s stages"
-                icon={<Moon size={18} weight="fill" className="text-sleep-core" />}
+                title="Stages"
+                hint="Hover a block for its timing"
+                icon={<Moon size={18} weight="fill" style={{ color: 'var(--color-sleep)' }} />}
               />
               <div className="mt-5">
-                <SleepStages night={latest} />
+                <SleepStages night={night} />
               </div>
             </div>
           </Panel>
-        </motion.div>
-      )}
+        ) : (
+          <Panel className="grid place-items-center p-12 text-[13px] text-ink-faint">
+            No sleep recorded for this night.
+          </Panel>
+        )}
+      </motion.div>
 
-      <div>
-        <h2 className="mb-3 px-1 text-[13px] font-semibold text-ink-dim">Recent nights</h2>
-        <div className="flex flex-col gap-2.5">
-          {history.slice(1).map((night, i) => (
-            <motion.div
-              key={night.date}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.03 * i, duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
-            >
-              <NightRow night={night} />
-            </motion.div>
-          ))}
+      {/* Duration trend */}
+      <motion.div custom={2} variants={fade} initial="hidden" animate="show">
+        <Panel className="flex flex-col gap-4 p-6">
+          <SectionHeader
+            title="Duration, last 14 nights"
+            hint="Is your sleep consistent?"
+            icon={<Moon size={18} weight="fill" style={{ color: 'var(--color-sleep)' }} />}
+          />
+          <ColumnChart
+            data={day.trend.map((d) => ({
+              key: d.date,
+              label: `${weekdayShort(d.date)} · ${shortDate(d.date)}`,
+              value: d.sleepMinutes,
+              tick: weekdayShort(d.date).slice(0, 1)
+            }))}
+            color="var(--color-sleep)"
+            goal={{ value: goals.sleepMinutes, label: 'goal' }}
+            emphasisIndex={emphasis}
+            format={(v) => formatMinutes(v)}
+            unitLabel="asleep"
+          />
+        </Panel>
+      </motion.div>
+
+      {/* Night-by-night stage mix */}
+      {nights && nights.length > 1 && (
+        <div>
+          <h2 className="mb-3 px-1 text-[13px] font-semibold text-ink-dim">Recent nights</h2>
+          <div className="flex flex-col gap-2.5">
+            {[...nights]
+              .reverse()
+              .filter((n) => n.date !== day.date)
+              .map((n, i) => (
+                <motion.div
+                  key={n.date}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.03 * i, duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+                >
+                  <NightRow night={n} />
+                </motion.div>
+              ))}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   )
 }
@@ -124,7 +154,7 @@ function MiniStat({
         <span className="text-ink-dim">{icon}</span>
         {label}
       </span>
-      <span className="font-mono text-[13px] text-ink">{value}</span>
+      <span className="text-[13px] font-semibold text-ink">{value}</span>
     </div>
   )
 }
@@ -132,12 +162,6 @@ function MiniStat({
 // Compact stacked stage bar for the history list.
 function NightRow({ night }: { night: SleepNight }): React.JSX.Element {
   const order = ['DEEP', 'LIGHT', 'REM', 'AWAKE'] as const
-  const colors: Record<string, string> = {
-    DEEP: 'var(--color-sleep-deep)',
-    LIGHT: 'var(--color-sleep-core)',
-    REM: 'var(--color-sleep-rem)',
-    AWAKE: 'var(--color-sleep-awake)'
-  }
   const total = order.reduce((s, k) => s + (night.stageMinutes[k] ?? 0), 0) || 1
 
   return (
@@ -146,18 +170,21 @@ function NightRow({ night }: { night: SleepNight }): React.JSX.Element {
         <div className="text-[13px] font-medium text-ink">
           {new Date(`${night.date}T12:00:00`).toLocaleDateString('en-US', { weekday: 'long' })}
         </div>
-        <div className="text-[11px] text-ink-faint">
-          {new Date(`${night.date}T12:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-        </div>
+        <div className="text-[11px] text-ink-faint">{shortDate(night.date)}</div>
       </div>
-      <div className="flex h-2.5 flex-1 overflow-hidden rounded-full bg-white/5">
+      <div className="flex h-2.5 flex-1 gap-[2px] overflow-hidden rounded-full">
         {order.map((k) => {
           const w = ((night.stageMinutes[k] ?? 0) / total) * 100
-          return w > 0 ? <div key={k} style={{ width: `${w}%`, background: colors[k] }} /> : null
+          return w > 0 ? (
+            <div key={k} className="rounded-full" style={{ width: `${w}%`, background: STAGE_COLOR[k] }} />
+          ) : null
         })}
       </div>
-      <div className="w-16 shrink-0 text-right font-mono text-[13px] text-ink">
-        {formatMinutes(night.minutesAsleep)}
+      <div className="w-24 shrink-0 text-right">
+        <span className="font-mono text-[13px] text-ink">{formatMinutes(night.minutesAsleep)}</span>
+        {night.efficiency != null && (
+          <span className="ml-2 font-mono text-[11px] text-ink-faint">{night.efficiency}%</span>
+        )}
       </div>
     </Panel>
   )

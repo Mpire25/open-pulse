@@ -6,7 +6,7 @@ import { randomUUID } from 'node:crypto'
 import type { WebContents } from 'electron'
 import type { AiEvent, ChatMessage } from '../shared/types'
 import { getCodexTokens } from './codex-auth'
-import { getDashboardToday, getSleepHistory, getWeekSeries } from './health-service'
+import { getDevices, getHealthDay, getSleepHistory } from './health-service'
 
 const CODEX_URL = 'https://chatgpt.com/backend-api/codex/responses'
 const MODEL = 'gpt-5.1-codex'
@@ -14,7 +14,7 @@ const MAX_TOOL_TURNS = 8
 
 const INSTRUCTIONS = `You are OpenPulse, the built-in health assistant of a macOS app that displays the user's Google Fitbit Air data (via the Google Health API).
 
-You have tools that return the user's real data: today's dashboard, the last 7 days, and sleep history. Always call the relevant tools before answering questions about the user's health — never invent numbers. If the data source is "demo", mention once that this is sample data because no Fitbit account is connected yet.
+You have tools that return the user's real data: a full snapshot for any calendar day (with its 14-day trend window), detailed sleep history, and paired-device status. Always call the relevant tools before answering questions about the user's health — never invent numbers. If the data source is "demo", mention once that this is sample data because no Fitbit account is connected yet.
 
 Style: warm, precise, brief. Use plain language, concrete numbers and short paragraphs or compact bullet lists. Highlight trends, anomalies, and one actionable suggestion when relevant. You are not a doctor; for medical concerns (e.g. AFib alerts, persistently abnormal values) recommend seeing a professional, without being alarmist.`
 
@@ -29,24 +29,25 @@ interface ToolSpec {
 const TOOLS: ToolSpec[] = [
   {
     type: 'function',
-    name: 'get_today_dashboard',
+    name: 'get_health_day',
     description:
-      "Today's snapshot: steps, active zone minutes, active energy (kcal), distance, floors, resting/current heart rate, intraday heart-rate series, HRV, SpO2, breathing rate, and last night's sleep.",
+      "Full snapshot for one calendar day: steps, distance, floors, calories out/in, active & zone minutes, sedentary time, resting heart rate, HRV, SpO2, breathing rate, skin-temperature deviation, VO2 max, weight, body fat, water, sleep (with stages), workouts, hourly steps, intraday heart rate, plus daily metrics for the 14 days ending on that date (the `trend` array).",
     strict: false,
-    parameters: { type: 'object', properties: {}, additionalProperties: false }
-  },
-  {
-    type: 'function',
-    name: 'get_week_series',
-    description:
-      'Daily totals for the last 7 days: steps, active zone minutes, active energy, distance, sleep minutes, resting heart rate, HRV.',
-    strict: false,
-    parameters: { type: 'object', properties: {}, additionalProperties: false }
+    parameters: {
+      type: 'object',
+      properties: {
+        date: {
+          type: 'string',
+          description: 'Day to fetch, YYYY-MM-DD. Defaults to today. Future dates are clamped to today.'
+        }
+      },
+      additionalProperties: false
+    }
   },
   {
     type: 'function',
     name: 'get_sleep_history',
-    description: 'Detailed sleep sessions (start/end, minutes asleep, stage segments and stage totals) for the last N nights.',
+    description: 'Detailed sleep sessions (start/end, minutes asleep, efficiency, stage totals) for the last N nights.',
     strict: false,
     parameters: {
       type: 'object',
@@ -55,26 +56,35 @@ const TOOLS: ToolSpec[] = [
       },
       additionalProperties: false
     }
+  },
+  {
+    type: 'function',
+    name: 'get_devices',
+    description: 'Paired trackers: model, type, battery level and state, last sync time, hardware features.',
+    strict: false,
+    parameters: { type: 'object', properties: {}, additionalProperties: false }
   }
 ]
 
 const TOOL_LABELS: Record<string, string> = {
-  get_today_dashboard: 'Reading today’s metrics',
-  get_week_series: 'Reading the last 7 days',
-  get_sleep_history: 'Reading sleep history'
+  get_health_day: 'Reading day metrics',
+  get_sleep_history: 'Reading sleep history',
+  get_devices: 'Checking devices'
 }
 
 async function runTool(name: string, args: Record<string, unknown>): Promise<string> {
   switch (name) {
-    case 'get_today_dashboard': {
-      const data = await getDashboardToday()
-      // Trim the heart-rate series to keep tool output compact.
-      const series = data.heartRateSeries
-      const step = Math.max(1, Math.floor(series.length / 48))
-      return JSON.stringify({ ...data, heartRateSeries: series.filter((_, i) => i % step === 0) })
+    case 'get_health_day': {
+      const date = typeof args.date === 'string' ? args.date : new Date().toISOString().slice(0, 10)
+      const data = await getHealthDay(date)
+      // Trim intraday series to keep tool output compact.
+      const step = Math.max(1, Math.floor(data.heartRate.length / 48))
+      return JSON.stringify({
+        ...data,
+        heartRate: data.heartRate.filter((_, i) => i % step === 0),
+        sleep: data.sleep ? { ...data.sleep, stages: undefined, stageSegmentCount: data.sleep.stages.length } : null
+      })
     }
-    case 'get_week_series':
-      return JSON.stringify(await getWeekSeries())
     case 'get_sleep_history': {
       const nights = Math.min(30, Math.max(1, Number(args.nights) || 7))
       const history = await getSleepHistory(nights)
@@ -83,6 +93,8 @@ async function runTool(name: string, args: Record<string, unknown>): Promise<str
         history.map(({ stages, ...rest }) => ({ ...rest, stageSegmentCount: stages.length }))
       )
     }
+    case 'get_devices':
+      return JSON.stringify(await getDevices())
     default:
       return JSON.stringify({ error: `Unknown tool: ${name}` })
   }

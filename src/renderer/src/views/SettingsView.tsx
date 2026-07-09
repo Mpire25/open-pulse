@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { motion } from 'framer-motion'
-import { CheckCircle, GoogleLogo, Sparkle, Watch, ArrowClockwise, Warning } from '@phosphor-icons/react'
+import { CheckCircle, GoogleLogo, Sparkle, Target, ArrowClockwise, Warning } from '@phosphor-icons/react'
 import { Panel, SectionHeader } from '@/components/Panel'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { GoogleSetup } from '@/components/GoogleSetup'
-import type { AppSettings, CodexAuthStatus, GoogleAuthStatus, PairedDevice } from '@shared/types'
+import type { AppSettings, CodexAuthStatus, Goals, GoogleAuthStatus } from '@shared/types'
 
 interface SettingsViewProps {
   settings: AppSettings
@@ -31,8 +32,8 @@ export function SettingsView({
         transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
         className="pt-2"
       >
-        <h1 className="text-[28px] font-semibold tracking-tight text-ink">Settings</h1>
-        <p className="mt-1 text-[13px] text-ink-dim">Connect your accounts.</p>
+        <h1 className="display text-[27px] font-bold text-ink">Settings</h1>
+        <p className="mt-1 text-[13px] text-ink-dim">Accounts and daily goals.</p>
       </motion.header>
 
       <GoogleCard
@@ -42,7 +43,66 @@ export function SettingsView({
         onGoogleChange={onGoogleChange}
       />
       <CodexCard codex={codex} onCodexChange={onCodexChange} />
+      <GoalsCard settings={settings} onSettingsChange={onSettingsChange} />
     </div>
+  )
+}
+
+function GoalsCard({
+  settings,
+  onSettingsChange
+}: {
+  settings: AppSettings
+  onSettingsChange: (s: AppSettings) => void
+}): React.JSX.Element {
+  const [draft, setDraft] = useState<Goals>(settings.goals)
+  const dirty = JSON.stringify(draft) !== JSON.stringify(settings.goals)
+
+  const save = async (): Promise<void> => {
+    const next = await window.pulse.settings.update({ goals: draft })
+    onSettingsChange(next)
+    setDraft(next.goals)
+  }
+
+  const field = (
+    key: keyof Goals,
+    label: string,
+    unit: string
+  ): React.JSX.Element => (
+    <label className="flex flex-col gap-1.5">
+      <span className="text-[11px] font-medium text-ink-faint">
+        {label} <span className="text-ink-faint/70">({unit})</span>
+      </span>
+      <Input
+        type="number"
+        min={1}
+        value={draft[key]}
+        onChange={(e) => setDraft({ ...draft, [key]: Number(e.target.value) })}
+      />
+    </label>
+  )
+
+  return (
+    <Card index={2}>
+      <SectionHeader
+        title="Daily goals"
+        hint="Used for the rings and the goal lines on charts"
+        icon={<Target size={18} weight="fill" className="text-recovery" />}
+      />
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+        {field('steps', 'Steps', 'count')}
+        {field('activeZoneMinutes', 'Zone minutes', 'min')}
+        {field('caloriesOut', 'Calories', 'kcal')}
+        {field('sleepMinutes', 'Sleep', 'min')}
+      </div>
+      {dirty && (
+        <div>
+          <Button size="sm" onClick={save}>
+            Save goals
+          </Button>
+        </div>
+      )}
+    </Card>
   )
 }
 
@@ -70,12 +130,6 @@ function GoogleCard({
   onSettingsChange: (s: AppSettings) => void
   onGoogleChange: (s: GoogleAuthStatus) => void
 }): React.JSX.Element {
-  const [devices, setDevices] = useState<PairedDevice[]>([])
-
-  useEffect(() => {
-    if (google.connected) window.pulse.health.devices().then(setDevices)
-  }, [google.connected])
-
   const disconnect = async (): Promise<void> => {
     await window.pulse.google.disconnect()
     onGoogleChange({ connected: false })
@@ -96,24 +150,6 @@ function GoogleCard({
             <CheckCircle size={16} weight="fill" className="text-[#4fd979]" />
             Signed in{google.email ? ` as ${google.email}` : ''}
           </div>
-          {devices.length > 0 && (
-            <div className="flex flex-col divide-y divide-hairline rounded-xl border border-hairline bg-white/[0.02]">
-              {devices.map((d) => (
-                <div key={d.name} className="flex items-center justify-between px-4 py-3">
-                  <div className="flex items-center gap-2.5">
-                    <Watch size={17} className="text-ink-dim" />
-                    <div>
-                      <div className="text-[13px] font-medium text-ink">{d.name}</div>
-                      <div className="text-[11px] text-ink-faint">{d.model}</div>
-                    </div>
-                  </div>
-                  {d.batteryPct != null && (
-                    <span className="font-mono text-[12px] text-ink-dim">{d.batteryPct}%</span>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
           <div>
             <Button variant="destructive" size="sm" onClick={disconnect}>
               Disconnect
