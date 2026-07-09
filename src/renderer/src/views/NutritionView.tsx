@@ -19,7 +19,6 @@ const NUTRITION_METRICS: MetricKey[] = [
   'carbsG',
   'fatG',
   'fiberG',
-  'sugarG',
   'waterMl'
 ]
 
@@ -167,7 +166,6 @@ export function NutritionView({ date, onOpenMetric }: NutritionViewProps): React
           <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
             {barCard('caloriesIn', 2)}
             {barCard('waterMl', 3)}
-            {(series.isMetricPending('sugarG') || !metricAbsent(pointsFor('sugarG'))) && barCard('sugarG', 5)}
           </div>
         </>
       )}
@@ -231,10 +229,9 @@ function MacroBreakdown({
           </button>
         ))}
       </div>
-      {(today.fiberG != null || today.sugarG != null) && (
-        <div className="flex gap-4 border-t border-hairline pt-3 text-[12px] text-ink-dim">
-          {today.fiberG != null && <span>Fiber {formatInt(today.fiberG)} g</span>}
-          {today.sugarG != null && <span>Sugar {formatInt(today.sugarG)} g</span>}
+      {today.fiberG != null && (
+        <div className="border-t border-hairline pt-3 text-[12px] text-ink-dim">
+          Fiber {formatInt(today.fiberG)} g
         </div>
       )}
     </div>
