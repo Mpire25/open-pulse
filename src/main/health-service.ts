@@ -81,6 +81,11 @@ function num(value: unknown): number {
   return Number.isFinite(n) ? n : 0
 }
 
+function apiDateKey(date?: { year?: number; month?: number; day?: number }): string {
+  if (!date?.year || !date.month || !date.day) return ''
+  return `${date.year}-${String(date.month).padStart(2, '0')}-${String(date.day).padStart(2, '0')}`
+}
+
 // Pulls the first numeric field out of a rollup value object, so we tolerate
 // small naming differences across data types (countSum, minutesSum, ...).
 function firstNumber(obj: unknown): number {
@@ -138,21 +143,44 @@ export async function getDashboardToday(): Promise<DashboardToday> {
       .filter((s): s is HeartSample => s !== null)
       .sort((a, b) => a.time.localeCompare(b.time))
 
-    const latest = <T>(points: RawDataPoint[], key: string): T | undefined =>
-      points.length ? (points[points.length - 1][key] as T) : undefined
+    const latestDaily = <T extends { date?: { year?: number; month?: number; day?: number } }>(
+      points: RawDataPoint[],
+      key: string
+    ): T | undefined =>
+      points
+        .map((p) => p[key] as T | undefined)
+        .filter((p): p is T => !!p)
+        .sort((a, b) => apiDateKey(a.date).localeCompare(apiDateKey(b.date)))
+        .at(-1)
 
-    const rhr = latest<{ beatsPerMinute?: string }>(rhrPoints, 'dailyRestingHeartRate')
-    const hrv = latest<{ averageHeartRateVariabilityMilliseconds?: number }>(
+    const rhr = latestDaily<{ date?: { year?: number; month?: number; day?: number }; beatsPerMinute?: string }>(
+      rhrPoints,
+      'dailyRestingHeartRate'
+    )
+    const hrv = latestDaily<{
+      date?: { year?: number; month?: number; day?: number }
+      averageHeartRateVariabilityMilliseconds?: number
+    }>(
       hrvPoints,
       'dailyHeartRateVariability'
     )
-    const spo2 = latest<{ averagePercentage?: number }>(spo2Points, 'dailyOxygenSaturation')
-    const br = latest<{ breathsPerMinute?: number; averageBreathsPerMinute?: number }>(
+    const spo2 = latestDaily<{ date?: { year?: number; month?: number; day?: number }; averagePercentage?: number }>(
+      spo2Points,
+      'dailyOxygenSaturation'
+    )
+    const br = latestDaily<{
+      date?: { year?: number; month?: number; day?: number }
+      breathsPerMinute?: number
+      averageBreathsPerMinute?: number
+    }>(
       brPoints,
       'dailyRespiratoryRate'
     )
 
-    const sleepNights = sleepPoints.map(mapSleep).filter((s): s is SleepNight => s !== null)
+    const sleepNights = sleepPoints
+      .map(mapSleep)
+      .filter((s): s is SleepNight => s !== null)
+      .sort((a, b) => a.endTime.localeCompare(b.endTime))
 
     return {
       date: today,
@@ -226,20 +254,16 @@ export async function getWeekSeries(): Promise<WeekSeries> {
       const date = isoDate(shiftDays(now, -i))
       const sleepNight = sleepNights.find((s) => s.date === date)
       const rhrPoint = rhrPoints.find((p) => {
-        const d = (p.dailyRestingHeartRate as { date?: { year?: number; month?: number; day?: number } })
-          ?.date
-        return (
-          d &&
-          `${d.year}-${String(d.month).padStart(2, '0')}-${String(d.day).padStart(2, '0')}` === date
-        )
+        const rhr = p.dailyRestingHeartRate as
+          | { date?: { year?: number; month?: number; day?: number } }
+          | undefined
+        return apiDateKey(rhr?.date) === date
       })
       const hrvPoint = hrvPoints.find((p) => {
-        const d = (p.dailyHeartRateVariability as { date?: { year?: number; month?: number; day?: number } })
-          ?.date
-        return (
-          d &&
-          `${d.year}-${String(d.month).padStart(2, '0')}-${String(d.day).padStart(2, '0')}` === date
-        )
+        const hrv = p.dailyHeartRateVariability as
+          | { date?: { year?: number; month?: number; day?: number } }
+          | undefined
+        return apiDateKey(hrv?.date) === date
       })
       days.push({
         date,

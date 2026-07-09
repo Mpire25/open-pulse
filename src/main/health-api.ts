@@ -76,6 +76,42 @@ export interface RawDataPoint {
   [key: string]: unknown
 }
 
+const DAILY_DATA_TYPES = new Set([
+  'daily-resting-heart-rate',
+  'daily-heart-rate-variability',
+  'daily-oxygen-saturation',
+  'daily-respiratory-rate'
+])
+
+function toFilterDataType(dataType: string): string {
+  return dataType.replaceAll('-', '_')
+}
+
+function toLocalDate(iso: string): string {
+  const d = new Date(iso)
+  const tz = d.getTimezoneOffset() * 60_000
+  return new Date(d.getTime() - tz).toISOString().slice(0, 10)
+}
+
+function nextLocalDate(iso: string): string {
+  const d = new Date(iso)
+  d.setDate(d.getDate() + 1)
+  return toLocalDate(d.toISOString())
+}
+
+function dataPointFilter(dataType: string, startIso: string, endIso: string): string {
+  if (dataType === 'sleep') {
+    return `sleep.interval.end_time >= "${startIso}" AND sleep.interval.end_time < "${endIso}"`
+  }
+
+  const filterDataType = toFilterDataType(dataType)
+  if (DAILY_DATA_TYPES.has(dataType)) {
+    return `${filterDataType}.date >= "${toLocalDate(startIso)}" AND ${filterDataType}.date < "${nextLocalDate(endIso)}"`
+  }
+
+  return `${filterDataType}.sample_time.physical_time >= "${startIso}" AND ${filterDataType}.sample_time.physical_time < "${endIso}"`
+}
+
 /**
  * Lists granular data points for a data type, filtered to a physical time range
  * (AIP-160 filter, as documented on the list method).
@@ -87,7 +123,7 @@ export async function listDataPoints(
   endIso: string,
   pageSize = 1440
 ): Promise<RawDataPoint[]> {
-  const filter = encodeURIComponent(`startTime >= "${startIso}" AND endTime < "${endIso}"`)
+  const filter = encodeURIComponent(dataPointFilter(dataType, startIso, endIso))
   const points: RawDataPoint[] = []
   let pageToken = ''
   do {
