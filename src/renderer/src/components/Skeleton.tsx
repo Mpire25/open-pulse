@@ -27,14 +27,35 @@ export function SkeletonText({ className }: { className?: string }): React.JSX.E
   return <SkeletonBlock className={cn('h-3 w-20', className)} />
 }
 
-export function SkeletonRing({ size = 128, stroke = 11 }: { size?: number; stroke?: number }): React.JSX.Element {
+export function SkeletonRing({
+  size = 128,
+  stroke = 11,
+  className,
+  contentClassName
+}: {
+  size?: number
+  stroke?: number
+  className?: string
+  contentClassName?: string
+}): React.JSX.Element {
+  const radius = (size - stroke) / 2
   return (
     <div
       aria-hidden
-      className="grid shrink-0 animate-pulse place-items-center rounded-full border-white/[0.055]"
-      style={{ width: size, height: size, borderWidth: stroke }}
+      className={cn('relative grid shrink-0 animate-pulse place-items-center', className)}
+      style={{ width: size, height: size }}
     >
-      <div className="flex flex-col items-center gap-2">
+      <svg viewBox={`0 0 ${size} ${size}`} className="absolute inset-0 h-full w-full" aria-hidden>
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
+          fill="none"
+          stroke="rgb(255 255 255 / 0.055)"
+          strokeWidth={stroke}
+        />
+      </svg>
+      <div className={cn('relative flex flex-col items-center gap-2', contentClassName)}>
         <SkeletonBlock className="h-5 w-14" />
         <SkeletonBlock className="h-2.5 w-12" />
       </div>

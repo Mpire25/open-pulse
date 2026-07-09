@@ -5,6 +5,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { animate, motion, useMotionValue, useReducedMotion, useTransform } from 'framer-motion'
 import { formatMinuteOfDay } from '@/lib/format'
+import { cn } from '@/lib/utils'
 
 // ---------------------------------------------------------------------------
 // Container measurement
@@ -601,12 +602,21 @@ interface ProgressRingProps {
   color: string
   size?: number
   stroke?: number
+  className?: string
   children?: React.ReactNode
 }
 
 const RING_EASE = [0.19, 1, 0.22, 1] as const
 
-export function ProgressRing({ value, goal, color, size = 120, stroke = 10, children }: ProgressRingProps): React.JSX.Element {
+export function ProgressRing({
+  value,
+  goal,
+  color,
+  size = 120,
+  stroke = 10,
+  className,
+  children
+}: ProgressRingProps): React.JSX.Element {
   const reduceMotion = useReducedMotion()
   const r = (size - stroke) / 2
   const c = size / 2
@@ -642,8 +652,8 @@ export function ProgressRing({ value, goal, color, size = 120, stroke = 10, chil
   }, [animatedRatio, ratio, reduceMotion])
 
   return (
-    <div className="relative" style={{ width: size, height: size }}>
-      <svg width={size} height={size} className="block overflow-visible -rotate-90" aria-hidden>
+    <div className={cn('relative shrink-0', className)} style={{ width: size, height: size }}>
+      <svg viewBox={`0 0 ${size} ${size}`} className="block h-full w-full overflow-visible -rotate-90" aria-hidden>
         <circle cx={c} cy={c} r={r} fill="none" stroke={color} opacity={0.15} strokeWidth={stroke} />
         {ratio > 0.004 && (
           <motion.circle

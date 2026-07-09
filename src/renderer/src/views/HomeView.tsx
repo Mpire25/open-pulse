@@ -36,6 +36,7 @@ const HOME_METRICS: MetricKey[] = [
 ]
 
 const SIGNAL_KEYS: MetricKey[] = ['hrvMs', 'spo2Pct', 'breathingRate', 'skinTempDeltaC']
+const HOME_RING_SIZE = 'lg:!h-[172px] lg:!w-[172px] xl:!h-[188px] xl:!w-[188px] 2xl:!h-[200px] 2xl:!w-[200px]'
 
 interface HomeViewProps {
   date: string
@@ -317,8 +318,13 @@ function SignalsPanel({
 function GoalRingSkeleton(): React.JSX.Element {
   return (
     <div className="flex flex-col items-center gap-2" aria-hidden>
-      <SkeletonRing size={148} stroke={17} />
-      <SkeletonText className="w-20" />
+      <SkeletonRing
+        size={148}
+        stroke={17}
+        className={HOME_RING_SIZE}
+        contentClassName="lg:scale-110 xl:scale-125 2xl:scale-[1.35]"
+      />
+      <SkeletonText className="w-20 lg:h-3.5 lg:w-24 xl:w-28 2xl:h-4 2xl:w-32" />
     </div>
   )
 }
@@ -340,15 +346,24 @@ function GoalRing({
   const pct = value != null && goal > 0 ? Math.round((value / goal) * 100) : null
   return (
     <button onClick={() => onOpen(metricKey)} className="group flex flex-col items-center gap-2">
-      <ProgressRing value={value ?? 0} goal={goal} color={def.color} size={148} stroke={17}>
+      <ProgressRing
+        value={value ?? 0}
+        goal={goal}
+        color={def.color}
+        size={148}
+        stroke={17}
+        className={HOME_RING_SIZE}
+      >
         <div className="text-center">
-          <div className="text-[22px] font-semibold leading-none tracking-tight text-ink">
+          <div className="text-[22px] font-semibold leading-none tracking-tight text-ink lg:text-[25px] xl:text-[28px] 2xl:text-[30px]">
             {value != null ? def.format(value) : '—'}
           </div>
-          <div className="mt-1 text-[10px] uppercase tracking-wide text-ink-faint">{label ?? def.shortLabel ?? def.label}</div>
+          <div className="mt-1 text-[10px] uppercase tracking-wide text-ink-faint lg:text-[11px] xl:text-[12px] 2xl:text-[12.5px]">
+            {label ?? def.shortLabel ?? def.label}
+          </div>
         </div>
       </ProgressRing>
-      <span className="font-mono text-[11px] text-ink-dim transition-colors group-hover:text-ink">
+      <span className="font-mono text-[11px] text-ink-dim transition-colors group-hover:text-ink lg:text-[12px] xl:text-[13px] 2xl:text-[13.5px]">
         {pct != null ? `${pct}% of ${formatInt(goal)}` : 'no goal data'}
       </span>
     </button>
