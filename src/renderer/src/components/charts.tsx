@@ -511,18 +511,26 @@ export function TrendLine({
 // ---------------------------------------------------------------------------
 // Intraday line — heart rate over the day, minute domain
 
+export interface IntradayHeartRateZone {
+  label: string
+  minBpm: number | null
+  maxBpm: number | null
+  color: string
+}
+
 interface IntradayLineProps {
   points: Array<{ minute: number; bpm: number }>
   color: string
   height?: number
   domain?: { startMinute: number; endMinute: number }
+  zones?: IntradayHeartRateZone[]
 }
 
 // A single SVG path and nearest-point hover remain responsive at this size.
 // Below the cap every received reading is drawn; only larger series are reduced.
 const MAX_HEART_RATE_CHART_POINTS = 2000
 
-export function IntradayLine({ points, color, height = 170, domain }: IntradayLineProps): React.JSX.Element {
+export function IntradayLine({ points, color, height = 170, domain, zones }: IntradayLineProps): React.JSX.Element {
   const [ref, width] = useWidth()
   const [tip, setTip] = useState<TipState | null>(null)
   const [cursorX, setCursorX] = useState<number | null>(null)
@@ -551,6 +559,39 @@ export function IntradayLine({ points, color, height = 170, domain }: IntradayLi
     [axis.max, axis.min, domainSpan, domainStart, height, sampled, width]
   )
 
+  const zonePaths = useMemo(() => {
+    if (!zones?.length || sampled.length < 2) return []
+    const colorAt = (bpm: number): string => {
+      const zone = zones.find(
+        (item) => (item.minBpm == null || bpm >= item.minBpm) && (item.maxBpm == null || bpm <= item.maxBpm)
+      )
+      return zone?.color ?? color
+    }
+    const segments: Array<{ color: string; path: string }> = []
+    let previous = sampled[0]
+    let segmentColor = colorAt(previous.bpm)
+    let segmentPath = `M ${x(previous.minute).toFixed(1)} ${y(previous.bpm).toFixed(1)}`
+
+    for (let index = 1; index < sampled.length; index += 1) {
+      const current = sampled[index]
+      const currentColor = colorAt(Math.round((previous.bpm + current.bpm) / 2))
+      if (currentColor !== segmentColor) {
+        segments.push({ color: segmentColor, path: segmentPath })
+        segmentColor = currentColor
+        segmentPath = `M ${x(previous.minute).toFixed(1)} ${y(previous.bpm).toFixed(1)}`
+      }
+      segmentPath += ` L ${x(current.minute).toFixed(1)} ${y(current.bpm).toFixed(1)}`
+      previous = current
+    }
+    segments.push({ color: segmentColor, path: segmentPath })
+    return segments
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [axis.max, axis.min, color, domainSpan, domainStart, height, sampled, width, zones])
+
+  const visibleZoneBoundaries = [...(zones ?? [])]
+    .filter((zone) => zone.minBpm != null && zone.minBpm > axis.min && zone.minBpm < axis.max)
+    .sort((a, b) => a.minBpm! - b.minBpm!)
+
   const timeTicks = domain
     ? [domainStart, domainStart + domainSpan / 2, domainEnd]
     : [6 * 60, 12 * 60, 18 * 60]
@@ -568,7 +609,18 @@ export function IntradayLine({ points, color, height = 170, domain }: IntradayLi
       x: x(nearest.minute),
       y: y(nearest.bpm),
       title: formatMinuteOfDay(nearest.minute, domainSpan <= 60),
-      rows: [{ label: 'bpm', value: String(nearest.bpm), color }]
+      rows: [
+        {
+          label: 'bpm',
+          value: String(nearest.bpm),
+          color:
+            zones?.find(
+              (zone) =>
+                (zone.minBpm == null || nearest.bpm >= zone.minBpm) &&
+                (zone.maxBpm == null || nearest.bpm <= zone.maxBpm)
+            )?.color ?? color
+        }
+      ]
     })
   }
 
@@ -593,6 +645,31 @@ export function IntradayLine({ points, color, height = 170, domain }: IntradayLi
                 fontSize={10}
               >
                 {axisNumber(value)}
+              </text>
+            </g>
+          ))}
+          {visibleZoneBoundaries.map((zone) => (
+            <g key={`${zone.label}-${zone.minBpm}`}>
+              <line
+                x1={0}
+                x2={plotW}
+                y1={y(zone.minBpm!)}
+                y2={y(zone.minBpm!)}
+                stroke={zone.color}
+                strokeWidth={1}
+                strokeDasharray="4 4"
+                opacity={0.65}
+              />
+              <text
+                x={plotW - 6}
+                y={y(zone.minBpm!) - 4}
+                textAnchor="end"
+                fill={zone.color}
+                fontSize={9}
+                fontWeight={600}
+                opacity={0.9}
+              >
+                {zone.label} {zone.minBpm}
               </text>
             </g>
           ))}
@@ -628,7 +705,19 @@ export function IntradayLine({ points, color, height = 170, domain }: IntradayLi
               </text>
             </g>
           ))}
-          {path && <path d={path} fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />}
+          {zones?.length
+            ? zonePaths.map((segment, index) => (
+                <path
+                  key={`${segment.color}-${index}`}
+                  d={segment.path}
+                  fill="none"
+                  stroke={segment.color}
+                  strokeWidth={2}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              ))
+            : path && <path d={path} fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />}
 
           {cursorX != null && (
             <line
