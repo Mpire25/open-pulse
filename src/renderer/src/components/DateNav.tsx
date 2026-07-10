@@ -12,8 +12,8 @@ interface DateNavProps {
 /**
  * Prev/next day arrows around a fixed-width label with a calendar popover.
  * The width never changes with the label ("Today" vs "Wed, Jun 24"), so the
- * control never shifts its neighbors; jumping back to today lives in the
- * popover presets instead of a layout-shifting button.
+ * control never shifts its neighbors. A fixed shortcut slot keeps the rest of
+ * the title bar stable when the historical-date "Today" action appears.
  */
 export function DateNav({ date, onChange }: DateNavProps): React.JSX.Element {
   const [open, setOpen] = useState(false)
@@ -22,6 +22,30 @@ export function DateNav({ date, onChange }: DateNavProps): React.JSX.Element {
 
   return (
     <div className="no-drag relative flex items-center gap-0.5">
+      <div className="mr-1 grid h-[22px] w-[88px] place-items-center">
+        <AnimatePresence initial={false}>
+          {!atToday && (
+            <motion.button
+              key="today-shortcut"
+              type="button"
+              aria-label="Return to today"
+              title="Return to today"
+              onClick={() => {
+                setOpen(false)
+                onChange(today)
+              }}
+              initial={{ opacity: 0, y: -2 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -2 }}
+              transition={{ duration: 0.15, ease: [0.16, 1, 0.3, 1] }}
+              className="flex h-[22px] w-[88px] items-center justify-center whitespace-nowrap rounded-[6px] px-2 text-[10.5px] font-semibold text-accent outline-none transition-colors hover:bg-accent-soft hover:text-[#a5a3ff] focus-visible:ring-2 focus-visible:ring-accent/60 active:scale-[0.97]"
+            >
+              Back to Today
+            </motion.button>
+          )}
+        </AnimatePresence>
+      </div>
+
       <NavArrow label="Previous day" onClick={() => onChange(shiftDate(date, -1))}>
         <CaretLeft size={14} weight="bold" />
       </NavArrow>
