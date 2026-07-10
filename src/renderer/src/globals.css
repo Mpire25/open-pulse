@@ -86,6 +86,43 @@ body {
   scrollbar-gutter: stable;
 }
 
+/* Workout facts step away in priority order based on the card's available
+   width, rather than overflowing when the card shares a narrow grid row. */
+.workout-list {
+  container: workouts / inline-size;
+}
+
+.workout-fact-distance,
+.workout-fact-calories,
+.workout-fact-heart,
+.workout-fact-zone {
+  display: flex;
+}
+
+@container workouts (width < 28rem) {
+  .workout-fact-zone {
+    display: none;
+  }
+}
+
+@container workouts (width < 22rem) {
+  .workout-fact-heart {
+    display: none;
+  }
+}
+
+@container workouts (width < 17rem) {
+  .workout-fact-distance {
+    display: none;
+  }
+}
+
+@container workouts (width < 13rem) {
+  .workout-fact-calories {
+    display: none;
+  }
+}
+
 /* Understated overlay scrollbars, like AppKit */
 *::-webkit-scrollbar {
   width: 9px;

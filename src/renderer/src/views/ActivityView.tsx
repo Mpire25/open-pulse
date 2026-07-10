@@ -153,7 +153,7 @@ export function ActivityView({ date, goals, onOpenMetric }: ActivityViewProps): 
 
         {/* Workouts */}
         <motion.div custom={3} variants={fade} initial="hidden" animate="show" className="min-w-0">
-          <Panel className={`flex h-full min-w-0 flex-col gap-2 p-5 ${CARD_HEIGHT.large}`}>
+          <Panel className={`flex h-full min-w-0 flex-col gap-2 px-3 py-5 ${CARD_HEIGHT.large}`}>
             <SectionHeader
               title="Workouts"
               hint={
