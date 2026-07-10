@@ -73,7 +73,7 @@ import {
   demoWorkoutsRange
 } from './sample-data'
 import { activityRollupBreakdown, activityRollupPoints, calorieEnergyBreakdown } from './activity-intraday'
-import { parseBodyMeasurements, parseNutritionLogs } from './body-nutrition-detail'
+import { bmiFrom, parseBodyMeasurements, parseLatestHeight, parseNutritionLogs } from './body-nutrition-detail'
 import {
   parseHeartZones,
   parseVo2Detail
@@ -236,10 +236,26 @@ const GROUPS: FetchGroup[] = [
     const dur = (p.sedentaryPeriod as { durationSum?: string })?.durationSum
     return { sedentaryMinutes: dur === undefined ? null : Math.round(durationSeconds(dur) / 60) }
   }),
-  rollupGroup('weight', 'weight', ['weightKg'], (p) => {
-    const grams = num((p.weight as { weightGramsAvg?: number })?.weightGramsAvg)
-    return { weightKg: grams == null ? null : +(grams / 1000).toFixed(1) }
-  }),
+  {
+    id: 'weight-bmi-v1',
+    metrics: ['weightKg', 'bmi'],
+    fetch: async (token, start, endExclusive, priority) => {
+      const [weightPoints, heightPoints] = await Promise.all([
+        dailyRollUp(token, 'weight', start, endExclusive, priority),
+        listRawData(token, 'height', 'sample', '2000-01-01', shiftIsoDate(todayIso(), 1), priority).catch(() => [])
+      ])
+      const heightCm = parseLatestHeight(heightPoints)
+      const map = new Map<string, DayValues>()
+      for (const point of weightPoints) {
+        const date = dateFromCivil(point.civilStartTime)
+        if (!date) continue
+        const grams = num((point.weight as { weightGramsAvg?: number })?.weightGramsAvg)
+        const weightKg = grams == null ? null : +(grams / 1000).toFixed(1)
+        map.set(date, { weightKg, bmi: bmiFrom(weightKg, heightCm) })
+      }
+      return map
+    }
+  },
   rollupGroup('body-fat', 'body-fat', ['bodyFatPct'], (p) => ({
     bodyFatPct: num((p.bodyFat as { bodyFatPercentageAvg?: number })?.bodyFatPercentageAvg)
   })),
@@ -956,14 +972,20 @@ export async function getBodyMeasurements(start: string, end: string): Promise<B
   const [s, e] = normalizeRange(start, end)
   const token = await getGoogleAccessToken()
   if (!token) return demoBodyMeasurements(s, e)
-  const [weightResult, bodyFatResult] = await Promise.allSettled([
+  const [weightResult, heightResult] = await Promise.allSettled([
     listRawData(token, 'weight', 'sample', s, shiftIsoDate(e, 1), spanPriority(listDates(s, e).length)),
-    listRawData(token, 'body-fat', 'sample', s, shiftIsoDate(e, 1), spanPriority(listDates(s, e).length))
+    // Height is a profile-like input and may have been recorded years before
+    // the visible weight range. Fetch its tiny history independently.
+    listRawData(token, 'height', 'sample', '2000-01-01', shiftIsoDate(todayIso(), 1), 1)
   ])
-  if (weightResult.status === 'rejected' && bodyFatResult.status === 'rejected') throw weightResult.reason
+  if (weightResult.status === 'rejected' && heightResult.status === 'rejected') throw weightResult.reason
   const weightPoints = weightResult.status === 'fulfilled' ? weightResult.value : []
-  const bodyFatPoints = bodyFatResult.status === 'fulfilled' ? bodyFatResult.value : []
-  return { source: 'live', measurements: parseBodyMeasurements(weightPoints, bodyFatPoints) }
+  const heightPoints = heightResult.status === 'fulfilled' ? heightResult.value : []
+  return {
+    source: 'live',
+    measurements: parseBodyMeasurements(weightPoints, []),
+    heightCm: parseLatestHeight(heightPoints)
+  }
 }
 
 // ---------------------------------------------------------------------------

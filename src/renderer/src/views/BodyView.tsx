@@ -12,7 +12,12 @@ import type { OpenMetric } from '@/lib/metric-navigation'
 import { fade } from '@/lib/motion'
 import type { MetricKey } from '@shared/types'
 
-const BODY_KEYS: MetricKey[] = ['weightKg', 'bodyFatPct']
+const BODY_KEYS: MetricKey[] = ['weightKg', 'bmi']
+
+function bmi(weightKg: number, heightCm: number): number {
+  const heightM = heightCm / 100
+  return weightKg / (heightM * heightM)
+}
 
 interface BodyViewProps {
   date: string
@@ -32,6 +37,7 @@ export function BodyView({ date, onOpenMetric }: BodyViewProps): React.JSX.Eleme
 
   const days = series.data?.days
   const pointsFor = (key: MetricKey) => seriesPoints(days, key, start, end)
+  const heightCm = measurements.data?.heightCm ?? null
 
   return (
     <div className="mx-auto flex max-w-[1180px] flex-col gap-5 px-8 pb-12">
@@ -100,17 +106,17 @@ export function BodyView({ date, onOpenMetric }: BodyViewProps): React.JSX.Eleme
           <Panel className="px-5 py-4 text-[12px] text-ink-faint">
             Individual measurement details could not be loaded.
           </Panel>
-        ) : measurements.data && measurements.data.length > 0 ? (
+        ) : measurements.data && measurements.data.measurements.length > 0 ? (
           <Panel className="overflow-hidden">
             <div className="border-b border-hairline px-5 pb-3 pt-4">
               <SectionHeader
                 title="Recent measurements"
-                hint="Individual scale readings"
+                hint="Individual scale readings with calculated BMI"
                 icon={<Scales size={18} weight="fill" style={{ color: 'var(--color-body-metric)' }} />}
               />
             </div>
             <div className="divide-y divide-hairline">
-              {[...measurements.data].reverse().slice(0, 10).map((measurement) => (
+              {[...measurements.data.measurements].reverse().slice(0, 10).map((measurement) => (
                 <div
                   key={measurement.id}
                   className="grid grid-cols-1 gap-2 px-5 py-3.5 sm:grid-cols-[140px_minmax(0,1fr)] sm:items-center sm:gap-5"
@@ -123,8 +129,8 @@ export function BodyView({ date, onOpenMetric }: BodyViewProps): React.JSX.Eleme
                     {measurement.weightKg != null && (
                       <MeasurementValue label="Weight" value={measurement.weightKg.toFixed(2)} unit="kg" />
                     )}
-                    {measurement.bodyFatPct != null && (
-                      <MeasurementValue label="Body fat" value={measurement.bodyFatPct.toFixed(1)} unit="%" />
+                    {measurement.weightKg != null && heightCm != null && (
+                      <MeasurementValue label="BMI" value={bmi(measurement.weightKg, heightCm).toFixed(1)} />
                     )}
                     {measurement.notes && (
                       <span title={measurement.notes} className="min-w-0 flex-1 truncate text-[11px] text-ink-faint">
@@ -146,12 +152,12 @@ function measurementDate(time: string): string {
   return new Date(time).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 }
 
-function MeasurementValue({ label, value, unit }: { label: string; value: string; unit: string }): React.JSX.Element {
+function MeasurementValue({ label, value, unit }: { label: string; value: string; unit?: string }): React.JSX.Element {
   return (
     <div className="flex items-baseline gap-2">
       <span className="text-[10.5px] text-ink-faint">{label}</span>
       <span className="font-mono text-[13px] font-medium text-ink">
-        {value} <span className="text-[10px] text-ink-dim">{unit}</span>
+        {value}{unit && <> <span className="text-[10px] text-ink-dim">{unit}</span></>}
       </span>
     </div>
   )

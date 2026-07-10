@@ -31,6 +31,7 @@ export const METRIC_KEYS = [
   // Body
   'weightKg',
   'bodyFatPct',
+  'bmi',
   // Nutrition & intake
   'waterMl',
   'caloriesIn',
@@ -333,6 +334,8 @@ export interface BodyMeasurement {
 export interface BodyMeasurementsResult {
   source: DataSource
   measurements: BodyMeasurement[]
+  /** Latest recorded height, used only to derive BMI from weight. */
+  heightCm: number | null
 }
 
 // ---------------------------------------------------------------------------

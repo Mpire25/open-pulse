@@ -187,6 +187,7 @@ function demoDayValues(date: string): DayValues {
   const restDay = rand() < 0.2
 
   const caloriesIn = rand() < 0.65 ? Math.round(1800 + rand() * 800) : null
+  const weightKg = rand() < 0.45 ? +(76.5 + Math.sin(seedFor(date) % 30) * 1.4 + rand()).toFixed(1) : null
   // Macros track logged energy: ~22/46/30% of kcal with jitter.
   const macro = (share: number, perGramKcal: number, jitter: number): number | null =>
     caloriesIn == null ? null : Math.round((caloriesIn * (share + (rand() - 0.5) * jitter)) / perGramKcal)
@@ -207,8 +208,9 @@ function demoDayValues(date: string): DayValues {
     vo2Max: +(41 + rand() * 4).toFixed(1),
     sleepMinutes: sleep.minutesAsleep,
     sleepEfficiency: sleep.efficiency,
-    weightKg: rand() < 0.45 ? +(76.5 + Math.sin(seedFor(date) % 30) * 1.4 + rand()).toFixed(1) : null,
+    weightKg,
     bodyFatPct: rand() < 0.3 ? +(18 + rand() * 3).toFixed(1) : null,
+    bmi: weightKg == null ? null : +(weightKg / (1.78 * 1.78)).toFixed(1),
     waterMl: rand() < 0.6 ? Math.round(900 + rand() * 1400) : null,
     caloriesIn,
     proteinG: macro(0.22, 4, 0.05),
@@ -493,7 +495,7 @@ export function demoBodyMeasurements(start: string, end: string): BodyMeasuremen
       notes: null
     }]
   })
-  return { source: 'demo', measurements }
+  return { source: 'demo', measurements, heightCm: 178 }
 }
 
 export function demoIntraday(date: string): IntradaySnapshot {

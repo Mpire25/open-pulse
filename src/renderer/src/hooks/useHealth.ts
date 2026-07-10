@@ -17,7 +17,7 @@ import {
 import type {
   ActivityIntradayMetric,
   ActivityIntradayResult,
-  BodyMeasurement,
+  BodyMeasurementsResult,
   HeartDetailMetric,
   HeartDetailResult,
   IntradaySnapshot,
@@ -169,10 +169,12 @@ export function useNutritionLogs(date: string): UseQueryResult<NutritionLogEntry
   })
 }
 
-export function useBodyMeasurements(start: string, end: string): UseQueryResult<BodyMeasurement[]> {
+export function useBodyMeasurements(start: string, end: string): UseQueryResult<BodyMeasurementsResult> {
   return useQuery({
-    queryKey: ['body-measurements', start, end],
-    queryFn: async () => (await window.pulse.health.bodyMeasurements(start, end)).measurements,
+    // Versioned because the result now includes the static height input used
+    // for BMI; don't reuse the previous measurements-only response.
+    queryKey: ['body-measurements-v2', start, end],
+    queryFn: () => window.pulse.health.bodyMeasurements(start, end),
     staleTime: STALE_MS
   })
 }

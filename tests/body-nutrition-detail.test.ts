@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { parseBodyMeasurements, parseNutritionLogs } from '../src/main/body-nutrition-detail'
+import { bmiFrom, parseBodyMeasurements, parseLatestHeight, parseNutritionLogs } from '../src/main/body-nutrition-detail'
 
 describe('body and nutrition record normalization', () => {
   test('retains individual food, meal, serving, energy, and nutrient details', () => {
@@ -76,5 +76,14 @@ describe('body and nutrition record normalization', () => {
 
     expect(measurements[0]?.weightKg).toBeNull()
     expect(measurements[0]?.bodyFatPct).toBe(19.1)
+  })
+
+  test('uses the latest valid height as a static BMI input', () => {
+    const height = parseLatestHeight([
+      { height: { sampleTime: { physicalTime: '2024-01-01T08:00:00Z' }, heightMillimeters: 1775 } },
+      { height: { sampleTime: { physicalTime: '2026-01-01T08:00:00Z' }, heightMillimeters: 1782 } }
+    ])
+    expect(height).toBe(178.2)
+    expect(bmiFrom(82.4, height)).toBe(25.9)
   })
 })

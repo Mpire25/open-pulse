@@ -294,6 +294,19 @@ export const METRICS: Record<MetricKey, MetricDef> = {
     format: one,
     hint: 'Bioimpedance estimate'
   },
+  bmi: {
+    key: 'bmi',
+    label: 'BMI',
+    unit: '',
+    icon: Gauge,
+    color: 'var(--color-body-metric)',
+    domain: 'body',
+    aggregate: 'last',
+    chart: 'line',
+    upIsGood: null,
+    format: one,
+    hint: 'Calculated from weight and your latest recorded height'
+  },
   waterMl: {
     key: 'waterMl',
     label: 'Water',

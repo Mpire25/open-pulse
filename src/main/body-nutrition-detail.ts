@@ -116,3 +116,24 @@ export function parseBodyMeasurements(
     .sort((a, b) => a.timestamp - b.timestamp)
     .map(({ timestamp: _timestamp, ...measurement }) => measurement)
 }
+
+/** Latest valid height record, normalized from millimetres to centimetres. */
+export function parseLatestHeight(points: RawDataPoint[]): number | null {
+  const heights = points.flatMap((point) => {
+    const height = record(point.height)
+    const sampleTime = record(height?.sampleTime)
+    const time = typeof sampleTime?.physicalTime === 'string' ? sampleTime.physicalTime : null
+    const millimeters = numberValue(height?.heightMillimeters)
+    return time && millimeters != null && millimeters > 0
+      ? [{ time: Date.parse(time), centimeters: millimeters / 10 }]
+      : []
+  })
+  const latest = heights.sort((a, b) => b.time - a.time)[0]
+  return latest ? +latest.centimeters.toFixed(1) : null
+}
+
+export function bmiFrom(weightKg: number | null, heightCm: number | null): number | null {
+  if (weightKg == null || heightCm == null || weightKg <= 0 || heightCm <= 0) return null
+  const heightM = heightCm / 100
+  return +(weightKg / (heightM * heightM)).toFixed(1)
+}
