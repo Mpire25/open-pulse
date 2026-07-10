@@ -7,7 +7,7 @@ import { CARD_HEIGHT, SkeletonBlock, SkeletonChart, SkeletonRing, SkeletonText }
 import { ErrorState } from '@/components/ErrorState'
 import { useNutritionLogs, useSeries } from '@/hooks/useHealth'
 import { METRICS } from '@/lib/metric-registry'
-import { listDates, metricAbsent, rangeEnding, seriesPoints } from '@/lib/metrics'
+import { listDates, rangeEnding, seriesPoints } from '@/lib/metrics'
 import { formatClock, formatInt, longDate, shortDate, weekdayShort } from '@/lib/format'
 import type { OpenMetric } from '@/lib/metric-navigation'
 import { fade } from '@/lib/motion'
@@ -61,10 +61,6 @@ export function NutritionView({ date, goals, onOpenMetric, onSelectDate }: Nutri
 
   const intakePending = series.isMetricPending('caloriesIn')
   const entries = nutritionLogs.data ?? []
-  const anyIntake = intakePending
-    || nutritionLogs.isPending
-    || entries.length > 0
-    || (series.data ? !metricAbsent(pointsFor('caloriesIn')) : true)
   const hasMacrosToday = MACROS.some((m) => today[m.key] != null)
   const macrosPending = MACROS.some((macro) => series.isMetricPending(macro.key))
   const recordedDays = listDates(start, end)
@@ -130,12 +126,7 @@ export function NutritionView({ date, goals, onOpenMetric, onSelectDate }: Nutri
         <p className="mt-1 text-[13px] text-ink-dim">{longDate(date)} · logged food</p>
       </motion.header>
 
-      {!anyIntake ? (
-        <Panel className="grid place-items-center p-12 text-center text-[13px] leading-relaxed text-ink-faint">
-          No food logged in this window. Meals logged in the Fitbit app — calories and macros — appear here.
-        </Panel>
-      ) : (
-        <>
+      <>
           {/* Today: intake goal + macro split */}
           <motion.div custom={1} variants={fade} initial="hidden" animate="show">
             <Panel className={`grid grid-cols-1 gap-6 p-6 lg:grid-cols-[auto_1fr] lg:gap-4 ${CARD_HEIGHT.hero}`}>
@@ -237,8 +228,7 @@ export function NutritionView({ date, goals, onOpenMetric, onSelectDate }: Nutri
               </div>
             </motion.div>
           )}
-        </>
-      )}
+      </>
     </div>
   )
 }

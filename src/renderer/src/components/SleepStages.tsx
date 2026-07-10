@@ -18,15 +18,18 @@ export const STAGE_LABEL: Record<SleepStageType, string> = {
 const ROW_ORDER: SleepStageType[] = ['AWAKE', 'REM', 'LIGHT', 'DEEP']
 
 interface SleepStagesProps {
-  night: SleepNight
+  night: SleepNight | null
   compact?: boolean
 }
+
+const EMPTY_STAGES: SleepNight['stages'] = []
 
 // Hypnogram: each stage segment drawn as a rounded block on its own row,
 // with a per-segment hover readout.
 export function SleepStages({ night, compact = false }: SleepStagesProps): React.JSX.Element {
-  const start = new Date(night.startTime).getTime()
-  const end = new Date(night.endTime).getTime()
+  const stages = night?.stages ?? EMPTY_STAGES
+  const start = night ? new Date(night.startTime).getTime() : 0
+  const end = night ? new Date(night.endTime).getTime() : 1
   const total = Math.max(1, end - start)
   const rowHeight = compact ? 18 : 22
   const rowGap = compact ? 6 : 8
@@ -34,7 +37,7 @@ export function SleepStages({ night, compact = false }: SleepStagesProps): React
 
   const blocks = useMemo(
     () =>
-      night.stages.map((seg, i) => {
+      stages.map((seg, i) => {
         const segStart = new Date(seg.startTime).getTime()
         const segEnd = new Date(seg.endTime).getTime()
         const left = ((segStart - start) / total) * 100
@@ -50,7 +53,7 @@ export function SleepStages({ night, compact = false }: SleepStagesProps): React
           tip: `${STAGE_LABEL[seg.type]} · ${formatMinutes(minutes)} · ${formatClock(seg.startTime)}`
         }
       }),
-    [night.stages, rowGap, rowHeight, start, total]
+    [rowGap, rowHeight, stages, start, total]
   )
 
   const connectors = blocks.slice(1).flatMap((next, index) => {
@@ -151,8 +154,8 @@ export function SleepStages({ night, compact = false }: SleepStagesProps): React
       <div
         className={`${compact ? 'mt-2 pl-[47px] text-[10px]' : 'mt-3 pl-[52px] text-[11px]'} flex items-center justify-between font-mono text-ink-faint`}
       >
-        <span>{formatClock(night.startTime)}</span>
-        <span>{formatClock(night.endTime)}</span>
+        <span>{night ? formatClock(night.startTime) : '—'}</span>
+        <span>{night ? formatClock(night.endTime) : '—'}</span>
       </div>
       <div className={`${compact ? 'mt-3' : 'mt-4'} grid grid-cols-4 gap-2`}>
         {ROW_ORDER.map((t) => (
@@ -162,7 +165,7 @@ export function SleepStages({ night, compact = false }: SleepStagesProps): React
               <span className={`${compact ? 'text-[10px]' : 'text-[11px]'} text-ink-dim`}>{STAGE_LABEL[t]}</span>
             </div>
             <span className={`${compact ? 'text-[12px]' : 'text-[13px]'} font-semibold text-ink`}>
-              {formatMinutes(night.stageMinutes[t] ?? 0)}
+              {night ? formatMinutes(night.stageMinutes[t] ?? 0) : '—'}
             </span>
           </div>
         ))}

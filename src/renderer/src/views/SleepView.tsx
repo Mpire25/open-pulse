@@ -66,7 +66,7 @@ export function SleepView({ date, goals, onOpenMetric, onOpenStages, onSelectDat
             </div>
             <SleepNightSummarySkeleton />
           </Panel>
-        ) : night ? (
+        ) : (
           <Panel className="grid min-h-[340px] grid-cols-1 gap-2 p-3 lg:grid-cols-[250px_1fr]">
             <button
               type="button"
@@ -80,7 +80,7 @@ export function SleepView({ date, goals, onOpenMetric, onOpenStages, onSelectDat
                 className="absolute right-4 top-4 text-ink-faint transition-all group-hover/drill:translate-x-0.5 group-hover/drill:text-ink"
               />
               <ProgressRing
-                value={night.minutesAsleep}
+                value={night?.minutesAsleep ?? 0}
                 goal={goals.sleepMinutes}
                 color="var(--color-sleep)"
                 size={172}
@@ -88,13 +88,15 @@ export function SleepView({ date, goals, onOpenMetric, onOpenStages, onSelectDat
               >
                 <div className="text-center">
                   <div className="text-[23px] font-semibold leading-none text-ink">
-                    {formatMinutes(night.minutesAsleep)}
+                    {night ? formatMinutes(night.minutesAsleep) : '—'}
                   </div>
                   <div className="mt-1 text-[10px] uppercase tracking-wide text-ink-faint">asleep</div>
                 </div>
               </ProgressRing>
               <span className="font-mono text-[11px] text-ink-dim">
-                {Math.round((night.minutesAsleep / goals.sleepMinutes) * 100)}% of {formatMinutes(goals.sleepMinutes)} goal
+                {night
+                  ? `${Math.round((night.minutesAsleep / goals.sleepMinutes) * 100)}% of ${formatMinutes(goals.sleepMinutes)} goal`
+                  : `${formatMinutes(goals.sleepMinutes)} goal`}
               </span>
             </button>
             <button
@@ -105,7 +107,7 @@ export function SleepView({ date, goals, onOpenMetric, onOpenStages, onSelectDat
             >
               <DrillHeader
                 title="Stages"
-                hint="Hover a block for its timing"
+                hint={night ? 'Hover a block for its timing' : 'No stages recorded'}
                 icon={<Moon size={18} weight="fill" style={{ color: 'var(--color-sleep)' }} />}
               />
               <div className="mt-4">
@@ -113,10 +115,6 @@ export function SleepView({ date, goals, onOpenMetric, onOpenStages, onSelectDat
               </div>
             </button>
             <SleepNightSummary night={night} />
-          </Panel>
-        ) : (
-          <Panel className="grid place-items-center p-12 text-[13px] text-ink-faint">
-            No sleep recorded for this night.
           </Panel>
         )}
       </motion.div>
@@ -221,13 +219,13 @@ function SleepNightSummarySkeleton(): React.JSX.Element {
   )
 }
 
-function SleepNightSummary({ night }: { night: SleepNight }): React.JSX.Element {
-  const interruptions = night.stages.length > 0
+function SleepNightSummary({ night }: { night: SleepNight | null }): React.JSX.Element {
+  const interruptions = night && night.stages.length > 0
     ? `${night.interruptionCount} ${night.interruptionCount === 1 ? 'moment' : 'moments'} · ${formatMinutes(night.interruptionMinutes)}`
     : '—'
   const items = [
-    { label: 'In bed', value: formatMinutes(night.minutesInSleepPeriod) },
-    { label: 'Efficiency', value: night.efficiency != null ? `${night.efficiency}%` : '—' },
+    { label: 'In bed', value: night ? formatMinutes(night.minutesInSleepPeriod) : '—' },
+    { label: 'Efficiency', value: night?.efficiency != null ? `${night.efficiency}%` : '—' },
     { label: 'Interruptions', value: interruptions }
   ]
 
