@@ -1,4 +1,5 @@
-import { motion } from 'framer-motion'
+import { useState } from 'react'
+import { AnimatePresence, motion } from 'framer-motion'
 import { CaretDown, ForkKnife } from '@phosphor-icons/react'
 import { Panel, DrillHeader, InteractivePanel, SectionHeader } from '@/components/Panel'
 import { ColumnChart, ProgressRing } from '@/components/charts'
@@ -232,39 +233,82 @@ function NutritionLogsPanel({ entries }: { entries: NutritionLogEntry[] }): Reac
       </div>
       <div className="divide-y divide-hairline">
         {groups.map((group) => (
-          <details key={group.label} className="group/meal">
-            <MealSummary label={group.label} entries={group.entries} />
-            <div className="divide-y divide-hairline border-t border-hairline bg-white/[0.012]">
-              {group.entries.map((entry) => (
-                <div key={entry.id} className="grid grid-cols-1 gap-2 px-5 py-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:gap-4">
-                  <div className="min-w-0">
-                    <div className="truncate text-[12.5px] font-medium text-ink">{entry.foodName}</div>
-                    <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-[10.5px] text-ink-faint">
-                      <span className="font-mono">{formatClock(entry.startTime)}</span>
-                      {entry.servingLabel && <span>{entry.servingLabel}</span>}
-                    </div>
-                    <MacroShareBar entries={[entry]} className="mt-2 max-w-[230px]" compact />
-                  </div>
-                  <div className="flex flex-wrap items-center justify-start gap-x-4 gap-y-1 whitespace-nowrap sm:justify-end sm:text-right">
-                    <div className="flex items-center gap-3">
-                      <MacroTotal label="Protein" value={entry.proteinG} color="var(--color-recovery)" />
-                      <MacroTotal label="Carbs" value={entry.carbsG} color="var(--color-activity)" />
-                      <MacroTotal label="Fat" value={entry.fatG} color="var(--color-heart)" />
-                    </div>
-                    <div>
-                      <span className="font-mono text-[13px] font-medium text-ink">
-                        {entry.calories != null ? formatInt(entry.calories) : '—'}
-                      </span>{' '}
-                      <span className="text-[9.5px] text-ink-dim">kcal</span>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </details>
+          <MealGroupSection key={group.label} label={group.label} entries={group.entries} />
         ))}
       </div>
     </Panel>
+  )
+}
+
+const MEAL_REVEAL_EASE = [0.16, 1, 0.3, 1] as const
+
+function MealGroupSection({ label, entries }: { label: MealGroup; entries: NutritionLogEntry[] }): React.JSX.Element {
+  const [isOpen, setIsOpen] = useState(false)
+  const contentId = `meal-${label.toLowerCase()}-items`
+
+  return (
+    <section>
+      <MealSummary
+        label={label}
+        entries={entries}
+        isOpen={isOpen}
+        contentId={contentId}
+        onToggle={() => setIsOpen((open) => !open)}
+      />
+      <AnimatePresence initial={false}>
+        {isOpen && (
+          <motion.div
+            id={contentId}
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ height: { duration: 0.36, ease: MEAL_REVEAL_EASE }, opacity: { duration: 0.22 } }}
+            className="overflow-hidden"
+          >
+            <div className="divide-y divide-hairline border-t border-hairline bg-white/[0.012]">
+              {entries.map((entry, index) => (
+                <motion.div
+                  key={entry.id}
+                  initial={{ opacity: 0, y: -6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.04 + index * 0.045, duration: 0.32, ease: MEAL_REVEAL_EASE }}
+                >
+                  <NutritionItemRow entry={entry} />
+                </motion.div>
+              ))}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </section>
+  )
+}
+
+function NutritionItemRow({ entry }: { entry: NutritionLogEntry }): React.JSX.Element {
+  return (
+    <div className="grid grid-cols-1 gap-2 px-5 py-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:gap-4">
+      <div className="min-w-0">
+        <div className="truncate text-[12.5px] font-medium text-ink">{entry.foodName}</div>
+        <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-[10.5px] text-ink-faint">
+          <span className="font-mono">{formatClock(entry.startTime)}</span>
+          {entry.servingLabel && <span>{entry.servingLabel}</span>}
+        </div>
+        <MacroShareBar entries={[entry]} className="mt-2 max-w-[230px]" compact />
+      </div>
+      <div className="flex flex-wrap items-center justify-start gap-x-4 gap-y-1 whitespace-nowrap sm:justify-end sm:text-right">
+        <div className="flex items-center gap-3">
+          <MacroTotal label="Protein" value={entry.proteinG} color="var(--color-recovery)" />
+          <MacroTotal label="Carbs" value={entry.carbsG} color="var(--color-activity)" />
+          <MacroTotal label="Fat" value={entry.fatG} color="var(--color-heart)" />
+        </div>
+        <div>
+          <span className="font-mono text-[13px] font-medium text-ink">
+            {entry.calories != null ? formatInt(entry.calories) : '—'}
+          </span>{' '}
+          <span className="text-[9.5px] text-ink-dim">kcal</span>
+        </div>
+      </div>
+    </div>
   )
 }
 
@@ -273,14 +317,32 @@ function sumValue(entries: NutritionLogEntry[], key: 'calories' | 'proteinG' | '
   return values.length > 0 ? values.reduce((sum, value) => sum + value, 0) : null
 }
 
-function MealSummary({ label, entries }: { label: MealGroup; entries: NutritionLogEntry[] }): React.JSX.Element {
+function MealSummary({
+  label,
+  entries,
+  isOpen,
+  contentId,
+  onToggle
+}: {
+  label: MealGroup
+  entries: NutritionLogEntry[]
+  isOpen: boolean
+  contentId: string
+  onToggle: () => void
+}): React.JSX.Element {
   const calories = sumValue(entries, 'calories')
   const protein = sumValue(entries, 'proteinG')
   const carbs = sumValue(entries, 'carbsG')
   const fat = sumValue(entries, 'fatG')
   const fiber = sumValue(entries, 'fiberG')
   return (
-    <summary className="cursor-pointer list-none px-5 py-4 transition-colors hover:bg-white/[0.025] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/50 active:bg-white/[0.04] [&::-webkit-details-marker]:hidden">
+    <button
+      type="button"
+      aria-expanded={isOpen}
+      aria-controls={contentId}
+      onClick={onToggle}
+      className="w-full cursor-pointer px-5 py-4 text-left transition-colors hover:bg-white/[0.025] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/50 active:bg-white/[0.04]"
+    >
       <div className="flex items-baseline justify-between gap-4">
         <div className="flex items-baseline gap-2">
           <h3 className="text-[14px] font-semibold text-ink">{label}</h3>
@@ -295,7 +357,7 @@ function MealSummary({ label, entries }: { label: MealGroup; entries: NutritionL
           <CaretDown
             size={13}
             weight="bold"
-            className="text-ink-faint transition-transform duration-200 group-open/meal:rotate-180"
+            className={cn('text-ink-faint transition-transform duration-300', isOpen && 'rotate-180')}
           />
         </div>
       </div>
@@ -306,7 +368,7 @@ function MealSummary({ label, entries }: { label: MealGroup; entries: NutritionL
         <MacroTotal label="Fat" value={fat} color="var(--color-heart)" />
         {fiber != null && <MacroTotal label="Fiber" value={fiber} color="var(--color-hydration)" />}
       </div>
-    </summary>
+    </button>
   )
 }
 
