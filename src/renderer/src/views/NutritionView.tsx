@@ -434,11 +434,6 @@ function MacroBreakdown({
           </button>
         ))}
       </div>
-      {today.fiberG != null && (
-        <div className="border-t border-hairline pt-3 text-[12px] text-ink-dim">
-          Fiber {formatInt(today.fiberG)} g
-        </div>
-      )}
     </div>
   )
 }
