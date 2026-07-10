@@ -5,6 +5,7 @@
 import type {
   ActivityIntradayMetric,
   ActivityIntradayResult,
+  BodyMeasurementsResult,
   DailySeries,
   DayValues,
   HeartRatePoint,
@@ -13,6 +14,7 @@ import type {
   HourlySteps,
   IntradaySnapshot,
   MetricKey,
+  NutritionLogsResult,
   PairedDevice,
   SleepNight,
   SleepStageSegment,
@@ -212,8 +214,7 @@ function demoDayValues(date: string): DayValues {
     proteinG: macro(0.22, 4, 0.05),
     carbsG: macro(0.46, 4, 0.08),
     fatG: macro(0.3, 9, 0.05),
-    fiberG: caloriesIn == null ? null : Math.round(16 + rand() * 18),
-    sugarG: caloriesIn == null ? null : Math.round(38 + rand() * 50)
+    fiberG: caloriesIn == null ? null : Math.round(16 + rand() * 18)
   }
 }
 
@@ -230,8 +231,7 @@ const PROGRESS_SCALED: MetricKey[] = [
   'proteinG',
   'carbsG',
   'fatG',
-  'fiberG',
-  'sugarG'
+  'fiberG'
 ]
 
 function scaleForToday(values: DayValues): DayValues {
@@ -432,6 +432,56 @@ export function demoSleepRange(start: string, end: string): SleepNight[] {
 
 export function demoWorkoutsRange(start: string, end: string): Workout[] {
   return listDates(start, end).flatMap((date) => demoWorkoutsFor(date, uptoMinuteFor(date)))
+}
+
+export function demoNutritionLogs(date: string): NutritionLogsResult {
+  const values = valuesFor(date)
+  if (values.caloriesIn == null) return { date, source: 'demo', entries: [] }
+  const templates = [
+    { minute: 8 * 60 + 10, foodName: 'Greek yogurt with berries', mealType: 'BREAKFAST', share: 0.22 },
+    { minute: 13 * 60 + 5, foodName: 'Chicken pesto pasta', mealType: 'LUNCH', share: 0.41 },
+    { minute: 19 * 60 + 20, foodName: 'Salmon rice bowl', mealType: 'DINNER', share: 0.37 }
+  ].filter((entry) => entry.minute <= uptoMinuteFor(date))
+  const totalShare = templates.reduce((sum, entry) => sum + entry.share, 0) || 1
+  return {
+    date,
+    source: 'demo',
+    entries: templates.map((entry, index) => {
+      const share = entry.share / totalShare
+      const start = new Date(`${date}T00:00:00`)
+      start.setMinutes(entry.minute)
+      const end = new Date(start.getTime() + 5 * 60_000)
+      return {
+        id: `demo-food-${date}-${index}`,
+        startTime: start.toISOString(),
+        endTime: end.toISOString(),
+        foodName: entry.foodName,
+        mealType: entry.mealType,
+        servingLabel: '1 serving',
+        calories: Math.round(values.caloriesIn! * share),
+        proteinG: values.proteinG == null ? null : Math.round(values.proteinG * share),
+        carbsG: values.carbsG == null ? null : Math.round(values.carbsG * share),
+        fatG: values.fatG == null ? null : Math.round(values.fatG * share),
+        fiberG: values.fiberG == null ? null : Math.round(values.fiberG * share)
+      }
+    })
+  }
+}
+
+export function demoBodyMeasurements(start: string, end: string): BodyMeasurementsResult {
+  const measurements = listDates(start, end).flatMap((date) => {
+    const values = valuesFor(date)
+    if (values.weightKg == null && values.bodyFatPct == null) return []
+    const time = new Date(`${date}T07:30:00`).toISOString()
+    return [{
+      id: `demo-body-${date}`,
+      time,
+      weightKg: values.weightKg ?? null,
+      bodyFatPct: values.bodyFatPct ?? null,
+      notes: null
+    }]
+  })
+  return { source: 'demo', measurements }
 }
 
 export function demoIntraday(date: string): IntradaySnapshot {

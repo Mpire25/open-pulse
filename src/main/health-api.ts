@@ -340,6 +340,41 @@ export async function listData(
   return points
 }
 
+/**
+ * Lists identifiable raw records without reconciling them into a sensor
+ * stream. User-entered logs such as food, weight, and body fat retain their
+ * resource IDs and metadata through this endpoint.
+ */
+export async function listRawData(
+  token: string,
+  dataType: string,
+  kind: RecordKind,
+  startDate: string,
+  endDateExclusive: string,
+  priority: Priority = 1
+): Promise<RawDataPoint[]> {
+  const params = new URLSearchParams({
+    filter: dataFilter(dataType, kind, startDate, endDateExclusive),
+    pageSize: kind === 'sleep' || kind === 'session' ? '25' : '10000'
+  })
+  const points: RawDataPoint[] = []
+  let pageToken = ''
+  let pages = 0
+  do {
+    if (pageToken) params.set('pageToken', pageToken)
+    const json = await request<{ dataPoints?: RawDataPoint[]; nextPageToken?: string }>(
+      token,
+      `/users/me/dataTypes/${dataType}/dataPoints?${params}`,
+      undefined,
+      priority
+    )
+    points.push(...(json.dataPoints ?? []))
+    pageToken = json.nextPageToken ?? ''
+    pages++
+  } while (pageToken && pages < 50)
+  return points
+}
+
 export interface ApiPairedDevice {
   name?: string
   displayName?: string

@@ -37,8 +37,7 @@ export const METRIC_KEYS = [
   'proteinG',
   'carbsG',
   'fatG',
-  'fiberG',
-  'sugarG'
+  'fiberG'
 ] as const
 
 export type MetricKey = (typeof METRIC_KEYS)[number]
@@ -295,6 +294,39 @@ export interface WorkoutTrackResult {
 export interface WorkoutsResult {
   source: DataSource
   workouts: Workout[]
+}
+
+export interface NutritionLogEntry {
+  id: string
+  startTime: string
+  endTime: string
+  foodName: string
+  mealType: string | null
+  servingLabel: string | null
+  calories: number | null
+  proteinG: number | null
+  carbsG: number | null
+  fatG: number | null
+  fiberG: number | null
+}
+
+export interface NutritionLogsResult {
+  date: string
+  source: DataSource
+  entries: NutritionLogEntry[]
+}
+
+export interface BodyMeasurement {
+  id: string
+  time: string
+  weightKg: number | null
+  bodyFatPct: number | null
+  notes: string | null
+}
+
+export interface BodyMeasurementsResult {
+  source: DataSource
+  measurements: BodyMeasurement[]
 }
 
 // ---------------------------------------------------------------------------

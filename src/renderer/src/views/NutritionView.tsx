@@ -1,17 +1,18 @@
 import { motion } from 'framer-motion'
-import { ForkKnife } from '@phosphor-icons/react'
+import { CaretDown, ForkKnife } from '@phosphor-icons/react'
 import { Panel, DrillHeader, InteractivePanel, SectionHeader } from '@/components/Panel'
 import { ColumnChart } from '@/components/charts'
 import { DeltaChip } from '@/components/DeltaChip'
 import { CARD_HEIGHT, SkeletonBlock, SkeletonChart, SkeletonText } from '@/components/Skeleton'
 import { ErrorState } from '@/components/ErrorState'
-import { useSeries } from '@/hooks/useHealth'
+import { useNutritionLogs, useSeries } from '@/hooks/useHealth'
 import { METRICS } from '@/lib/metric-registry'
 import { metricAbsent, rangeEnding, seriesPoints } from '@/lib/metrics'
-import { formatInt, longDate, weekdayShort } from '@/lib/format'
+import { formatClock, formatInt, longDate, weekdayShort } from '@/lib/format'
 import type { OpenMetric } from '@/lib/metric-navigation'
 import { fade } from '@/lib/motion'
-import type { DayValues, Goals, MetricKey } from '@shared/types'
+import { cn } from '@/lib/utils'
+import type { DayValues, Goals, MetricKey, NutritionLogEntry } from '@shared/types'
 
 const NUTRITION_METRICS: MetricKey[] = [
   'caloriesIn',
@@ -38,6 +39,7 @@ interface NutritionViewProps {
 export function NutritionView({ date, goals, onOpenMetric }: NutritionViewProps): React.JSX.Element {
   const { start, end } = rangeEnding(date, 7)
   const series = useSeries(NUTRITION_METRICS, start, end)
+  const nutritionLogs = useNutritionLogs(date)
 
   if (series.isError) {
     return <ErrorState message={series.error instanceof Error ? series.error.message : undefined} onRetry={() => void series.refetch()} />
@@ -48,7 +50,11 @@ export function NutritionView({ date, goals, onOpenMetric }: NutritionViewProps)
   const pointsFor = (key: MetricKey) => seriesPoints(days, key, start, end)
 
   const intakePending = series.isMetricPending('caloriesIn')
-  const anyIntake = intakePending || (series.data ? !metricAbsent(pointsFor('caloriesIn')) : true)
+  const entries = nutritionLogs.data ?? []
+  const anyIntake = intakePending
+    || nutritionLogs.isPending
+    || entries.length > 0
+    || (series.data ? !metricAbsent(pointsFor('caloriesIn')) : true)
   const hasMacrosToday = MACROS.some((m) => today[m.key] != null)
   const macrosPending = MACROS.some((macro) => series.isMetricPending(macro.key))
   const net =
@@ -174,13 +180,195 @@ export function NutritionView({ date, goals, onOpenMetric }: NutritionViewProps)
             </Panel>
           </motion.div>
 
+          {(nutritionLogs.isPending || nutritionLogs.isError || entries.length > 0) && (
+            <motion.div custom={2} variants={fade} initial="hidden" animate="show">
+              {nutritionLogs.isPending ? (
+                <NutritionLogsSkeleton />
+              ) : nutritionLogs.isError ? (
+                <Panel className="px-5 py-4 text-[12px] text-ink-faint">
+                  Individual food details could not be loaded.
+                </Panel>
+              ) : (
+                <NutritionLogsPanel entries={entries} />
+              )}
+            </motion.div>
+          )}
+
           {/* Trends */}
           <div className="grid grid-cols-1 gap-5">
-            {barCard('caloriesIn', 2)}
+            {barCard('caloriesIn', 3)}
           </div>
         </>
       )}
     </div>
+  )
+}
+
+const MEAL_ORDER = ['Breakfast', 'Lunch', 'Dinner', 'Snack', 'Other'] as const
+type MealGroup = (typeof MEAL_ORDER)[number]
+
+function mealGroup(mealType: string | null): MealGroup {
+  if (mealType === 'BREAKFAST') return 'Breakfast'
+  if (mealType === 'LUNCH') return 'Lunch'
+  if (mealType === 'DINNER') return 'Dinner'
+  if (mealType === 'SNACK' || mealType?.startsWith('BEFORE_') || mealType === 'AFTER_DINNER') return 'Snack'
+  return 'Other'
+}
+
+function NutritionLogsPanel({ entries }: { entries: NutritionLogEntry[] }): React.JSX.Element {
+  const groups = MEAL_ORDER.map((label) => ({
+    label,
+    entries: entries.filter((entry) => mealGroup(entry.mealType) === label)
+  })).filter((group) => group.entries.length > 0)
+
+  return (
+    <Panel className="overflow-hidden">
+      <div className="border-b border-hairline px-5 pb-3 pt-4">
+        <SectionHeader
+          title="Logged meals"
+          hint={`${entries.length} ${entries.length === 1 ? 'entry' : 'entries'} organized by meal`}
+          icon={<ForkKnife size={18} weight="fill" style={{ color: 'var(--color-activity)' }} />}
+        />
+      </div>
+      <div className="divide-y divide-hairline">
+        {groups.map((group) => (
+          <details key={group.label} className="group/meal">
+            <MealSummary label={group.label} entries={group.entries} />
+            <div className="divide-y divide-hairline border-t border-hairline bg-white/[0.012]">
+              {group.entries.map((entry) => (
+                <div key={entry.id} className="grid grid-cols-[minmax(0,1fr)_auto] gap-4 px-5 py-3 sm:items-center">
+                  <div className="min-w-0">
+                    <div className="truncate text-[12.5px] font-medium text-ink">{entry.foodName}</div>
+                    <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-[10.5px] text-ink-faint">
+                      <span className="font-mono">{formatClock(entry.startTime)}</span>
+                      {entry.servingLabel && <span>{entry.servingLabel}</span>}
+                    </div>
+                    <MacroShareBar entries={[entry]} className="mt-2 max-w-[230px]" compact />
+                  </div>
+                  <div className="whitespace-nowrap text-right">
+                    <span className="font-mono text-[13px] font-medium text-ink">
+                      {entry.calories != null ? formatInt(entry.calories) : '—'}
+                    </span>{' '}
+                    <span className="text-[9.5px] text-ink-dim">kcal</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </details>
+        ))}
+      </div>
+    </Panel>
+  )
+}
+
+function sumValue(entries: NutritionLogEntry[], key: 'calories' | 'proteinG' | 'carbsG' | 'fatG' | 'fiberG'): number | null {
+  const values = entries.flatMap((entry) => entry[key] == null ? [] : [entry[key]])
+  return values.length > 0 ? values.reduce((sum, value) => sum + value, 0) : null
+}
+
+function MealSummary({ label, entries }: { label: MealGroup; entries: NutritionLogEntry[] }): React.JSX.Element {
+  const calories = sumValue(entries, 'calories')
+  const protein = sumValue(entries, 'proteinG')
+  const carbs = sumValue(entries, 'carbsG')
+  const fat = sumValue(entries, 'fatG')
+  const fiber = sumValue(entries, 'fiberG')
+  return (
+    <summary className="cursor-pointer list-none px-5 py-4 transition-colors hover:bg-white/[0.025] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/50 active:bg-white/[0.04] [&::-webkit-details-marker]:hidden">
+      <div className="flex items-baseline justify-between gap-4">
+        <div className="flex items-baseline gap-2">
+          <h3 className="text-[14px] font-semibold text-ink">{label}</h3>
+          <span className="text-[10.5px] text-ink-faint">
+            {entries.length} {entries.length === 1 ? 'item' : 'items'}
+          </span>
+        </div>
+        <div className="flex items-center gap-3">
+          <div className="whitespace-nowrap font-mono text-[12.5px] text-ink-dim">
+            {calories != null ? formatInt(calories) : '—'} <span className="text-[9.5px]">kcal</span>
+          </div>
+          <CaretDown
+            size={13}
+            weight="bold"
+            className="text-ink-faint transition-transform duration-200 group-open/meal:rotate-180"
+          />
+        </div>
+      </div>
+      <MacroShareBar entries={entries} className="mt-3" />
+      <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
+        <MacroTotal label="Protein" value={protein} color="var(--color-recovery)" />
+        <MacroTotal label="Carbs" value={carbs} color="var(--color-activity)" />
+        <MacroTotal label="Fat" value={fat} color="var(--color-heart)" />
+        {fiber != null && <MacroTotal label="Fiber" value={fiber} color="var(--color-hydration)" />}
+      </div>
+    </summary>
+  )
+}
+
+function MacroTotal({ label, value, color }: { label: string; value: number | null; color: string }): React.JSX.Element | null {
+  if (value == null) return null
+  return (
+    <span className="flex items-center gap-1.5 text-[10.5px] text-ink-faint">
+      <span className="h-1.5 w-1.5 rounded-full" style={{ background: color }} />
+      {label} <span className="font-mono text-ink-dim">{formatInt(value)}g</span>
+    </span>
+  )
+}
+
+function MacroShareBar({
+  entries,
+  compact = false,
+  className
+}: {
+  entries: NutritionLogEntry[]
+  compact?: boolean
+  className?: string
+}): React.JSX.Element {
+  const parts = [
+    { label: 'Protein', grams: sumValue(entries, 'proteinG') ?? 0, kcalPerG: 4, color: 'var(--color-recovery)' },
+    { label: 'Carbs', grams: sumValue(entries, 'carbsG') ?? 0, kcalPerG: 4, color: 'var(--color-activity)' },
+    { label: 'Fat', grams: sumValue(entries, 'fatG') ?? 0, kcalPerG: 9, color: 'var(--color-heart)' }
+  ].map((part) => ({ ...part, kcal: part.grams * part.kcalPerG }))
+  const total = parts.reduce((sum, part) => sum + part.kcal, 0)
+  const ariaLabel = parts.filter((part) => part.grams > 0).map((part) => `${part.label} ${formatInt(part.grams)} grams`).join(', ')
+  return (
+    <div
+      className={cn('flex overflow-hidden rounded-full bg-white/[0.04]', compact ? 'h-1' : 'h-2', className)}
+      role="img"
+      aria-label={ariaLabel || 'No macro details'}
+    >
+      {total > 0 && parts.map((part) => part.kcal > 0 ? (
+        <span
+          key={part.label}
+          style={{ width: `${(part.kcal / total) * 100}%`, background: part.color }}
+        />
+      ) : null)}
+    </div>
+  )
+}
+
+function NutritionLogsSkeleton(): React.JSX.Element {
+  return (
+    <Panel className="overflow-hidden" aria-hidden>
+      <div className="border-b border-hairline px-5 pb-3 pt-4">
+        <SkeletonText className="h-4 w-28" />
+        <SkeletonText className="mt-2 w-36" />
+      </div>
+      {Array.from({ length: 2 }, (_, groupIndex) => (
+        <div key={groupIndex} className="border-b border-hairline last:border-b-0">
+          <div className="px-5 py-4">
+            <div className="flex justify-between gap-4">
+              <SkeletonText className="h-4 w-24" />
+              <SkeletonText className="w-16" />
+            </div>
+            <SkeletonBlock className="mt-3 h-2 w-full rounded-full" />
+            <div className="mt-2 flex gap-4">
+              <SkeletonText className="w-20" />
+              <SkeletonText className="w-20" />
+              <SkeletonText className="w-20" />
+            </div>
+          </div>
+        </div>
+      ))}
+    </Panel>
   )
 }
 

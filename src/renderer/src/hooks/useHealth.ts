@@ -17,10 +17,12 @@ import {
 import type {
   ActivityIntradayMetric,
   ActivityIntradayResult,
+  BodyMeasurement,
   HeartDetailMetric,
   HeartDetailResult,
   IntradaySnapshot,
   MetricKey,
+  NutritionLogEntry,
   PairedDevice,
   SeriesResult,
   SleepNight,
@@ -154,6 +156,22 @@ export function useHeartDetail(
     queryFn: () => window.pulse.health.heartDetail(date, metric),
     staleTime: STALE_MS,
     enabled
+  })
+}
+
+export function useNutritionLogs(date: string): UseQueryResult<NutritionLogEntry[]> {
+  return useQuery({
+    queryKey: ['nutrition-logs', date],
+    queryFn: async () => (await window.pulse.health.nutritionLogs(date)).entries,
+    staleTime: STALE_MS
+  })
+}
+
+export function useBodyMeasurements(start: string, end: string): UseQueryResult<BodyMeasurement[]> {
+  return useQuery({
+    queryKey: ['body-measurements', start, end],
+    queryFn: async () => (await window.pulse.health.bodyMeasurements(start, end)).measurements,
+    staleTime: STALE_MS
   })
 }
 

@@ -9,6 +9,7 @@
 import type {
   ActivityIntradayMetric,
   ActivityIntradayResult,
+  BodyMeasurementsResult,
   DailySeries,
   DayMetrics,
   DayValues,
@@ -19,6 +20,7 @@ import type {
   HourlySteps,
   IntradaySnapshot,
   MetricKey,
+  NutritionLogsResult,
   PairedDevice,
   SeriesResult,
   SleepNight,
@@ -35,6 +37,7 @@ import {
   exportExerciseTcx,
   HealthApiError,
   listData,
+  listRawData,
   listPairedDevices,
   minuteFromCivil,
   physicalRollUp,
@@ -59,15 +62,18 @@ import {
 } from './metric-store'
 import {
   demoActivityIntraday,
+  demoBodyMeasurements,
   demoDevices,
   demoHeartDetail,
   demoIntraday,
+  demoNutritionLogs,
   demoSeries,
   demoSleepRange,
   demoWorkoutTrack,
   demoWorkoutsRange
 } from './sample-data'
 import { activityRollupBreakdown, activityRollupPoints, calorieEnergyBreakdown } from './activity-intraday'
+import { parseBodyMeasurements, parseNutritionLogs } from './body-nutrition-detail'
 import {
   parseHeartZones,
   parseVo2Detail
@@ -247,17 +253,16 @@ const GROUPS: FetchGroup[] = [
     // parser refetch nutrition once and repair the archived day automatically.
     'nutrition-v2',
     'nutrition-log',
-    ['caloriesIn', 'proteinG', 'carbsG', 'fatG', 'fiberG', 'sugarG'],
+    ['caloriesIn', 'proteinG', 'carbsG', 'fatG', 'fiberG'],
     (p) => {
       const log = p.nutritionLog as Record<string, unknown> | undefined
-      if (!log) return { caloriesIn: null, proteinG: null, carbsG: null, fatG: null, fiberG: null, sugarG: null }
+      if (!log) return { caloriesIn: null, proteinG: null, carbsG: null, fatG: null, fiberG: null }
       return {
         caloriesIn: num((log.energy as { kcalSum?: number } | undefined)?.kcalSum),
         proteinG: nutrientGrams(log, ['protein', 'proteins', 'proteinG', 'proteinGrams', 'totalProtein', 'dietaryProtein']),
         carbsG: nutrientGrams(log, ['carbohydrate', 'carbohydrates', 'totalCarbohydrate', 'carbs', 'carbsG']),
         fatG: nutrientGrams(log, ['fat', 'fats', 'totalFat', 'fatG']),
-        fiberG: nutrientGrams(log, ['fiber', 'fibre', 'dietaryFiber', 'dietaryFibre', 'fiberG']),
-        sugarG: nutrientGrams(log, ['sugar', 'sugars', 'totalSugar', 'sugarG'])
+        fiberG: nutrientGrams(log, ['fiber', 'fibre', 'dietaryFiber', 'dietaryFibre', 'fiberG'])
       }
     }
   ),
@@ -915,6 +920,37 @@ export async function getHeartDetail(
   setHeartDetail(d, result)
   markFetched(group, [d])
   return result
+}
+
+export async function getNutritionLogs(date: string): Promise<NutritionLogsResult> {
+  const [d] = normalizeRange(date, date)
+  const token = await getGoogleAccessToken()
+  if (!token) return demoNutritionLogs(d)
+  let points: RawDataPoint[]
+  try {
+    points = await listRawData(token, 'nutrition-log', 'session', d, shiftIsoDate(d, 1), 0)
+  } catch (error) {
+    // Google's data-type index currently labels nutrition-log as a Sample
+    // even though its published payload contains a session interval. Accept
+    // either server-side filter classification while that inconsistency exists.
+    if (!(error instanceof HealthApiError) || error.status !== 400) throw error
+    points = await listRawData(token, 'nutrition-log', 'sample', d, shiftIsoDate(d, 1), 0)
+  }
+  return { date: d, source: 'live', entries: parseNutritionLogs(points) }
+}
+
+export async function getBodyMeasurements(start: string, end: string): Promise<BodyMeasurementsResult> {
+  const [s, e] = normalizeRange(start, end)
+  const token = await getGoogleAccessToken()
+  if (!token) return demoBodyMeasurements(s, e)
+  const [weightResult, bodyFatResult] = await Promise.allSettled([
+    listRawData(token, 'weight', 'sample', s, shiftIsoDate(e, 1), spanPriority(listDates(s, e).length)),
+    listRawData(token, 'body-fat', 'sample', s, shiftIsoDate(e, 1), spanPriority(listDates(s, e).length))
+  ])
+  if (weightResult.status === 'rejected' && bodyFatResult.status === 'rejected') throw weightResult.reason
+  const weightPoints = weightResult.status === 'fulfilled' ? weightResult.value : []
+  const bodyFatPoints = bodyFatResult.status === 'fulfilled' ? bodyFatResult.value : []
+  return { source: 'live', measurements: parseBodyMeasurements(weightPoints, bodyFatPoints) }
 }
 
 // ---------------------------------------------------------------------------

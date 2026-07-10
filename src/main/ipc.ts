@@ -6,9 +6,11 @@ import { connectCodex, disconnectCodex, getCodexStatus } from './codex-auth'
 import {
   clearHealthCache,
   getActivityIntraday,
+  getBodyMeasurements,
   getDevices,
   getHeartDetail,
   getIntraday,
+  getNutritionLogs,
   getSeries,
   getSleepRange,
   getWorkoutTrack,
@@ -58,6 +60,8 @@ export function registerIpc(): void {
     if (!isHeartDetailMetric(metric)) throw new Error('Unsupported heart detail metric')
     return getHeartDetail(date, metric, force)
   })
+  ipcMain.handle('health:nutrition-logs', (_e, date: string) => getNutritionLogs(date))
+  ipcMain.handle('health:body-measurements', (_e, start: string, end: string) => getBodyMeasurements(start, end))
   ipcMain.handle('health:devices', (_e, force?: boolean) => getDevices(force))
   ipcMain.handle('health:refresh', () => clearHealthCache())
 

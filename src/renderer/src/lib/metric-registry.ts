@@ -8,7 +8,6 @@ import {
   Avocado,
   Barbell,
   BowlFood,
-  Cookie,
   Drop,
   DropHalf,
   Fire,
@@ -377,19 +376,6 @@ export const METRICS: Record<MetricKey, MetricDef> = {
     upIsGood: true,
     format: int,
     hint: 'Logged fiber'
-  },
-  sugarG: {
-    key: 'sugarG',
-    label: 'Sugar',
-    unit: 'g',
-    icon: Cookie,
-    color: 'var(--color-body-metric)',
-    domain: 'nutrition',
-    aggregate: 'sum',
-    chart: 'bar',
-    upIsGood: false,
-    format: int,
-    hint: 'Logged sugar'
   }
 }
 

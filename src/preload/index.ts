@@ -4,6 +4,7 @@ import type {
   ActivityIntradayResult,
   AiEvent,
   AppSettings,
+  BodyMeasurementsResult,
   ChatMessage,
   CodexAuthStatus,
   GoogleAuthStatus,
@@ -11,6 +12,7 @@ import type {
   HeartDetailResult,
   IntradaySnapshot,
   MetricKey,
+  NutritionLogsResult,
   PairedDevice,
   SeriesResult,
   SleepRangeResult,
@@ -53,6 +55,10 @@ const api = {
     ): Promise<ActivityIntradayResult> => ipcRenderer.invoke('health:activity-intraday', date, metric, force),
     heartDetail: (date: string, metric: HeartDetailMetric, force?: boolean): Promise<HeartDetailResult> =>
       ipcRenderer.invoke('health:heart-detail', date, metric, force),
+    nutritionLogs: (date: string): Promise<NutritionLogsResult> =>
+      ipcRenderer.invoke('health:nutrition-logs', date),
+    bodyMeasurements: (start: string, end: string): Promise<BodyMeasurementsResult> =>
+      ipcRenderer.invoke('health:body-measurements', start, end),
     devices: (force?: boolean): Promise<PairedDevice[]> => ipcRenderer.invoke('health:devices', force),
     refresh: (): Promise<void> => ipcRenderer.invoke('health:refresh'),
     onActivity: (callback: (activity: SyncActivity) => void): (() => void) => {
