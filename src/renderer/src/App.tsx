@@ -18,15 +18,46 @@ import { DevicesView } from '@/views/DevicesView'
 import { AssistantView } from '@/views/AssistantView'
 import { SettingsView } from '@/views/SettingsView'
 import { useChat } from '@/hooks/useChat'
+import { useTrackpadHistoryNavigation } from '@/hooks/useTrackpadHistoryNavigation'
 import { isoToday } from '@/lib/format'
 import type { MetricRange, OpenMetric } from '@/lib/metric-navigation'
 import type { AppSettings, CodexAuthStatus, GoogleAuthStatus, MetricKey, Workout } from '@shared/types'
 
 const DATA_VIEWS: View[] = ['home', 'activity', 'heart', 'sleep', 'body', 'nutrition']
+const NAVIGATION_STATE_KEY = 'open-pulse-navigation-v2'
 
 interface MetricDetailSelection {
   metric: MetricKey
   initialRange: MetricRange
+}
+
+interface NavigationEntry {
+  key: typeof NAVIGATION_STATE_KEY
+  view: View
+  selectedDate: string
+  detailMetric: MetricDetailSelection | null
+  sleepStagesOpen: boolean
+  selectedWorkout: Workout | null
+}
+
+function isNavigationEntry(value: unknown): value is NavigationEntry {
+  return (
+    typeof value === 'object' &&
+    value != null &&
+    'key' in value &&
+    value.key === NAVIGATION_STATE_KEY
+  )
+}
+
+function sameNavigationEntry(a: NavigationEntry, b: NavigationEntry): boolean {
+  return (
+    a.view === b.view &&
+    a.selectedDate === b.selectedDate &&
+    a.detailMetric?.metric === b.detailMetric?.metric &&
+    a.detailMetric?.initialRange === b.detailMetric?.initialRange &&
+    a.sleepStagesOpen === b.sleepStagesOpen &&
+    a.selectedWorkout?.id === b.selectedWorkout?.id
+  )
 }
 
 export default function App(): React.JSX.Element {
@@ -45,6 +76,30 @@ export default function App(): React.JSX.Element {
   // One conversation shared by the Assistant page and the side panel.
   const chat = useChat()
   const queryClient = useQueryClient()
+  useTrackpadHistoryNavigation()
+
+  const applyNavigationEntry = (entry: NavigationEntry): void => {
+    setView(entry.view)
+    setSelectedDate(entry.selectedDate)
+    setDetailMetric(entry.detailMetric)
+    setSleepStagesOpen(entry.sleepStagesOpen)
+    setSelectedWorkout(entry.selectedWorkout)
+  }
+
+  const currentNavigationEntry = (): NavigationEntry => ({
+    key: NAVIGATION_STATE_KEY,
+    view,
+    selectedDate,
+    detailMetric,
+    sleepStagesOpen,
+    selectedWorkout
+  })
+
+  const navigate = (entry: NavigationEntry): void => {
+    if (sameNavigationEntry(currentNavigationEntry(), entry)) return
+    window.history.pushState(entry, '')
+    applyNavigationEntry(entry)
+  }
 
   useEffect(() => {
     void Promise.all([
@@ -58,6 +113,30 @@ export default function App(): React.JSX.Element {
     })
   }, [])
 
+  useEffect(() => {
+    const initialEntry: NavigationEntry = {
+      key: NAVIGATION_STATE_KEY,
+      view: 'home',
+      selectedDate: isoToday(),
+      detailMetric: null,
+      sleepStagesOpen: false,
+      selectedWorkout: null
+    }
+
+    if (isNavigationEntry(window.history.state)) {
+      applyNavigationEntry(window.history.state)
+    } else {
+      window.history.replaceState(initialEntry, '')
+    }
+
+    const handleHistoryNavigation = (event: PopStateEvent): void => {
+      if (isNavigationEntry(event.state)) applyNavigationEntry(event.state)
+    }
+
+    window.addEventListener('popstate', handleHistoryNavigation)
+    return () => window.removeEventListener('popstate', handleHistoryNavigation)
+  }, [])
+
   // A fresh connection invalidates whatever demo data is on screen.
   const handleGoogleChange = (status: GoogleAuthStatus): void => {
     setGoogle(status)
@@ -65,35 +144,50 @@ export default function App(): React.JSX.Element {
   }
 
   const selectView = (v: View): void => {
-    setView(v)
-    setDetailMetric(null)
-    setSleepStagesOpen(false)
-    setSelectedWorkout(null)
+    navigate({
+      ...currentNavigationEntry(),
+      view: v,
+      detailMetric: null,
+      sleepStagesOpen: false,
+      selectedWorkout: null
+    })
   }
 
   const selectDate = (date: string): void => {
-    setSelectedDate(date)
-    setDetailMetric(null)
-    setSleepStagesOpen(false)
-    setSelectedWorkout(null)
+    navigate({
+      ...currentNavigationEntry(),
+      selectedDate: date,
+      detailMetric: null,
+      sleepStagesOpen: false,
+      selectedWorkout: null
+    })
   }
 
   const openMetric: OpenMetric = (metric, initialRange) => {
-    setSelectedWorkout(null)
-    setSleepStagesOpen(false)
-    setDetailMetric({ metric, initialRange })
+    navigate({
+      ...currentNavigationEntry(),
+      detailMetric: { metric, initialRange },
+      sleepStagesOpen: false,
+      selectedWorkout: null
+    })
   }
 
   const openSleepStages = (): void => {
-    setDetailMetric(null)
-    setSelectedWorkout(null)
-    setSleepStagesOpen(true)
+    navigate({
+      ...currentNavigationEntry(),
+      detailMetric: null,
+      sleepStagesOpen: true,
+      selectedWorkout: null
+    })
   }
 
   const openWorkout = (workout: Workout): void => {
-    setDetailMetric(null)
-    setSleepStagesOpen(false)
-    setSelectedWorkout(workout)
+    navigate({
+      ...currentNavigationEntry(),
+      detailMetric: null,
+      sleepStagesOpen: false,
+      selectedWorkout: workout
+    })
   }
 
   if (!settings) {
@@ -156,12 +250,12 @@ export default function App(): React.JSX.Element {
                       <WorkoutDetailView
                         workout={selectedWorkout}
                         date={selectedDate}
-                        onBack={() => setSelectedWorkout(null)}
+                        onBack={() => window.history.back()}
                       />
                     ) : showSleepStagesDetail ? (
                       <SleepStagesDetailView
                         date={selectedDate}
-                        onBack={() => setSleepStagesOpen(false)}
+                        onBack={() => window.history.back()}
                       />
                     ) : showDetail ? (
                       <MetricDetailView
@@ -169,7 +263,7 @@ export default function App(): React.JSX.Element {
                         initialRange={detailMetric.initialRange}
                         date={selectedDate}
                         goals={settings.goals}
-                        onBack={() => setDetailMetric(null)}
+                        onBack={() => window.history.back()}
                       />
                     ) : (
                       <>
