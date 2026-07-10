@@ -214,7 +214,10 @@ function demoDayValues(date: string): DayValues {
     proteinG: macro(0.22, 4, 0.05),
     carbsG: macro(0.46, 4, 0.08),
     fatG: macro(0.3, 9, 0.05),
-    fiberG: caloriesIn == null ? null : Math.round(16 + rand() * 18)
+    fiberG: caloriesIn == null ? null : Math.round(16 + rand() * 18),
+    saturatedFatG: caloriesIn == null ? null : Math.round(12 + rand() * 14),
+    sodiumG: caloriesIn == null ? null : +(1.2 + rand() * 1.8).toFixed(2),
+    sugarG: caloriesIn == null ? null : Math.round(35 + rand() * 55)
   }
 }
 
@@ -231,7 +234,9 @@ const PROGRESS_SCALED: MetricKey[] = [
   'proteinG',
   'carbsG',
   'fatG',
-  'fiberG'
+  'fiberG',
+  'saturatedFatG',
+  'sugarG'
 ]
 
 function scaleForToday(values: DayValues): DayValues {
@@ -240,6 +245,10 @@ function scaleForToday(values: DayValues): DayValues {
   for (const key of PROGRESS_SCALED) {
     const v = out[key]
     if (v != null) out[key] = Math.round(v * p)
+  }
+  for (const key of ['sodiumG'] as const) {
+    const v = out[key]
+    if (v != null) out[key] = +(v * p).toFixed(2)
   }
   if (out.distanceKm != null) out.distanceKm = +(out.distanceKm * p).toFixed(2)
   return out
@@ -462,7 +471,10 @@ export function demoNutritionLogs(date: string): NutritionLogsResult {
         proteinG: values.proteinG == null ? null : Math.round(values.proteinG * share),
         carbsG: values.carbsG == null ? null : Math.round(values.carbsG * share),
         fatG: values.fatG == null ? null : Math.round(values.fatG * share),
-        fiberG: values.fiberG == null ? null : Math.round(values.fiberG * share)
+        fiberG: values.fiberG == null ? null : Math.round(values.fiberG * share),
+        saturatedFatG: values.saturatedFatG == null ? null : +(values.saturatedFatG * share).toFixed(1),
+        sodiumG: values.sodiumG == null ? null : +(values.sodiumG * share).toFixed(2),
+        sugarG: values.sugarG == null ? null : Math.round(values.sugarG * share)
       }
     })
   }

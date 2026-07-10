@@ -79,7 +79,7 @@ import {
   parseVo2Detail
 } from './heart-detail'
 import { mapSleep, mapSleepRespiratory, type MappedRespiratorySummary } from './sleep-detail'
-import { nutrientGrams } from './nutrition'
+import { nutrientGrams, nutrientMineralGrams } from './nutrition'
 import { parseExerciseTcx } from './tcx'
 
 // ---------------------------------------------------------------------------
@@ -249,20 +249,33 @@ const GROUPS: FetchGroup[] = [
     )
   })),
   rollupGroup(
-    // Versioned so installs that cached a missing Protein value with the old
-    // parser refetch nutrition once and repair the archived day automatically.
-    'nutrition-v2',
+    // Versioned so archived days refetch the expanded nutrient set once.
+    'nutrition-v5',
     'nutrition-log',
-    ['caloriesIn', 'proteinG', 'carbsG', 'fatG', 'fiberG'],
+    ['caloriesIn', 'proteinG', 'carbsG', 'fatG', 'fiberG', 'saturatedFatG', 'sodiumG', 'sugarG'],
     (p) => {
       const log = p.nutritionLog as Record<string, unknown> | undefined
-      if (!log) return { caloriesIn: null, proteinG: null, carbsG: null, fatG: null, fiberG: null }
+      if (!log) {
+        return {
+          caloriesIn: null,
+          proteinG: null,
+          carbsG: null,
+          fatG: null,
+          fiberG: null,
+          saturatedFatG: null,
+          sodiumG: null,
+          sugarG: null
+        }
+      }
       return {
         caloriesIn: num((log.energy as { kcalSum?: number } | undefined)?.kcalSum),
         proteinG: nutrientGrams(log, ['protein', 'proteins', 'proteinG', 'proteinGrams', 'totalProtein', 'dietaryProtein']),
         carbsG: nutrientGrams(log, ['carbohydrate', 'carbohydrates', 'totalCarbohydrate', 'carbs', 'carbsG']),
         fatG: nutrientGrams(log, ['fat', 'fats', 'totalFat', 'fatG']),
-        fiberG: nutrientGrams(log, ['fiber', 'fibre', 'dietaryFiber', 'dietaryFibre', 'fiberG'])
+        fiberG: nutrientGrams(log, ['fiber', 'fibre', 'dietaryFiber', 'dietaryFibre', 'fiberG']),
+        saturatedFatG: nutrientGrams(log, ['saturatedFat', 'saturatedFats', 'saturatedFatG']),
+        sodiumG: nutrientMineralGrams(log, ['sodium']),
+        sugarG: nutrientGrams(log, ['sugar', 'sugars', 'sugarG'])
       }
     }
   ),

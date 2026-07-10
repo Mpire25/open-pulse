@@ -161,7 +161,9 @@ export function useHeartDetail(
 
 export function useNutritionLogs(date: string): UseQueryResult<NutritionLogEntry[]> {
   return useQuery({
-    queryKey: ['nutrition-logs', date],
+    // Versioned because the parsed entry shape now retains secondary
+    // nutrients; do not reuse entries cached before those fields existed.
+    queryKey: ['nutrition-logs-v2', date],
     queryFn: async () => (await window.pulse.health.nutritionLogs(date)).entries,
     staleTime: STALE_MS
   })

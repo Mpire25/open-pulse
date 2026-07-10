@@ -376,6 +376,45 @@ export const METRICS: Record<MetricKey, MetricDef> = {
     upIsGood: true,
     format: int,
     hint: 'Logged fiber'
+  },
+  saturatedFatG: {
+    key: 'saturatedFatG',
+    label: 'Saturated fat',
+    unit: 'g',
+    icon: Avocado,
+    color: 'var(--color-heart)',
+    domain: 'nutrition',
+    aggregate: 'sum',
+    chart: 'bar',
+    upIsGood: false,
+    format: int,
+    hint: 'Logged saturated fat'
+  },
+  sodiumG: {
+    key: 'sodiumG',
+    label: 'Sodium',
+    unit: 'g',
+    icon: ForkKnife,
+    color: 'var(--color-activity)',
+    domain: 'nutrition',
+    aggregate: 'sum',
+    chart: 'bar',
+    upIsGood: false,
+    format: one,
+    hint: 'Logged sodium'
+  },
+  sugarG: {
+    key: 'sugarG',
+    label: 'Sugar',
+    unit: 'g',
+    icon: BowlFood,
+    color: 'var(--color-body-metric)',
+    domain: 'nutrition',
+    aggregate: 'sum',
+    chart: 'bar',
+    upIsGood: false,
+    format: int,
+    hint: 'Logged sugar'
   }
 }
 

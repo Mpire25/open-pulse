@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test'
 import { parseBodyMeasurements, parseNutritionLogs } from '../src/main/body-nutrition-detail'
 
 describe('body and nutrition record normalization', () => {
-  test('retains individual food, meal, serving, energy, and macro details without sugar', () => {
+  test('retains individual food, meal, serving, energy, and nutrient details', () => {
     const entries = parseNutritionLogs([{ 
       name: 'users/me/dataTypes/nutrition-log/dataPoints/lunch',
       nutritionLog: {
@@ -16,6 +16,8 @@ describe('body and nutrition record normalization', () => {
         nutrients: [
           { nutrient: 'PROTEIN', quantity: { grams: 43 } },
           { nutrient: 'DIETARY_FIBER', quantity: { grams: 8 } },
+          { nutrient: 'SATURATED_FAT', quantity: { grams: 7 } },
+          { nutrient: 'SODIUM', quantity: 860 },
           { nutrient: 'SUGAR', quantity: { grams: 6 } }
         ]
       }
@@ -32,9 +34,11 @@ describe('body and nutrition record normalization', () => {
       proteinG: 43,
       carbsG: 78,
       fatG: 22,
-      fiberG: 8
+      fiberG: 8,
+      saturatedFatG: 7,
+      sodiumG: 0.86,
+      sugarG: 6
     }])
-    expect('sugarG' in entries[0]).toBe(false)
   })
 
   test('pairs weight and body-fat readings from the same scale session', () => {

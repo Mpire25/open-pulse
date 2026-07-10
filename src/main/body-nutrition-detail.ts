@@ -1,6 +1,6 @@
 import type { BodyMeasurement, NutritionLogEntry } from '../shared/types'
 import type { RawDataPoint } from './health-api'
-import { gramsFromNutrientNode, nutrientGrams } from './nutrition'
+import { gramsFromNutrientNode, nutrientGrams, nutrientMineralGrams } from './nutrition'
 
 function numberValue(value: unknown): number | null {
   if (value === undefined || value === null || value === '') return null
@@ -54,7 +54,10 @@ export function parseNutritionLogs(points: RawDataPoint[]): NutritionLogEntry[] 
         carbsG: gramsFromNutrientNode(log.totalCarbohydrate)
           ?? nutrientGrams(log, ['carbohydrates', 'carbohydrate']),
         fatG: gramsFromNutrientNode(log.totalFat) ?? nutrientGrams(log, ['fat', 'totalFat']),
-        fiberG: nutrientGrams(log, ['dietaryFiber', 'fiber', 'fibre'])
+        fiberG: nutrientGrams(log, ['dietaryFiber', 'fiber', 'fibre']),
+        saturatedFatG: nutrientGrams(log, ['saturatedFat']),
+        sodiumG: nutrientMineralGrams(log, ['sodium']),
+        sugarG: nutrientGrams(log, ['sugar', 'sugars'])
       }]
     })
     .sort((a, b) => Date.parse(a.startTime) - Date.parse(b.startTime))

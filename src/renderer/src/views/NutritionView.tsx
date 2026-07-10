@@ -21,7 +21,10 @@ const NUTRITION_METRICS: MetricKey[] = [
   'proteinG',
   'carbsG',
   'fatG',
-  'fiberG'
+  'fiberG',
+  'saturatedFatG',
+  'sodiumG',
+  'sugarG'
 ]
 
 // Macro energy densities, kcal per gram.
@@ -29,6 +32,13 @@ const MACROS = [
   { key: 'proteinG' as const, label: 'Protein', kcalPerG: 4, color: 'var(--color-recovery)' },
   { key: 'carbsG' as const, label: 'Carbs', kcalPerG: 4, color: 'var(--color-activity)' },
   { key: 'fatG' as const, label: 'Fat', kcalPerG: 9, color: 'var(--color-heart)' }
+]
+
+const SECONDARY_NUTRIENTS = [
+  { key: 'fiberG' as const, label: 'Fiber', unit: 'g', color: 'var(--color-hydration)', decimals: 0 },
+  { key: 'saturatedFatG' as const, label: 'Saturated fat', unit: 'g', color: 'var(--color-heart)', decimals: 0 },
+  { key: 'sodiumG' as const, label: 'Sodium', unit: 'g', color: 'var(--color-activity)', decimals: 2 },
+  { key: 'sugarG' as const, label: 'Sugar', unit: 'g', color: 'var(--color-body-metric)', decimals: 0 }
 ]
 
 interface NutritionViewProps {
@@ -171,7 +181,13 @@ export function NutritionView({ date, goals, onOpenMetric }: NutritionViewProps)
                 {macrosPending ? (
                   <MacroBreakdownSkeleton />
                 ) : hasMacrosToday ? (
-                  <MacroBreakdown today={today} goals={goals} onOpenMetric={onOpenMetric} />
+                  <MacroBreakdown
+                    today={today}
+                    goals={goals}
+                    entries={entries}
+                    onOpenMetric={onOpenMetric}
+                    isMetricPending={(key) => series.isMetricPending(key) || nutritionLogs.isPending}
+                  />
                 ) : (
                   <div className="grid h-full min-h-[120px] place-items-center text-[13px] text-ink-faint">
                     No macro detail for this day — log meals in the Fitbit app to break energy into protein, carbs, and fat.
@@ -312,7 +328,10 @@ function NutritionItemRow({ entry }: { entry: NutritionLogEntry }): React.JSX.El
   )
 }
 
-function sumValue(entries: NutritionLogEntry[], key: 'calories' | 'proteinG' | 'carbsG' | 'fatG' | 'fiberG'): number | null {
+function sumValue(
+  entries: NutritionLogEntry[],
+  key: 'calories' | 'proteinG' | 'carbsG' | 'fatG' | 'fiberG' | 'saturatedFatG' | 'sodiumG' | 'sugarG'
+): number | null {
   const values = entries.flatMap((entry) => entry[key] == null ? [] : [entry[key]])
   return values.length > 0 ? values.reduce((sum, value) => sum + value, 0) : null
 }
@@ -459,6 +478,14 @@ function MacroBreakdownSkeleton(): React.JSX.Element {
           </div>
         ))}
       </div>
+      <div className="grid grid-cols-2 gap-3 border-t border-hairline pt-3 sm:grid-cols-4">
+        {SECONDARY_NUTRIENTS.map((nutrient) => (
+          <div key={nutrient.key} className="flex flex-col gap-1.5 px-2">
+            <SkeletonText className="w-16" />
+            <SkeletonBlock className="h-4 w-12" />
+          </div>
+        ))}
+      </div>
     </div>
   )
 }
@@ -466,14 +493,28 @@ function MacroBreakdownSkeleton(): React.JSX.Element {
 function MacroBreakdown({
   today,
   goals,
-  onOpenMetric
+  entries,
+  onOpenMetric,
+  isMetricPending
 }: {
   today: DayValues
   goals: Goals
+  entries: NutritionLogEntry[]
   onOpenMetric: OpenMetric
+  isMetricPending: (key: MetricKey) => boolean
 }): React.JSX.Element {
   const parts = MACROS.map((m) => ({ ...m, grams: today[m.key] ?? null, kcal: (today[m.key] ?? 0) * m.kcalPerG }))
   const totalKcal = parts.reduce((s, p) => s + p.kcal, 0) || 1
+  const secondary = SECONDARY_NUTRIENTS
+    .map((nutrient) => {
+      // Individual foods retain sugar, saturated fat, and mixed sodium units
+      // that Google's daily rollup can omit or aggregate incorrectly.
+      const recorded = sumValue(entries, nutrient.key) ?? today[nutrient.key]
+      const pending = (recorded == null || recorded <= 0) && isMetricPending(nutrient.key)
+      const value = recorded != null && recorded > 0 ? recorded : null
+      return { ...nutrient, value, pending }
+    })
+    .filter((nutrient) => nutrient.pending || nutrient.value != null)
 
   return (
     <div className="flex h-full flex-col justify-center gap-4">
@@ -513,6 +554,30 @@ function MacroBreakdown({
           </button>
         ))}
       </div>
+      {secondary.length > 0 && (
+        <div className="grid grid-cols-[repeat(auto-fit,minmax(105px,1fr))] gap-3 border-t border-hairline pt-3">
+          {secondary.map((nutrient) => (
+            <div key={nutrient.key} className="min-w-0 px-2 py-1">
+              <div className="flex items-center gap-1.5 text-[10.5px] font-medium text-ink-faint">
+                <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: nutrient.color }} />
+                <span className="truncate">{nutrient.label}</span>
+              </div>
+              {nutrient.pending ? (
+                <SkeletonBlock className="mt-1.5 h-4 w-12" />
+              ) : (
+                <div className="mt-1 font-mono text-[13px] font-medium text-ink">
+                  {nutrient.value != null
+                    ? nutrient.decimals > 0 && nutrient.value < 0.01
+                      ? '<0.01'
+                      : nutrient.value.toFixed(nutrient.decimals)
+                    : '—'}{' '}
+                  <span className="text-[10px] font-normal text-ink-faint">{nutrient.unit}</span>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

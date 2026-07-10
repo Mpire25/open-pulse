@@ -117,3 +117,20 @@ export function nutrientGrams(log: Record<string, unknown>, aliases: string[]): 
   const normalizedAliases = new Set(aliases.map(normalizedKey))
   return gramsFromNutrientNode(findNutrientNode(log, normalizedAliases))
 }
+
+/**
+ * Normalize minerals to grams. Google returns structured WeightQuantity
+ * values in grams, but older/direct nutrition payloads retain minerals such
+ * as sodium as milligram numbers. Very large "gram" values are also treated
+ * as legacy milligrams — hundreds of grams of sodium is not credible.
+ */
+export function nutrientMineralGrams(log: Record<string, unknown>, aliases: string[]): number | null {
+  const normalizedAliases = new Set(aliases.map(normalizedKey))
+  const node = findNutrientNode(log, normalizedAliases)
+  const directMilligrams = finiteNumber(node)
+  if (directMilligrams != null) return +(directMilligrams / 1000).toFixed(3)
+
+  const grams = gramsFromNutrientNode(node)
+  if (grams == null) return null
+  return +(grams >= 100 ? grams / 1000 : grams).toFixed(3)
+}

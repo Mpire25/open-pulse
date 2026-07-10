@@ -37,7 +37,10 @@ export const METRIC_KEYS = [
   'proteinG',
   'carbsG',
   'fatG',
-  'fiberG'
+  'fiberG',
+  'saturatedFatG',
+  'sodiumG',
+  'sugarG'
 ] as const
 
 export type MetricKey = (typeof METRIC_KEYS)[number]
@@ -308,6 +311,9 @@ export interface NutritionLogEntry {
   carbsG: number | null
   fatG: number | null
   fiberG: number | null
+  saturatedFatG: number | null
+  sodiumG: number | null
+  sugarG: number | null
 }
 
 export interface NutritionLogsResult {
