@@ -37,7 +37,7 @@ const MACROS = [
 const SECONDARY_NUTRIENTS = [
   { key: 'fiberG' as const, label: 'Fiber', unit: 'g', color: 'var(--color-hydration)', decimals: 0 },
   { key: 'saturatedFatG' as const, label: 'Saturated fat', unit: 'g', color: 'var(--color-heart)', decimals: 0 },
-  { key: 'sodiumG' as const, label: 'Sodium', unit: 'g', color: 'var(--color-activity)', decimals: 2 },
+  { key: 'sodiumG' as const, label: 'Sodium', unit: 'g', color: 'var(--color-recovery)', decimals: 2 },
   { key: 'sugarG' as const, label: 'Sugar', unit: 'g', color: 'var(--color-body-metric)', decimals: 0 }
 ]
 
@@ -144,7 +144,7 @@ export function NutritionView({ date, goals, onOpenMetric, onSelectDate }: Nutri
                 <SectionHeader
                   title="Energy"
                   hint="Logged intake vs burned"
-                  icon={<ForkKnife size={18} weight="fill" style={{ color: 'var(--color-activity)' }} />}
+                  icon={<ForkKnife size={18} weight="fill" style={{ color: 'var(--color-recovery)' }} />}
                 />
                 <div className="mt-2 flex items-baseline gap-2">
                   {intakePending ? (
@@ -322,7 +322,7 @@ function NutritionLogsPanel({ entries }: { entries: NutritionLogEntry[] }): Reac
         <SectionHeader
           title="Logged meals"
           hint={`${entries.length} ${entries.length === 1 ? 'entry' : 'entries'} organized by meal`}
-          icon={<ForkKnife size={18} weight="fill" style={{ color: 'var(--color-activity)' }} />}
+          icon={<ForkKnife size={18} weight="fill" style={{ color: 'var(--color-recovery)' }} />}
         />
       </div>
       <div className="divide-y divide-hairline">
