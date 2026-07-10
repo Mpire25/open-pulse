@@ -64,7 +64,7 @@ export function SkeletonRing({
 }
 
 export function SkeletonChart({
-  height = 150,
+  height = 170,
   columns = 7
 }: {
   height?: number

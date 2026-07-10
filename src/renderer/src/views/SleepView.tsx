@@ -125,7 +125,7 @@ export function SleepView({ date, goals, onOpenMetric }: SleepViewProps): React.
           {/* Duration trend */}
           <motion.div custom={2} variants={fade} initial="hidden" animate="show">
             <InteractivePanel
-              className={`flex h-full flex-col gap-4 p-6 ${CARD_HEIGHT.chart}`}
+              className={`flex h-full flex-col gap-3 p-5 ${CARD_HEIGHT.chart}`}
               onOpen={() => onOpenMetric('sleepMinutes')}
             >
               <DrillHeader
@@ -159,7 +159,7 @@ export function SleepView({ date, goals, onOpenMetric }: SleepViewProps): React.
           {/* Efficiency trend */}
           <motion.div custom={3} variants={fade} initial="hidden" animate="show">
             <InteractivePanel
-              className={`flex h-full flex-col gap-4 p-6 ${CARD_HEIGHT.chart}`}
+              className={`flex h-full flex-col gap-3 p-5 ${CARD_HEIGHT.chart}`}
               onOpen={() => onOpenMetric('sleepEfficiency')}
             >
               <DrillHeader
@@ -178,7 +178,7 @@ export function SleepView({ date, goals, onOpenMetric }: SleepViewProps): React.
                       value: byDate.get(d)?.efficiency ?? null
                     }))}
                     color="var(--color-sleep)"
-                    height={150}
+                    height={170}
                     format={(v) => String(Math.round(v))}
                     unitLabel="%"
                     axisLabel="%"

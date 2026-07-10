@@ -48,7 +48,7 @@ export function ActivityView({ date, goals, onOpenMetric }: ActivityViewProps): 
     return (
       <motion.div key={key} custom={index} variants={fade} initial="hidden" animate="show">
         <InteractivePanel
-          className={`flex h-full flex-col gap-5 p-6 ${CARD_HEIGHT.chart}`}
+          className={`flex h-full flex-col gap-3 p-5 ${CARD_HEIGHT.chart}`}
           onOpen={() => onOpenMetric(key)}
         >
           <DrillHeader
@@ -119,7 +119,7 @@ export function ActivityView({ date, goals, onOpenMetric }: ActivityViewProps): 
         {/* Hourly movement */}
         <motion.div custom={2} variants={fade} initial="hidden" animate="show">
           <InteractivePanel
-            className={`flex h-full flex-col gap-4 p-6 ${CARD_HEIGHT.large}`}
+            className={`flex h-full flex-col gap-3 p-5 ${CARD_HEIGHT.large}`}
             onOpen={() => onOpenMetric('steps')}
           >
             <DrillHeader
@@ -128,7 +128,7 @@ export function ActivityView({ date, goals, onOpenMetric }: ActivityViewProps): 
               icon={<Footprints size={18} weight="fill" style={{ color: 'var(--color-activity)' }} />}
             />
             {intraday.isPending ? (
-              <SkeletonChart height={170} columns={12} />
+              <SkeletonChart height={180} columns={12} />
             ) : intraday.data && intraday.data.stepsHourly.length > 0 ? (
                 <ColumnChart
                   data={intraday.data.stepsHourly.map((h) => ({
@@ -138,7 +138,7 @@ export function ActivityView({ date, goals, onOpenMetric }: ActivityViewProps): 
                     tick: h.hour % 6 === 0 ? formatHour(h.hour) : undefined
                   }))}
                   color="var(--color-activity)"
-                  height={170}
+                  height={180}
                   format={formatInt}
                   unitLabel="steps"
                 />

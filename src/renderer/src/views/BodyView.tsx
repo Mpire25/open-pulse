@@ -48,7 +48,7 @@ export function BodyView({ date, onOpenMetric }: BodyViewProps): React.JSX.Eleme
             return (
               <motion.div key={key} custom={i + 1} variants={fade} initial="hidden" animate="show">
                 <InteractivePanel
-                  className={`flex flex-col gap-4 p-6 ${CARD_HEIGHT.chart}`}
+                  className={`flex flex-col gap-3 p-5 ${CARD_HEIGHT.chart}`}
                   onOpen={() => onOpenMetric(key)}
                 >
                   <DrillHeader

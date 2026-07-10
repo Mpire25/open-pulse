@@ -41,7 +41,7 @@ export function HeartView({ date, onOpenMetric }: HeartViewProps): React.JSX.Ele
       {/* Intraday heart rate */}
       <motion.div custom={1} variants={fade} initial="hidden" animate="show">
         <InteractivePanel
-          className={`flex flex-col gap-4 p-6 ${CARD_HEIGHT.large}`}
+          className={`flex flex-col gap-3 p-5 ${CARD_HEIGHT.large}`}
           onOpen={() => onOpenMetric('restingHeartRate')}
         >
           <DrillHeader
@@ -65,9 +65,9 @@ export function HeartView({ date, onOpenMetric }: HeartViewProps): React.JSX.Ele
             }
           />
           {intraday.isPending ? (
-            <SkeletonChart height={170} columns={12} />
+            <SkeletonChart height={180} columns={12} />
           ) : intraday.data && intraday.data.heartRate.length > 1 ? (
-            <IntradayLine points={intraday.data.heartRate} color="var(--color-heart)" />
+            <IntradayLine points={intraday.data.heartRate} color="var(--color-heart)" height={180} />
           ) : (
             <div className="grid flex-1 place-items-center text-[13px] text-ink-faint">
               No heart-rate samples recorded for this day.
@@ -115,7 +115,7 @@ function VitalCard({
   const Icon = def.icon
   return (
     <motion.div custom={index} variants={fade} initial="hidden" animate="show">
-      <InteractivePanel className={`flex flex-col gap-4 p-6 ${CARD_HEIGHT.chart}`} onOpen={onOpen}>
+      <InteractivePanel className={`flex flex-col gap-3 p-5 ${CARD_HEIGHT.chart}`} onOpen={onOpen}>
         <DrillHeader
           title={def.label}
           hint={def.hint}
@@ -139,7 +139,7 @@ function VitalCard({
           }
         />
         {pending ? (
-          <SkeletonChart height={130} />
+          <SkeletonChart height={150} />
         ) : hasData ? (
           <TrendLine
             data={points.map((p) => ({
@@ -148,7 +148,7 @@ function VitalCard({
               value: p.value
             }))}
             color={def.color}
-            height={130}
+            height={150}
             format={def.format}
             baseline={
               def.deltaMode === 'abs'

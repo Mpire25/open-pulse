@@ -175,7 +175,7 @@ export function HomeView({ date, goals, onOpenMetric, onNavigate }: HomeViewProp
         {/* Daily movement */}
         <motion.div custom={2} variants={fade} initial="hidden" animate="show" className="min-w-0">
           <InteractivePanel
-            className={`flex h-full min-w-0 flex-col gap-4 p-6 ${CARD_HEIGHT.large}`}
+            className={`flex h-full min-w-0 flex-col gap-3 p-5 ${CARD_HEIGHT.large}`}
             onOpen={() => onOpenMetric('steps')}
           >
             <DrillHeader
@@ -212,7 +212,7 @@ export function HomeView({ date, goals, onOpenMetric, onNavigate }: HomeViewProp
         {/* Last night */}
         <motion.div custom={3} variants={fade} initial="hidden" animate="show" className="min-w-0">
           <InteractivePanel
-            className={`flex h-full min-w-0 flex-col gap-4 p-6 ${CARD_HEIGHT.large}`}
+            className={`flex h-full min-w-0 flex-col gap-3 p-5 ${CARD_HEIGHT.large}`}
             onOpen={() => onNavigate('sleep')}
           >
             <DrillHeader

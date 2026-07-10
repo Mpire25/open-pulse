@@ -138,7 +138,7 @@ interface ColumnChartProps {
 export function ColumnChart({
   data,
   color,
-  height = 150,
+  height = 170,
   format = (v) => compact(v),
   goal = null,
   emphasisIndex,
@@ -318,7 +318,7 @@ interface TrendLineProps {
 export function TrendLine({
   data,
   color,
-  height = 150,
+  height = 170,
   format = (v) => compact(v),
   baseline = null,
   unitLabel = '',
