@@ -152,7 +152,7 @@ export function NutritionView({ date, goals, onOpenMetric, onSelectDate }: Nutri
                     >
                       <div className="text-center">
                         <div className="text-[26px] font-semibold leading-none tracking-tight text-ink">
-                          {today.caloriesIn != null ? formatInt(today.caloriesIn) : '—'}
+                          {formatInt(today.caloriesIn ?? 0)}
                         </div>
                         <div className="mt-1.5 text-[10px] uppercase tracking-wide text-ink-faint">
                           calories eaten
@@ -616,13 +616,13 @@ function MacroBreakdown({
             <div className="mt-1 flex items-center gap-3">
               <div className="min-w-0">
                 <div className="text-[17px] font-semibold text-ink">
-                  {p.grams != null ? `${formatInt(p.grams)} g` : '—'}
+                  {p.grams != null ? `${formatInt(p.grams)} g` : showEmptyNutrients ? '0 g' : '—'}
                 </div>
                 <div className="truncate text-[10.5px] text-ink-faint">{formatInt(goals[p.key])} g goal</div>
               </div>
               <ProgressRing value={p.grams ?? 0} goal={goals[p.key]} color={p.color} size={48} stroke={6}>
                 <span className="font-mono text-[9px] font-medium text-ink">
-                  {p.grams != null ? `${Math.round((p.grams / goals[p.key]) * 100)}%` : '—'}
+                  {p.grams != null ? `${Math.round((p.grams / goals[p.key]) * 100)}%` : showEmptyNutrients ? '0%' : '—'}
                 </span>
               </ProgressRing>
             </div>
@@ -650,7 +650,9 @@ function MacroBreakdown({
                     ? nutrient.decimals > 0 && nutrient.value < 0.01
                       ? '<0.01'
                       : nutrient.value.toFixed(nutrient.decimals)
-                    : '—'}{' '}
+                    : showEmptyNutrients
+                      ? (0).toFixed(nutrient.decimals)
+                      : '—'}{' '}
                   <span className="text-[10px] font-normal text-ink-faint">{nutrient.unit}</span>
                 </div>
               )}
