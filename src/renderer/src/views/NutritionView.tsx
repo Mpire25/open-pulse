@@ -189,9 +189,14 @@ export function NutritionView({ date, goals, onOpenMetric, onSelectDate }: Nutri
                     isMetricPending={(key) => series.isMetricPending(key) || nutritionLogs.isPending}
                   />
                 ) : (
-                  <div className="grid h-full min-h-[120px] place-items-center text-[13px] text-ink-faint">
-                    No macro detail for this day — log meals in the Fitbit app to break energy into protein, carbs, and fat.
-                  </div>
+                  <MacroBreakdown
+                    today={today}
+                    goals={goals}
+                    entries={entries}
+                    onOpenMetric={onOpenMetric}
+                    isMetricPending={(key) => series.isMetricPending(key) || nutritionLogs.isPending}
+                    showEmptyNutrients
+                  />
                 )}
               </div>
             </Panel>
@@ -568,13 +573,15 @@ function MacroBreakdown({
   goals,
   entries,
   onOpenMetric,
-  isMetricPending
+  isMetricPending,
+  showEmptyNutrients = false
 }: {
   today: DayValues
   goals: Goals
   entries: NutritionLogEntry[]
   onOpenMetric: OpenMetric
   isMetricPending: (key: MetricKey) => boolean
+  showEmptyNutrients?: boolean
 }): React.JSX.Element {
   const parts = MACROS.map((m) => ({ ...m, grams: today[m.key] ?? null, kcal: (today[m.key] ?? 0) * m.kcalPerG }))
   const totalKcal = parts.reduce((s, p) => s + p.kcal, 0) || 1
@@ -587,12 +594,16 @@ function MacroBreakdown({
       const value = recorded != null && recorded > 0 ? recorded : null
       return { ...nutrient, value, pending }
     })
-    .filter((nutrient) => nutrient.pending || nutrient.value != null)
+    .filter((nutrient) => showEmptyNutrients || nutrient.pending || nutrient.value != null)
 
   return (
     <div className="flex h-full flex-col justify-center gap-4">
       {/* Stacked share bar */}
-      <div className="flex h-3 gap-[2px] overflow-hidden rounded-full">
+      <div
+        className="flex h-3 gap-[2px] overflow-hidden rounded-full bg-white/[0.045]"
+        role="img"
+        aria-label={showEmptyNutrients ? 'No macro details recorded' : 'Daily macro calorie share'}
+      >
         {parts.map(
           (p) =>
             p.kcal > 0 && (
