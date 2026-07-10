@@ -179,8 +179,6 @@ export default function App(): React.JSX.Element {
     navigate({
       ...currentNavigationEntry(),
       selectedDate: date,
-      detailMetric: null,
-      sleepStagesOpen: false,
       selectedWorkout: null
     })
   }
