@@ -6,6 +6,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { animate, motion, useMotionValue, useReducedMotion, useTransform } from 'framer-motion'
 import { formatMinuteOfDay } from '@/lib/format'
 import { sampleHeartRateForChart } from '@/lib/heart-rate'
+import { lineAxis } from '@/lib/chart-scale'
 import { cn } from '@/lib/utils'
 
 // ---------------------------------------------------------------------------
@@ -88,28 +89,6 @@ function axisNumber(n: number): string {
   if (Math.abs(n) < 1 && n !== 0) return String(+n.toFixed(2))
   if (Math.abs(n) < 10 && !Number.isInteger(n)) return String(+n.toFixed(1))
   return compact(n)
-}
-
-function niceStep(raw: number): number {
-  if (!Number.isFinite(raw) || raw <= 0) return 1
-  const magnitude = 10 ** Math.floor(Math.log10(raw))
-  const fraction = raw / magnitude
-  for (const multiplier of [1, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10]) {
-    if (multiplier >= fraction) return multiplier * magnitude
-  }
-  return 10 * magnitude
-}
-
-function lineAxis(rawLo: number, rawHi: number): { min: number; max: number; ticks: number[] } {
-  const rawSpan = rawHi - rawLo
-  const span = rawSpan > 0 ? rawSpan : Math.max(Math.abs(rawHi) * 0.04, 0.1)
-  const paddedLo = rawLo - span * 0.15
-  const paddedHi = rawHi + span * 0.15
-  const step = niceStep((paddedHi - paddedLo) / 2)
-  const min = Math.floor(paddedLo / step) * step
-  const max = Math.ceil(paddedHi / step) * step
-  const midpoint = Math.abs((min + max) / 2) < 1e-10 ? 0 : (min + max) / 2
-  return { min, max, ticks: [min, midpoint, max] }
 }
 
 // ---------------------------------------------------------------------------
@@ -557,8 +536,8 @@ export function IntradayLine({ points, color, height = 170, domain }: IntradayLi
     [domainEnd, domainStart, points]
   )
 
-  const rawLo = sampled.length ? Math.min(...sampled.map((p) => p.bpm)) - 8 : 40
-  const rawHi = sampled.length ? Math.max(...sampled.map((p) => p.bpm)) + 8 : 120
+  const rawLo = sampled.length ? Math.min(...sampled.map((p) => p.bpm)) : 40
+  const rawHi = sampled.length ? Math.max(...sampled.map((p) => p.bpm)) : 120
   const axis = lineAxis(rawLo, rawHi)
   const x = (minute: number): number => pad.left + (plotW * (minute - domainStart)) / domainSpan
   const y = (bpm: number): number => pad.top + plotH * (1 - (bpm - axis.min) / (axis.max - axis.min))
