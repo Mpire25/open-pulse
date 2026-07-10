@@ -236,7 +236,7 @@ function NutritionLogsPanel({ entries }: { entries: NutritionLogEntry[] }): Reac
             <MealSummary label={group.label} entries={group.entries} />
             <div className="divide-y divide-hairline border-t border-hairline bg-white/[0.012]">
               {group.entries.map((entry) => (
-                <div key={entry.id} className="grid grid-cols-[minmax(0,1fr)_auto] gap-4 px-5 py-3 sm:items-center">
+                <div key={entry.id} className="grid grid-cols-1 gap-2 px-5 py-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:gap-4">
                   <div className="min-w-0">
                     <div className="truncate text-[12.5px] font-medium text-ink">{entry.foodName}</div>
                     <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-[10.5px] text-ink-faint">
@@ -245,11 +245,18 @@ function NutritionLogsPanel({ entries }: { entries: NutritionLogEntry[] }): Reac
                     </div>
                     <MacroShareBar entries={[entry]} className="mt-2 max-w-[230px]" compact />
                   </div>
-                  <div className="whitespace-nowrap text-right">
-                    <span className="font-mono text-[13px] font-medium text-ink">
-                      {entry.calories != null ? formatInt(entry.calories) : '—'}
-                    </span>{' '}
-                    <span className="text-[9.5px] text-ink-dim">kcal</span>
+                  <div className="flex flex-wrap items-center justify-start gap-x-4 gap-y-1 whitespace-nowrap sm:justify-end sm:text-right">
+                    <div className="flex items-center gap-3">
+                      <MacroTotal label="Protein" value={entry.proteinG} color="var(--color-recovery)" />
+                      <MacroTotal label="Carbs" value={entry.carbsG} color="var(--color-activity)" />
+                      <MacroTotal label="Fat" value={entry.fatG} color="var(--color-heart)" />
+                    </div>
+                    <div>
+                      <span className="font-mono text-[13px] font-medium text-ink">
+                        {entry.calories != null ? formatInt(entry.calories) : '—'}
+                      </span>{' '}
+                      <span className="text-[9.5px] text-ink-dim">kcal</span>
+                    </div>
                   </div>
                 </div>
               ))}
