@@ -8,8 +8,8 @@ import { CARD_HEIGHT, SkeletonBlock, SkeletonChart, SkeletonText } from '@/compo
 import { ErrorState } from '@/components/ErrorState'
 import { useNutritionLogs, useSeries } from '@/hooks/useHealth'
 import { METRICS } from '@/lib/metric-registry'
-import { metricAbsent, rangeEnding, seriesPoints } from '@/lib/metrics'
-import { formatClock, formatInt, longDate, weekdayShort } from '@/lib/format'
+import { listDates, metricAbsent, rangeEnding, seriesPoints } from '@/lib/metrics'
+import { formatClock, formatInt, longDate, shortDate, weekdayShort } from '@/lib/format'
 import type { OpenMetric } from '@/lib/metric-navigation'
 import { fade } from '@/lib/motion'
 import { cn } from '@/lib/utils'
@@ -45,9 +45,10 @@ interface NutritionViewProps {
   date: string
   goals: Goals
   onOpenMetric: OpenMetric
+  onSelectDate: (date: string) => void
 }
 
-export function NutritionView({ date, goals, onOpenMetric }: NutritionViewProps): React.JSX.Element {
+export function NutritionView({ date, goals, onOpenMetric, onSelectDate }: NutritionViewProps): React.JSX.Element {
   const { start, end } = rangeEnding(date, 7)
   const series = useSeries(NUTRITION_METRICS, start, end)
   const nutritionLogs = useNutritionLogs(date)
@@ -68,6 +69,10 @@ export function NutritionView({ date, goals, onOpenMetric }: NutritionViewProps)
     || (series.data ? !metricAbsent(pointsFor('caloriesIn')) : true)
   const hasMacrosToday = MACROS.some((m) => today[m.key] != null)
   const macrosPending = MACROS.some((macro) => series.isMetricPending(macro.key))
+  const recordedDays = listDates(start, end)
+    .map((dayDate) => ({ date: dayDate, values: days?.[dayDate] ?? {} }))
+    .filter(({ values }) => values.caloriesIn != null || MACROS.some((macro) => values[macro.key] != null))
+  const recentDays = [...recordedDays].reverse().filter((day) => day.date !== date)
   const net =
     today.caloriesIn != null && today.caloriesOut != null ? today.caloriesIn - today.caloriesOut : null
 
@@ -215,9 +220,82 @@ export function NutritionView({ date, goals, onOpenMetric }: NutritionViewProps)
           <div className="grid grid-cols-1 gap-5">
             {barCard('caloriesIn', 3)}
           </div>
+
+          {/* Day-by-day energy and macro mix */}
+          {recentDays.length > 0 && (
+            <motion.div custom={4} variants={fade} initial="hidden" animate="show">
+              <h2 className="mb-3 px-1 text-[13px] font-semibold text-ink-dim">Recent days</h2>
+              <div className="flex flex-col gap-2.5">
+                {recentDays.map((day) => (
+                  <NutritionDayRow
+                    key={day.date}
+                    date={day.date}
+                    values={day.values}
+                    onSelect={onSelectDate}
+                  />
+                ))}
+              </div>
+            </motion.div>
+          )}
         </>
       )}
     </div>
+  )
+}
+
+function NutritionDayRow({
+  date,
+  values,
+  onSelect
+}: {
+  date: string
+  values: DayValues
+  onSelect: (date: string) => void
+}): React.JSX.Element {
+  const parts = MACROS.map((macro) => {
+    const grams = values[macro.key] ?? null
+    return { ...macro, grams, kcal: (grams ?? 0) * macro.kcalPerG }
+  })
+  const macroCalories = parts.reduce((sum, part) => sum + part.kcal, 0)
+
+  return (
+    <InteractivePanel className="flex items-center gap-4 px-5 py-3.5" onOpen={() => onSelect(date)}>
+      <div className="w-28 shrink-0">
+        <div className="text-[13px] font-medium text-ink">
+          {new Date(`${date}T12:00:00`).toLocaleDateString('en-US', { weekday: 'long' })}
+        </div>
+        <div className="text-[11px] text-ink-faint">{shortDate(date)}</div>
+      </div>
+      <div className="min-w-0 flex-1">
+        <div
+          className="flex h-2.5 gap-[2px] overflow-hidden rounded-full bg-white/[0.04]"
+          role="img"
+          aria-label={parts
+            .filter((part) => part.grams != null)
+            .map((part) => `${part.label} ${formatInt(part.grams!)} grams`)
+            .join(', ') || 'No macro details'}
+        >
+          {macroCalories > 0 && parts.map((part) => part.kcal > 0 ? (
+            <span
+              key={part.key}
+              className="rounded-full"
+              style={{ width: `${(part.kcal / macroCalories) * 100}%`, background: part.color }}
+            />
+          ) : null)}
+        </div>
+        <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
+          {parts.map((part) => (
+            <MacroTotal key={part.key} label={part.label} value={part.grams} color={part.color} />
+          ))}
+        </div>
+      </div>
+      <div className="w-24 shrink-0 text-right">
+        <span className="font-mono text-[13px] text-ink">
+          {values.caloriesIn != null ? formatInt(values.caloriesIn) : '—'}
+        </span>{' '}
+        <span className="text-[9.5px] text-ink-dim">kcal</span>
+      </div>
+    </InteractivePanel>
   )
 }
 

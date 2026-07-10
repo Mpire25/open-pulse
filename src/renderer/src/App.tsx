@@ -183,7 +183,12 @@ export default function App(): React.JSX.Element {
                         )}
                         {view === 'body' && <BodyView date={selectedDate} onOpenMetric={openMetric} />}
                         {view === 'nutrition' && (
-                          <NutritionView date={selectedDate} goals={settings.goals} onOpenMetric={openMetric} />
+                          <NutritionView
+                            date={selectedDate}
+                            goals={settings.goals}
+                            onOpenMetric={openMetric}
+                            onSelectDate={selectDate}
+                          />
                         )}
                       </>
                     )}
