@@ -12,10 +12,20 @@ export function formatClock(iso: string): string {
   return new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
 }
 
-/** "2:30 PM" from a minute of the day (0-1439). */
-export function formatMinuteOfDay(minute: number): string {
-  const h = Math.floor(minute / 60) % 24
-  const m = Math.round(minute % 60)
+/** "2:30 PM" (or "2:30:15 PM") from a minute of the day (0-1439). */
+export function formatMinuteOfDay(minute: number, includeSeconds = false): string {
+  if (includeSeconds) {
+    const normalizedSeconds = ((Math.round(minute * 60) % 86_400) + 86_400) % 86_400
+    const h = Math.floor(normalizedSeconds / 3600)
+    const m = Math.floor((normalizedSeconds % 3600) / 60)
+    const s = normalizedSeconds % 60
+    const suffix = h < 12 ? 'AM' : 'PM'
+    const hour12 = h % 12 === 0 ? 12 : h % 12
+    return `${hour12}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')} ${suffix}`
+  }
+  const normalized = ((Math.round(minute) % 1440) + 1440) % 1440
+  const h = Math.floor(normalized / 60)
+  const m = normalized % 60
   const suffix = h < 12 ? 'AM' : 'PM'
   const hour12 = h % 12 === 0 ? 12 : h % 12
   return `${hour12}:${String(m).padStart(2, '0')} ${suffix}`

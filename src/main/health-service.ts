@@ -22,6 +22,7 @@ import type {
   SleepStageSegment,
   SleepStageType,
   Workout,
+  WorkoutTrackResult,
   WorkoutsResult
 } from '../shared/types'
 import { METRIC_KEYS } from '../shared/types'
@@ -29,6 +30,8 @@ import { getGoogleAccessToken } from './google-auth'
 import {
   dailyRollUp,
   dateFromCivil,
+  exportExerciseTcx,
+  HealthApiError,
   listData,
   listPairedDevices,
   minuteFromCivil,
@@ -49,8 +52,16 @@ import {
   setSleep,
   setWorkouts
 } from './metric-store'
-import { demoDevices, demoIntraday, demoSeries, demoSleepRange, demoWorkoutsRange } from './sample-data'
+import {
+  demoDevices,
+  demoIntraday,
+  demoSeries,
+  demoSleepRange,
+  demoWorkoutTrack,
+  demoWorkoutsRange
+} from './sample-data'
 import { nutrientGrams } from './nutrition'
+import { parseExerciseTcx } from './tcx'
 
 // ---------------------------------------------------------------------------
 // Dates & freshness
@@ -404,39 +415,180 @@ function ensureSleepOnce(token: string, start: string, end: string, force: boole
 // ---------------------------------------------------------------------------
 // Workouts
 
+interface RawWorkoutMetrics {
+  heartRateZoneDurations?: {
+    lightTime?: string
+    moderateTime?: string
+    vigorousTime?: string
+    peakTime?: string
+  }
+  mobilityMetrics?: {
+    avgGroundContactTimeDuration?: string
+    avgCadenceStepsPerMinute?: number
+    avgStrideLengthMillimeters?: string | number
+    avgVerticalOscillationMillimeters?: string | number
+    avgVerticalRatio?: number
+  }
+  caloriesKcal?: number
+  distanceMillimeters?: number
+  steps?: string | number
+  averageSpeedMillimetersPerSecond?: number
+  averagePaceSecondsPerMeter?: number
+  averageHeartRateBeatsPerMinute?: string | number
+  elevationGainMillimeters?: number
+  activeZoneMinutes?: string | number
+  runVo2Max?: number
+  totalSwimLengths?: number
+}
+
+interface RawWorkoutSplit {
+  startTime?: string
+  endTime?: string
+  activeDuration?: string
+  metricsSummary?: RawWorkoutMetrics
+  splitType?: string
+}
+
+interface RawExercise {
+  exerciseType?: string
+  displayName?: string
+  interval?: { startTime?: string; endTime?: string; civilStartTime?: CivilDateTime }
+  activeDuration?: string
+  metricsSummary?: RawWorkoutMetrics
+  splits?: RawWorkoutSplit[]
+  splitSummaries?: RawWorkoutSplit[]
+  exerciseEvents?: Array<{ eventTime?: string; eventUtcOffset?: string; exerciseEventType?: string }>
+  exerciseMetadata?: { hasGps?: boolean; poolLengthMillimeters?: string | number }
+  notes?: string
+}
+
+function durationMinutes(value: unknown): number | null {
+  const seconds = durationSeconds(value)
+  return seconds > 0 ? seconds / 60 : null
+}
+
+function metricDistanceKm(summary: RawWorkoutMetrics): number | null {
+  const millimeters = num(summary.distanceMillimeters)
+  return millimeters != null ? +(millimeters / 1_000_000).toFixed(3) : null
+}
+
+function metricSpeedKph(summary: RawWorkoutMetrics): number | null {
+  const millimetersPerSecond = num(summary.averageSpeedMillimetersPerSecond)
+  return millimetersPerSecond != null ? +(millimetersPerSecond * 0.0036).toFixed(2) : null
+}
+
+function metricPaceSecPerKm(summary: RawWorkoutMetrics): number | null {
+  const secondsPerMeter = num(summary.averagePaceSecondsPerMeter)
+  return secondsPerMeter != null ? +(secondsPerMeter * 1000).toFixed(1) : null
+}
+
+function metricElevationM(summary: RawWorkoutMetrics): number | null {
+  const millimeters = num(summary.elevationGainMillimeters)
+  return millimeters != null ? +(millimeters / 1000).toFixed(1) : null
+}
+
+function mapWorkoutSplit(split: RawWorkoutSplit): NonNullable<Workout['splits']>[number] | null {
+  if (!split.startTime || !split.endTime) return null
+  const summary = split.metricsSummary ?? {}
+  const elapsedMinutes = (new Date(split.endTime).getTime() - new Date(split.startTime).getTime()) / 60_000
+  return {
+    startTime: split.startTime,
+    endTime: split.endTime,
+    durationMin: durationMinutes(split.activeDuration) ?? Math.max(0, elapsedMinutes),
+    splitType: split.splitType ?? null,
+    calories: num(summary.caloriesKcal),
+    distanceKm: metricDistanceKm(summary),
+    steps: num(summary.steps),
+    avgHeartRate: num(summary.averageHeartRateBeatsPerMinute),
+    averageSpeedKph: metricSpeedKph(summary),
+    averagePaceSecPerKm: metricPaceSecPerKm(summary),
+    elevationGainM: metricElevationM(summary)
+  }
+}
+
 function mapWorkout(point: RawDataPoint): Workout | null {
-  const exercise = point.exercise as
-    | {
-        exerciseType?: string
-        displayName?: string
-        interval?: { startTime?: string; endTime?: string }
-        activeDuration?: string
-        metricsSummary?: {
-          caloriesKcal?: number
-          distanceMillimeters?: number
-          averageHeartRateBeatsPerMinute?: number
-          steps?: number
-          activeZoneMinutes?: number
-        }
-      }
-    | undefined
+  const exercise = point.exercise as RawExercise | undefined
   if (!exercise?.interval?.startTime) return null
   const summary = exercise.metricsSummary ?? {}
+  const dataSource = point.dataSource as
+    | { platform?: string; device?: { displayName?: string; model?: string } }
+    | undefined
   const intervalSec = exercise.interval.endTime
     ? (new Date(exercise.interval.endTime).getTime() - new Date(exercise.interval.startTime).getTime()) / 1000
     : 0
   const durationSec = durationSeconds(exercise.activeDuration) || Math.max(0, intervalSec)
+  const zones = summary.heartRateZoneDurations
+  const mobility = summary.mobilityMetrics
+  const rawSplits = exercise.splitSummaries?.length ? exercise.splitSummaries : exercise.splits
   return {
     id: String(point.dataPointName ?? point.name ?? exercise.interval.startTime),
     name: exercise.displayName || String(exercise.exerciseType ?? 'Activity').replaceAll('_', ' '),
     startTime: exercise.interval.startTime,
+    startMinute: minuteFromCivil(exercise.interval.civilStartTime),
     durationMin: Math.round(durationSec / 60),
+    elapsedDurationMin: intervalSec > 0 ? +(intervalSec / 60).toFixed(1) : null,
+    exerciseType: exercise.exerciseType ?? null,
     calories: num(summary.caloriesKcal),
-    distanceKm:
-      num(summary.distanceMillimeters) != null ? +(Number(summary.distanceMillimeters) / 1_000_000).toFixed(2) : null,
+    distanceKm: metricDistanceKm(summary),
     avgHeartRate: num(summary.averageHeartRateBeatsPerMinute),
     steps: num(summary.steps),
-    activeZoneMinutes: num(summary.activeZoneMinutes)
+    activeZoneMinutes: num(summary.activeZoneMinutes),
+    averageSpeedKph: metricSpeedKph(summary),
+    averagePaceSecPerKm: metricPaceSecPerKm(summary),
+    elevationGainM: metricElevationM(summary),
+    runVo2Max: num(summary.runVo2Max),
+    totalSwimLengths: num(summary.totalSwimLengths),
+    heartRateZones: zones
+      ? {
+          lightMin: durationMinutes(zones.lightTime),
+          moderateMin: durationMinutes(zones.moderateTime),
+          vigorousMin: durationMinutes(zones.vigorousTime),
+          peakMin: durationMinutes(zones.peakTime)
+        }
+      : null,
+    mobility: mobility
+      ? {
+          groundContactMs:
+            durationSeconds(mobility.avgGroundContactTimeDuration) > 0
+              ? durationSeconds(mobility.avgGroundContactTimeDuration) * 1000
+              : null,
+          cadenceStepsPerMin: num(mobility.avgCadenceStepsPerMinute),
+          strideLengthM:
+            num(mobility.avgStrideLengthMillimeters) != null
+              ? +(Number(mobility.avgStrideLengthMillimeters) / 1000).toFixed(3)
+              : null,
+          verticalOscillationCm:
+            num(mobility.avgVerticalOscillationMillimeters) != null
+              ? +(Number(mobility.avgVerticalOscillationMillimeters) / 10).toFixed(2)
+              : null,
+          verticalRatio: num(mobility.avgVerticalRatio)
+        }
+      : null,
+    splits: (rawSplits ?? []).flatMap((split) => {
+      const mapped = mapWorkoutSplit(split)
+      return mapped ? [mapped] : []
+    }),
+    events: (exercise.exerciseEvents ?? []).flatMap((event) => {
+      if (!event.eventTime || !event.exerciseEventType) return []
+      const eventLocal = event.eventUtcOffset
+        ? new Date(new Date(event.eventTime).getTime() + durationSeconds(event.eventUtcOffset) * 1000)
+        : null
+      return [
+        {
+          time: event.eventTime,
+          type: event.exerciseEventType,
+          minute: eventLocal ? eventLocal.getUTCHours() * 60 + eventLocal.getUTCMinutes() : null
+        }
+      ]
+    }),
+    hasGps: exercise.exerciseMetadata?.hasGps ?? null,
+    poolLengthM:
+      num(exercise.exerciseMetadata?.poolLengthMillimeters) != null
+        ? +(Number(exercise.exerciseMetadata?.poolLengthMillimeters) / 1000).toFixed(2)
+        : null,
+    notes: exercise.notes?.trim() || null,
+    recordingSource: dataSource?.platform ?? null,
+    deviceName: dataSource?.device?.displayName ?? dataSource?.device?.model ?? null
   }
 }
 
@@ -469,6 +621,23 @@ async function ensureWorkoutsRange(token: string, start: string, end: string, fo
     setWorkouts(date, list)
   }
   markFetched('workouts', spanDates)
+}
+
+const workoutTrackCache = new Map<string, WorkoutTrackResult>()
+
+export async function getWorkoutTrack(workoutId: string): Promise<WorkoutTrackResult> {
+  const cached = workoutTrackCache.get(workoutId)
+  if (cached) return cached
+  const token = await getGoogleAccessToken()
+  if (!token) return demoWorkoutTrack(workoutId)
+  try {
+    const track = parseExerciseTcx(await exportExerciseTcx(token, workoutId))
+    workoutTrackCache.set(workoutId, track)
+    return track
+  } catch (error) {
+    if (error instanceof HealthApiError && [400, 403, 404].includes(error.status)) return { points: [] }
+    throw error
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -504,12 +673,23 @@ async function ensureIntradayHeart(token: string, date: string, force: boolean):
       const record = p.heartRate as
         | { sampleTime?: { civilTime?: CivilDateTime; physicalTime?: string }; beatsPerMinute?: string }
         | undefined
+      const civilTime = record?.sampleTime?.civilTime?.time
+      const physicalTime = record?.sampleTime?.physicalTime
+        ? new Date(record.sampleTime.physicalTime)
+        : null
       const minute =
-        minuteFromCivil(record?.sampleTime?.civilTime) ??
-        (record?.sampleTime?.physicalTime
-          ? new Date(record.sampleTime.physicalTime).getHours() * 60 +
-            new Date(record.sampleTime.physicalTime).getMinutes()
-          : null)
+        typeof civilTime?.hours === 'number'
+          ? civilTime.hours * 60 +
+            (civilTime.minutes ?? 0) +
+            (typeof civilTime.seconds === 'number'
+              ? civilTime.seconds / 60
+              : ((physicalTime?.getSeconds() ?? 0) + (physicalTime?.getMilliseconds() ?? 0) / 1000) / 60)
+          : physicalTime
+            ? physicalTime.getHours() * 60 +
+              physicalTime.getMinutes() +
+              physicalTime.getSeconds() / 60 +
+              physicalTime.getMilliseconds() / 60_000
+            : null
       const bpm = num(record?.beatsPerMinute)
       return minute != null && bpm ? { minute, bpm } : null
     })
@@ -646,6 +826,7 @@ export async function getDevices(force = false): Promise<PairedDevice[]> {
 export function clearHealthCache(): void {
   markAllStale()
   devicesCache = null
+  workoutTrackCache.clear()
 }
 
 // ---------------------------------------------------------------------------

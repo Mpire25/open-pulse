@@ -12,12 +12,13 @@ import { SleepView } from '@/views/SleepView'
 import { BodyView } from '@/views/BodyView'
 import { NutritionView } from '@/views/NutritionView'
 import { MetricDetailView } from '@/views/MetricDetailView'
+import { WorkoutDetailView } from '@/views/WorkoutDetailView'
 import { DevicesView } from '@/views/DevicesView'
 import { AssistantView } from '@/views/AssistantView'
 import { SettingsView } from '@/views/SettingsView'
 import { useChat } from '@/hooks/useChat'
 import { isoToday } from '@/lib/format'
-import type { AppSettings, CodexAuthStatus, GoogleAuthStatus, MetricKey } from '@shared/types'
+import type { AppSettings, CodexAuthStatus, GoogleAuthStatus, MetricKey, Workout } from '@shared/types'
 
 const DATA_VIEWS: View[] = ['home', 'activity', 'heart', 'sleep', 'body', 'nutrition']
 
@@ -25,6 +26,7 @@ export default function App(): React.JSX.Element {
   const [view, setView] = useState<View>('home')
   // Non-null = a metric detail page is open on top of the current data view.
   const [detailMetric, setDetailMetric] = useState<MetricKey | null>(null)
+  const [selectedWorkout, setSelectedWorkout] = useState<Workout | null>(null)
   const [settings, setSettings] = useState<AppSettings | null>(null)
   const [google, setGoogle] = useState<GoogleAuthStatus>({ connected: false })
   const [codex, setCodex] = useState<CodexAuthStatus>({ connected: false })
@@ -57,6 +59,23 @@ export default function App(): React.JSX.Element {
   const selectView = (v: View): void => {
     setView(v)
     setDetailMetric(null)
+    setSelectedWorkout(null)
+  }
+
+  const selectDate = (date: string): void => {
+    setSelectedDate(date)
+    setDetailMetric(null)
+    setSelectedWorkout(null)
+  }
+
+  const openMetric = (metric: MetricKey): void => {
+    setSelectedWorkout(null)
+    setDetailMetric(metric)
+  }
+
+  const openWorkout = (workout: Workout): void => {
+    setDetailMetric(null)
+    setSelectedWorkout(workout)
   }
 
   if (!settings) {
@@ -65,6 +84,7 @@ export default function App(): React.JSX.Element {
 
   const isDataView = DATA_VIEWS.includes(view)
   const showDetail = isDataView && detailMetric != null
+  const showWorkoutDetail = isDataView && selectedWorkout != null
 
   return (
     <div className="flex h-full w-full overflow-hidden bg-canvas/60 text-ink">
@@ -84,7 +104,7 @@ export default function App(): React.JSX.Element {
         <TopBar
           showDateNav={isDataView}
           date={selectedDate}
-          onDateChange={setSelectedDate}
+          onDateChange={selectDate}
           showAsk={view !== 'assistant'}
           chatOpen={chatOpen}
           onToggleChat={() => setChatOpen((o) => !o)}
@@ -96,7 +116,7 @@ export default function App(): React.JSX.Element {
           <div className="scroll-stable min-h-0 flex-1 overflow-y-auto">
             <AnimatePresence mode="wait">
               <motion.div
-                key={`${view}-${detailMetric ?? 'root'}-${google.connected}`}
+                key={`${view}-${detailMetric ?? selectedWorkout?.id ?? 'root'}-${google.connected}`}
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -6 }}
@@ -113,7 +133,13 @@ export default function App(): React.JSX.Element {
                       setSettings({ ...settings, googleClientId, googleClientSecretConfigured })
                     }
                   >
-                    {showDetail ? (
+                    {showWorkoutDetail ? (
+                      <WorkoutDetailView
+                        workout={selectedWorkout}
+                        date={selectedDate}
+                        onBack={() => setSelectedWorkout(null)}
+                      />
+                    ) : showDetail ? (
                       <MetricDetailView
                         metricKey={detailMetric}
                         date={selectedDate}
@@ -126,20 +152,31 @@ export default function App(): React.JSX.Element {
                           <HomeView
                             date={selectedDate}
                             goals={settings.goals}
-                            onOpenMetric={setDetailMetric}
+                            onOpenMetric={openMetric}
+                            onOpenWorkout={openWorkout}
                             onNavigate={selectView}
                           />
                         )}
                         {view === 'activity' && (
-                          <ActivityView date={selectedDate} goals={settings.goals} onOpenMetric={setDetailMetric} />
+                          <ActivityView
+                            date={selectedDate}
+                            goals={settings.goals}
+                            onOpenMetric={openMetric}
+                            onOpenWorkout={openWorkout}
+                          />
                         )}
-                        {view === 'heart' && <HeartView date={selectedDate} onOpenMetric={setDetailMetric} />}
+                        {view === 'heart' && <HeartView date={selectedDate} onOpenMetric={openMetric} />}
                         {view === 'sleep' && (
-                          <SleepView date={selectedDate} goals={settings.goals} onOpenMetric={setDetailMetric} />
+                          <SleepView
+                            date={selectedDate}
+                            goals={settings.goals}
+                            onOpenMetric={openMetric}
+                            onSelectDate={selectDate}
+                          />
                         )}
-                        {view === 'body' && <BodyView date={selectedDate} onOpenMetric={setDetailMetric} />}
+                        {view === 'body' && <BodyView date={selectedDate} onOpenMetric={openMetric} />}
                         {view === 'nutrition' && (
-                          <NutritionView date={selectedDate} goals={settings.goals} onOpenMetric={setDetailMetric} />
+                          <NutritionView date={selectedDate} goals={settings.goals} onOpenMetric={openMetric} />
                         )}
                       </>
                     )}

@@ -8,6 +8,7 @@ import {
   getIntraday,
   getSeries,
   getSleepRange,
+  getWorkoutTrack,
   getWorkoutsRange
 } from './health-service'
 import { setApiActivityListener } from './health-api'
@@ -25,6 +26,7 @@ export function registerIpc(): void {
     await disconnectGoogle()
     // The archive is this account's health data; it goes with the connection.
     wipeArchive()
+    clearHealthCache()
   })
 
   ipcMain.handle('codex:status', () => getCodexStatus())
@@ -40,6 +42,7 @@ export function registerIpc(): void {
   ipcMain.handle('health:workouts', (_e, start: string, end: string, force?: boolean) =>
     getWorkoutsRange(start, end, force)
   )
+  ipcMain.handle('health:workout-track', (_e, workoutId: string) => getWorkoutTrack(workoutId))
   ipcMain.handle('health:intraday', (_e, date: string, force?: boolean) => getIntraday(date, force))
   ipcMain.handle('health:devices', (_e, force?: boolean) => getDevices(force))
   ipcMain.handle('health:refresh', () => clearHealthCache())

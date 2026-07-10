@@ -13,7 +13,8 @@ import type {
   SleepNight,
   SleepStageSegment,
   SleepStageType,
-  Workout
+  Workout,
+  WorkoutTrackResult
 } from '../shared/types'
 
 function mulberry32(seed: number): () => number {
@@ -256,19 +257,108 @@ function demoWorkoutsFor(date: string, uptoMinute: number): Workout[] {
     const start = new Date(`${date}T00:00:00`)
     start.setMinutes(startMinute)
     const isCardio = name === 'Run' || name === 'Bike ride' || name === 'Walk'
+    const hasGps = isCardio
+    const elapsedDurationMin = durationMin + (isCardio ? 3 : 0)
+    const calories = Math.round(durationMin * (isCardio ? 9 : 5) + rand() * 40)
+    const distanceKm = isCardio ? +(durationMin * (name === 'Bike ride' ? 0.4 : 0.16) + rand()).toFixed(2) : null
+    const avgHeartRate = Math.round(isCardio ? 138 + rand() * 20 : 105 + rand() * 15)
+    const steps = name === 'Run' || name === 'Walk' ? Math.round(durationMin * (name === 'Run' ? 160 : 100)) : null
+    const splitCount = distanceKm != null ? Math.max(1, Math.min(6, Math.floor(distanceKm))) : 0
+    const end = new Date(start.getTime() + elapsedDurationMin * 60_000)
+    const pause = new Date(start.getTime() + durationMin * 0.45 * 60_000)
+    const resume = new Date(pause.getTime() + 3 * 60_000)
     workouts.push({
       id: `${date}-${i}`,
       name,
       startTime: start.toISOString(),
+      startMinute,
       durationMin,
-      calories: Math.round(durationMin * (isCardio ? 9 : 5) + rand() * 40),
-      distanceKm: isCardio ? +(durationMin * (name === 'Bike ride' ? 0.4 : 0.16) + rand()).toFixed(2) : null,
-      avgHeartRate: Math.round(isCardio ? 138 + rand() * 20 : 105 + rand() * 15),
-      steps: name === 'Run' || name === 'Walk' ? Math.round(durationMin * (name === 'Run' ? 160 : 100)) : null,
-      activeZoneMinutes: Math.round(durationMin * (isCardio ? 0.9 : 0.4))
+      elapsedDurationMin,
+      exerciseType: name.toUpperCase().replaceAll(' ', '_'),
+      calories,
+      distanceKm,
+      avgHeartRate,
+      steps,
+      activeZoneMinutes: Math.round(durationMin * (isCardio ? 0.9 : 0.4)),
+      averageSpeedKph: distanceKm != null ? +(distanceKm / (durationMin / 60)).toFixed(2) : null,
+      averagePaceSecPerKm: distanceKm != null ? +((durationMin * 60) / distanceKm).toFixed(1) : null,
+      elevationGainM: hasGps ? Math.round(18 + rand() * 75) : null,
+      runVo2Max: name === 'Run' ? +(42 + rand() * 8).toFixed(1) : null,
+      totalSwimLengths: null,
+      heartRateZones: {
+        lightMin: +(durationMin * 0.2).toFixed(1),
+        moderateMin: +(durationMin * (isCardio ? 0.35 : 0.45)).toFixed(1),
+        vigorousMin: +(durationMin * (isCardio ? 0.35 : 0.2)).toFixed(1),
+        peakMin: +(durationMin * (isCardio ? 0.1 : 0.05)).toFixed(1)
+      },
+      mobility:
+        name === 'Run'
+          ? {
+              groundContactMs: Math.round(225 + rand() * 35),
+              cadenceStepsPerMin: Math.round(164 + rand() * 16),
+              strideLengthM: +(0.95 + rand() * 0.3).toFixed(2),
+              verticalOscillationCm: +(7 + rand() * 2).toFixed(1),
+              verticalRatio: +(6.8 + rand() * 1.8).toFixed(1)
+            }
+          : null,
+      splits: Array.from({ length: splitCount }, (_, splitIndex) => {
+        const splitDuration = durationMin / splitCount
+        const splitStart = new Date(start.getTime() + splitIndex * splitDuration * 60_000)
+        const splitEnd = new Date(splitStart.getTime() + splitDuration * 60_000)
+        const splitDistance = (distanceKm ?? 0) / splitCount
+        return {
+          startTime: splitStart.toISOString(),
+          endTime: splitEnd.toISOString(),
+          durationMin: splitDuration,
+          splitType: 'DISTANCE',
+          calories: Math.round(calories / splitCount),
+          distanceKm: +splitDistance.toFixed(2),
+          steps: steps != null ? Math.round(steps / splitCount) : null,
+          avgHeartRate: avgHeartRate + splitIndex - Math.floor(splitCount / 2),
+          averageSpeedKph: +(splitDistance / (splitDuration / 60)).toFixed(2),
+          averagePaceSecPerKm: +((splitDuration * 60) / splitDistance).toFixed(1),
+          elevationGainM: Math.round(((18 + rand() * 75) / splitCount) * 10) / 10
+        }
+      }),
+      events: [
+        { time: start.toISOString(), type: 'START', minute: startMinute },
+        ...(isCardio
+          ? [
+              { time: pause.toISOString(), type: 'AUTO_PAUSE', minute: startMinute + durationMin * 0.45 },
+              { time: resume.toISOString(), type: 'AUTO_RESUME', minute: startMinute + durationMin * 0.45 + 3 }
+            ]
+          : []),
+        { time: end.toISOString(), type: 'STOP', minute: startMinute + elapsedDurationMin }
+      ],
+      hasGps,
+      poolLengthM: null,
+      notes: null,
+      recordingSource: 'FITBIT',
+      deviceName: 'Google Fitbit Air'
     })
   }
   return workouts
+}
+
+export function demoWorkoutTrack(workoutId: string): WorkoutTrackResult {
+  const rand = mulberry32(seedFor(`${workoutId}-route`))
+  const centerLat = 51.5074 + (rand() - 0.5) * 0.025
+  const centerLon = -0.1278 + (rand() - 0.5) * 0.04
+  const count = 90
+  return {
+    points: Array.from({ length: count }, (_, index) => {
+      const progress = index / (count - 1)
+      const angle = progress * Math.PI * 2
+      return {
+        time: null,
+        latitude: centerLat + Math.sin(angle) * 0.008 + Math.sin(angle * 3) * 0.0015,
+        longitude: centerLon + Math.cos(angle) * 0.012 + Math.sin(angle * 2) * 0.001,
+        altitudeM: 28 + Math.sin(angle * 2) * 9,
+        heartRate: Math.round(112 + Math.sin(progress * Math.PI) * 45 + rand() * 5),
+        cadence: Math.round(158 + rand() * 12)
+      }
+    })
+  }
 }
 
 function uptoMinuteFor(date: string): number {

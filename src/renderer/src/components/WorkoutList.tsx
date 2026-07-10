@@ -2,11 +2,21 @@ import { PersonSimpleRun } from '@phosphor-icons/react'
 import { formatClock, formatInt, formatMinutes } from '@/lib/format'
 import type { Workout } from '@shared/types'
 
-export function WorkoutList({ workouts }: { workouts: Workout[] }): React.JSX.Element {
+interface WorkoutListProps {
+  workouts: Workout[]
+  onOpen: (workout: Workout) => void
+}
+
+export function WorkoutList({ workouts, onOpen }: WorkoutListProps): React.JSX.Element {
   return (
     <div className="workout-list flex flex-col gap-1">
       {workouts.map((w) => (
-        <div key={w.id} className="flex min-w-0 items-center gap-3 rounded-xl px-3 py-2.5 transition-colors hover:bg-white/[0.03]">
+        <button
+          key={w.id}
+          type="button"
+          onClick={() => onOpen(w)}
+          className="flex w-full min-w-0 items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-white/[0.05] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 active:bg-white/[0.07]"
+        >
           <div className="flex min-w-0 flex-1 items-center gap-3">
             <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-recovery-soft">
               <PersonSimpleRun size={17} weight="fill" style={{ color: 'var(--color-recovery)' }} />
@@ -24,7 +34,7 @@ export function WorkoutList({ workouts }: { workouts: Workout[] }): React.JSX.El
             {w.avgHeartRate != null && <Fact className="workout-fact-heart" label="avg bpm" value={String(w.avgHeartRate)} />}
             {w.activeZoneMinutes != null && <Fact className="workout-fact-zone" label="zone min" value={String(w.activeZoneMinutes)} />}
           </div>
-        </div>
+        </button>
       ))}
     </div>
   )

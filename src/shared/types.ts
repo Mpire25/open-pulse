@@ -109,12 +109,77 @@ export interface Workout {
   id: string
   name: string
   startTime: string // ISO
+  startMinute?: number | null // civil minute of day where the workout was recorded
   durationMin: number
+  elapsedDurationMin?: number | null
+  exerciseType?: string | null
   calories: number | null
   distanceKm: number | null
   avgHeartRate: number | null
   steps: number | null
   activeZoneMinutes: number | null
+  averageSpeedKph?: number | null
+  averagePaceSecPerKm?: number | null
+  elevationGainM?: number | null
+  runVo2Max?: number | null
+  totalSwimLengths?: number | null
+  heartRateZones?: WorkoutHeartRateZones | null
+  mobility?: WorkoutMobilityMetrics | null
+  splits?: WorkoutSplit[]
+  events?: WorkoutEvent[]
+  hasGps?: boolean | null
+  poolLengthM?: number | null
+  notes?: string | null
+  recordingSource?: string | null
+  deviceName?: string | null
+}
+
+export interface WorkoutHeartRateZones {
+  lightMin: number | null
+  moderateMin: number | null
+  vigorousMin: number | null
+  peakMin: number | null
+}
+
+export interface WorkoutMobilityMetrics {
+  groundContactMs: number | null
+  cadenceStepsPerMin: number | null
+  strideLengthM: number | null
+  verticalOscillationCm: number | null
+  verticalRatio: number | null
+}
+
+export interface WorkoutSplit {
+  startTime: string
+  endTime: string
+  durationMin: number
+  splitType: string | null
+  calories: number | null
+  distanceKm: number | null
+  steps: number | null
+  avgHeartRate: number | null
+  averageSpeedKph: number | null
+  averagePaceSecPerKm: number | null
+  elevationGainM: number | null
+}
+
+export interface WorkoutEvent {
+  time: string
+  type: string
+  minute?: number | null
+}
+
+export interface WorkoutTrackPoint {
+  time: string | null
+  latitude: number | null
+  longitude: number | null
+  altitudeM: number | null
+  heartRate: number | null
+  cadence: number | null
+}
+
+export interface WorkoutTrackResult {
+  points: WorkoutTrackPoint[]
 }
 
 export interface WorkoutsResult {

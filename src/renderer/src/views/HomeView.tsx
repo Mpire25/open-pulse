@@ -21,7 +21,7 @@ import { METRICS } from '@/lib/metric-registry'
 import { baseline, baselineDeltaPct, pointValues, rangeEnding, seriesPoints } from '@/lib/metrics'
 import { formatClock, formatHour, formatInt, formatMinutes, greeting, isoToday, longDate } from '@/lib/format'
 import { fade } from '@/lib/motion'
-import type { Goals, MetricKey } from '@shared/types'
+import type { Goals, MetricKey, Workout } from '@shared/types'
 
 const HOME_METRICS: MetricKey[] = [
   'steps',
@@ -42,10 +42,11 @@ interface HomeViewProps {
   date: string
   goals: Goals
   onOpenMetric: (metric: MetricKey) => void
+  onOpenWorkout: (workout: Workout) => void
   onNavigate: (view: View) => void
 }
 
-export function HomeView({ date, goals, onOpenMetric, onNavigate }: HomeViewProps): React.JSX.Element {
+export function HomeView({ date, goals, onOpenMetric, onOpenWorkout, onNavigate }: HomeViewProps): React.JSX.Element {
   const { start, end } = rangeEnding(date, 7)
   const series = useSeries(HOME_METRICS, start, end)
   const night = useSleepNight(date)
@@ -256,7 +257,11 @@ export function HomeView({ date, goals, onOpenMetric, onNavigate }: HomeViewProp
       {(workouts.isPending || (workouts.data && workouts.data.length > 0)) && (
         <motion.div custom={5} variants={fade} initial="hidden" animate="show">
           <Panel className="min-h-[126px] p-3">
-            {workouts.isPending ? <SkeletonRows /> : <WorkoutList workouts={workouts.data ?? []} />}
+            {workouts.isPending ? (
+              <SkeletonRows />
+            ) : (
+              <WorkoutList workouts={workouts.data ?? []} onOpen={onOpenWorkout} />
+            )}
           </Panel>
         </motion.div>
       )}

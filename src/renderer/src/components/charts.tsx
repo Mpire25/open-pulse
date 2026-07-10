@@ -5,6 +5,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { animate, motion, useMotionValue, useReducedMotion, useTransform } from 'framer-motion'
 import { formatMinuteOfDay } from '@/lib/format'
+import { sampleHeartRateForChart } from '@/lib/heart-rate'
 import { cn } from '@/lib/utils'
 
 // ---------------------------------------------------------------------------
@@ -531,9 +532,14 @@ interface IntradayLineProps {
   points: Array<{ minute: number; bpm: number }>
   color: string
   height?: number
+  domain?: { startMinute: number; endMinute: number }
 }
 
-export function IntradayLine({ points, color, height = 170 }: IntradayLineProps): React.JSX.Element {
+// A single SVG path and nearest-point hover remain responsive at this size.
+// Below the cap every received reading is drawn; only larger series are reduced.
+const MAX_HEART_RATE_CHART_POINTS = 2000
+
+export function IntradayLine({ points, color, height = 170, domain }: IntradayLineProps): React.JSX.Element {
   const [ref, width] = useWidth()
   const [tip, setTip] = useState<TipState | null>(null)
   const [cursorX, setCursorX] = useState<number | null>(null)
@@ -541,36 +547,35 @@ export function IntradayLine({ points, color, height = 170 }: IntradayLineProps)
   const pad = { top: 14, bottom: 18, left: 0, right: 46 }
   const plotW = Math.max(0, width - pad.left - pad.right)
   const plotH = height - pad.top - pad.bottom
+  const domainStart = domain?.startMinute ?? 0
+  const domainEnd = Math.max(domainStart + 1, domain?.endMinute ?? 1440)
+  const domainSpan = domainEnd - domainStart
 
-  // Downsample to ~1 point per 2 plot px.
-  const sampled = useMemo(() => {
-    const target = Math.max(60, Math.floor(plotW / 2))
-    if (points.length <= target) return points
-    const step = points.length / target
-    const out: Array<{ minute: number; bpm: number }> = []
-    for (let i = 0; i < target; i++) out.push(points[Math.floor(i * step)])
-    if (out.at(-1) !== points.at(-1)) out.push(points.at(-1)!)
-    return out
-  }, [points, plotW])
+  const sampled = useMemo(
+    () => sampleHeartRateForChart(points, MAX_HEART_RATE_CHART_POINTS, domainStart, domainEnd),
+    [domainEnd, domainStart, points]
+  )
 
   const rawLo = sampled.length ? Math.min(...sampled.map((p) => p.bpm)) - 8 : 40
   const rawHi = sampled.length ? Math.max(...sampled.map((p) => p.bpm)) + 8 : 120
   const axis = lineAxis(rawLo, rawHi)
-  const x = (minute: number): number => pad.left + (plotW * minute) / 1440
+  const x = (minute: number): number => pad.left + (plotW * (minute - domainStart)) / domainSpan
   const y = (bpm: number): number => pad.top + plotH * (1 - (bpm - axis.min) / (axis.max - axis.min))
 
   const path = useMemo(
     () => sampled.map((p, i) => `${i ? 'L' : 'M'} ${x(p.minute).toFixed(1)} ${y(p.bpm).toFixed(1)}`).join(' '),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [axis.max, axis.min, height, sampled, width]
+    [axis.max, axis.min, domainSpan, domainStart, height, sampled, width]
   )
 
-  const hours = [6, 12, 18]
+  const timeTicks = domain
+    ? [domainStart, domainStart + domainSpan / 2, domainEnd]
+    : [6 * 60, 12 * 60, 18 * 60]
 
   const onMove = (e: React.PointerEvent<SVGRectElement>): void => {
     if (!sampled.length) return
     const rect = e.currentTarget.getBoundingClientRect()
-    const minute = ((e.clientX - rect.left) / plotW) * 1440
+    const minute = domainStart + ((e.clientX - rect.left) / plotW) * domainSpan
     let nearest = sampled[0]
     for (const p of sampled) {
       if (Math.abs(p.minute - minute) < Math.abs(nearest.minute - minute)) nearest = p
@@ -579,7 +584,7 @@ export function IntradayLine({ points, color, height = 170 }: IntradayLineProps)
     setTip({
       x: x(nearest.minute),
       y: y(nearest.bpm),
-      title: formatMinuteOfDay(nearest.minute),
+      title: formatMinuteOfDay(nearest.minute, domainSpan <= 60),
       rows: [{ label: 'bpm', value: String(nearest.bpm), color }]
     })
   }
@@ -619,24 +624,24 @@ export function IntradayLine({ points, color, height = 170 }: IntradayLineProps)
           >
             bpm
           </text>
-          {hours.map((h) => (
-            <g key={h}>
+          {timeTicks.map((minute) => (
+            <g key={minute}>
               <line
-                x1={x(h * 60)}
-                x2={x(h * 60)}
+                x1={x(minute)}
+                x2={x(minute)}
                 y1={pad.top}
                 y2={pad.top + plotH}
                 stroke="var(--color-hairline)"
                 strokeWidth={1}
               />
               <text
-                x={x(h * 60)}
+                x={x(minute)}
                 y={height - 4}
                 textAnchor="middle"
                 className="fill-[var(--color-ink-faint)] font-mono"
                 fontSize={10}
               >
-                {h === 12 ? '12 PM' : h < 12 ? `${h} AM` : `${h - 12} PM`}
+                {formatMinuteOfDay(Math.round(minute))}
               </text>
             </g>
           ))}
