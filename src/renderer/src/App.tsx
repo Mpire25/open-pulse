@@ -9,6 +9,7 @@ import { HomeView } from '@/views/HomeView'
 import { ActivityView } from '@/views/ActivityView'
 import { HeartView } from '@/views/HeartView'
 import { SleepView } from '@/views/SleepView'
+import { SleepStagesDetailView } from '@/views/SleepStagesDetailView'
 import { BodyView } from '@/views/BodyView'
 import { NutritionView } from '@/views/NutritionView'
 import { MetricDetailView } from '@/views/MetricDetailView'
@@ -32,6 +33,7 @@ export default function App(): React.JSX.Element {
   const [view, setView] = useState<View>('home')
   // Non-null = a metric detail page is open on top of the current data view.
   const [detailMetric, setDetailMetric] = useState<MetricDetailSelection | null>(null)
+  const [sleepStagesOpen, setSleepStagesOpen] = useState(false)
   const [selectedWorkout, setSelectedWorkout] = useState<Workout | null>(null)
   const [settings, setSettings] = useState<AppSettings | null>(null)
   const [google, setGoogle] = useState<GoogleAuthStatus>({ connected: false })
@@ -65,22 +67,32 @@ export default function App(): React.JSX.Element {
   const selectView = (v: View): void => {
     setView(v)
     setDetailMetric(null)
+    setSleepStagesOpen(false)
     setSelectedWorkout(null)
   }
 
   const selectDate = (date: string): void => {
     setSelectedDate(date)
     setDetailMetric(null)
+    setSleepStagesOpen(false)
     setSelectedWorkout(null)
   }
 
   const openMetric: OpenMetric = (metric, initialRange) => {
     setSelectedWorkout(null)
+    setSleepStagesOpen(false)
     setDetailMetric({ metric, initialRange })
+  }
+
+  const openSleepStages = (): void => {
+    setDetailMetric(null)
+    setSelectedWorkout(null)
+    setSleepStagesOpen(true)
   }
 
   const openWorkout = (workout: Workout): void => {
     setDetailMetric(null)
+    setSleepStagesOpen(false)
     setSelectedWorkout(workout)
   }
 
@@ -90,6 +102,7 @@ export default function App(): React.JSX.Element {
 
   const isDataView = DATA_VIEWS.includes(view)
   const showDetail = isDataView && detailMetric != null
+  const showSleepStagesDetail = isDataView && view === 'sleep' && sleepStagesOpen
   const showWorkoutDetail = isDataView && selectedWorkout != null
 
   return (
@@ -122,7 +135,7 @@ export default function App(): React.JSX.Element {
           <div className="scroll-stable min-h-0 flex-1 overflow-y-auto">
             <AnimatePresence mode="wait">
               <motion.div
-                key={`${view}-${detailMetric ? `${detailMetric.metric}-${detailMetric.initialRange}` : selectedWorkout?.id ?? 'root'}-${google.connected}`}
+                key={`${view}-${detailMetric ? `${detailMetric.metric}-${detailMetric.initialRange}` : sleepStagesOpen ? 'sleep-stages' : selectedWorkout?.id ?? 'root'}-${google.connected}`}
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -6 }}
@@ -144,6 +157,11 @@ export default function App(): React.JSX.Element {
                         workout={selectedWorkout}
                         date={selectedDate}
                         onBack={() => setSelectedWorkout(null)}
+                      />
+                    ) : showSleepStagesDetail ? (
+                      <SleepStagesDetailView
+                        date={selectedDate}
+                        onBack={() => setSleepStagesOpen(false)}
                       />
                     ) : showDetail ? (
                       <MetricDetailView
@@ -178,6 +196,7 @@ export default function App(): React.JSX.Element {
                             date={selectedDate}
                             goals={settings.goals}
                             onOpenMetric={openMetric}
+                            onOpenStages={openSleepStages}
                             onSelectDate={selectDate}
                           />
                         )}

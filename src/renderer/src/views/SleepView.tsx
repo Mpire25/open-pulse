@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion'
-import { Moon, Timer } from '@phosphor-icons/react'
+import { CaretRight, Moon, Timer } from '@phosphor-icons/react'
 import { Panel, DrillHeader, InteractivePanel } from '@/components/Panel'
 import { ColumnChart, ProgressRing, TrendLine } from '@/components/charts'
 import { SleepStages, STAGE_COLOR } from '@/components/SleepStages'
@@ -15,10 +15,11 @@ interface SleepViewProps {
   date: string
   goals: Goals
   onOpenMetric: OpenMetric
+  onOpenStages: () => void
   onSelectDate: (date: string) => void
 }
 
-export function SleepView({ date, goals, onOpenMetric, onSelectDate }: SleepViewProps): React.JSX.Element {
+export function SleepView({ date, goals, onOpenMetric, onOpenStages, onSelectDate }: SleepViewProps): React.JSX.Element {
   const week = rangeEnding(date, 7)
   const historyRange = rangeEnding(date, 30)
   const nights = useSleepRange(historyRange.start, historyRange.end)
@@ -45,18 +46,15 @@ export function SleepView({ date, goals, onOpenMetric, onSelectDate }: SleepView
       {/* Selected night */}
       <motion.div custom={1} variants={fade} initial="hidden" animate="show">
         {nights.isPending ? (
-          <InteractivePanel
-            className="grid min-h-[340px] grid-cols-1 gap-7 p-7 lg:grid-cols-[250px_1fr]"
-            onOpen={() => onOpenMetric('sleepMinutes', 'D')}
-          >
-            <div className="flex flex-col items-center justify-center gap-3" aria-hidden>
+          <Panel className="grid min-h-[340px] grid-cols-1 gap-2 p-3 lg:grid-cols-[250px_1fr]">
+            <div className="flex flex-col items-center justify-center gap-3 rounded-[18px] p-4" aria-hidden>
               <SkeletonRing size={172} stroke={16} />
               <div className="flex flex-col items-center gap-1.5">
                 <SkeletonText className="w-28" />
                 <SkeletonText className="h-2.5 w-16" />
               </div>
             </div>
-            <div className="flex flex-col justify-center">
+            <div className="flex flex-col justify-center rounded-[18px] p-4">
               <DrillHeader
                 title="Stages"
                 hint={<SkeletonText className="w-32" />}
@@ -67,13 +65,20 @@ export function SleepView({ date, goals, onOpenMetric, onSelectDate }: SleepView
               </div>
             </div>
             <SleepNightSummarySkeleton />
-          </InteractivePanel>
+          </Panel>
         ) : night ? (
-          <InteractivePanel
-            className="grid min-h-[340px] grid-cols-1 gap-7 p-7 lg:grid-cols-[250px_1fr]"
-            onOpen={() => onOpenMetric('sleepMinutes', 'D')}
-          >
-            <div className="flex flex-col items-center justify-center gap-3">
+          <Panel className="grid min-h-[340px] grid-cols-1 gap-2 p-3 lg:grid-cols-[250px_1fr]">
+            <button
+              type="button"
+              onClick={() => onOpenMetric('sleepMinutes', 'D')}
+              className="group/drill relative flex min-w-0 flex-col items-center justify-center gap-3 rounded-[18px] p-4 transition-colors hover:bg-white/[0.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+              aria-label="Open sleep duration details"
+            >
+              <CaretRight
+                size={14}
+                weight="bold"
+                className="absolute right-4 top-4 text-ink-faint transition-all group-hover/drill:translate-x-0.5 group-hover/drill:text-ink"
+              />
               <ProgressRing
                 value={night.minutesAsleep}
                 goal={goals.sleepMinutes}
@@ -91,8 +96,13 @@ export function SleepView({ date, goals, onOpenMetric, onSelectDate }: SleepView
               <span className="font-mono text-[11px] text-ink-dim">
                 {Math.round((night.minutesAsleep / goals.sleepMinutes) * 100)}% of {formatMinutes(goals.sleepMinutes)} goal
               </span>
-            </div>
-            <div className="flex flex-col justify-center">
+            </button>
+            <button
+              type="button"
+              onClick={onOpenStages}
+              className="group/drill flex min-w-0 flex-col justify-center rounded-[18px] p-4 text-left transition-colors hover:bg-white/[0.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+              aria-label="Open sleep stages details"
+            >
               <DrillHeader
                 title="Stages"
                 hint="Hover a block for its timing"
@@ -101,9 +111,9 @@ export function SleepView({ date, goals, onOpenMetric, onSelectDate }: SleepView
               <div className="mt-4">
                 <SleepStages night={night} compact />
               </div>
-            </div>
+            </button>
             <SleepNightSummary night={night} />
-          </InteractivePanel>
+          </Panel>
         ) : (
           <Panel className="grid place-items-center p-12 text-[13px] text-ink-faint">
             No sleep recorded for this night.
@@ -200,7 +210,7 @@ export function SleepView({ date, goals, onOpenMetric, onSelectDate }: SleepView
 
 function SleepNightSummarySkeleton(): React.JSX.Element {
   return (
-    <div className="flex flex-wrap gap-x-8 gap-y-3 border-t border-hairline pt-4 lg:col-span-2" aria-hidden>
+    <div className="mx-4 mb-2 flex flex-wrap gap-x-8 gap-y-3 border-t border-hairline pt-4 lg:col-span-2" aria-hidden>
       {Array.from({ length: 3 }, (_, index) => (
         <div key={index} className="flex items-center gap-2">
           <SkeletonText className="w-16" />
@@ -222,7 +232,7 @@ function SleepNightSummary({ night }: { night: SleepNight }): React.JSX.Element 
   ]
 
   return (
-    <div className="flex flex-wrap items-center gap-x-8 gap-y-2 border-t border-hairline pt-4 lg:col-span-2">
+    <div className="mx-4 mb-2 flex flex-wrap items-center gap-x-8 gap-y-2 border-t border-hairline pt-4 lg:col-span-2">
       {items.map((item) => (
         <div key={item.label} className="flex items-baseline gap-2">
           <span className="text-[10.5px] font-medium text-ink-faint">{item.label}</span>
