@@ -1,7 +1,7 @@
 import { motion } from 'framer-motion'
 import { CaretDown, ForkKnife } from '@phosphor-icons/react'
 import { Panel, DrillHeader, InteractivePanel, SectionHeader } from '@/components/Panel'
-import { ColumnChart } from '@/components/charts'
+import { ColumnChart, ProgressRing } from '@/components/charts'
 import { DeltaChip } from '@/components/DeltaChip'
 import { CARD_HEIGHT, SkeletonBlock, SkeletonChart, SkeletonText } from '@/components/Skeleton'
 import { ErrorState } from '@/components/ErrorState'
@@ -380,8 +380,13 @@ function MacroBreakdownSkeleton(): React.JSX.Element {
         {MACROS.map((macro) => (
           <div key={macro.key} className="flex flex-col gap-2 px-2 py-1.5">
             <SkeletonText className="w-14" />
-            <SkeletonBlock className="h-4 w-12" />
-            <SkeletonText className="w-16" />
+            <div className="flex items-center gap-3">
+              <div className="flex flex-col gap-2">
+                <SkeletonBlock className="h-4 w-12" />
+                <SkeletonText className="w-16" />
+              </div>
+              <div className="h-12 w-12 shrink-0 animate-pulse rounded-full border-[6px] border-white/[0.055]" />
+            </div>
           </div>
         ))}
       </div>
@@ -417,19 +422,24 @@ function MacroBreakdown({
           <button
             key={p.key}
             onClick={() => onOpenMetric(p.key, 'D')}
-            className="rounded-xl px-2 py-1.5 text-left transition-colors hover:bg-white/[0.04]"
+            className="group min-w-0 rounded-xl px-2 py-1.5 text-left outline-none transition-colors hover:bg-white/[0.04] focus-visible:ring-2 focus-visible:ring-accent/60 active:scale-[0.98]"
           >
             <div className="flex items-center gap-1.5">
               <span className="h-2 w-2 rounded-full" style={{ background: p.color }} />
               <span className="text-[11px] font-medium text-ink-faint">{p.label}</span>
             </div>
-            <div className="mt-1 text-[17px] font-semibold text-ink">
-              {p.grams != null ? `${formatInt(p.grams)} g` : '—'}
-            </div>
-            <div className="text-[10.5px] text-ink-faint">
-              {p.grams != null
-                ? `${Math.round((p.grams / goals[p.key]) * 100)}% of ${formatInt(goals[p.key])} g goal`
-                : `${formatInt(goals[p.key])} g goal`}
+            <div className="mt-1 flex items-center gap-3">
+              <div className="min-w-0">
+                <div className="text-[17px] font-semibold text-ink">
+                  {p.grams != null ? `${formatInt(p.grams)} g` : '—'}
+                </div>
+                <div className="truncate text-[10.5px] text-ink-faint">{formatInt(goals[p.key])} g goal</div>
+              </div>
+              <ProgressRing value={p.grams ?? 0} goal={goals[p.key]} color={p.color} size={48} stroke={6}>
+                <span className="font-mono text-[9px] font-medium text-ink">
+                  {p.grams != null ? `${Math.round((p.grams / goals[p.key]) * 100)}%` : '—'}
+                </span>
+              </ProgressRing>
             </div>
           </button>
         ))}
