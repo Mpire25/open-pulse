@@ -635,10 +635,15 @@ function MacroBreakdown({
       {secondary.length > 0 && (
         <div className="grid grid-cols-[repeat(auto-fit,minmax(105px,1fr))] gap-3 border-t border-hairline pt-3">
           {secondary.map((nutrient) => (
-            <div key={nutrient.key} className="min-w-0 px-2 py-1">
+            <button
+              key={nutrient.key}
+              type="button"
+              onClick={() => onOpenMetric(nutrient.key, 'D')}
+              className="group min-w-0 rounded-xl px-2 py-1 text-left outline-none transition-colors hover:bg-white/[0.04] focus-visible:ring-2 focus-visible:ring-accent/60 active:scale-[0.98]"
+            >
               <div className="flex items-center gap-1.5 text-[10.5px] font-medium text-ink-faint">
                 <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: nutrient.color }} />
-                <span className="truncate">{nutrient.label}</span>
+                <span className="truncate transition-colors group-hover:text-ink-dim">{nutrient.label}</span>
               </div>
               {nutrient.pending ? (
                 <SkeletonBlock className="mt-1.5 h-4 w-12" />
@@ -652,7 +657,7 @@ function MacroBreakdown({
                   <span className="text-[10px] font-normal text-ink-faint">{nutrient.unit}</span>
                 </div>
               )}
-            </div>
+            </button>
           ))}
         </div>
       )}

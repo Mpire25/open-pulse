@@ -73,7 +73,13 @@ import {
   demoWorkoutsRange
 } from './sample-data'
 import { activityRollupBreakdown, activityRollupPoints, calorieEnergyBreakdown } from './activity-intraday'
-import { bmiFrom, parseBodyMeasurements, parseLatestHeight, parseNutritionLogs } from './body-nutrition-detail'
+import {
+  bmiFrom,
+  parseBodyMeasurements,
+  parseLatestHeight,
+  parseNutritionLogs,
+  parseNutritionLogTotals
+} from './body-nutrition-detail'
 import {
   parseHeartZones,
   parseVo2Detail
@@ -175,6 +181,20 @@ function rollupGroup(
   }
 }
 
+async function listNutritionRawData(
+  token: string,
+  start: string,
+  endExclusive: string,
+  priority: Priority
+): Promise<RawDataPoint[]> {
+  try {
+    return await listRawData(token, 'nutrition-log', 'session', start, endExclusive, priority)
+  } catch (error) {
+    if (!(error instanceof HealthApiError) || error.status !== 400) throw error
+    return listRawData(token, 'nutrition-log', 'sample', start, endExclusive, priority)
+  }
+}
+
 function dailyRecordGroup(
   id: string,
   dataType: string,
@@ -264,37 +284,50 @@ const GROUPS: FetchGroup[] = [
       (p.hydrationLog as { amountConsumed?: { millilitersSum?: number } })?.amountConsumed?.millilitersSum
     )
   })),
-  rollupGroup(
-    // Versioned so archived days refetch the expanded nutrient set once.
-    'nutrition-v5',
-    'nutrition-log',
-    ['caloriesIn', 'proteinG', 'carbsG', 'fatG', 'fiberG', 'saturatedFatG', 'sodiumG', 'sugarG'],
-    (p) => {
-      const log = p.nutritionLog as Record<string, unknown> | undefined
-      if (!log) {
-        return {
-          caloriesIn: null,
-          proteinG: null,
-          carbsG: null,
-          fatG: null,
-          fiberG: null,
-          saturatedFatG: null,
-          sodiumG: null,
-          sugarG: null
+  {
+    // Versioned so archived days refetch with raw-log nutrient fallbacks once.
+    id: 'nutrition-v6',
+    metrics: ['caloriesIn', 'proteinG', 'carbsG', 'fatG', 'fiberG', 'saturatedFatG', 'sodiumG', 'sugarG'],
+    fetch: async (token, start, endExclusive, priority) => {
+      const [points, rawPoints] = await Promise.all([
+        dailyRollUp(token, 'nutrition-log', start, endExclusive, priority),
+        listNutritionRawData(token, start, endExclusive, priority).catch((error) => {
+          console.error(`[health] raw nutrition fallback failed for ${start}..${endExclusive}:`, error)
+          return []
+        })
+      ])
+      const map = new Map<string, DayValues>()
+      for (const p of points) {
+        const date = dateFromCivil(p.civilStartTime)
+        if (!date) continue
+        const log = p.nutritionLog as Record<string, unknown> | undefined
+        if (!log) {
+          map.set(date, {})
+          continue
         }
+        map.set(date, {
+          caloriesIn: num((log.energy as { kcalSum?: number } | undefined)?.kcalSum),
+          proteinG: nutrientGrams(log, ['protein', 'proteins', 'proteinG', 'proteinGrams', 'totalProtein', 'dietaryProtein']),
+          carbsG: nutrientGrams(log, ['carbohydrate', 'carbohydrates', 'totalCarbohydrate', 'carbs', 'carbsG']),
+          fatG: nutrientGrams(log, ['fat', 'fats', 'totalFat', 'fatG']),
+          fiberG: nutrientGrams(log, ['fiber', 'fibre', 'dietaryFiber', 'dietaryFibre', 'fiberG']),
+          saturatedFatG: nutrientGrams(log, ['saturatedFat', 'saturatedFats', 'saturatedFatG']),
+          sodiumG: nutrientMineralGrams(log, ['sodium']),
+          sugarG: nutrientGrams(log, ['sugar', 'sugars', 'sugarG'])
+        })
       }
-      return {
-        caloriesIn: num((log.energy as { kcalSum?: number } | undefined)?.kcalSum),
-        proteinG: nutrientGrams(log, ['protein', 'proteins', 'proteinG', 'proteinGrams', 'totalProtein', 'dietaryProtein']),
-        carbsG: nutrientGrams(log, ['carbohydrate', 'carbohydrates', 'totalCarbohydrate', 'carbs', 'carbsG']),
-        fatG: nutrientGrams(log, ['fat', 'fats', 'totalFat', 'fatG']),
-        fiberG: nutrientGrams(log, ['fiber', 'fibre', 'dietaryFiber', 'dietaryFibre', 'fiberG']),
-        saturatedFatG: nutrientGrams(log, ['saturatedFat', 'saturatedFats', 'saturatedFatG']),
-        sodiumG: nutrientMineralGrams(log, ['sodium']),
-        sugarG: nutrientGrams(log, ['sugar', 'sugars', 'sugarG'])
+
+      for (const [date, rawValues] of parseNutritionLogTotals(rawPoints)) {
+        const values = map.get(date) ?? {}
+        for (const metric of ['caloriesIn', 'proteinG', 'carbsG', 'fatG', 'fiberG', 'saturatedFatG', 'sodiumG', 'sugarG'] as const) {
+          if (values[metric] == null && rawValues[metric] != null) values[metric] = rawValues[metric]
+        }
+        map.set(date, values)
       }
+
+      return map
     }
-  ),
+  },
   dailyRecordGroup('rhr', 'daily-resting-heart-rate', 'dailyRestingHeartRate', ['restingHeartRate'], (r) => ({
     restingHeartRate: num(r.beatsPerMinute)
   })),
@@ -955,16 +988,7 @@ export async function getNutritionLogs(date: string): Promise<NutritionLogsResul
   const [d] = normalizeRange(date, date)
   const token = await getGoogleAccessToken()
   if (!token) return demoNutritionLogs(d)
-  let points: RawDataPoint[]
-  try {
-    points = await listRawData(token, 'nutrition-log', 'session', d, shiftIsoDate(d, 1), 0)
-  } catch (error) {
-    // Google's data-type index currently labels nutrition-log as a Sample
-    // even though its published payload contains a session interval. Accept
-    // either server-side filter classification while that inconsistency exists.
-    if (!(error instanceof HealthApiError) || error.status !== 400) throw error
-    points = await listRawData(token, 'nutrition-log', 'sample', d, shiftIsoDate(d, 1), 0)
-  }
+  const points = await listNutritionRawData(token, d, shiftIsoDate(d, 1), 0)
   return { date: d, source: 'live', entries: parseNutritionLogs(points) }
 }
 

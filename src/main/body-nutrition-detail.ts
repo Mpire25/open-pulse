@@ -1,5 +1,5 @@
-import type { BodyMeasurement, NutritionLogEntry } from '../shared/types'
-import type { RawDataPoint } from './health-api'
+import type { BodyMeasurement, DayValues, NutritionLogEntry } from '../shared/types'
+import { dateFromCivil, type CivilDateTime, type RawDataPoint } from './health-api'
 import { gramsFromNutrientNode, nutrientGrams, nutrientMineralGrams } from './nutrition'
 
 function numberValue(value: unknown): number | null {
@@ -61,6 +61,35 @@ export function parseNutritionLogs(points: RawDataPoint[]): NutritionLogEntry[] 
       }]
     })
     .sort((a, b) => Date.parse(a.startTime) - Date.parse(b.startTime))
+}
+
+/** Daily totals recovered from raw food logs when Google's rollup omits nutrients. */
+export function parseNutritionLogTotals(points: RawDataPoint[]): Map<string, DayValues> {
+  const totals = new Map<string, DayValues>()
+  for (const point of points) {
+    const log = record(point.nutritionLog)
+    const interval = record(log?.interval)
+    const startTime = typeof interval?.startTime === 'string' ? interval.startTime : null
+    const date = dateFromCivil(interval?.civilStartTime as CivilDateTime | undefined)
+      ?? (startTime && /^\d{4}-\d{2}-\d{2}/.test(startTime) ? startTime.slice(0, 10) : null)
+    const entry = parseNutritionLogs([point])[0]
+    if (!date || !entry) continue
+
+    const day = totals.get(date) ?? {}
+    const add = (key: keyof DayValues, value: number | null): void => {
+      if (value != null) day[key] = (day[key] ?? 0) + value
+    }
+    add('caloriesIn', entry.calories)
+    add('proteinG', entry.proteinG)
+    add('carbsG', entry.carbsG)
+    add('fatG', entry.fatG)
+    add('fiberG', entry.fiberG)
+    add('saturatedFatG', entry.saturatedFatG)
+    add('sodiumG', entry.sodiumG)
+    add('sugarG', entry.sugarG)
+    totals.set(date, day)
+  }
+  return totals
 }
 
 interface PartialMeasurement extends BodyMeasurement {
