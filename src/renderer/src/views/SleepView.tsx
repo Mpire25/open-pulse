@@ -14,9 +14,10 @@ interface SleepViewProps {
   date: string
   goals: Goals
   onOpenMetric: (metric: MetricKey) => void
+  onSelectDate: (date: string) => void
 }
 
-export function SleepView({ date, goals, onOpenMetric }: SleepViewProps): React.JSX.Element {
+export function SleepView({ date, goals, onOpenMetric, onSelectDate }: SleepViewProps): React.JSX.Element {
   const { start, end } = rangeEnding(date, 7)
   const nights = useSleepRange(start, end)
 
@@ -199,7 +200,7 @@ export function SleepView({ date, goals, onOpenMetric }: SleepViewProps): React.
               .reverse()
               .filter((n) => n.date !== date)
               .map((n) => (
-                <NightRow key={n.date} night={n} />
+                <NightRow key={n.date} night={n} onSelect={onSelectDate} />
               ))}
           </div>
         </motion.div>
@@ -229,12 +230,12 @@ function MiniStat({
 }
 
 // Compact stacked stage bar for the history list.
-function NightRow({ night }: { night: SleepNight }): React.JSX.Element {
+function NightRow({ night, onSelect }: { night: SleepNight; onSelect: (date: string) => void }): React.JSX.Element {
   const order = ['DEEP', 'LIGHT', 'REM', 'AWAKE'] as const
   const total = order.reduce((s, k) => s + (night.stageMinutes[k] ?? 0), 0) || 1
 
   return (
-    <Panel className="flex items-center gap-4 px-5 py-3.5">
+    <InteractivePanel className="flex items-center gap-4 px-5 py-3.5" onOpen={() => onSelect(night.date)}>
       <div className="w-28 shrink-0">
         <div className="text-[13px] font-medium text-ink">
           {new Date(`${night.date}T12:00:00`).toLocaleDateString('en-US', { weekday: 'long' })}
@@ -255,6 +256,6 @@ function NightRow({ night }: { night: SleepNight }): React.JSX.Element {
           <span className="ml-2 font-mono text-[11px] text-ink-faint">{night.efficiency}%</span>
         )}
       </div>
-    </Panel>
+    </InteractivePanel>
   )
 }
