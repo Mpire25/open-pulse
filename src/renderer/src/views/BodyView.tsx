@@ -7,6 +7,7 @@ import { useSeries } from '@/hooks/useHealth'
 import { METRICS } from '@/lib/metric-registry'
 import { latestPoint, rangeEnding, seriesPoints } from '@/lib/metrics'
 import { longDate, shortDate, weekdayShort } from '@/lib/format'
+import type { OpenMetric } from '@/lib/metric-navigation'
 import { fade } from '@/lib/motion'
 import type { MetricKey } from '@shared/types'
 
@@ -14,7 +15,7 @@ const BODY_KEYS: MetricKey[] = ['weightKg', 'bodyFatPct']
 
 interface BodyViewProps {
   date: string
-  onOpenMetric: (metric: MetricKey) => void
+  onOpenMetric: OpenMetric
 }
 
 // Body measurements are sparse (few people weigh in daily), so this view
@@ -49,7 +50,7 @@ export function BodyView({ date, onOpenMetric }: BodyViewProps): React.JSX.Eleme
               <motion.div key={key} custom={i + 1} variants={fade} initial="hidden" animate="show">
                 <InteractivePanel
                   className={`flex flex-col gap-3 p-5 ${CARD_HEIGHT.chart}`}
-                  onOpen={() => onOpenMetric(key)}
+                  onOpen={() => onOpenMetric(key, 'M')}
                 >
                   <DrillHeader
                     title={def.label}

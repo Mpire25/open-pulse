@@ -18,14 +18,20 @@ import { AssistantView } from '@/views/AssistantView'
 import { SettingsView } from '@/views/SettingsView'
 import { useChat } from '@/hooks/useChat'
 import { isoToday } from '@/lib/format'
+import type { MetricRange, OpenMetric } from '@/lib/metric-navigation'
 import type { AppSettings, CodexAuthStatus, GoogleAuthStatus, MetricKey, Workout } from '@shared/types'
 
 const DATA_VIEWS: View[] = ['home', 'activity', 'heart', 'sleep', 'body', 'nutrition']
 
+interface MetricDetailSelection {
+  metric: MetricKey
+  initialRange: MetricRange
+}
+
 export default function App(): React.JSX.Element {
   const [view, setView] = useState<View>('home')
   // Non-null = a metric detail page is open on top of the current data view.
-  const [detailMetric, setDetailMetric] = useState<MetricKey | null>(null)
+  const [detailMetric, setDetailMetric] = useState<MetricDetailSelection | null>(null)
   const [selectedWorkout, setSelectedWorkout] = useState<Workout | null>(null)
   const [settings, setSettings] = useState<AppSettings | null>(null)
   const [google, setGoogle] = useState<GoogleAuthStatus>({ connected: false })
@@ -68,9 +74,9 @@ export default function App(): React.JSX.Element {
     setSelectedWorkout(null)
   }
 
-  const openMetric = (metric: MetricKey): void => {
+  const openMetric: OpenMetric = (metric, initialRange) => {
     setSelectedWorkout(null)
-    setDetailMetric(metric)
+    setDetailMetric({ metric, initialRange })
   }
 
   const openWorkout = (workout: Workout): void => {
@@ -116,7 +122,7 @@ export default function App(): React.JSX.Element {
           <div className="scroll-stable min-h-0 flex-1 overflow-y-auto">
             <AnimatePresence mode="wait">
               <motion.div
-                key={`${view}-${detailMetric ?? selectedWorkout?.id ?? 'root'}-${google.connected}`}
+                key={`${view}-${detailMetric ? `${detailMetric.metric}-${detailMetric.initialRange}` : selectedWorkout?.id ?? 'root'}-${google.connected}`}
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -6 }}
@@ -141,7 +147,8 @@ export default function App(): React.JSX.Element {
                       />
                     ) : showDetail ? (
                       <MetricDetailView
-                        metricKey={detailMetric}
+                        metricKey={detailMetric.metric}
+                        initialRange={detailMetric.initialRange}
                         date={selectedDate}
                         goals={settings.goals}
                         onBack={() => setDetailMetric(null)}

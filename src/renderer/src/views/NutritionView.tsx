@@ -9,6 +9,7 @@ import { useSeries } from '@/hooks/useHealth'
 import { METRICS } from '@/lib/metric-registry'
 import { metricAbsent, rangeEnding, seriesPoints } from '@/lib/metrics'
 import { formatInt, longDate, weekdayShort } from '@/lib/format'
+import type { OpenMetric } from '@/lib/metric-navigation'
 import { fade } from '@/lib/motion'
 import type { DayValues, Goals, MetricKey } from '@shared/types'
 
@@ -31,7 +32,7 @@ const MACROS = [
 interface NutritionViewProps {
   date: string
   goals: Goals
-  onOpenMetric: (metric: MetricKey) => void
+  onOpenMetric: OpenMetric
 }
 
 export function NutritionView({ date, goals, onOpenMetric }: NutritionViewProps): React.JSX.Element {
@@ -61,7 +62,7 @@ export function NutritionView({ date, goals, onOpenMetric }: NutritionViewProps)
       <motion.div key={key} custom={index} variants={fade} initial="hidden" animate="show">
         <InteractivePanel
           className={`flex h-full flex-col gap-3 p-5 ${CARD_HEIGHT.chart}`}
-          onOpen={() => onOpenMetric(key)}
+          onOpen={() => onOpenMetric(key, 'W')}
         >
           <DrillHeader
             title={def.label}
@@ -207,7 +208,7 @@ function MacroBreakdown({
 }: {
   today: DayValues
   goals: Goals
-  onOpenMetric: (metric: MetricKey) => void
+  onOpenMetric: OpenMetric
 }): React.JSX.Element {
   const parts = MACROS.map((m) => ({ ...m, grams: today[m.key] ?? null, kcal: (today[m.key] ?? 0) * m.kcalPerG }))
   const totalKcal = parts.reduce((s, p) => s + p.kcal, 0) || 1
@@ -227,7 +228,7 @@ function MacroBreakdown({
         {parts.map((p) => (
           <button
             key={p.key}
-            onClick={() => onOpenMetric(p.key)}
+            onClick={() => onOpenMetric(p.key, 'D')}
             className="rounded-xl px-2 py-1.5 text-left transition-colors hover:bg-white/[0.04]"
           >
             <div className="flex items-center gap-1.5">

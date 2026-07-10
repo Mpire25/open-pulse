@@ -10,6 +10,7 @@ import { useIntraday, useSeries, useWorkouts } from '@/hooks/useHealth'
 import { METRICS } from '@/lib/metric-registry'
 import { baseline, baselineDeltaPct, pointValues, rangeEnding, seriesPoints } from '@/lib/metrics'
 import { formatHour, formatInt, longDate, weekdayShort } from '@/lib/format'
+import type { OpenMetric } from '@/lib/metric-navigation'
 import { fade } from '@/lib/motion'
 import type { Goals, MetricKey, Workout } from '@shared/types'
 
@@ -25,7 +26,7 @@ const ACTIVITY_METRICS: MetricKey[] = [
 interface ActivityViewProps {
   date: string
   goals: Goals
-  onOpenMetric: (metric: MetricKey) => void
+  onOpenMetric: OpenMetric
   onOpenWorkout: (workout: Workout) => void
 }
 
@@ -50,7 +51,7 @@ export function ActivityView({ date, goals, onOpenMetric, onOpenWorkout }: Activ
       <motion.div key={key} custom={index} variants={fade} initial="hidden" animate="show">
         <InteractivePanel
           className={`flex h-full flex-col gap-3 p-5 ${CARD_HEIGHT.chart}`}
-          onOpen={() => onOpenMetric(key)}
+          onOpen={() => onOpenMetric(key, 'W')}
         >
           <DrillHeader
             title={def.label}
@@ -110,7 +111,7 @@ export function ActivityView({ date, goals, onOpenMetric, onOpenWorkout }: Activ
                   upIsGood={def.upIsGood}
                   spark={pointValues(points)}
                   sparkWidth={56}
-                  onOpen={() => onOpenMetric(key)}
+                  onOpen={() => onOpenMetric(key, 'D')}
                 />
             )
           })}
@@ -122,7 +123,7 @@ export function ActivityView({ date, goals, onOpenMetric, onOpenWorkout }: Activ
         <motion.div custom={2} variants={fade} initial="hidden" animate="show" className="min-w-0">
           <InteractivePanel
             className={`flex h-full min-w-0 flex-col gap-3 p-5 ${CARD_HEIGHT.large}`}
-            onOpen={() => onOpenMetric('steps')}
+            onOpen={() => onOpenMetric('steps', 'D')}
           >
             <DrillHeader
               title="Hourly steps"

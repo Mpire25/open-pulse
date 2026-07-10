@@ -23,14 +23,13 @@ import {
   type SeriesPoint
 } from '@/lib/metrics'
 import { formatHour, formatInt, longDate, shortDate, weekdayShort } from '@/lib/format'
+import type { MetricRange } from '@/lib/metric-navigation'
 import { fade } from '@/lib/motion'
 import type { Goals, MetricKey } from '@shared/types'
 import { cn } from '@/lib/utils'
 
-type Range = 'D' | 'W' | 'M' | '3M' | 'Y'
-
 // days shown; fetched = shown + previous period for the comparison chip.
-const RANGES: Array<{ id: Range; label: string; days: number; fetchDays: number }> = [
+const RANGES: Array<{ id: MetricRange; label: string; days: number; fetchDays: number }> = [
   { id: 'D', label: 'D', days: 1, fetchDays: 14 },
   { id: 'W', label: 'W', days: 7, fetchDays: 14 },
   { id: 'M', label: 'M', days: 30, fetchDays: 60 },
@@ -40,14 +39,15 @@ const RANGES: Array<{ id: Range; label: string; days: number; fetchDays: number 
 
 interface MetricDetailViewProps {
   metricKey: MetricKey
+  initialRange: MetricRange
   date: string
   goals: Goals
   onBack: () => void
 }
 
-export function MetricDetailView({ metricKey, date, goals, onBack }: MetricDetailViewProps): React.JSX.Element {
+export function MetricDetailView({ metricKey, initialRange, date, goals, onBack }: MetricDetailViewProps): React.JSX.Element {
   const def = METRICS[metricKey]
-  const [range, setRange] = useState<Range>('W')
+  const [range, setRange] = useState<MetricRange>(initialRange)
   const spec = RANGES.find((r) => r.id === range)!
 
   const fetchWindow = rangeEnding(date, spec.fetchDays)
@@ -126,7 +126,7 @@ export function MetricDetailView({ metricKey, date, goals, onBack }: MetricDetai
   )
 }
 
-function MetricDetailSkeleton({ range, hasGoal }: { range: Range; hasGoal: boolean }): React.JSX.Element {
+function MetricDetailSkeleton({ range, hasGoal }: { range: MetricRange; hasGoal: boolean }): React.JSX.Element {
   if (range === 'D') {
     return (
       <>
@@ -180,7 +180,7 @@ function axisDomainFor(metricKey: MetricKey): { max: number } | undefined {
   return metricKey === 'sleepEfficiency' || metricKey === 'spo2Pct' ? { max: 100 } : undefined
 }
 
-function RangeTabs({ range, onChange }: { range: Range; onChange: (r: Range) => void }): React.JSX.Element {
+function RangeTabs({ range, onChange }: { range: MetricRange; onChange: (r: MetricRange) => void }): React.JSX.Element {
   return (
     <div className="flex rounded-xl border border-hairline bg-white/[0.03] p-0.5">
       {RANGES.map((r) => (
@@ -365,7 +365,7 @@ function PeriodDetail({
   goal
 }: {
   metricKey: MetricKey
-  range: Range
+  range: MetricRange
   date: string
   points: SeriesPoint[]
   prevPoints: SeriesPoint[]
@@ -481,14 +481,14 @@ function PeriodDetail({
   )
 }
 
-function rangeTitle(range: Range, date: string): string {
+function rangeTitle(range: MetricRange, date: string): string {
   if (range === 'W') return 'Last 7 days'
   if (range === 'M') return 'Last 30 days'
   if (range === '3M') return 'Last 3 months'
   return `Year to ${shortDate(date)}`
 }
 
-function tickFor(range: Range, date: string, index: number): string | undefined {
+function tickFor(range: MetricRange, date: string, index: number): string | undefined {
   if (range === 'W') return weekdayShort(date).slice(0, 1)
   if (range === 'M') return index % 5 === 0 ? date.slice(8) : undefined
   if (range === '3M') return date.slice(8, 10) === '01' ? monthLabel(date) : undefined

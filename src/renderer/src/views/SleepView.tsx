@@ -7,13 +7,14 @@ import { CARD_HEIGHT, SkeletonChart, SkeletonRing, SkeletonSleepStages, Skeleton
 import { useSleepRange } from '@/hooks/useHealth'
 import { listDates, rangeEnding } from '@/lib/metrics'
 import { formatMinutes, longDate, shortDate, weekdayShort } from '@/lib/format'
+import type { OpenMetric } from '@/lib/metric-navigation'
 import { fade } from '@/lib/motion'
-import type { Goals, MetricKey, SleepNight } from '@shared/types'
+import type { Goals, SleepNight } from '@shared/types'
 
 interface SleepViewProps {
   date: string
   goals: Goals
-  onOpenMetric: (metric: MetricKey) => void
+  onOpenMetric: OpenMetric
   onSelectDate: (date: string) => void
 }
 
@@ -45,7 +46,7 @@ export function SleepView({ date, goals, onOpenMetric, onSelectDate }: SleepView
         {nights.isPending ? (
           <InteractivePanel
             className={`grid grid-cols-1 gap-8 p-7 lg:grid-cols-[auto_1fr] ${CARD_HEIGHT.detail}`}
-            onOpen={() => onOpenMetric('sleepMinutes')}
+            onOpen={() => onOpenMetric('sleepMinutes', 'D')}
           >
             <div className="flex flex-col items-center justify-center gap-3" aria-hidden>
               <SkeletonRing size={140} stroke={12} />
@@ -75,7 +76,7 @@ export function SleepView({ date, goals, onOpenMetric, onSelectDate }: SleepView
         ) : night ? (
           <InteractivePanel
             className={`grid grid-cols-1 gap-8 p-7 lg:grid-cols-[auto_1fr] ${CARD_HEIGHT.detail}`}
-            onOpen={() => onOpenMetric('sleepMinutes')}
+            onOpen={() => onOpenMetric('sleepMinutes', 'D')}
           >
             <div className="flex flex-col items-center justify-center gap-3">
               <ProgressRing
@@ -127,7 +128,7 @@ export function SleepView({ date, goals, onOpenMetric, onSelectDate }: SleepView
           <motion.div custom={2} variants={fade} initial="hidden" animate="show">
             <InteractivePanel
               className={`flex h-full flex-col gap-3 p-5 ${CARD_HEIGHT.chart}`}
-              onOpen={() => onOpenMetric('sleepMinutes')}
+              onOpen={() => onOpenMetric('sleepMinutes', 'W')}
             >
               <DrillHeader
                 title="Duration"
@@ -161,7 +162,7 @@ export function SleepView({ date, goals, onOpenMetric, onSelectDate }: SleepView
           <motion.div custom={3} variants={fade} initial="hidden" animate="show">
             <InteractivePanel
               className={`flex h-full flex-col gap-3 p-5 ${CARD_HEIGHT.chart}`}
-              onOpen={() => onOpenMetric('sleepEfficiency')}
+              onOpen={() => onOpenMetric('sleepEfficiency', 'W')}
             >
               <DrillHeader
                 title="Efficiency"

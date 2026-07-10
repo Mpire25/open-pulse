@@ -20,6 +20,7 @@ import { useIntraday, useSeries, useSleepNight, useWorkouts } from '@/hooks/useH
 import { METRICS } from '@/lib/metric-registry'
 import { baseline, baselineDeltaPct, pointValues, rangeEnding, seriesPoints } from '@/lib/metrics'
 import { formatClock, formatHour, formatInt, formatMinutes, greeting, isoToday, longDate } from '@/lib/format'
+import type { OpenMetric } from '@/lib/metric-navigation'
 import { fade } from '@/lib/motion'
 import type { Goals, MetricKey, Workout } from '@shared/types'
 
@@ -41,7 +42,7 @@ const HOME_RING_SIZE = 'lg:!h-[172px] lg:!w-[172px] xl:!h-[188px] xl:!w-[188px] 
 interface HomeViewProps {
   date: string
   goals: Goals
-  onOpenMetric: (metric: MetricKey) => void
+  onOpenMetric: OpenMetric
   onOpenWorkout: (workout: Workout) => void
   onNavigate: (view: View) => void
 }
@@ -177,7 +178,7 @@ export function HomeView({ date, goals, onOpenMetric, onOpenWorkout, onNavigate 
         <motion.div custom={2} variants={fade} initial="hidden" animate="show" className="min-w-0">
           <InteractivePanel
             className={`flex h-full min-w-0 flex-col gap-3 p-5 ${CARD_HEIGHT.large}`}
-            onOpen={() => onOpenMetric('steps')}
+            onOpen={() => onOpenMetric('steps', 'D')}
           >
             <DrillHeader
               title="Daily movement"
@@ -284,7 +285,7 @@ function SignalsPanel({
   pointsFor: (key: MetricKey) => ReturnType<typeof seriesPoints>
   today: (key: MetricKey) => number | null
   isPending: (key: MetricKey) => boolean
-  onOpenMetric: (metric: MetricKey) => void
+  onOpenMetric: OpenMetric
 }): React.JSX.Element {
   return (
     <Panel className={`overflow-hidden ${CARD_HEIGHT.summary}`}>
@@ -311,7 +312,7 @@ function SignalsPanel({
               upIsGood={def.upIsGood}
               spark={pointValues(points)}
               sub={def.deltaMode === 'abs' ? 'vs device baseline' : undefined}
-              onOpen={() => onOpenMetric(key)}
+              onOpen={() => onOpenMetric(key, 'D')}
             />
           )
         })}
@@ -345,12 +346,12 @@ function GoalRing({
   goal: number
   metricKey: MetricKey
   label?: string
-  onOpen: (metric: MetricKey) => void
+  onOpen: OpenMetric
 }): React.JSX.Element {
   const def = METRICS[metricKey]
   const pct = value != null && goal > 0 ? Math.round((value / goal) * 100) : null
   return (
-    <button onClick={() => onOpen(metricKey)} className="group flex flex-col items-center gap-2">
+    <button onClick={() => onOpen(metricKey, 'D')} className="group flex flex-col items-center gap-2">
       <ProgressRing
         value={value ?? 0}
         goal={goal}
