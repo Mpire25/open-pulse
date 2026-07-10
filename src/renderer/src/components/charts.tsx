@@ -85,6 +85,7 @@ function compact(n: number): string {
 }
 
 function axisNumber(n: number): string {
+  if (Math.abs(n) < 1 && n !== 0) return String(+n.toFixed(2))
   if (Math.abs(n) < 10 && !Number.isInteger(n)) return String(+n.toFixed(1))
   return compact(n)
 }

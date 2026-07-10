@@ -7,6 +7,8 @@
 // history backfills.
 
 import type {
+  ActivityIntradayMetric,
+  ActivityIntradayResult,
   DailySeries,
   DayMetrics,
   DayValues,
@@ -35,6 +37,7 @@ import {
   listData,
   listPairedDevices,
   minuteFromCivil,
+  physicalRollUp,
   shiftIsoDate,
   type CivilDateTime,
   type Priority,
@@ -47,12 +50,14 @@ import {
   markFetched,
   mergeValues,
   peekDay,
+  setActivityIntraday,
   setIntradayHeart,
   setIntradaySteps,
   setSleep,
   setWorkouts
 } from './metric-store'
 import {
+  demoActivityIntraday,
   demoDevices,
   demoIntraday,
   demoSeries,
@@ -60,6 +65,7 @@ import {
   demoWorkoutTrack,
   demoWorkoutsRange
 } from './sample-data'
+import { activityRollupBreakdown, activityRollupPoints, calorieEnergyBreakdown } from './activity-intraday'
 import { nutrientGrams } from './nutrition'
 import { parseExerciseTcx } from './tcx'
 
@@ -643,6 +649,32 @@ export async function getWorkoutTrack(workoutId: string): Promise<WorkoutTrackRe
 // ---------------------------------------------------------------------------
 // Intraday (selected day only — always priority 0)
 
+const ACTIVITY_INTRADAY_WINDOW_MINUTES = 30
+
+const ACTIVITY_INTRADAY_DATA_TYPES: Record<ActivityIntradayMetric, string> = {
+  distanceKm: 'distance',
+  caloriesOut: 'total-calories',
+  floors: 'floors',
+  activeMinutes: 'active-minutes',
+  activeZoneMinutes: 'active-zone-minutes',
+  sedentaryMinutes: 'sedentary-period'
+}
+
+function physicalDayRange(date: string): { startTime: string; endTime: string; dayEndTime: string } {
+  const [year, month, day] = date.split('-').map(Number)
+  const start = new Date(year, month - 1, day)
+  const nextMidnight = new Date(year, month - 1, day + 1)
+  // Physical rollups reject a range that extends into the future. Civil daily
+  // rollups allow a full current day, which is why the headline value could
+  // succeed while its intraday request failed.
+  const end = new Date(Math.min(nextMidnight.getTime(), Date.now()))
+  return {
+    startTime: start.toISOString(),
+    endTime: end.toISOString(),
+    dayEndTime: nextMidnight.toISOString()
+  }
+}
+
 async function ensureIntradaySteps(token: string, date: string, force: boolean): Promise<void> {
   if (!force && isFresh('intraday-steps', date)) return
   const points = await listData(token, 'steps', 'interval', date, shiftIsoDate(date, 1), 'google-wearables', 0)
@@ -784,6 +816,70 @@ export async function getIntraday(date: string, force = false): Promise<Intraday
     heartRate,
     currentHeartRate: d === todayIso() ? (heartRate.at(-1)?.bpm ?? null) : null
   }
+}
+
+export async function getActivityIntraday(
+  date: string,
+  metric: ActivityIntradayMetric,
+  force = false
+): Promise<ActivityIntradayResult> {
+  const [d] = normalizeRange(date, date)
+  const token = await getGoogleAccessToken()
+  if (!token) return demoActivityIntraday(d, metric)
+
+  // v2 normalizes omitted elapsed windows to zero, so older sparse cached
+  // series are refetched once instead of retaining compressed chart spacing.
+  const group = `intraday-activity-v2-${metric}`
+  const cached = peekDay(d)?.activityIntraday?.[metric]
+  if (!force && cached && isFresh(group, d)) return cached
+
+  const { startTime, endTime, dayEndTime } = physicalDayRange(d)
+  const [rollups, activeEnergyRollups] = await Promise.all([
+    physicalRollUp(
+      token,
+      ACTIVITY_INTRADAY_DATA_TYPES[metric],
+      startTime,
+      endTime,
+      ACTIVITY_INTRADAY_WINDOW_MINUTES * 60,
+      'all-sources',
+      0
+    ),
+    metric === 'caloriesOut'
+      ? physicalRollUp(
+          token,
+          'active-energy-burned',
+          startTime,
+          endTime,
+          ACTIVITY_INTRADAY_WINDOW_MINUTES * 60,
+          'all-sources',
+          0
+        ).catch((error) => {
+          console.error(`[health] active energy breakdown failed for ${d}:`, error)
+          return []
+        })
+      : Promise.resolve([])
+  ])
+  const result: ActivityIntradayResult = {
+    date: d,
+    source: 'live',
+    metric,
+    windowMinutes: ACTIVITY_INTRADAY_WINDOW_MINUTES,
+    points: activityRollupPoints(
+      metric,
+      rollups,
+      startTime,
+      endTime,
+      dayEndTime,
+      ACTIVITY_INTRADAY_WINDOW_MINUTES
+    ),
+    breakdown:
+      metric === 'caloriesOut'
+        ? calorieEnergyBreakdown(rollups, activeEnergyRollups)
+        : activityRollupBreakdown(metric, rollups)
+  }
+  setActivityIntraday(d, result)
+  markFetched(group, [d])
+  return result
 }
 
 // ---------------------------------------------------------------------------

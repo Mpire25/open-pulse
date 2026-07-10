@@ -3,6 +3,8 @@
 // across reloads but differ day to day, and any date can be traversed.
 
 import type {
+  ActivityIntradayMetric,
+  ActivityIntradayResult,
   DailySeries,
   DayValues,
   HeartRatePoint,
@@ -397,6 +399,59 @@ export function demoIntraday(date: string): IntradaySnapshot {
     heartRate,
     currentHeartRate: date === today() ? (heartRate.at(-1)?.bpm ?? null) : null
   }
+}
+
+function demoActivityBreakdown(
+  metric: ActivityIntradayMetric,
+  total: number
+): ActivityIntradayResult['breakdown'] {
+  switch (metric) {
+    case 'activeMinutes':
+      return [
+        { key: 'light', value: Math.round(total * 1.35), unit: 'min' },
+        { key: 'moderate', value: Math.round(total * 0.68), unit: 'min' },
+        { key: 'vigorous', value: Math.round(total * 0.32), unit: 'min' }
+      ]
+    case 'activeZoneMinutes':
+      return [
+        { key: 'fatBurn', value: Math.round(total * 0.5), unit: 'min' },
+        { key: 'cardio', value: Math.round(total * 0.34), unit: 'min' },
+        { key: 'peak', value: Math.round(total * 0.16), unit: 'min' }
+      ]
+    case 'caloriesOut':
+      return [
+        { key: 'activeEnergy', value: Math.round(total * 0.38), unit: 'kcal' },
+        { key: 'basalEnergy', value: Math.round(total * 0.62), unit: 'kcal' }
+      ]
+    default:
+      return []
+  }
+}
+
+export function demoActivityIntraday(date: string, metric: ActivityIntradayMetric): ActivityIntradayResult {
+  const total = valuesFor(date)[metric] ?? 0
+  const random = mulberry32(seedFor(`${date}:${metric}:intraday`))
+  const windowMinutes = 30
+  const uptoMinute = uptoMinuteFor(date)
+  const weights = Array.from({ length: 48 }, (_, index) => {
+    if (index * windowMinutes > uptoMinute) return 0
+    const hour = index / 2
+    const morning = Math.exp(-((hour - 8.2) ** 2) / 3.5)
+    const midday = Math.exp(-((hour - 13) ** 2) / 5)
+    const evening = Math.exp(-((hour - 18.2) ** 2) / 4)
+    const activity = morning * 0.85 + midday * 0.45 + evening
+    if (metric === 'caloriesOut') return 0.28 + activity + random() * 0.08
+    if (metric === 'sedentaryMinutes') return hour >= 7 && hour <= 23 ? 0.45 + (1 - Math.min(1, activity)) + random() * 0.2 : 0
+    return activity > 0.08 ? activity + random() * 0.22 : 0
+  })
+  const weightTotal = weights.reduce((sum, value) => sum + value, 0) || 1
+  const points = weights.map((weight, index) => ({
+    minute: index * windowMinutes,
+    value: index * windowMinutes > uptoMinute ? null : total > 0 ? (weight / weightTotal) * total : 0
+  }))
+  const breakdown = demoActivityBreakdown(metric, total)
+
+  return { date, source: 'demo', metric, windowMinutes, points, breakdown }
 }
 
 export function demoDevices(): PairedDevice[] {

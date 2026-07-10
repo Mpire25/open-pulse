@@ -1,5 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import type {
+  ActivityIntradayMetric,
+  ActivityIntradayResult,
   AiEvent,
   AppSettings,
   ChatMessage,
@@ -42,6 +44,11 @@ const api = {
       ipcRenderer.invoke('health:workout-track', workoutId),
     intraday: (date: string, force?: boolean): Promise<IntradaySnapshot> =>
       ipcRenderer.invoke('health:intraday', date, force),
+    activityIntraday: (
+      date: string,
+      metric: ActivityIntradayMetric,
+      force?: boolean
+    ): Promise<ActivityIntradayResult> => ipcRenderer.invoke('health:activity-intraday', date, metric, force),
     devices: (force?: boolean): Promise<PairedDevice[]> => ipcRenderer.invoke('health:devices', force),
     refresh: (): Promise<void> => ipcRenderer.invoke('health:refresh'),
     onActivity: (callback: (activity: SyncActivity) => void): (() => void) => {

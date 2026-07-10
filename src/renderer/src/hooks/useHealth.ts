@@ -15,6 +15,8 @@ import {
   type UseQueryResult
 } from '@tanstack/react-query'
 import type {
+  ActivityIntradayMetric,
+  ActivityIntradayResult,
   IntradaySnapshot,
   MetricKey,
   PairedDevice,
@@ -118,11 +120,25 @@ export function useWorkoutTrack(workoutId: string, enabled: boolean): UseQueryRe
   })
 }
 
-export function useIntraday(date: string): UseQueryResult<IntradaySnapshot> {
+export function useIntraday(date: string, enabled = true): UseQueryResult<IntradaySnapshot> {
   return useQuery({
     queryKey: ['intraday', date],
     queryFn: () => window.pulse.health.intraday(date),
-    staleTime: STALE_MS
+    staleTime: STALE_MS,
+    enabled
+  })
+}
+
+export function useActivityIntraday(
+  date: string,
+  metric: ActivityIntradayMetric,
+  enabled = true
+): UseQueryResult<ActivityIntradayResult> {
+  return useQuery({
+    queryKey: ['activity-intraday', metric, date],
+    queryFn: () => window.pulse.health.activityIntraday(date, metric),
+    staleTime: STALE_MS,
+    enabled
   })
 }
 

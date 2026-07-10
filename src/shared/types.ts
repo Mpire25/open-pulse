@@ -105,6 +105,41 @@ export interface IntradaySnapshot {
   currentHeartRate: number | null // only set when date is today
 }
 
+export const ACTIVITY_INTRADAY_METRICS = [
+  'distanceKm',
+  'caloriesOut',
+  'floors',
+  'activeMinutes',
+  'activeZoneMinutes',
+  'sedentaryMinutes'
+] as const satisfies readonly MetricKey[]
+
+export type ActivityIntradayMetric = (typeof ACTIVITY_INTRADAY_METRICS)[number]
+
+export function isActivityIntradayMetric(value: string): value is ActivityIntradayMetric {
+  return ACTIVITY_INTRADAY_METRICS.some((metric) => metric === value)
+}
+
+export interface ActivityIntradayPoint {
+  minute: number // local minute of day at the start of the aggregation window
+  value: number | null // null means the device supplied no value for this window
+}
+
+export interface ActivityIntradayBreakdown {
+  key: 'light' | 'moderate' | 'vigorous' | 'fatBurn' | 'cardio' | 'peak' | 'activeEnergy' | 'basalEnergy'
+  value: number
+  unit: 'min' | 'kcal'
+}
+
+export interface ActivityIntradayResult {
+  date: string
+  source: DataSource
+  metric: ActivityIntradayMetric
+  windowMinutes: number
+  points: ActivityIntradayPoint[]
+  breakdown: ActivityIntradayBreakdown[]
+}
+
 export interface Workout {
   id: string
   name: string
