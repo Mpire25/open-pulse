@@ -426,7 +426,6 @@ function DayDetail({
                 color={def.color}
                 height={210}
                 format={def.format}
-                baseline={base != null && def.deltaMode !== 'abs' ? { value: base, label: '7d avg' } : null}
                 unitLabel={def.unit}
                 axisLabel={axisLabel}
                 domain={axisDomainFor(metricKey)}
@@ -724,8 +723,6 @@ function PeriodDetail({
           { label: 'Highest', value: present.length ? def.format(Math.max(...present)) : '—' }
         ]
 
-  const avg = present.length ? present.reduce((s, v) => s + v, 0) / present.length : null
-
   return (
     <>
       <motion.div custom={1} variants={fade} initial="hidden" animate="show">
@@ -784,7 +781,6 @@ function PeriodDetail({
               color={def.color}
               height={240}
               format={def.format}
-              baseline={avg != null ? { value: avg, label: 'avg' } : null}
               unitLabel={def.unit}
               axisLabel={axisLabel}
               domain={axisDomainFor(metricKey)}

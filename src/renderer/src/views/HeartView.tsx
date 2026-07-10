@@ -154,9 +154,7 @@ function VitalCard({
             baseline={
               def.deltaMode === 'abs'
                 ? { value: 0, label: 'baseline' }
-                : base != null
-                  ? { value: base, label: '7d avg' }
-                  : null
+                : null
             }
             unitLabel={def.unit}
             domain={metricKey === 'spo2Pct' ? { max: 100 } : undefined}
