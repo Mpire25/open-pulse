@@ -82,7 +82,7 @@ export function ActivityView({ date, goals, onOpenMetric }: ActivityViewProps): 
   }
 
   return (
-    <div className="mx-auto flex max-w-[1180px] flex-col gap-5 px-8 pb-12">
+    <div className="mx-auto flex max-w-[1320px] flex-col gap-5 px-8 pb-12">
       <motion.header custom={0} variants={fade} initial="hidden" animate="show" className="pt-2">
         <h1 className="display text-[27px] font-bold text-ink">Activity</h1>
         <p className="mt-1 text-[13px] text-ink-dim">{longDate(date)}</p>
@@ -90,13 +90,13 @@ export function ActivityView({ date, goals, onOpenMetric }: ActivityViewProps): 
 
       {/* Day totals */}
       <motion.div custom={1} variants={fade} initial="hidden" animate="show">
-        <Panel className={`grid grid-cols-2 divide-x divide-y divide-hairline overflow-hidden sm:grid-cols-3 lg:grid-cols-6 lg:divide-y-0 ${CARD_HEIGHT.compact}`}>
+        <Panel className={`grid grid-cols-2 divide-x divide-y divide-hairline overflow-hidden sm:grid-cols-3 xl:grid-cols-6 xl:divide-y-0 ${CARD_HEIGHT.compact}`}>
           {ACTIVITY_METRICS.map((key) => {
             const def = METRICS[key]
             const points = pointsFor(key)
             const value = days?.[date]?.[key] ?? null
             return series.isMetricPending(key) ? (
-              <SkeletonMetricStat key={key} />
+              <SkeletonMetricStat key={key} sparkWidth={56} />
             ) : (
                 <MetricStat
                   key={key}
@@ -108,6 +108,7 @@ export function ActivityView({ date, goals, onOpenMetric }: ActivityViewProps): 
                   deltaPct={baselineDeltaPct(value, baseline(points, date))}
                   upIsGood={def.upIsGood}
                   spark={pointValues(points)}
+                  sparkWidth={56}
                   onOpen={() => onOpenMetric(key)}
                 />
             )
@@ -115,11 +116,11 @@ export function ActivityView({ date, goals, onOpenMetric }: ActivityViewProps): 
         </Panel>
       </motion.div>
 
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1.35fr_1fr]">
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
         {/* Hourly movement */}
-        <motion.div custom={2} variants={fade} initial="hidden" animate="show">
+        <motion.div custom={2} variants={fade} initial="hidden" animate="show" className="min-w-0">
           <InteractivePanel
-            className={`flex h-full flex-col gap-3 p-5 ${CARD_HEIGHT.large}`}
+            className={`flex h-full min-w-0 flex-col gap-3 p-5 ${CARD_HEIGHT.large}`}
             onOpen={() => onOpenMetric('steps')}
           >
             <DrillHeader
@@ -151,8 +152,8 @@ export function ActivityView({ date, goals, onOpenMetric }: ActivityViewProps): 
         </motion.div>
 
         {/* Workouts */}
-        <motion.div custom={3} variants={fade} initial="hidden" animate="show">
-          <Panel className={`flex h-full flex-col gap-2 p-5 ${CARD_HEIGHT.large}`}>
+        <motion.div custom={3} variants={fade} initial="hidden" animate="show" className="min-w-0">
+          <Panel className={`flex h-full min-w-0 flex-col gap-2 p-5 ${CARD_HEIGHT.large}`}>
             <SectionHeader
               title="Workouts"
               hint={
