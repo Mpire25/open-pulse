@@ -149,7 +149,7 @@ export function NutritionView({ date, goals, onOpenMetric, onSelectDate }: Nutri
                   <button
                     type="button"
                     onClick={() => onOpenMetric('caloriesIn', 'D')}
-                    className="group flex flex-col items-center gap-2 rounded-2xl px-3 py-1 outline-none focus-visible:ring-2 focus-visible:ring-accent/60 active:scale-[0.98]"
+                    className="group -m-2 flex flex-col items-center gap-2 rounded-2xl p-3 outline-none transition-[background-color,box-shadow,transform] duration-200 hover:bg-white/[0.05] hover:shadow-[inset_0_0_0_1px_rgb(255_255_255/0.07)] focus-visible:bg-white/[0.05] focus-visible:ring-2 focus-visible:ring-accent/60 active:scale-[0.98]"
                     aria-label="Open calories eaten details"
                   >
                     <ProgressRing
@@ -604,8 +604,9 @@ function MacroBreakdown({
         {parts.map((p) => (
           <button
             key={p.key}
+            type="button"
             onClick={() => onOpenMetric(p.key, 'D')}
-            className="group min-w-0 rounded-xl px-2 py-1.5 text-left outline-none transition-colors hover:bg-white/[0.04] focus-visible:ring-2 focus-visible:ring-accent/60 active:scale-[0.98]"
+            className="group -m-1 min-w-0 rounded-xl p-3 text-left outline-none transition-[background-color,box-shadow,transform] duration-200 hover:bg-white/[0.05] hover:shadow-[inset_0_0_0_1px_rgb(255_255_255/0.07)] focus-visible:bg-white/[0.05] focus-visible:ring-2 focus-visible:ring-accent/60 active:scale-[0.98]"
           >
             <div className="flex items-center gap-1.5">
               <span className="h-2 w-2 rounded-full" style={{ background: p.color }} />
