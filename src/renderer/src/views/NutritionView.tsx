@@ -138,8 +138,8 @@ export function NutritionView({ date, goals, onOpenMetric, onSelectDate }: Nutri
         <>
           {/* Today: intake goal + macro split */}
           <motion.div custom={1} variants={fade} initial="hidden" animate="show">
-            <Panel className={`grid grid-cols-1 gap-6 p-6 lg:grid-cols-[auto_1fr] ${CARD_HEIGHT.hero}`}>
-              <div className="flex min-w-[220px] items-center justify-center">
+            <Panel className={`grid grid-cols-1 gap-6 p-6 lg:grid-cols-[auto_1fr] lg:gap-4 ${CARD_HEIGHT.hero}`}>
+              <div className="flex min-w-[180px] items-center justify-center">
                 {intakePending ? (
                   <div className="flex flex-col items-center gap-2" aria-hidden>
                     <SkeletonRing size={146} stroke={15} />
