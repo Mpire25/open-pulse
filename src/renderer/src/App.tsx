@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useQueryClient } from '@tanstack/react-query'
 import { Sidebar, type View } from '@/components/Sidebar'
@@ -24,11 +24,11 @@ import type { MetricRange, OpenMetric } from '@/lib/metric-navigation'
 import type { AppSettings, CodexAuthStatus, GoogleAuthStatus, MetricKey, Workout } from '@shared/types'
 
 const DATA_VIEWS: View[] = ['home', 'activity', 'heart', 'sleep', 'body', 'nutrition']
-const NAVIGATION_STATE_KEY = 'open-pulse-navigation-v2'
+const NAVIGATION_STATE_KEY = 'open-pulse-navigation-v3'
 
 interface MetricDetailSelection {
   metric: MetricKey
-  initialRange: MetricRange
+  range: MetricRange
 }
 
 interface NavigationEntry {
@@ -54,7 +54,7 @@ function sameNavigationEntry(a: NavigationEntry, b: NavigationEntry): boolean {
     a.view === b.view &&
     a.selectedDate === b.selectedDate &&
     a.detailMetric?.metric === b.detailMetric?.metric &&
-    a.detailMetric?.initialRange === b.detailMetric?.initialRange &&
+    a.detailMetric?.range === b.detailMetric?.range &&
     a.sleepStagesOpen === b.sleepStagesOpen &&
     a.selectedWorkout?.id === b.selectedWorkout?.id
   )
@@ -72,6 +72,7 @@ export default function App(): React.JSX.Element {
   const [selectedDate, setSelectedDate] = useState(isoToday)
   const [chatOpen, setChatOpen] = useState(false)
   const [sidebarOpen, setSidebarOpen] = useState(true)
+  const backNavigationPending = useRef(false)
 
   // One conversation shared by the Assistant page and the side panel.
   const chat = useChat()
@@ -86,7 +87,7 @@ export default function App(): React.JSX.Element {
     setSelectedWorkout(entry.selectedWorkout)
   }
 
-  const currentNavigationEntry = (): NavigationEntry => ({
+  const renderedNavigationEntry = (): NavigationEntry => ({
     key: NAVIGATION_STATE_KEY,
     view,
     selectedDate,
@@ -95,10 +96,30 @@ export default function App(): React.JSX.Element {
     selectedWorkout
   })
 
+  const currentNavigationEntry = (): NavigationEntry => {
+    const historyEntry = window.history.state
+    return isNavigationEntry(historyEntry) ? historyEntry : renderedNavigationEntry()
+  }
+
   const navigate = (entry: NavigationEntry): void => {
     if (sameNavigationEntry(currentNavigationEntry(), entry)) return
     window.history.pushState(entry, '')
     applyNavigationEntry(entry)
+  }
+
+  const navigateBack = (): void => {
+    if (backNavigationPending.current) return
+
+    const historyEntry = window.history.state
+    if (
+      !isNavigationEntry(historyEntry) ||
+      !sameNavigationEntry(historyEntry, renderedNavigationEntry())
+    ) {
+      return
+    }
+
+    backNavigationPending.current = true
+    window.history.back()
   }
 
   useEffect(() => {
@@ -130,6 +151,7 @@ export default function App(): React.JSX.Element {
     }
 
     const handleHistoryNavigation = (event: PopStateEvent): void => {
+      backNavigationPending.current = false
       if (isNavigationEntry(event.state)) applyNavigationEntry(event.state)
     }
 
@@ -166,10 +188,22 @@ export default function App(): React.JSX.Element {
   const openMetric: OpenMetric = (metric, initialRange) => {
     navigate({
       ...currentNavigationEntry(),
-      detailMetric: { metric, initialRange },
+      detailMetric: { metric, range: initialRange },
       sleepStagesOpen: false,
       selectedWorkout: null
     })
+  }
+
+  const selectMetricRange = (range: MetricRange): void => {
+    const entry = currentNavigationEntry()
+    if (!entry.detailMetric || entry.detailMetric.range === range) return
+
+    const nextEntry: NavigationEntry = {
+      ...entry,
+      detailMetric: { ...entry.detailMetric, range }
+    }
+    window.history.replaceState(nextEntry, '')
+    applyNavigationEntry(nextEntry)
   }
 
   const openSleepStages = (): void => {
@@ -229,7 +263,7 @@ export default function App(): React.JSX.Element {
           <div className="scroll-stable min-h-0 flex-1 overflow-y-auto">
             <AnimatePresence mode="wait">
               <motion.div
-                key={`${view}-${detailMetric ? `${detailMetric.metric}-${detailMetric.initialRange}` : sleepStagesOpen ? 'sleep-stages' : selectedWorkout?.id ?? 'root'}-${google.connected}`}
+                key={`${view}-${detailMetric ? detailMetric.metric : sleepStagesOpen ? 'sleep-stages' : selectedWorkout?.id ?? 'root'}-${google.connected}`}
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -6 }}
@@ -250,20 +284,21 @@ export default function App(): React.JSX.Element {
                       <WorkoutDetailView
                         workout={selectedWorkout}
                         date={selectedDate}
-                        onBack={() => window.history.back()}
+                        onBack={navigateBack}
                       />
                     ) : showSleepStagesDetail ? (
                       <SleepStagesDetailView
                         date={selectedDate}
-                        onBack={() => window.history.back()}
+                        onBack={navigateBack}
                       />
                     ) : showDetail ? (
                       <MetricDetailView
                         metricKey={detailMetric.metric}
-                        initialRange={detailMetric.initialRange}
+                        range={detailMetric.range}
                         date={selectedDate}
                         goals={settings.goals}
-                        onBack={() => window.history.back()}
+                        onBack={navigateBack}
+                        onRangeChange={selectMetricRange}
                       />
                     ) : (
                       <>

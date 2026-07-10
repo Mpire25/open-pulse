@@ -12,6 +12,28 @@ const MOMENTUM_TAIL_PEAK_RATIO = 0.35
 const NEW_GESTURE_MIN_DELTA = 8
 const NEW_GESTURE_ACCELERATION = 1.8
 
+export function isHorizontalTrackpadDelta(deltaX: number, deltaY: number): boolean {
+  const absX = Math.abs(deltaX)
+  return absX >= 1 && absX > Math.abs(deltaY) * HORIZONTAL_DOMINANCE
+}
+
+// Once a wheel sequence starts inside a horizontal scroller, keep the whole
+// sequence there. Otherwise momentum that reaches the edge can escape into a
+// history navigation before the user's next deliberate gesture.
+export class HorizontalScrollGestureLatch {
+  private active = false
+
+  update(canScroll: boolean, startsNewGesture = false): boolean {
+    if (startsNewGesture) this.active = false
+    if (canScroll) this.active = true
+    return this.active
+  }
+
+  reset(): void {
+    this.active = false
+  }
+}
+
 // Trackpads emit a stream of wheel events, including momentum after the user's
 // fingers lift. This recognizer turns that stream into at most one navigation.
 export class TrackpadNavigationGesture {
@@ -23,7 +45,7 @@ export class TrackpadNavigationGesture {
 
   update(deltaX: number, deltaY: number): TrackpadGestureResult {
     const absX = Math.abs(deltaX)
-    if (absX < 1 || absX <= Math.abs(deltaY) * HORIZONTAL_DOMINANCE) {
+    if (!isHorizontalTrackpadDelta(deltaX, deltaY)) {
       if (absX < 1) {
         this.previousAbsX = absX
         if (this.triggered) this.readyForNextSameDirection = true

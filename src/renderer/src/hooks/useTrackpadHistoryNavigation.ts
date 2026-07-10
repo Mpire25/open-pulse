@@ -1,5 +1,9 @@
 import { useEffect } from 'react'
-import { TrackpadNavigationGesture } from '@/lib/trackpad-navigation'
+import {
+  HorizontalScrollGestureLatch,
+  isHorizontalTrackpadDelta,
+  TrackpadNavigationGesture
+} from '@/lib/trackpad-navigation'
 
 const GESTURE_END_DELAY_MS = 160
 
@@ -26,18 +30,28 @@ function canScrollHorizontally(target: EventTarget | null, deltaX: number): bool
 export function useTrackpadHistoryNavigation(): void {
   useEffect(() => {
     const gesture = new TrackpadNavigationGesture()
+    const scrollGesture = new HorizontalScrollGestureLatch()
     let resetTimer: ReturnType<typeof setTimeout> | undefined
 
     const resetAfterMomentum = (): void => {
       if (resetTimer) clearTimeout(resetTimer)
-      resetTimer = setTimeout(() => gesture.reset(), GESTURE_END_DELAY_MS)
+      resetTimer = setTimeout(() => {
+        gesture.reset()
+        scrollGesture.reset()
+      }, GESTURE_END_DELAY_MS)
     }
 
     const handleWheel = (event: WheelEvent): void => {
       // Trackpads report pixel deltas. Leave line/page-based mouse wheels alone.
       if (event.deltaMode !== WheelEvent.DOM_DELTA_PIXEL) return
-      if (canScrollHorizontally(event.target, event.deltaX)) {
+
+      const startsNewGesture = Math.abs(event.deltaX) < 1 && Math.abs(event.deltaY) < 1
+      const horizontalInput = isHorizontalTrackpadDelta(event.deltaX, event.deltaY)
+      const canScroll = horizontalInput && canScrollHorizontally(event.target, event.deltaX)
+      if (scrollGesture.update(canScroll, startsNewGesture)) {
         gesture.reset()
+        resetAfterMomentum()
+        if (!canScroll && horizontalInput) event.preventDefault()
         return
       }
 

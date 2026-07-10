@@ -1,5 +1,8 @@
 import { describe, expect, test } from 'bun:test'
-import { TrackpadNavigationGesture } from '../src/renderer/src/lib/trackpad-navigation'
+import {
+  HorizontalScrollGestureLatch,
+  TrackpadNavigationGesture
+} from '../src/renderer/src/lib/trackpad-navigation'
 
 describe('trackpad history navigation', () => {
   test('ignores vertical and strongly diagonal scrolling', () => {
@@ -64,5 +67,13 @@ describe('trackpad history navigation', () => {
     expect(gesture.update(-50, 0).navigation).toBeNull()
     expect(gesture.update(50, 0).navigation).toBeNull()
     expect(gesture.update(40, 0).navigation).toBe('forward')
+  })
+
+  test('keeps momentum owned by a horizontal scroller after it reaches an edge', () => {
+    const scrollGesture = new HorizontalScrollGestureLatch()
+
+    expect(scrollGesture.update(true)).toBe(true)
+    expect(scrollGesture.update(false)).toBe(true)
+    expect(scrollGesture.update(false, true)).toBe(false)
   })
 })
