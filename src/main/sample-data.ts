@@ -3,12 +3,18 @@
 // across reloads but differ day to day, and any date can be traversed.
 
 import type {
+  ActivityIntradayMetric,
+  ActivityIntradayResult,
+  BodyMeasurementsResult,
   DailySeries,
   DayValues,
   HeartRatePoint,
+  HeartDetailMetric,
+  HeartDetailResult,
   HourlySteps,
   IntradaySnapshot,
   MetricKey,
+  NutritionLogsResult,
   PairedDevice,
   SleepNight,
   SleepStageSegment,
@@ -109,8 +115,32 @@ function generateSleep(date: string, rand: () => number): SleepNight {
   for (const key of ['LIGHT', 'DEEP', 'REM'] as const) {
     stageMinutes[key] = Math.round(stageMinutes[key] ?? 0)
   }
+  const stageCounts: Partial<Record<SleepStageType, number>> = {}
+  for (const stage of stages) stageCounts[stage.type] = (stageCounts[stage.type] ?? 0) + 1
+
+  const firstDeepOrRem = stages.find((stage) => stage.type === 'DEEP' || stage.type === 'REM')
+  const minutesToFirstDeepOrRem = firstDeepOrRem
+    ? Math.round((Date.parse(firstDeepOrRem.startTime) - start.getTime()) / 60_000)
+    : null
+  const deepRemMinutes = Math.round((stageMinutes.DEEP ?? 0) + (stageMinutes.REM ?? 0))
+  const interruptions = stages.filter((stage, index) => {
+    if (stage.type !== 'AWAKE') return false
+    return stages.slice(0, index).some((candidate) => candidate.type !== 'AWAKE')
+      && stages.slice(index + 1).some((candidate) => candidate.type !== 'AWAKE')
+  })
+  const interruptionMinutes = Math.round(
+    interruptions.reduce(
+      (total, stage) => total + (Date.parse(stage.endTime) - Date.parse(stage.startTime)) / 60_000,
+      0
+    )
+  )
 
   const minutesAsleep = totalMinutes - Math.round(awakeTotal)
+  const minutesToFallAsleep = Math.round(5 + rand() * 18)
+  const minutesAfterWakeUp = Math.round(rand() * 8)
+  const hasOutOfBed = rand() > 0.7
+  const outOfBedStart = new Date(start.getTime() + totalMinutes * 0.58 * 60_000)
+  const outOfBedEnd = new Date(outOfBedStart.getTime() + (2 + rand() * 5) * 60_000)
   return {
     date,
     startTime: start.toISOString(),
@@ -120,7 +150,26 @@ function generateSleep(date: string, rand: () => number): SleepNight {
     efficiency: Math.round((minutesAsleep / totalMinutes) * 100),
     isMainSleep: true,
     stages,
-    stageMinutes
+    stageMinutes,
+    stageCounts,
+    minutesAwake: Math.round(awakeTotal),
+    minutesToFirstDeepOrRem,
+    deepRemMinutes,
+    interruptionMinutes,
+    interruptionCount: interruptions.length,
+    minutesToFallAsleep,
+    minutesAfterWakeUp,
+    outOfBedSegments: hasOutOfBed ? [{ startTime: outOfBedStart.toISOString(), endTime: outOfBedEnd.toISOString() }] : [],
+    sleepType: 'STAGES',
+    processed: true,
+    manuallyEdited: false,
+    stagesStatus: 'SUCCEEDED',
+    respiratory: {
+      full: { breathsPerMinute: +(13.8 + rand() * 1.8).toFixed(1), standardDeviation: 1.1, signalToNoise: 7.4 },
+      light: { breathsPerMinute: +(14.2 + rand()).toFixed(1), standardDeviation: 1.2, signalToNoise: 6.9 },
+      deep: { breathsPerMinute: +(12.8 + rand()).toFixed(1), standardDeviation: 0.8, signalToNoise: 7.8 },
+      rem: { breathsPerMinute: +(14.8 + rand()).toFixed(1), standardDeviation: 1.4, signalToNoise: 6.4 }
+    }
   }
 }
 
@@ -138,6 +187,7 @@ function demoDayValues(date: string): DayValues {
   const restDay = rand() < 0.2
 
   const caloriesIn = rand() < 0.65 ? Math.round(1800 + rand() * 800) : null
+  const weightKg = rand() < 0.45 ? +(76.5 + Math.sin(seedFor(date) % 30) * 1.4 + rand()).toFixed(1) : null
   // Macros track logged energy: ~22/46/30% of kcal with jitter.
   const macro = (share: number, perGramKcal: number, jitter: number): number | null =>
     caloriesIn == null ? null : Math.round((caloriesIn * (share + (rand() - 0.5) * jitter)) / perGramKcal)
@@ -158,15 +208,18 @@ function demoDayValues(date: string): DayValues {
     vo2Max: +(41 + rand() * 4).toFixed(1),
     sleepMinutes: sleep.minutesAsleep,
     sleepEfficiency: sleep.efficiency,
-    weightKg: rand() < 0.45 ? +(76.5 + Math.sin(seedFor(date) % 30) * 1.4 + rand()).toFixed(1) : null,
+    weightKg,
     bodyFatPct: rand() < 0.3 ? +(18 + rand() * 3).toFixed(1) : null,
+    bmi: weightKg == null ? null : +(weightKg / (1.78 * 1.78)).toFixed(1),
     waterMl: rand() < 0.6 ? Math.round(900 + rand() * 1400) : null,
     caloriesIn,
     proteinG: macro(0.22, 4, 0.05),
     carbsG: macro(0.46, 4, 0.08),
     fatG: macro(0.3, 9, 0.05),
     fiberG: caloriesIn == null ? null : Math.round(16 + rand() * 18),
-    sugarG: caloriesIn == null ? null : Math.round(38 + rand() * 50)
+    saturatedFatG: caloriesIn == null ? null : Math.round(12 + rand() * 14),
+    sodiumG: caloriesIn == null ? null : +(1.2 + rand() * 1.8).toFixed(2),
+    sugarG: caloriesIn == null ? null : Math.round(35 + rand() * 55)
   }
 }
 
@@ -184,6 +237,7 @@ const PROGRESS_SCALED: MetricKey[] = [
   'carbsG',
   'fatG',
   'fiberG',
+  'saturatedFatG',
   'sugarG'
 ]
 
@@ -193,6 +247,10 @@ function scaleForToday(values: DayValues): DayValues {
   for (const key of PROGRESS_SCALED) {
     const v = out[key]
     if (v != null) out[key] = Math.round(v * p)
+  }
+  for (const key of ['sodiumG'] as const) {
+    const v = out[key]
+    if (v != null) out[key] = +(v * p).toFixed(2)
   }
   if (out.distanceKm != null) out.distanceKm = +(out.distanceKm * p).toFixed(2)
   return out
@@ -387,6 +445,59 @@ export function demoWorkoutsRange(start: string, end: string): Workout[] {
   return listDates(start, end).flatMap((date) => demoWorkoutsFor(date, uptoMinuteFor(date)))
 }
 
+export function demoNutritionLogs(date: string): NutritionLogsResult {
+  const values = valuesFor(date)
+  if (values.caloriesIn == null) return { date, source: 'demo', entries: [] }
+  const templates = [
+    { minute: 8 * 60 + 10, foodName: 'Greek yogurt with berries', mealType: 'BREAKFAST', share: 0.22 },
+    { minute: 13 * 60 + 5, foodName: 'Chicken pesto pasta', mealType: 'LUNCH', share: 0.41 },
+    { minute: 19 * 60 + 20, foodName: 'Salmon rice bowl', mealType: 'DINNER', share: 0.37 }
+  ].filter((entry) => entry.minute <= uptoMinuteFor(date))
+  const totalShare = templates.reduce((sum, entry) => sum + entry.share, 0) || 1
+  return {
+    date,
+    source: 'demo',
+    entries: templates.map((entry, index) => {
+      const share = entry.share / totalShare
+      const start = new Date(`${date}T00:00:00`)
+      start.setMinutes(entry.minute)
+      const end = new Date(start.getTime() + 5 * 60_000)
+      return {
+        id: `demo-food-${date}-${index}`,
+        startTime: start.toISOString(),
+        endTime: end.toISOString(),
+        foodName: entry.foodName,
+        mealType: entry.mealType,
+        servingLabel: '1 serving',
+        calories: Math.round(values.caloriesIn! * share),
+        proteinG: values.proteinG == null ? null : Math.round(values.proteinG * share),
+        carbsG: values.carbsG == null ? null : Math.round(values.carbsG * share),
+        fatG: values.fatG == null ? null : Math.round(values.fatG * share),
+        fiberG: values.fiberG == null ? null : Math.round(values.fiberG * share),
+        saturatedFatG: values.saturatedFatG == null ? null : +(values.saturatedFatG * share).toFixed(1),
+        sodiumG: values.sodiumG == null ? null : +(values.sodiumG * share).toFixed(2),
+        sugarG: values.sugarG == null ? null : Math.round(values.sugarG * share)
+      }
+    })
+  }
+}
+
+export function demoBodyMeasurements(start: string, end: string): BodyMeasurementsResult {
+  const measurements = listDates(start, end).flatMap((date) => {
+    const values = valuesFor(date)
+    if (values.weightKg == null && values.bodyFatPct == null) return []
+    const time = new Date(`${date}T07:30:00`).toISOString()
+    return [{
+      id: `demo-body-${date}`,
+      time,
+      weightKg: values.weightKg ?? null,
+      bodyFatPct: values.bodyFatPct ?? null,
+      notes: null
+    }]
+  })
+  return { source: 'demo', measurements, heightCm: 178 }
+}
+
 export function demoIntraday(date: string): IntradaySnapshot {
   const uptoMinute = uptoMinuteFor(date)
   const heartRate = demoHeartSeries(date, uptoMinute)
@@ -396,6 +507,101 @@ export function demoIntraday(date: string): IntradaySnapshot {
     stepsHourly: demoHourlySteps(date, uptoMinute, valuesFor(date).steps ?? 0),
     heartRate,
     currentHeartRate: date === today() ? (heartRate.at(-1)?.bpm ?? null) : null
+  }
+}
+
+function demoActivityBreakdown(
+  metric: ActivityIntradayMetric,
+  total: number
+): ActivityIntradayResult['breakdown'] {
+  switch (metric) {
+    case 'activeMinutes':
+      return [
+        { key: 'light', value: Math.round(total * 1.35), unit: 'min' },
+        { key: 'moderate', value: Math.round(total * 0.68), unit: 'min' },
+        { key: 'vigorous', value: Math.round(total * 0.32), unit: 'min' }
+      ]
+    case 'activeZoneMinutes':
+      return [
+        { key: 'fatBurn', value: Math.round(total * 0.5), unit: 'min' },
+        { key: 'cardio', value: Math.round(total * 0.34), unit: 'min' },
+        { key: 'peak', value: Math.round(total * 0.16), unit: 'min' }
+      ]
+    case 'caloriesOut':
+      return [
+        { key: 'activeEnergy', value: Math.round(total * 0.38), unit: 'kcal' },
+        { key: 'basalEnergy', value: Math.round(total * 0.62), unit: 'kcal' }
+      ]
+    default:
+      return []
+  }
+}
+
+export function demoActivityIntraday(date: string, metric: ActivityIntradayMetric): ActivityIntradayResult {
+  const total = valuesFor(date)[metric] ?? 0
+  const random = mulberry32(seedFor(`${date}:${metric}:intraday`))
+  const windowMinutes = 30
+  const uptoMinute = uptoMinuteFor(date)
+  const weights = Array.from({ length: 48 }, (_, index) => {
+    if (index * windowMinutes > uptoMinute) return 0
+    const hour = index / 2
+    const morning = Math.exp(-((hour - 8.2) ** 2) / 3.5)
+    const midday = Math.exp(-((hour - 13) ** 2) / 5)
+    const evening = Math.exp(-((hour - 18.2) ** 2) / 4)
+    const activity = morning * 0.85 + midday * 0.45 + evening
+    if (metric === 'caloriesOut') return 0.28 + activity + random() * 0.08
+    if (metric === 'sedentaryMinutes') return hour >= 7 && hour <= 23 ? 0.45 + (1 - Math.min(1, activity)) + random() * 0.2 : 0
+    return activity > 0.08 ? activity + random() * 0.22 : 0
+  })
+  const weightTotal = weights.reduce((sum, value) => sum + value, 0) || 1
+  const points = weights.map((weight, index) => ({
+    minute: index * windowMinutes,
+    value: index * windowMinutes > uptoMinute ? null : total > 0 ? (weight / weightTotal) * total : 0
+  }))
+  const breakdown = demoActivityBreakdown(metric, total)
+
+  return { date, source: 'demo', metric, windowMinutes, points, breakdown }
+}
+
+export function demoHeartDetail(date: string, metric: HeartDetailMetric): HeartDetailResult {
+  const windowMinutes = 30
+  const uptoMinute = uptoMinuteFor(date)
+  const daily = valuesFor(date)
+  const points = Array.from({ length: 48 }, (_, index) => {
+    const minute = index * windowMinutes
+    if (minute > uptoMinute) return { minute, value: null }
+    if (metric === 'vo2Max' && index === 36) return { minute, value: daily.vo2Max ?? 43 }
+    return { minute, value: null }
+  })
+  const stats: HeartDetailResult['stats'] =
+    metric === 'vo2Max'
+      ? [
+          { key: 'fitness', label: 'Fitness level', value: 'Good' },
+          { key: 'estimate', label: 'Reading type', value: 'Measured' },
+          { key: 'covariance', label: 'Estimate covariance', value: '0.34' },
+          { key: 'method', label: 'Measurement method', value: 'Fitbit Run' }
+        ]
+      : []
+  const zones: HeartDetailResult['zones'] =
+    metric === 'restingHeartRate'
+      ? [
+          { zone: 'light', minBpm: 92, maxBpm: 116, durationMin: 42, calories: 168 },
+          { zone: 'moderate', minBpm: 117, maxBpm: 139, durationMin: 18, calories: 142 },
+          { zone: 'vigorous', minBpm: 140, maxBpm: 162, durationMin: 7, calories: 81 },
+          { zone: 'peak', minBpm: 163, maxBpm: 190, durationMin: 2, calories: 28 }
+        ]
+      : []
+
+  return {
+    date,
+    source: 'demo',
+    metric,
+    windowMinutes,
+    points,
+    sampleLabel: metric === 'vo2Max' ? 'VO₂ max' : undefined,
+    sampleUnit: metric === 'vo2Max' ? 'ml/kg/min' : undefined,
+    stats,
+    zones
   }
 }
 

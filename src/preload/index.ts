@@ -1,12 +1,18 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import type {
+  ActivityIntradayMetric,
+  ActivityIntradayResult,
   AiEvent,
   AppSettings,
+  BodyMeasurementsResult,
   ChatMessage,
   CodexAuthStatus,
   GoogleAuthStatus,
+  HeartDetailMetric,
+  HeartDetailResult,
   IntradaySnapshot,
   MetricKey,
+  NutritionLogsResult,
   PairedDevice,
   SeriesResult,
   SleepRangeResult,
@@ -42,6 +48,17 @@ const api = {
       ipcRenderer.invoke('health:workout-track', workoutId),
     intraday: (date: string, force?: boolean): Promise<IntradaySnapshot> =>
       ipcRenderer.invoke('health:intraday', date, force),
+    activityIntraday: (
+      date: string,
+      metric: ActivityIntradayMetric,
+      force?: boolean
+    ): Promise<ActivityIntradayResult> => ipcRenderer.invoke('health:activity-intraday', date, metric, force),
+    heartDetail: (date: string, metric: HeartDetailMetric, force?: boolean): Promise<HeartDetailResult> =>
+      ipcRenderer.invoke('health:heart-detail', date, metric, force),
+    nutritionLogs: (date: string): Promise<NutritionLogsResult> =>
+      ipcRenderer.invoke('health:nutrition-logs', date),
+    bodyMeasurements: (start: string, end: string): Promise<BodyMeasurementsResult> =>
+      ipcRenderer.invoke('health:body-measurements', start, end),
     devices: (force?: boolean): Promise<PairedDevice[]> => ipcRenderer.invoke('health:devices', force),
     refresh: (): Promise<void> => ipcRenderer.invoke('health:refresh'),
     onActivity: (callback: (activity: SyncActivity) => void): (() => void) => {

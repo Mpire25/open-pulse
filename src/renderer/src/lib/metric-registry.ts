@@ -8,7 +8,6 @@ import {
   Avocado,
   Barbell,
   BowlFood,
-  Cookie,
   Drop,
   DropHalf,
   Fire,
@@ -295,6 +294,19 @@ export const METRICS: Record<MetricKey, MetricDef> = {
     format: one,
     hint: 'Bioimpedance estimate'
   },
+  bmi: {
+    key: 'bmi',
+    label: 'BMI',
+    unit: '',
+    icon: Gauge,
+    color: 'var(--color-body-metric)',
+    domain: 'body',
+    aggregate: 'last',
+    chart: 'line',
+    upIsGood: null,
+    format: one,
+    hint: 'Calculated from weight and your latest recorded height'
+  },
   waterMl: {
     key: 'waterMl',
     label: 'Water',
@@ -378,11 +390,37 @@ export const METRICS: Record<MetricKey, MetricDef> = {
     format: int,
     hint: 'Logged fiber'
   },
+  saturatedFatG: {
+    key: 'saturatedFatG',
+    label: 'Saturated fat',
+    unit: 'g',
+    icon: Avocado,
+    color: 'var(--color-heart)',
+    domain: 'nutrition',
+    aggregate: 'sum',
+    chart: 'bar',
+    upIsGood: false,
+    format: int,
+    hint: 'Logged saturated fat'
+  },
+  sodiumG: {
+    key: 'sodiumG',
+    label: 'Sodium',
+    unit: 'g',
+    icon: ForkKnife,
+    color: 'var(--color-activity)',
+    domain: 'nutrition',
+    aggregate: 'sum',
+    chart: 'bar',
+    upIsGood: false,
+    format: one,
+    hint: 'Logged sodium'
+  },
   sugarG: {
     key: 'sugarG',
     label: 'Sugar',
     unit: 'g',
-    icon: Cookie,
+    icon: BowlFood,
     color: 'var(--color-body-metric)',
     domain: 'nutrition',
     aggregate: 'sum',

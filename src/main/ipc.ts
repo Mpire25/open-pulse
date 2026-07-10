@@ -1,11 +1,16 @@
 import { BrowserWindow, ipcMain } from 'electron'
-import type { AppSettings, ChatMessage, MetricKey } from '../shared/types'
+import type { ActivityIntradayMetric, AppSettings, ChatMessage, HeartDetailMetric, MetricKey } from '../shared/types'
+import { isActivityIntradayMetric, isHeartDetailMetric } from '../shared/types'
 import { connectGoogle, disconnectGoogle, getGoogleStatus } from './google-auth'
 import { connectCodex, disconnectCodex, getCodexStatus } from './codex-auth'
 import {
   clearHealthCache,
+  getActivityIntraday,
+  getBodyMeasurements,
   getDevices,
+  getHeartDetail,
   getIntraday,
+  getNutritionLogs,
   getSeries,
   getSleepRange,
   getWorkoutTrack,
@@ -44,6 +49,19 @@ export function registerIpc(): void {
   )
   ipcMain.handle('health:workout-track', (_e, workoutId: string) => getWorkoutTrack(workoutId))
   ipcMain.handle('health:intraday', (_e, date: string, force?: boolean) => getIntraday(date, force))
+  ipcMain.handle(
+    'health:activity-intraday',
+    (_e, date: string, metric: ActivityIntradayMetric, force?: boolean) => {
+      if (!isActivityIntradayMetric(metric)) throw new Error('Unsupported intraday activity metric')
+      return getActivityIntraday(date, metric, force)
+    }
+  )
+  ipcMain.handle('health:heart-detail', (_e, date: string, metric: HeartDetailMetric, force?: boolean) => {
+    if (!isHeartDetailMetric(metric)) throw new Error('Unsupported heart detail metric')
+    return getHeartDetail(date, metric, force)
+  })
+  ipcMain.handle('health:nutrition-logs', (_e, date: string) => getNutritionLogs(date))
+  ipcMain.handle('health:body-measurements', (_e, start: string, end: string) => getBodyMeasurements(start, end))
   ipcMain.handle('health:devices', (_e, force?: boolean) => getDevices(force))
   ipcMain.handle('health:refresh', () => clearHealthCache())
 

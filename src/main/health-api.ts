@@ -173,6 +173,8 @@ export function minuteFromCivil(value?: CivilDateTime | null): number | null {
 
 export interface RollupPoint {
   civilStartTime?: CivilDateTime
+  startTime?: string
+  endTime?: string
   [key: string]: unknown
 }
 
@@ -223,6 +225,45 @@ export async function dailyRollUp(
     points.push(...(json.rollupDataPoints ?? []))
     chunkStart = chunkEndExclusive
   }
+
+  return points
+}
+
+/**
+ * Roll up a data type over physical-time windows. Unlike dailyRollUp this can
+ * expose the shape of a selected day, including derived types such as total
+ * calories that do not support listing individual data points.
+ */
+export async function physicalRollUp(
+  token: string,
+  dataType: string,
+  startTime: string,
+  endTime: string,
+  windowSeconds: number,
+  dataSourceFamily: 'all-sources' | 'google-wearables' = 'all-sources',
+  priority: Priority = 1
+): Promise<RollupPoint[]> {
+  const points: RollupPoint[] = []
+  const pageSize = Math.min(10_000, Math.ceil((Date.parse(endTime) - Date.parse(startTime)) / (windowSeconds * 1000)))
+  let pageToken = ''
+
+  do {
+    const body = {
+      range: { startTime, endTime },
+      windowSize: `${windowSeconds}s`,
+      pageSize,
+      dataSourceFamily: `users/me/dataSourceFamilies/${dataSourceFamily}`,
+      ...(pageToken ? { pageToken } : {})
+    }
+    const json = await request<{ rollupDataPoints?: RollupPoint[]; nextPageToken?: string }>(
+      token,
+      `/users/me/dataTypes/${dataType}/dataPoints:rollUp`,
+      { method: 'POST', body: JSON.stringify(body) },
+      priority
+    )
+    points.push(...(json.rollupDataPoints ?? []))
+    pageToken = json.nextPageToken ?? ''
+  } while (pageToken)
 
   return points
 }
@@ -289,6 +330,41 @@ export async function listData(
     const json = await request<{ dataPoints?: RawDataPoint[]; nextPageToken?: string }>(
       token,
       `/users/me/dataTypes/${dataType}/dataPoints:reconcile?${params}`,
+      undefined,
+      priority
+    )
+    points.push(...(json.dataPoints ?? []))
+    pageToken = json.nextPageToken ?? ''
+    pages++
+  } while (pageToken && pages < 50)
+  return points
+}
+
+/**
+ * Lists identifiable raw records without reconciling them into a sensor
+ * stream. User-entered logs such as food, weight, and body fat retain their
+ * resource IDs and metadata through this endpoint.
+ */
+export async function listRawData(
+  token: string,
+  dataType: string,
+  kind: RecordKind,
+  startDate: string,
+  endDateExclusive: string,
+  priority: Priority = 1
+): Promise<RawDataPoint[]> {
+  const params = new URLSearchParams({
+    filter: dataFilter(dataType, kind, startDate, endDateExclusive),
+    pageSize: kind === 'sleep' || kind === 'session' ? '25' : '10000'
+  })
+  const points: RawDataPoint[] = []
+  let pageToken = ''
+  let pages = 0
+  do {
+    if (pageToken) params.set('pageToken', pageToken)
+    const json = await request<{ dataPoints?: RawDataPoint[]; nextPageToken?: string }>(
+      token,
+      `/users/me/dataTypes/${dataType}/dataPoints?${params}`,
       undefined,
       priority
     )

@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { gramsFromNutrientNode, nutrientGrams } from '../src/main/nutrition'
+import { gramsFromNutrientNode, nutrientGrams, nutrientMineralGrams } from '../src/main/nutrition'
 
 describe('nutrition rollup normalization', () => {
   test('reads the existing gramsSum response shape', () => {
@@ -22,6 +22,16 @@ describe('nutrition rollup normalization', () => {
 
   test('converts milligrams to grams', () => {
     expect(gramsFromNutrientNode({ milligramsSum: 84_500 })).toBe(84.5)
+  })
+
+  test('keeps structured Google Health mineral quantities in grams', () => {
+    const log = { nutrients: [{ nutrient: 'SODIUM', quantity: { gramsSum: 1.75 } }] }
+    expect(nutrientMineralGrams(log, ['sodium'])).toBe(1.75)
+  })
+
+  test('normalizes direct legacy mineral values from milligrams to grams', () => {
+    const log = { nutrients: [{ nutrient: 'SODIUM', quantity: 3980 }] }
+    expect(nutrientMineralGrams(log, ['sodium'])).toBe(3.98)
   })
 
   test('sums a direct array of nutrient amounts', () => {

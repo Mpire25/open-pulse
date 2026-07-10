@@ -31,6 +31,7 @@ export const METRIC_KEYS = [
   // Body
   'weightKg',
   'bodyFatPct',
+  'bmi',
   // Nutrition & intake
   'waterMl',
   'caloriesIn',
@@ -38,6 +39,8 @@ export const METRIC_KEYS = [
   'carbsG',
   'fatG',
   'fiberG',
+  'saturatedFatG',
+  'sodiumG',
   'sugarG'
 ] as const
 
@@ -67,6 +70,24 @@ export interface SleepStageSegment {
   endTime: string // ISO
 }
 
+export interface SleepOutOfBedSegment {
+  startTime: string
+  endTime: string
+}
+
+export interface SleepRespiratoryStageStats {
+  breathsPerMinute: number
+  standardDeviation: number | null
+  signalToNoise: number | null
+}
+
+export interface SleepRespiratorySummary {
+  full: SleepRespiratoryStageStats | null
+  light: SleepRespiratoryStageStats | null
+  deep: SleepRespiratoryStageStats | null
+  rem: SleepRespiratoryStageStats | null
+}
+
 export interface SleepNight {
   date: string // YYYY-MM-DD the night ended on
   startTime: string
@@ -77,6 +98,20 @@ export interface SleepNight {
   isMainSleep: boolean
   stages: SleepStageSegment[]
   stageMinutes: Partial<Record<SleepStageType, number>>
+  stageCounts: Partial<Record<SleepStageType, number>>
+  minutesAwake: number | null
+  minutesToFirstDeepOrRem: number | null
+  deepRemMinutes: number
+  interruptionMinutes: number
+  interruptionCount: number
+  minutesToFallAsleep: number | null
+  minutesAfterWakeUp: number | null
+  outOfBedSegments: SleepOutOfBedSegment[]
+  sleepType: string | null
+  processed: boolean | null
+  manuallyEdited: boolean | null
+  stagesStatus: string | null
+  respiratory: SleepRespiratorySummary | null
 }
 
 export interface SleepRangeResult {
@@ -103,6 +138,84 @@ export interface IntradaySnapshot {
   stepsHourly: HourlySteps[]
   heartRate: HeartRatePoint[]
   currentHeartRate: number | null // only set when date is today
+}
+
+export const ACTIVITY_INTRADAY_METRICS = [
+  'distanceKm',
+  'caloriesOut',
+  'floors',
+  'activeMinutes',
+  'activeZoneMinutes',
+  'sedentaryMinutes'
+] as const satisfies readonly MetricKey[]
+
+export type ActivityIntradayMetric = (typeof ACTIVITY_INTRADAY_METRICS)[number]
+
+export function isActivityIntradayMetric(value: string): value is ActivityIntradayMetric {
+  return ACTIVITY_INTRADAY_METRICS.some((metric) => metric === value)
+}
+
+export interface ActivityIntradayPoint {
+  minute: number // local minute of day at the start of the aggregation window
+  value: number | null // null means the device supplied no value for this window
+}
+
+export interface ActivityIntradayBreakdown {
+  key: 'light' | 'moderate' | 'vigorous' | 'fatBurn' | 'cardio' | 'peak' | 'activeEnergy' | 'basalEnergy'
+  value: number
+  unit: 'min' | 'kcal'
+}
+
+export interface ActivityIntradayResult {
+  date: string
+  source: DataSource
+  metric: ActivityIntradayMetric
+  windowMinutes: number
+  points: ActivityIntradayPoint[]
+  breakdown: ActivityIntradayBreakdown[]
+}
+
+export const HEART_DETAIL_METRICS = [
+  'restingHeartRate',
+  'vo2Max'
+] as const satisfies readonly MetricKey[]
+
+export type HeartDetailMetric = (typeof HEART_DETAIL_METRICS)[number]
+
+export function isHeartDetailMetric(value: string): value is HeartDetailMetric {
+  return HEART_DETAIL_METRICS.some((metric) => metric === value)
+}
+
+export interface HeartDetailPoint {
+  minute: number
+  value: number | null
+}
+
+export interface HeartDetailStat {
+  key: string
+  label: string
+  value: string
+  unit?: string
+}
+
+export interface HeartZoneDetail {
+  zone: 'light' | 'moderate' | 'vigorous' | 'peak'
+  minBpm: number | null
+  maxBpm: number | null
+  durationMin: number | null
+  calories: number | null
+}
+
+export interface HeartDetailResult {
+  date: string
+  source: DataSource
+  metric: HeartDetailMetric
+  windowMinutes: number
+  points: HeartDetailPoint[]
+  sampleLabel?: string
+  sampleUnit?: string
+  stats: HeartDetailStat[]
+  zones: HeartZoneDetail[]
 }
 
 export interface Workout {
@@ -185,6 +298,44 @@ export interface WorkoutTrackResult {
 export interface WorkoutsResult {
   source: DataSource
   workouts: Workout[]
+}
+
+export interface NutritionLogEntry {
+  id: string
+  startTime: string
+  endTime: string
+  foodName: string
+  mealType: string | null
+  servingLabel: string | null
+  calories: number | null
+  proteinG: number | null
+  carbsG: number | null
+  fatG: number | null
+  fiberG: number | null
+  saturatedFatG: number | null
+  sodiumG: number | null
+  sugarG: number | null
+}
+
+export interface NutritionLogsResult {
+  date: string
+  source: DataSource
+  entries: NutritionLogEntry[]
+}
+
+export interface BodyMeasurement {
+  id: string
+  time: string
+  weightKg: number | null
+  bodyFatPct: number | null
+  notes: string | null
+}
+
+export interface BodyMeasurementsResult {
+  source: DataSource
+  measurements: BodyMeasurement[]
+  /** Latest recorded height, used only to derive BMI from weight. */
+  heightCm: number | null
 }
 
 // ---------------------------------------------------------------------------

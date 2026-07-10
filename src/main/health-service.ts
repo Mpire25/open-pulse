@@ -7,20 +7,24 @@
 // history backfills.
 
 import type {
+  ActivityIntradayMetric,
+  ActivityIntradayResult,
+  BodyMeasurementsResult,
   DailySeries,
   DayMetrics,
   DayValues,
   HealthDay,
   HeartRatePoint,
+  HeartDetailMetric,
+  HeartDetailResult,
   HourlySteps,
   IntradaySnapshot,
   MetricKey,
+  NutritionLogsResult,
   PairedDevice,
   SeriesResult,
   SleepNight,
   SleepRangeResult,
-  SleepStageSegment,
-  SleepStageType,
   Workout,
   WorkoutTrackResult,
   WorkoutsResult
@@ -33,8 +37,10 @@ import {
   exportExerciseTcx,
   HealthApiError,
   listData,
+  listRawData,
   listPairedDevices,
   minuteFromCivil,
+  physicalRollUp,
   shiftIsoDate,
   type CivilDateTime,
   type Priority,
@@ -47,20 +53,33 @@ import {
   markFetched,
   mergeValues,
   peekDay,
+  setActivityIntraday,
+  setHeartDetail,
   setIntradayHeart,
   setIntradaySteps,
   setSleep,
   setWorkouts
 } from './metric-store'
 import {
+  demoActivityIntraday,
+  demoBodyMeasurements,
   demoDevices,
+  demoHeartDetail,
   demoIntraday,
+  demoNutritionLogs,
   demoSeries,
   demoSleepRange,
   demoWorkoutTrack,
   demoWorkoutsRange
 } from './sample-data'
-import { nutrientGrams } from './nutrition'
+import { activityRollupBreakdown, activityRollupPoints, calorieEnergyBreakdown } from './activity-intraday'
+import { bmiFrom, parseBodyMeasurements, parseLatestHeight, parseNutritionLogs } from './body-nutrition-detail'
+import {
+  parseHeartZones,
+  parseVo2Detail
+} from './heart-detail'
+import { mapSleep, mapSleepRespiratory, type MappedRespiratorySummary } from './sleep-detail'
+import { nutrientGrams, nutrientMineralGrams } from './nutrition'
 import { parseExerciseTcx } from './tcx'
 
 // ---------------------------------------------------------------------------
@@ -217,10 +236,26 @@ const GROUPS: FetchGroup[] = [
     const dur = (p.sedentaryPeriod as { durationSum?: string })?.durationSum
     return { sedentaryMinutes: dur === undefined ? null : Math.round(durationSeconds(dur) / 60) }
   }),
-  rollupGroup('weight', 'weight', ['weightKg'], (p) => {
-    const grams = num((p.weight as { weightGramsAvg?: number })?.weightGramsAvg)
-    return { weightKg: grams == null ? null : +(grams / 1000).toFixed(1) }
-  }),
+  {
+    id: 'weight-bmi-v1',
+    metrics: ['weightKg', 'bmi'],
+    fetch: async (token, start, endExclusive, priority) => {
+      const [weightPoints, heightPoints] = await Promise.all([
+        dailyRollUp(token, 'weight', start, endExclusive, priority),
+        listRawData(token, 'height', 'sample', '2000-01-01', shiftIsoDate(todayIso(), 1), priority).catch(() => [])
+      ])
+      const heightCm = parseLatestHeight(heightPoints)
+      const map = new Map<string, DayValues>()
+      for (const point of weightPoints) {
+        const date = dateFromCivil(point.civilStartTime)
+        if (!date) continue
+        const grams = num((point.weight as { weightGramsAvg?: number })?.weightGramsAvg)
+        const weightKg = grams == null ? null : +(grams / 1000).toFixed(1)
+        map.set(date, { weightKg, bmi: bmiFrom(weightKg, heightCm) })
+      }
+      return map
+    }
+  },
   rollupGroup('body-fat', 'body-fat', ['bodyFatPct'], (p) => ({
     bodyFatPct: num((p.bodyFat as { bodyFatPercentageAvg?: number })?.bodyFatPercentageAvg)
   })),
@@ -230,21 +265,33 @@ const GROUPS: FetchGroup[] = [
     )
   })),
   rollupGroup(
-    // Versioned so installs that cached a missing Protein value with the old
-    // parser refetch nutrition once and repair the archived day automatically.
-    'nutrition-v2',
+    // Versioned so archived days refetch the expanded nutrient set once.
+    'nutrition-v5',
     'nutrition-log',
-    ['caloriesIn', 'proteinG', 'carbsG', 'fatG', 'fiberG', 'sugarG'],
+    ['caloriesIn', 'proteinG', 'carbsG', 'fatG', 'fiberG', 'saturatedFatG', 'sodiumG', 'sugarG'],
     (p) => {
       const log = p.nutritionLog as Record<string, unknown> | undefined
-      if (!log) return { caloriesIn: null, proteinG: null, carbsG: null, fatG: null, fiberG: null, sugarG: null }
+      if (!log) {
+        return {
+          caloriesIn: null,
+          proteinG: null,
+          carbsG: null,
+          fatG: null,
+          fiberG: null,
+          saturatedFatG: null,
+          sodiumG: null,
+          sugarG: null
+        }
+      }
       return {
         caloriesIn: num((log.energy as { kcalSum?: number } | undefined)?.kcalSum),
         proteinG: nutrientGrams(log, ['protein', 'proteins', 'proteinG', 'proteinGrams', 'totalProtein', 'dietaryProtein']),
         carbsG: nutrientGrams(log, ['carbohydrate', 'carbohydrates', 'totalCarbohydrate', 'carbs', 'carbsG']),
         fatG: nutrientGrams(log, ['fat', 'fats', 'totalFat', 'fatG']),
         fiberG: nutrientGrams(log, ['fiber', 'fibre', 'dietaryFiber', 'dietaryFibre', 'fiberG']),
-        sugarG: nutrientGrams(log, ['sugar', 'sugars', 'totalSugar', 'sugarG'])
+        saturatedFatG: nutrientGrams(log, ['saturatedFat', 'saturatedFats', 'saturatedFatG']),
+        sodiumG: nutrientMineralGrams(log, ['sodium']),
+        sugarG: nutrientGrams(log, ['sugar', 'sugars', 'sugarG'])
       }
     }
   ),
@@ -321,67 +368,38 @@ function ensureGroupOnce(token: string, group: FetchGroup, start: string, end: s
 // ---------------------------------------------------------------------------
 // Sleep sessions
 
-const STAGE_MAP: Record<string, SleepStageType> = {
-  AWAKE: 'AWAKE',
-  RESTLESS: 'AWAKE',
-  LIGHT: 'LIGHT',
-  ASLEEP: 'LIGHT',
-  DEEP: 'DEEP',
-  REM: 'REM'
-}
-
-interface RawSleep {
-  interval?: { startTime?: string; endTime?: string; civilEndTime?: CivilDateTime }
-  stages?: Array<{ type?: string; startTime?: string; endTime?: string }>
-  metadata?: { nap?: boolean }
-  summary?: {
-    minutesAsleep?: string
-    minutesInSleepPeriod?: string
-  }
-}
-
-function mapSleep(point: RawDataPoint): SleepNight | null {
-  const sleep = point.sleep as RawSleep | undefined
-  if (!sleep?.interval?.startTime || !sleep.interval.endTime) return null
-  const stages: SleepStageSegment[] = (sleep.stages ?? [])
-    .filter((s) => s.startTime && s.endTime && STAGE_MAP[s.type?.toUpperCase() ?? ''])
-    .map((s) => ({ type: STAGE_MAP[s.type!.toUpperCase()], startTime: s.startTime!, endTime: s.endTime! }))
-  const stageMinutes: Partial<Record<SleepStageType, number>> = {}
-  for (const seg of stages) {
-    const minutes = (new Date(seg.endTime).getTime() - new Date(seg.startTime).getTime()) / 60_000
-    stageMinutes[seg.type] = Math.round((stageMinutes[seg.type] ?? 0) + minutes)
-  }
-  const minutesAsleep = num(sleep.summary?.minutesAsleep) ?? 0
-  const period = num(sleep.summary?.minutesInSleepPeriod) ?? 0
-  const date = dateFromCivil(sleep.interval.civilEndTime) ?? isoDate(new Date(sleep.interval.endTime))
-  return {
-    date,
-    startTime: sleep.interval.startTime,
-    endTime: sleep.interval.endTime,
-    minutesAsleep,
-    minutesInSleepPeriod: period,
-    efficiency: period > 0 ? Math.round((minutesAsleep / period) * 100) : null,
-    isMainSleep: sleep.metadata?.nap !== true,
-    stages,
-    stageMinutes
-  }
-}
-
 async function ensureSleepRange(token: string, start: string, end: string, force: boolean): Promise<void> {
-  const missing = listDates(start, end).filter((d) => force || !isFresh('sleep', d))
+  const missing = listDates(start, end).filter((d) => force || !isFresh('sleep-v3', d))
   if (missing.length === 0) return
   const spanStart = missing[0]
   const spanEnd = missing[missing.length - 1]
   const spanDates = listDates(spanStart, spanEnd)
-  const points = await listData(
-    token,
-    'sleep',
-    'sleep',
-    spanStart,
-    shiftIsoDate(spanEnd, 1),
-    'google-wearables',
-    spanPriority(spanDates.length)
-  )
+  const [points, respiratoryPoints] = await Promise.all([
+    listData(
+      token,
+      'sleep',
+      'sleep',
+      spanStart,
+      shiftIsoDate(spanEnd, 1),
+      'google-wearables',
+      spanPriority(spanDates.length)
+    ),
+    listData(
+      token,
+      'respiratory-rate-sleep-summary',
+      'sample',
+      spanStart,
+      shiftIsoDate(spanEnd, 1),
+      'google-wearables',
+      spanPriority(spanDates.length)
+    ).catch((error) => {
+      console.error(`[health] sleep respiratory summary failed for ${spanStart}..${spanEnd}:`, error)
+      return []
+    })
+  ])
+  const respiratory = respiratoryPoints
+    .map(mapSleepRespiratory)
+    .filter((summary): summary is MappedRespiratorySummary => summary != null)
   const byDate = new Map<string, SleepNight>()
   for (const point of points) {
     const night = mapSleep(point)
@@ -394,17 +412,24 @@ async function ensureSleepRange(token: string, start: string, end: string, force
   }
   for (const date of spanDates) {
     const night = byDate.get(date) ?? null
+    if (night && respiratory.length > 0) {
+      const nightEnd = Date.parse(night.endTime)
+      const nearest = respiratory.reduce((best, candidate) =>
+        Math.abs(candidate.timestamp - nightEnd) < Math.abs(best.timestamp - nightEnd) ? candidate : best
+      )
+      if (Math.abs(nearest.timestamp - nightEnd) <= 12 * 60 * 60_000) night.respiratory = nearest.summary
+    }
     setSleep(date, night)
     mergeValues(date, {
       sleepMinutes: night?.minutesAsleep ?? null,
       sleepEfficiency: night?.efficiency ?? null
     })
   }
-  markFetched('sleep', spanDates)
+  markFetched('sleep-v3', spanDates)
 }
 
 function ensureSleepOnce(token: string, start: string, end: string, force: boolean): Promise<void> {
-  const key = `sleep:${start}:${end}:${force}`
+  const key = `sleep-v3:${start}:${end}:${force}`
   const pending = inFlight.get(key)
   if (pending) return pending
   const job = ensureSleepRange(token, start, end, force).finally(() => inFlight.delete(key))
@@ -643,6 +668,32 @@ export async function getWorkoutTrack(workoutId: string): Promise<WorkoutTrackRe
 // ---------------------------------------------------------------------------
 // Intraday (selected day only — always priority 0)
 
+const ACTIVITY_INTRADAY_WINDOW_MINUTES = 30
+
+const ACTIVITY_INTRADAY_DATA_TYPES: Record<ActivityIntradayMetric, string> = {
+  distanceKm: 'distance',
+  caloriesOut: 'total-calories',
+  floors: 'floors',
+  activeMinutes: 'active-minutes',
+  activeZoneMinutes: 'active-zone-minutes',
+  sedentaryMinutes: 'sedentary-period'
+}
+
+function physicalDayRange(date: string): { startTime: string; endTime: string; dayEndTime: string } {
+  const [year, month, day] = date.split('-').map(Number)
+  const start = new Date(year, month - 1, day)
+  const nextMidnight = new Date(year, month - 1, day + 1)
+  // Physical rollups reject a range that extends into the future. Civil daily
+  // rollups allow a full current day, which is why the headline value could
+  // succeed while its intraday request failed.
+  const end = new Date(Math.min(nextMidnight.getTime(), Date.now()))
+  return {
+    startTime: start.toISOString(),
+    endTime: end.toISOString(),
+    dayEndTime: nextMidnight.toISOString()
+  }
+}
+
 async function ensureIntradaySteps(token: string, date: string, force: boolean): Promise<void> {
   if (!force && isFresh('intraday-steps', date)) return
   const points = await listData(token, 'steps', 'interval', date, shiftIsoDate(date, 1), 'google-wearables', 0)
@@ -783,6 +834,157 @@ export async function getIntraday(date: string, force = false): Promise<Intraday
     stepsHourly: record?.stepsHourly ?? [],
     heartRate,
     currentHeartRate: d === todayIso() ? (heartRate.at(-1)?.bpm ?? null) : null
+  }
+}
+
+export async function getActivityIntraday(
+  date: string,
+  metric: ActivityIntradayMetric,
+  force = false
+): Promise<ActivityIntradayResult> {
+  const [d] = normalizeRange(date, date)
+  const token = await getGoogleAccessToken()
+  if (!token) return demoActivityIntraday(d, metric)
+
+  // v2 normalizes omitted elapsed windows to zero, so older sparse cached
+  // series are refetched once instead of retaining compressed chart spacing.
+  const group = `intraday-activity-v2-${metric}`
+  const cached = peekDay(d)?.activityIntraday?.[metric]
+  if (!force && cached && isFresh(group, d)) return cached
+
+  const { startTime, endTime, dayEndTime } = physicalDayRange(d)
+  const [rollups, activeEnergyRollups] = await Promise.all([
+    physicalRollUp(
+      token,
+      ACTIVITY_INTRADAY_DATA_TYPES[metric],
+      startTime,
+      endTime,
+      ACTIVITY_INTRADAY_WINDOW_MINUTES * 60,
+      'all-sources',
+      0
+    ),
+    metric === 'caloriesOut'
+      ? physicalRollUp(
+          token,
+          'active-energy-burned',
+          startTime,
+          endTime,
+          ACTIVITY_INTRADAY_WINDOW_MINUTES * 60,
+          'all-sources',
+          0
+        ).catch((error) => {
+          console.error(`[health] active energy breakdown failed for ${d}:`, error)
+          return []
+        })
+      : Promise.resolve([])
+  ])
+  const result: ActivityIntradayResult = {
+    date: d,
+    source: 'live',
+    metric,
+    windowMinutes: ACTIVITY_INTRADAY_WINDOW_MINUTES,
+    points: activityRollupPoints(
+      metric,
+      rollups,
+      startTime,
+      endTime,
+      dayEndTime,
+      ACTIVITY_INTRADAY_WINDOW_MINUTES
+    ),
+    breakdown:
+      metric === 'caloriesOut'
+        ? calorieEnergyBreakdown(rollups, activeEnergyRollups)
+        : activityRollupBreakdown(metric, rollups)
+  }
+  setActivityIntraday(d, result)
+  markFetched(group, [d])
+  return result
+}
+
+const HEART_DETAIL_WINDOW_MINUTES = 30
+
+export async function getHeartDetail(
+  date: string,
+  metric: HeartDetailMetric,
+  force = false
+): Promise<HeartDetailResult> {
+  const [d] = normalizeRange(date, date)
+  const token = await getGoogleAccessToken()
+  if (!token) return demoHeartDetail(d, metric)
+
+  const group = `heart-detail-v1-${metric}`
+  const cached = peekDay(d)?.heartDetails?.[metric]
+  if (!force && cached && isFresh(group, d)) return cached
+
+  const { startTime, endTime, dayEndTime } = physicalDayRange(d)
+  const bounds = { startTime, observedEndTime: endTime, dayEndTime }
+  let result: HeartDetailResult
+
+  switch (metric) {
+    case 'vo2Max': {
+      const [samples, daily] = await Promise.all([
+        listData(token, 'vo2-max', 'sample', d, shiftIsoDate(d, 1), 'all-sources', 0),
+        listData(token, 'daily-vo2-max', 'daily', d, shiftIsoDate(d, 1), 'all-sources', 0)
+      ])
+      result = parseVo2Detail(d, samples, daily, bounds, HEART_DETAIL_WINDOW_MINUTES)
+      break
+    }
+    case 'restingHeartRate': {
+      const [dailyZones, timeRollups, calorieRollups] = await Promise.all([
+        listData(token, 'daily-heart-rate-zones', 'daily', d, shiftIsoDate(d, 1), 'all-sources', 0),
+        dailyRollUp(token, 'time-in-heart-rate-zone', d, shiftIsoDate(d, 1), 0).catch((error) => {
+          console.error(`[health] time in heart-rate zones failed for ${d}:`, error)
+          return []
+        }),
+        dailyRollUp(token, 'calories-in-heart-rate-zone', d, shiftIsoDate(d, 1), 0).catch((error) => {
+          console.error(`[health] calories in heart-rate zones failed for ${d}:`, error)
+          return []
+        })
+      ])
+      result = parseHeartZones(d, dailyZones, timeRollups, calorieRollups)
+      break
+    }
+  }
+
+  setHeartDetail(d, result)
+  markFetched(group, [d])
+  return result
+}
+
+export async function getNutritionLogs(date: string): Promise<NutritionLogsResult> {
+  const [d] = normalizeRange(date, date)
+  const token = await getGoogleAccessToken()
+  if (!token) return demoNutritionLogs(d)
+  let points: RawDataPoint[]
+  try {
+    points = await listRawData(token, 'nutrition-log', 'session', d, shiftIsoDate(d, 1), 0)
+  } catch (error) {
+    // Google's data-type index currently labels nutrition-log as a Sample
+    // even though its published payload contains a session interval. Accept
+    // either server-side filter classification while that inconsistency exists.
+    if (!(error instanceof HealthApiError) || error.status !== 400) throw error
+    points = await listRawData(token, 'nutrition-log', 'sample', d, shiftIsoDate(d, 1), 0)
+  }
+  return { date: d, source: 'live', entries: parseNutritionLogs(points) }
+}
+
+export async function getBodyMeasurements(start: string, end: string): Promise<BodyMeasurementsResult> {
+  const [s, e] = normalizeRange(start, end)
+  const token = await getGoogleAccessToken()
+  if (!token) return demoBodyMeasurements(s, e)
+  const [weightResult, heightResult] = await Promise.allSettled([
+    listRawData(token, 'weight', 'sample', s, shiftIsoDate(e, 1), spanPriority(listDates(s, e).length)),
+    // Height is a profile-like input and may have been recorded years before
+    // the visible weight range. Fetch its tiny history independently.
+    listRawData(token, 'height', 'sample', '2000-01-01', shiftIsoDate(todayIso(), 1), 1)
+  ])
+  if (weightResult.status === 'rejected' && heightResult.status === 'rejected') throw weightResult.reason
+  const weightPoints = weightResult.status === 'fulfilled' ? weightResult.value : []
+  const heightPoints = heightResult.status === 'fulfilled' ? heightResult.value : []
+  return {
+    source: 'live',
+    measurements: parseBodyMeasurements(weightPoints, []),
+    heightCm: parseLatestHeight(heightPoints)
   }
 }
 

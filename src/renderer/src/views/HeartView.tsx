@@ -9,6 +9,7 @@ import { useIntraday, useSeries } from '@/hooks/useHealth'
 import { METRICS } from '@/lib/metric-registry'
 import { baseline, baselineDeltaPct, rangeEnding, seriesPoints } from '@/lib/metrics'
 import { longDate, shortDate, weekdayShort } from '@/lib/format'
+import type { OpenMetric } from '@/lib/metric-navigation'
 import { fade } from '@/lib/motion'
 import type { MetricKey } from '@shared/types'
 
@@ -16,7 +17,7 @@ const VITAL_KEYS: MetricKey[] = ['restingHeartRate', 'hrvMs', 'spo2Pct', 'breath
 
 interface HeartViewProps {
   date: string
-  onOpenMetric: (metric: MetricKey) => void
+  onOpenMetric: OpenMetric
 }
 
 export function HeartView({ date, onOpenMetric }: HeartViewProps): React.JSX.Element {
@@ -42,7 +43,7 @@ export function HeartView({ date, onOpenMetric }: HeartViewProps): React.JSX.Ele
       <motion.div custom={1} variants={fade} initial="hidden" animate="show">
         <InteractivePanel
           className={`flex flex-col gap-3 p-5 ${CARD_HEIGHT.large}`}
-          onOpen={() => onOpenMetric('restingHeartRate')}
+          onOpen={() => onOpenMetric('restingHeartRate', 'D')}
         >
           <DrillHeader
             title="Heart rate"
@@ -85,7 +86,7 @@ export function HeartView({ date, onOpenMetric }: HeartViewProps): React.JSX.Ele
             points={pointsFor(key)}
             pending={series.isMetricPending(key)}
             index={i + 2}
-            onOpen={() => onOpenMetric(key)}
+            onOpen={() => onOpenMetric(key, 'W')}
           />
         ))}
       </div>

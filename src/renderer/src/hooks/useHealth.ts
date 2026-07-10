@@ -15,8 +15,14 @@ import {
   type UseQueryResult
 } from '@tanstack/react-query'
 import type {
+  ActivityIntradayMetric,
+  ActivityIntradayResult,
+  BodyMeasurementsResult,
+  HeartDetailMetric,
+  HeartDetailResult,
   IntradaySnapshot,
   MetricKey,
+  NutritionLogEntry,
   PairedDevice,
   SeriesResult,
   SleepNight,
@@ -118,10 +124,57 @@ export function useWorkoutTrack(workoutId: string, enabled: boolean): UseQueryRe
   })
 }
 
-export function useIntraday(date: string): UseQueryResult<IntradaySnapshot> {
+export function useIntraday(date: string, enabled = true): UseQueryResult<IntradaySnapshot> {
   return useQuery({
     queryKey: ['intraday', date],
     queryFn: () => window.pulse.health.intraday(date),
+    staleTime: STALE_MS,
+    enabled
+  })
+}
+
+export function useActivityIntraday(
+  date: string,
+  metric: ActivityIntradayMetric,
+  enabled = true
+): UseQueryResult<ActivityIntradayResult> {
+  return useQuery({
+    queryKey: ['activity-intraday', metric, date],
+    queryFn: () => window.pulse.health.activityIntraday(date, metric),
+    staleTime: STALE_MS,
+    enabled
+  })
+}
+
+export function useHeartDetail(
+  date: string,
+  metric: HeartDetailMetric,
+  enabled = true
+): UseQueryResult<HeartDetailResult> {
+  return useQuery({
+    queryKey: ['heart-detail', metric, date],
+    queryFn: () => window.pulse.health.heartDetail(date, metric),
+    staleTime: STALE_MS,
+    enabled
+  })
+}
+
+export function useNutritionLogs(date: string): UseQueryResult<NutritionLogEntry[]> {
+  return useQuery({
+    // Versioned because the parsed entry shape now retains secondary
+    // nutrients; do not reuse entries cached before those fields existed.
+    queryKey: ['nutrition-logs-v2', date],
+    queryFn: async () => (await window.pulse.health.nutritionLogs(date)).entries,
+    staleTime: STALE_MS
+  })
+}
+
+export function useBodyMeasurements(start: string, end: string): UseQueryResult<BodyMeasurementsResult> {
+  return useQuery({
+    // Versioned because the result now includes the static height input used
+    // for BMI; don't reuse the previous measurements-only response.
+    queryKey: ['body-measurements-v2', start, end],
+    queryFn: () => window.pulse.health.bodyMeasurements(start, end),
     staleTime: STALE_MS
   })
 }

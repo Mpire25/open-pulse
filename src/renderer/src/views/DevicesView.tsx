@@ -153,7 +153,12 @@ function DeviceHero({ device, connected }: { device: PairedDevice; connected: bo
           background: 'radial-gradient(ellipse 65% 80% at 50% 45%, rgb(125 123 240 / 0.08), transparent 70%)'
         }}
       >
-        <img src={fitbitAir} alt={device.model} className="h-44 w-auto object-contain" draggable={false} />
+        <img
+          src={fitbitAir}
+          alt={device.model}
+          className="h-44 w-auto scale-[1.4] object-contain"
+          draggable={false}
+        />
       </div>
 
       <div className="flex flex-1 flex-col gap-4 p-6 pt-3">
