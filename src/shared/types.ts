@@ -67,6 +67,24 @@ export interface SleepStageSegment {
   endTime: string // ISO
 }
 
+export interface SleepOutOfBedSegment {
+  startTime: string
+  endTime: string
+}
+
+export interface SleepRespiratoryStageStats {
+  breathsPerMinute: number
+  standardDeviation: number | null
+  signalToNoise: number | null
+}
+
+export interface SleepRespiratorySummary {
+  full: SleepRespiratoryStageStats | null
+  light: SleepRespiratoryStageStats | null
+  deep: SleepRespiratoryStageStats | null
+  rem: SleepRespiratoryStageStats | null
+}
+
 export interface SleepNight {
   date: string // YYYY-MM-DD the night ended on
   startTime: string
@@ -77,6 +95,20 @@ export interface SleepNight {
   isMainSleep: boolean
   stages: SleepStageSegment[]
   stageMinutes: Partial<Record<SleepStageType, number>>
+  stageCounts: Partial<Record<SleepStageType, number>>
+  minutesAwake: number | null
+  minutesToFirstDeepOrRem: number | null
+  deepRemMinutes: number
+  interruptionMinutes: number
+  interruptionCount: number
+  minutesToFallAsleep: number | null
+  minutesAfterWakeUp: number | null
+  outOfBedSegments: SleepOutOfBedSegment[]
+  sleepType: string | null
+  processed: boolean | null
+  manuallyEdited: boolean | null
+  stagesStatus: string | null
+  respiratory: SleepRespiratorySummary | null
 }
 
 export interface SleepRangeResult {

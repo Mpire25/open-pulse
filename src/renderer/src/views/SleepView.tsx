@@ -1,12 +1,12 @@
 import { motion } from 'framer-motion'
-import { Moon, Bed, Timer } from '@phosphor-icons/react'
+import { Moon, Bed, Timer, Wind } from '@phosphor-icons/react'
 import { Panel, DrillHeader, InteractivePanel } from '@/components/Panel'
 import { ColumnChart, ProgressRing, TrendLine } from '@/components/charts'
 import { SleepStages, STAGE_COLOR } from '@/components/SleepStages'
 import { CARD_HEIGHT, SkeletonChart, SkeletonRing, SkeletonSleepStages, SkeletonText } from '@/components/Skeleton'
 import { useSleepRange } from '@/hooks/useHealth'
 import { listDates, rangeEnding } from '@/lib/metrics'
-import { formatMinutes, longDate, shortDate, weekdayShort } from '@/lib/format'
+import { formatClock, formatMinutes, longDate, shortDate, weekdayShort } from '@/lib/format'
 import type { OpenMetric } from '@/lib/metric-navigation'
 import { fade } from '@/lib/motion'
 import type { Goals, SleepNight } from '@shared/types'
@@ -72,6 +72,7 @@ export function SleepView({ date, goals, onOpenMetric, onSelectDate }: SleepView
                 <SkeletonSleepStages />
               </div>
             </div>
+            <SleepNightDetailsSkeleton />
           </InteractivePanel>
         ) : night ? (
           <InteractivePanel
@@ -115,6 +116,7 @@ export function SleepView({ date, goals, onOpenMetric, onSelectDate }: SleepView
                 <SleepStages night={night} />
               </div>
             </div>
+            <SleepNightDetails night={night} />
           </InteractivePanel>
         ) : (
           <Panel className="grid place-items-center p-12 text-[13px] text-ink-faint">
@@ -205,6 +207,131 @@ export function SleepView({ date, goals, onOpenMetric, onSelectDate }: SleepView
               ))}
           </div>
         </motion.div>
+      )}
+    </div>
+  )
+}
+
+function SleepNightDetailsSkeleton(): React.JSX.Element {
+  return (
+    <div className="border-t border-hairline pt-5 lg:col-span-2" aria-hidden>
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+        {Array.from({ length: 4 }, (_, index) => (
+          <div key={index} className="flex flex-col gap-2">
+            <SkeletonText className="w-20" />
+            <SkeletonText className="h-4 w-14" />
+          </div>
+        ))}
+      </div>
+      <div className="mt-5 grid grid-cols-2 gap-4 border-t border-hairline pt-4 sm:grid-cols-4">
+        {Array.from({ length: 4 }, (_, index) => (
+          <div key={index} className="flex flex-col gap-2">
+            <SkeletonText className="w-16" />
+            <SkeletonText className="h-4 w-20" />
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function stageStatusLabel(status: string | null | undefined, processed: boolean | null | undefined): string | null {
+  if (processed === false) return 'Sleep stages still processing'
+  const labels: Record<string, string> = {
+    SUCCEEDED: 'Sleep stages processed',
+    REJECTED_COVERAGE: 'Stages unavailable · low signal coverage',
+    REJECTED_MAX_GAP: 'Stages unavailable · large recording gap',
+    REJECTED_START_GAP: 'Stages unavailable · start gap',
+    REJECTED_END_GAP: 'Stages unavailable · end gap',
+    REJECTED_NAP: 'Stages unavailable for this nap',
+    REJECTED_SERVER: 'Stages unavailable · source data missing',
+    TIMEOUT: 'Stage processing timed out',
+    PROCESSING_INTERNAL_ERROR: 'Stage processing failed'
+  }
+  return status ? labels[status] ?? null : processed === true ? 'Sleep processed' : null
+}
+
+function SleepNightDetails({ night }: { night: SleepNight }): React.JSX.Element {
+  const outOfBedSegments = night.outOfBedSegments ?? []
+  const outOfBedMinutes = outOfBedSegments.reduce(
+    (sum, segment) => sum + Math.max(0, (Date.parse(segment.endTime) - Date.parse(segment.startTime)) / 60_000),
+    0
+  )
+  const detailStats = [
+    {
+      label: 'To first deep/REM',
+      value: night.minutesToFirstDeepOrRem != null ? formatMinutes(night.minutesToFirstDeepOrRem) : '—'
+    },
+    { label: 'Deep + REM', value: formatMinutes(night.deepRemMinutes) },
+    { label: 'Awake', value: night.minutesAwake != null ? formatMinutes(night.minutesAwake) : '—' },
+    {
+      label: 'Interruptions',
+      value: `${formatMinutes(night.interruptionMinutes)} · ${night.interruptionCount} ${night.interruptionCount === 1 ? 'moment' : 'moments'}`
+    }
+  ]
+  const respiratory = night.respiratory
+  const respiratoryRows = respiratory
+    ? [
+        { label: 'Full night', value: respiratory.full },
+        { label: 'Light', value: respiratory.light },
+        { label: 'Deep', value: respiratory.deep },
+        { label: 'REM', value: respiratory.rem }
+      ].filter((row) => row.value != null)
+    : []
+  const status = stageStatusLabel(night.stagesStatus, night.processed)
+
+  return (
+    <div className="border-t border-hairline pt-5 lg:col-span-2">
+      <div className="grid grid-cols-2 gap-x-5 gap-y-4 sm:grid-cols-4">
+        {detailStats.map((stat) => (
+          <div key={stat.label}>
+            <div className="text-[10.5px] font-medium text-ink-faint">{stat.label}</div>
+            <div className="mt-0.5 font-mono text-[14px] font-medium text-ink">{stat.value}</div>
+          </div>
+        ))}
+      </div>
+
+      {outOfBedSegments.length > 0 && (
+        <div className="mt-3 text-[10.5px] text-ink-faint">
+          Out of bed {formatMinutes(outOfBedMinutes)} ·{' '}
+          {outOfBedSegments
+            .map((segment) => `${formatClock(segment.startTime)}–${formatClock(segment.endTime)}`)
+            .join(' · ')}
+        </div>
+      )}
+
+      {respiratoryRows.length > 0 && (
+        <div className="mt-5 border-t border-hairline pt-4">
+          <div className="mb-3 flex items-center gap-2 text-[11px] font-medium text-ink-dim">
+            <Wind size={14} weight="fill" style={{ color: 'var(--color-sleep)' }} />
+            Breathing during sleep
+          </div>
+          <div className="grid grid-cols-2 gap-x-5 gap-y-4 sm:grid-cols-4">
+            {respiratoryRows.map((row) => (
+              <div key={row.label}>
+                <div className="text-[10.5px] text-ink-faint">{row.label}</div>
+                <div className="mt-0.5 font-mono text-[14px] font-medium text-ink">
+                  {row.value!.breathsPerMinute.toFixed(1)}{' '}
+                  <span className="text-[9.5px] text-ink-dim">br/min</span>
+                </div>
+                {(row.value!.standardDeviation != null || row.value!.signalToNoise != null) && (
+                  <div className="mt-0.5 text-[9.5px] text-ink-faint">
+                    {row.value!.standardDeviation != null && `±${row.value!.standardDeviation.toFixed(1)}`}
+                    {row.value!.standardDeviation != null && row.value!.signalToNoise != null && ' · '}
+                    {row.value!.signalToNoise != null && `SNR ${row.value!.signalToNoise.toFixed(1)}`}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {(status || night.manuallyEdited) && (
+        <div className="mt-4 flex flex-wrap gap-x-4 gap-y-1 border-t border-hairline pt-3 text-[10px] text-ink-faint">
+          {status && <span>{status}</span>}
+          {night.manuallyEdited && <span>Manually edited</span>}
+        </div>
       )}
     </div>
   )

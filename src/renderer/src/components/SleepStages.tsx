@@ -157,6 +157,11 @@ export function SleepStages({ night }: SleepStagesProps): React.JSX.Element {
             <span className="text-[13px] font-semibold text-ink">
               {formatMinutes(night.stageMinutes[t] ?? 0)}
             </span>
+            {(night.stageCounts?.[t] ?? 0) > 0 && (
+              <span className="text-[9.5px] text-ink-faint">
+                {night.stageCounts?.[t]} {night.stageCounts?.[t] === 1 ? 'period' : 'periods'}
+              </span>
+            )}
           </div>
         ))}
       </div>

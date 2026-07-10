@@ -113,8 +113,32 @@ function generateSleep(date: string, rand: () => number): SleepNight {
   for (const key of ['LIGHT', 'DEEP', 'REM'] as const) {
     stageMinutes[key] = Math.round(stageMinutes[key] ?? 0)
   }
+  const stageCounts: Partial<Record<SleepStageType, number>> = {}
+  for (const stage of stages) stageCounts[stage.type] = (stageCounts[stage.type] ?? 0) + 1
+
+  const firstDeepOrRem = stages.find((stage) => stage.type === 'DEEP' || stage.type === 'REM')
+  const minutesToFirstDeepOrRem = firstDeepOrRem
+    ? Math.round((Date.parse(firstDeepOrRem.startTime) - start.getTime()) / 60_000)
+    : null
+  const deepRemMinutes = Math.round((stageMinutes.DEEP ?? 0) + (stageMinutes.REM ?? 0))
+  const interruptions = stages.filter((stage, index) => {
+    if (stage.type !== 'AWAKE') return false
+    return stages.slice(0, index).some((candidate) => candidate.type !== 'AWAKE')
+      && stages.slice(index + 1).some((candidate) => candidate.type !== 'AWAKE')
+  })
+  const interruptionMinutes = Math.round(
+    interruptions.reduce(
+      (total, stage) => total + (Date.parse(stage.endTime) - Date.parse(stage.startTime)) / 60_000,
+      0
+    )
+  )
 
   const minutesAsleep = totalMinutes - Math.round(awakeTotal)
+  const minutesToFallAsleep = Math.round(5 + rand() * 18)
+  const minutesAfterWakeUp = Math.round(rand() * 8)
+  const hasOutOfBed = rand() > 0.7
+  const outOfBedStart = new Date(start.getTime() + totalMinutes * 0.58 * 60_000)
+  const outOfBedEnd = new Date(outOfBedStart.getTime() + (2 + rand() * 5) * 60_000)
   return {
     date,
     startTime: start.toISOString(),
@@ -124,7 +148,26 @@ function generateSleep(date: string, rand: () => number): SleepNight {
     efficiency: Math.round((minutesAsleep / totalMinutes) * 100),
     isMainSleep: true,
     stages,
-    stageMinutes
+    stageMinutes,
+    stageCounts,
+    minutesAwake: Math.round(awakeTotal),
+    minutesToFirstDeepOrRem,
+    deepRemMinutes,
+    interruptionMinutes,
+    interruptionCount: interruptions.length,
+    minutesToFallAsleep,
+    minutesAfterWakeUp,
+    outOfBedSegments: hasOutOfBed ? [{ startTime: outOfBedStart.toISOString(), endTime: outOfBedEnd.toISOString() }] : [],
+    sleepType: 'STAGES',
+    processed: true,
+    manuallyEdited: false,
+    stagesStatus: 'SUCCEEDED',
+    respiratory: {
+      full: { breathsPerMinute: +(13.8 + rand() * 1.8).toFixed(1), standardDeviation: 1.1, signalToNoise: 7.4 },
+      light: { breathsPerMinute: +(14.2 + rand()).toFixed(1), standardDeviation: 1.2, signalToNoise: 6.9 },
+      deep: { breathsPerMinute: +(12.8 + rand()).toFixed(1), standardDeviation: 0.8, signalToNoise: 7.8 },
+      rem: { breathsPerMinute: +(14.8 + rand()).toFixed(1), standardDeviation: 1.4, signalToNoise: 6.4 }
+    }
   }
 }
 

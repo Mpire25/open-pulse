@@ -23,8 +23,6 @@ import type {
   SeriesResult,
   SleepNight,
   SleepRangeResult,
-  SleepStageSegment,
-  SleepStageType,
   Workout,
   WorkoutTrackResult,
   WorkoutsResult
@@ -74,6 +72,7 @@ import {
   parseHeartZones,
   parseVo2Detail
 } from './heart-detail'
+import { mapSleep, mapSleepRespiratory, type MappedRespiratorySummary } from './sleep-detail'
 import { nutrientGrams } from './nutrition'
 import { parseExerciseTcx } from './tcx'
 
@@ -335,67 +334,38 @@ function ensureGroupOnce(token: string, group: FetchGroup, start: string, end: s
 // ---------------------------------------------------------------------------
 // Sleep sessions
 
-const STAGE_MAP: Record<string, SleepStageType> = {
-  AWAKE: 'AWAKE',
-  RESTLESS: 'AWAKE',
-  LIGHT: 'LIGHT',
-  ASLEEP: 'LIGHT',
-  DEEP: 'DEEP',
-  REM: 'REM'
-}
-
-interface RawSleep {
-  interval?: { startTime?: string; endTime?: string; civilEndTime?: CivilDateTime }
-  stages?: Array<{ type?: string; startTime?: string; endTime?: string }>
-  metadata?: { nap?: boolean }
-  summary?: {
-    minutesAsleep?: string
-    minutesInSleepPeriod?: string
-  }
-}
-
-function mapSleep(point: RawDataPoint): SleepNight | null {
-  const sleep = point.sleep as RawSleep | undefined
-  if (!sleep?.interval?.startTime || !sleep.interval.endTime) return null
-  const stages: SleepStageSegment[] = (sleep.stages ?? [])
-    .filter((s) => s.startTime && s.endTime && STAGE_MAP[s.type?.toUpperCase() ?? ''])
-    .map((s) => ({ type: STAGE_MAP[s.type!.toUpperCase()], startTime: s.startTime!, endTime: s.endTime! }))
-  const stageMinutes: Partial<Record<SleepStageType, number>> = {}
-  for (const seg of stages) {
-    const minutes = (new Date(seg.endTime).getTime() - new Date(seg.startTime).getTime()) / 60_000
-    stageMinutes[seg.type] = Math.round((stageMinutes[seg.type] ?? 0) + minutes)
-  }
-  const minutesAsleep = num(sleep.summary?.minutesAsleep) ?? 0
-  const period = num(sleep.summary?.minutesInSleepPeriod) ?? 0
-  const date = dateFromCivil(sleep.interval.civilEndTime) ?? isoDate(new Date(sleep.interval.endTime))
-  return {
-    date,
-    startTime: sleep.interval.startTime,
-    endTime: sleep.interval.endTime,
-    minutesAsleep,
-    minutesInSleepPeriod: period,
-    efficiency: period > 0 ? Math.round((minutesAsleep / period) * 100) : null,
-    isMainSleep: sleep.metadata?.nap !== true,
-    stages,
-    stageMinutes
-  }
-}
-
 async function ensureSleepRange(token: string, start: string, end: string, force: boolean): Promise<void> {
-  const missing = listDates(start, end).filter((d) => force || !isFresh('sleep', d))
+  const missing = listDates(start, end).filter((d) => force || !isFresh('sleep-v3', d))
   if (missing.length === 0) return
   const spanStart = missing[0]
   const spanEnd = missing[missing.length - 1]
   const spanDates = listDates(spanStart, spanEnd)
-  const points = await listData(
-    token,
-    'sleep',
-    'sleep',
-    spanStart,
-    shiftIsoDate(spanEnd, 1),
-    'google-wearables',
-    spanPriority(spanDates.length)
-  )
+  const [points, respiratoryPoints] = await Promise.all([
+    listData(
+      token,
+      'sleep',
+      'sleep',
+      spanStart,
+      shiftIsoDate(spanEnd, 1),
+      'google-wearables',
+      spanPriority(spanDates.length)
+    ),
+    listData(
+      token,
+      'respiratory-rate-sleep-summary',
+      'sample',
+      spanStart,
+      shiftIsoDate(spanEnd, 1),
+      'google-wearables',
+      spanPriority(spanDates.length)
+    ).catch((error) => {
+      console.error(`[health] sleep respiratory summary failed for ${spanStart}..${spanEnd}:`, error)
+      return []
+    })
+  ])
+  const respiratory = respiratoryPoints
+    .map(mapSleepRespiratory)
+    .filter((summary): summary is MappedRespiratorySummary => summary != null)
   const byDate = new Map<string, SleepNight>()
   for (const point of points) {
     const night = mapSleep(point)
@@ -408,17 +378,24 @@ async function ensureSleepRange(token: string, start: string, end: string, force
   }
   for (const date of spanDates) {
     const night = byDate.get(date) ?? null
+    if (night && respiratory.length > 0) {
+      const nightEnd = Date.parse(night.endTime)
+      const nearest = respiratory.reduce((best, candidate) =>
+        Math.abs(candidate.timestamp - nightEnd) < Math.abs(best.timestamp - nightEnd) ? candidate : best
+      )
+      if (Math.abs(nearest.timestamp - nightEnd) <= 12 * 60 * 60_000) night.respiratory = nearest.summary
+    }
     setSleep(date, night)
     mergeValues(date, {
       sleepMinutes: night?.minutesAsleep ?? null,
       sleepEfficiency: night?.efficiency ?? null
     })
   }
-  markFetched('sleep', spanDates)
+  markFetched('sleep-v3', spanDates)
 }
 
 function ensureSleepOnce(token: string, start: string, end: string, force: boolean): Promise<void> {
-  const key = `sleep:${start}:${end}:${force}`
+  const key = `sleep-v3:${start}:${end}:${force}`
   const pending = inFlight.get(key)
   if (pending) return pending
   const job = ensureSleepRange(token, start, end, force).finally(() => inFlight.delete(key))
