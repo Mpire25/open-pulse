@@ -3,7 +3,6 @@
 // One data-driven page — the registry decides naming, color, chart type, and
 // aggregation, so every metric behaves identically.
 
-import { useState } from 'react'
 import { motion } from 'framer-motion'
 import { ArrowLeft } from '@phosphor-icons/react'
 import { Panel, SectionHeader } from '@/components/Panel'
@@ -52,15 +51,22 @@ const SUMMARY_ONLY_DAILY_METRICS = new Set<MetricKey>(['hrvMs', 'spo2Pct', 'brea
 
 interface MetricDetailViewProps {
   metricKey: MetricKey
-  initialRange: MetricRange
+  range: MetricRange
   date: string
   goals: Goals
   onBack: () => void
+  onRangeChange: (range: MetricRange) => void
 }
 
-export function MetricDetailView({ metricKey, initialRange, date, goals, onBack }: MetricDetailViewProps): React.JSX.Element {
+export function MetricDetailView({
+  metricKey,
+  range,
+  date,
+  goals,
+  onBack,
+  onRangeChange
+}: MetricDetailViewProps): React.JSX.Element {
   const def = METRICS[metricKey]
-  const [range, setRange] = useState<MetricRange>(initialRange)
   const spec = RANGES.find((r) => r.id === range)!
 
   const fetchWindow = rangeEnding(date, spec.fetchDays)
@@ -116,7 +122,7 @@ export function MetricDetailView({ metricKey, initialRange, date, goals, onBack 
               {def.hint && <p className="text-[13px] text-ink-dim">{def.hint}</p>}
             </div>
           </div>
-          <RangeTabs range={range} onChange={setRange} />
+          <RangeTabs range={range} onChange={onRangeChange} />
         </div>
       </motion.header>
 
