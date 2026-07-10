@@ -12,6 +12,8 @@ import type {
   ActivityIntradayResult,
   DayValues,
   HeartRatePoint,
+  HeartDetailMetric,
+  HeartDetailResult,
   HourlySteps,
   SleepNight,
   Workout
@@ -25,6 +27,7 @@ export interface DayRecord {
   stepsHourly?: HourlySteps[]
   heartRate?: HeartRatePoint[]
   activityIntraday?: Partial<Record<ActivityIntradayMetric, ActivityIntradayResult>>
+  heartDetails?: Partial<Record<HeartDetailMetric, HeartDetailResult>>
   /** fetch group -> epoch ms of the last successful sync covering this day */
   fetched: Record<string, number>
 }
@@ -120,6 +123,13 @@ export function setActivityIntraday(date: string, result: ActivityIntradayResult
   const record = dayRecord(date)
   const activityIntraday = record.activityIntraday ?? (record.activityIntraday = {})
   activityIntraday[result.metric] = result
+  scheduleSave()
+}
+
+export function setHeartDetail(date: string, result: HeartDetailResult): void {
+  const record = dayRecord(date)
+  const heartDetails = record.heartDetails ?? (record.heartDetails = {})
+  heartDetails[result.metric] = result
   scheduleSave()
 }
 

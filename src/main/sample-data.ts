@@ -8,6 +8,8 @@ import type {
   DailySeries,
   DayValues,
   HeartRatePoint,
+  HeartDetailMetric,
+  HeartDetailResult,
   HourlySteps,
   IntradaySnapshot,
   MetricKey,
@@ -452,6 +454,48 @@ export function demoActivityIntraday(date: string, metric: ActivityIntradayMetri
   const breakdown = demoActivityBreakdown(metric, total)
 
   return { date, source: 'demo', metric, windowMinutes, points, breakdown }
+}
+
+export function demoHeartDetail(date: string, metric: HeartDetailMetric): HeartDetailResult {
+  const windowMinutes = 30
+  const uptoMinute = uptoMinuteFor(date)
+  const daily = valuesFor(date)
+  const points = Array.from({ length: 48 }, (_, index) => {
+    const minute = index * windowMinutes
+    if (minute > uptoMinute) return { minute, value: null }
+    if (metric === 'vo2Max' && index === 36) return { minute, value: daily.vo2Max ?? 43 }
+    return { minute, value: null }
+  })
+  const stats: HeartDetailResult['stats'] =
+    metric === 'vo2Max'
+      ? [
+          { key: 'fitness', label: 'Fitness level', value: 'Good' },
+          { key: 'estimate', label: 'Reading type', value: 'Measured' },
+          { key: 'covariance', label: 'Estimate covariance', value: '0.34' },
+          { key: 'method', label: 'Measurement method', value: 'Fitbit Run' }
+        ]
+      : []
+  const zones: HeartDetailResult['zones'] =
+    metric === 'restingHeartRate'
+      ? [
+          { zone: 'light', minBpm: 92, maxBpm: 116, durationMin: 42, calories: 168 },
+          { zone: 'moderate', minBpm: 117, maxBpm: 139, durationMin: 18, calories: 142 },
+          { zone: 'vigorous', minBpm: 140, maxBpm: 162, durationMin: 7, calories: 81 },
+          { zone: 'peak', minBpm: 163, maxBpm: 190, durationMin: 2, calories: 28 }
+        ]
+      : []
+
+  return {
+    date,
+    source: 'demo',
+    metric,
+    windowMinutes,
+    points,
+    sampleLabel: metric === 'vo2Max' ? 'VO₂ max' : undefined,
+    sampleUnit: metric === 'vo2Max' ? 'ml/kg/min' : undefined,
+    stats,
+    zones
+  }
 }
 
 export function demoDevices(): PairedDevice[] {

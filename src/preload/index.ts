@@ -7,6 +7,8 @@ import type {
   ChatMessage,
   CodexAuthStatus,
   GoogleAuthStatus,
+  HeartDetailMetric,
+  HeartDetailResult,
   IntradaySnapshot,
   MetricKey,
   PairedDevice,
@@ -49,6 +51,8 @@ const api = {
       metric: ActivityIntradayMetric,
       force?: boolean
     ): Promise<ActivityIntradayResult> => ipcRenderer.invoke('health:activity-intraday', date, metric, force),
+    heartDetail: (date: string, metric: HeartDetailMetric, force?: boolean): Promise<HeartDetailResult> =>
+      ipcRenderer.invoke('health:heart-detail', date, metric, force),
     devices: (force?: boolean): Promise<PairedDevice[]> => ipcRenderer.invoke('health:devices', force),
     refresh: (): Promise<void> => ipcRenderer.invoke('health:refresh'),
     onActivity: (callback: (activity: SyncActivity) => void): (() => void) => {

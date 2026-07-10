@@ -14,6 +14,8 @@ import type {
   DayValues,
   HealthDay,
   HeartRatePoint,
+  HeartDetailMetric,
+  HeartDetailResult,
   HourlySteps,
   IntradaySnapshot,
   MetricKey,
@@ -51,6 +53,7 @@ import {
   mergeValues,
   peekDay,
   setActivityIntraday,
+  setHeartDetail,
   setIntradayHeart,
   setIntradaySteps,
   setSleep,
@@ -59,6 +62,7 @@ import {
 import {
   demoActivityIntraday,
   demoDevices,
+  demoHeartDetail,
   demoIntraday,
   demoSeries,
   demoSleepRange,
@@ -66,6 +70,10 @@ import {
   demoWorkoutsRange
 } from './sample-data'
 import { activityRollupBreakdown, activityRollupPoints, calorieEnergyBreakdown } from './activity-intraday'
+import {
+  parseHeartZones,
+  parseVo2Detail
+} from './heart-detail'
 import { nutrientGrams } from './nutrition'
 import { parseExerciseTcx } from './tcx'
 
@@ -878,6 +886,56 @@ export async function getActivityIntraday(
         : activityRollupBreakdown(metric, rollups)
   }
   setActivityIntraday(d, result)
+  markFetched(group, [d])
+  return result
+}
+
+const HEART_DETAIL_WINDOW_MINUTES = 30
+
+export async function getHeartDetail(
+  date: string,
+  metric: HeartDetailMetric,
+  force = false
+): Promise<HeartDetailResult> {
+  const [d] = normalizeRange(date, date)
+  const token = await getGoogleAccessToken()
+  if (!token) return demoHeartDetail(d, metric)
+
+  const group = `heart-detail-v1-${metric}`
+  const cached = peekDay(d)?.heartDetails?.[metric]
+  if (!force && cached && isFresh(group, d)) return cached
+
+  const { startTime, endTime, dayEndTime } = physicalDayRange(d)
+  const bounds = { startTime, observedEndTime: endTime, dayEndTime }
+  let result: HeartDetailResult
+
+  switch (metric) {
+    case 'vo2Max': {
+      const [samples, daily] = await Promise.all([
+        listData(token, 'vo2-max', 'sample', d, shiftIsoDate(d, 1), 'all-sources', 0),
+        listData(token, 'daily-vo2-max', 'daily', d, shiftIsoDate(d, 1), 'all-sources', 0)
+      ])
+      result = parseVo2Detail(d, samples, daily, bounds, HEART_DETAIL_WINDOW_MINUTES)
+      break
+    }
+    case 'restingHeartRate': {
+      const [dailyZones, timeRollups, calorieRollups] = await Promise.all([
+        listData(token, 'daily-heart-rate-zones', 'daily', d, shiftIsoDate(d, 1), 'all-sources', 0),
+        dailyRollUp(token, 'time-in-heart-rate-zone', d, shiftIsoDate(d, 1), 0).catch((error) => {
+          console.error(`[health] time in heart-rate zones failed for ${d}:`, error)
+          return []
+        }),
+        dailyRollUp(token, 'calories-in-heart-rate-zone', d, shiftIsoDate(d, 1), 0).catch((error) => {
+          console.error(`[health] calories in heart-rate zones failed for ${d}:`, error)
+          return []
+        })
+      ])
+      result = parseHeartZones(d, dailyZones, timeRollups, calorieRollups)
+      break
+    }
+  }
+
+  setHeartDetail(d, result)
   markFetched(group, [d])
   return result
 }

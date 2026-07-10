@@ -17,6 +17,8 @@ import {
 import type {
   ActivityIntradayMetric,
   ActivityIntradayResult,
+  HeartDetailMetric,
+  HeartDetailResult,
   IntradaySnapshot,
   MetricKey,
   PairedDevice,
@@ -137,6 +139,19 @@ export function useActivityIntraday(
   return useQuery({
     queryKey: ['activity-intraday', metric, date],
     queryFn: () => window.pulse.health.activityIntraday(date, metric),
+    staleTime: STALE_MS,
+    enabled
+  })
+}
+
+export function useHeartDetail(
+  date: string,
+  metric: HeartDetailMetric,
+  enabled = true
+): UseQueryResult<HeartDetailResult> {
+  return useQuery({
+    queryKey: ['heart-detail', metric, date],
+    queryFn: () => window.pulse.health.heartDetail(date, metric),
     staleTime: STALE_MS,
     enabled
   })

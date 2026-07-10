@@ -1,12 +1,13 @@
 import { BrowserWindow, ipcMain } from 'electron'
-import type { ActivityIntradayMetric, AppSettings, ChatMessage, MetricKey } from '../shared/types'
-import { isActivityIntradayMetric } from '../shared/types'
+import type { ActivityIntradayMetric, AppSettings, ChatMessage, HeartDetailMetric, MetricKey } from '../shared/types'
+import { isActivityIntradayMetric, isHeartDetailMetric } from '../shared/types'
 import { connectGoogle, disconnectGoogle, getGoogleStatus } from './google-auth'
 import { connectCodex, disconnectCodex, getCodexStatus } from './codex-auth'
 import {
   clearHealthCache,
   getActivityIntraday,
   getDevices,
+  getHeartDetail,
   getIntraday,
   getSeries,
   getSleepRange,
@@ -53,6 +54,10 @@ export function registerIpc(): void {
       return getActivityIntraday(date, metric, force)
     }
   )
+  ipcMain.handle('health:heart-detail', (_e, date: string, metric: HeartDetailMetric, force?: boolean) => {
+    if (!isHeartDetailMetric(metric)) throw new Error('Unsupported heart detail metric')
+    return getHeartDetail(date, metric, force)
+  })
   ipcMain.handle('health:devices', (_e, force?: boolean) => getDevices(force))
   ipcMain.handle('health:refresh', () => clearHealthCache())
 

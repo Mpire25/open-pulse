@@ -140,6 +140,49 @@ export interface ActivityIntradayResult {
   breakdown: ActivityIntradayBreakdown[]
 }
 
+export const HEART_DETAIL_METRICS = [
+  'restingHeartRate',
+  'vo2Max'
+] as const satisfies readonly MetricKey[]
+
+export type HeartDetailMetric = (typeof HEART_DETAIL_METRICS)[number]
+
+export function isHeartDetailMetric(value: string): value is HeartDetailMetric {
+  return HEART_DETAIL_METRICS.some((metric) => metric === value)
+}
+
+export interface HeartDetailPoint {
+  minute: number
+  value: number | null
+}
+
+export interface HeartDetailStat {
+  key: string
+  label: string
+  value: string
+  unit?: string
+}
+
+export interface HeartZoneDetail {
+  zone: 'light' | 'moderate' | 'vigorous' | 'peak'
+  minBpm: number | null
+  maxBpm: number | null
+  durationMin: number | null
+  calories: number | null
+}
+
+export interface HeartDetailResult {
+  date: string
+  source: DataSource
+  metric: HeartDetailMetric
+  windowMinutes: number
+  points: HeartDetailPoint[]
+  sampleLabel?: string
+  sampleUnit?: string
+  stats: HeartDetailStat[]
+  zones: HeartZoneDetail[]
+}
+
 export interface Workout {
   id: string
   name: string
