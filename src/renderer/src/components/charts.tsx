@@ -282,6 +282,8 @@ export interface LinePoint {
   date: string
   label: string
   value: number | null
+  /** Optional tick under the line, used for denser time ranges. */
+  tick?: string
 }
 
 interface TrendLineProps {
@@ -342,9 +344,10 @@ export function TrendLine({
 
   const last = [...data].reverse().find((d) => d.value != null)
   const lastIndex = last ? data.lastIndexOf(last) : -1
-  const tickIndices = [...new Set([0, Math.floor((data.length - 1) / 2), data.length - 1])].filter(
-    (index) => index >= 0
-  )
+  const labelledTickIndices = data.flatMap((point, index) => (point.tick ? [index] : []))
+  const tickIndices = labelledTickIndices.length
+    ? labelledTickIndices
+    : [...new Set([0, Math.floor((data.length - 1) / 2), data.length - 1])].filter((index) => index >= 0)
 
   const onMove = (e: React.PointerEvent<SVGRectElement>): void => {
     const rect = e.currentTarget.getBoundingClientRect()
@@ -482,7 +485,7 @@ export function TrendLine({
               className="fill-[var(--color-ink-faint)] font-mono"
               fontSize={10}
             >
-              {data[index].label}
+              {data[index].tick ?? data[index].label}
             </text>
           ))}
 

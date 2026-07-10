@@ -18,9 +18,12 @@ import {
   baseline,
   baselineDeltaPct,
   latestPoint,
+  monthlyBuckets,
   rangeEnding,
   seriesPoints,
-  type SeriesPoint
+  weeklyAverageBuckets,
+  type SeriesPoint,
+  type WeeklySeriesPoint
 } from '@/lib/metrics'
 import { formatHour, formatInt, formatMinuteOfDay, longDate, shortDate, weekdayShort } from '@/lib/format'
 import type { MetricRange } from '@/lib/metric-navigation'
@@ -701,8 +704,9 @@ function PeriodDetail({
   const deltaVsPrev =
     current != null && previous != null && previous !== 0 ? ((current - previous) / previous) * 100 : null
 
-  const buckets = range === 'Y' ? monthlyBuckets(points, def.aggregate) : null
-  const chartPoints = buckets ?? points
+  const monthlyHistory = range === 'Y' ? monthlyBuckets(points, def.aggregate) : null
+  const weeklyBuckets = range === 'Y' && def.chart === 'bar' ? weeklyAverageBuckets(points) : null
+  const chartPoints = weeklyBuckets ?? points
 
   const stats: Array<{ label: string; value: string }> =
     def.aggregate === 'sum'
@@ -753,30 +757,35 @@ function PeriodDetail({
         <Panel className={`flex flex-col gap-3 p-5 ${CARD_HEIGHT.detailLarge}`}>
           <SectionHeader
             title={rangeTitle(range, date)}
-            hint={range === 'Y' ? (def.aggregate === 'sum' ? 'Daily average per month' : 'Monthly values') : undefined}
+            hint={range === 'Y' ? (def.chart === 'bar' ? 'Weekly daily averages' : 'Daily values') : undefined}
           />
           {def.chart === 'bar' ? (
             <ColumnChart
               data={chartPoints.map((p, i) => ({
                 key: p.date,
-                label: buckets ? monthLabel(p.date) : `${weekdayShort(p.date)} · ${shortDate(p.date)}`,
+                label: weeklyBuckets
+                  ? weekLabel(weeklyBuckets[i])
+                  : `${weekdayShort(p.date)} · ${shortDate(p.date)}`,
                 value: p.value,
-                tick: tickFor(range, p.date, i)
+                tick: weeklyBuckets
+                  ? weekMonthTick(weeklyBuckets, i)
+                  : tickFor(range, p.date, i)
               }))}
               color={def.color}
               height={240}
-              goal={goal != null && !buckets ? { value: goal, label: 'goal' } : null}
-              emphasisIndex={buckets ? undefined : chartPoints.findIndex((p) => p.date === date)}
+              goal={goal != null ? { value: goal, label: 'goal' } : null}
+              emphasisIndex={weeklyBuckets ? undefined : chartPoints.findIndex((p) => p.date === date)}
               format={def.format}
               unitLabel={def.unit}
               axisLabel={axisLabel}
             />
           ) : (
             <TrendLine
-              data={chartPoints.map((p) => ({
+              data={chartPoints.map((p, index) => ({
                 date: p.date,
-                label: buckets ? monthLabel(p.date) : `${weekdayShort(p.date)} · ${shortDate(p.date)}`,
-                value: p.value
+                label: `${weekdayShort(p.date)} · ${shortDate(p.date)}`,
+                value: p.value,
+                tick: range === 'Y' ? dailyMonthTick(chartPoints, index) : undefined
               }))}
               color={def.color}
               height={240}
@@ -791,9 +800,9 @@ function PeriodDetail({
 
       <HistoryList
         metricKey={metricKey}
-        rows={[...(buckets ?? points)].reverse().slice(0, 31)}
+        rows={[...(monthlyHistory ?? points)].reverse().slice(0, 31)}
         selected={date}
-        monthly={buckets != null}
+        monthly={monthlyHistory != null}
       />
     </>
   )
@@ -813,30 +822,26 @@ function tickFor(range: MetricRange, date: string, index: number): string | unde
   return monthLabel(date).slice(0, 1)
 }
 
-function monthLabel(isoDate: string): string {
-  return new Date(`${isoDate.slice(0, 7)}-15T12:00:00`).toLocaleDateString('en-US', { month: 'short' })
+function dailyMonthTick(points: SeriesPoint[], index: number): string | undefined {
+  const point = points[index]
+  const previous = points[index - 1]
+  return index === 0 || point.date.slice(0, 7) !== previous.date.slice(0, 7) ? monthLabel(point.date) : undefined
 }
 
-/** 365 daily points -> per calendar month; sums become daily averages. */
-function monthlyBuckets(points: SeriesPoint[], aggregate: 'sum' | 'avg' | 'last'): SeriesPoint[] {
-  const byMonth = new Map<string, number[]>()
-  for (const p of points) {
-    if (p.value == null) continue
-    const month = p.date.slice(0, 7)
-    const list = byMonth.get(month) ?? []
-    list.push(p.value)
-    byMonth.set(month, list)
-  }
-  const months = [...new Set(points.map((p) => p.date.slice(0, 7)))].sort()
-  return months.map((month) => {
-    const values = byMonth.get(month)
-    let value: number | null = null
-    if (values && values.length) {
-      if (aggregate === 'last') value = values[values.length - 1]
-      else value = values.reduce((s, v) => s + v, 0) / values.length
-    }
-    return { date: `${month}-01`, value }
-  })
+function weekMonthTick(points: WeeklySeriesPoint[], index: number): string | undefined {
+  const point = points[index]
+  const previous = points[index - 1]
+  return index === 0 || point.midpointDate.slice(0, 7) !== previous.midpointDate.slice(0, 7)
+    ? monthLabel(point.midpointDate)
+    : undefined
+}
+
+function weekLabel(point: WeeklySeriesPoint): string {
+  return `${shortDate(point.date)}–${shortDate(point.endDate)}`
+}
+
+function monthLabel(isoDate: string): string {
+  return new Date(`${isoDate.slice(0, 7)}-15T12:00:00`).toLocaleDateString('en-US', { month: 'short' })
 }
 
 function HistoryList({
