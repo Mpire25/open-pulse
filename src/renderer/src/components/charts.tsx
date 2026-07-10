@@ -701,7 +701,7 @@ export function Spark({ values, color, width = 72, height = 24 }: { values: Arra
   const lastVal = values[lastIdx]
 
   return (
-    <svg width={width} height={height} className="block shrink-0" aria-hidden>
+    <svg width={width} height={height} className="block min-w-0 max-w-[55%] shrink" aria-hidden>
       <path d={d} fill="none" stroke="var(--color-ink-faint)" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" />
       {lastVal != null && <circle cx={x(lastIdx)} cy={y(lastVal)} r={2.5} fill={color} />}
     </svg>
