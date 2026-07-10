@@ -138,9 +138,9 @@ function MetricDetailSkeleton({ range, hasGoal }: { range: Range; hasGoal: boole
           </div>
           {hasGoal && <SkeletonRing size={108} stroke={10} />}
         </Panel>
-        <Panel className={`flex flex-col gap-4 p-6 ${CARD_HEIGHT.detail}`}>
+        <Panel className={`flex flex-col gap-3 p-5 ${CARD_HEIGHT.detail}`}>
           <SectionHeader title="In context" hint="The last 14 days, this day highlighted" />
-          <SkeletonChart height={200} columns={12} />
+          <SkeletonChart height={210} columns={12} />
         </Panel>
       </>
     )
@@ -156,9 +156,9 @@ function MetricDetailSkeleton({ range, hasGoal }: { range: Range; hasGoal: boole
           </div>
         ))}
       </Panel>
-      <Panel className={`flex flex-col gap-4 p-6 ${CARD_HEIGHT.detailLarge}`}>
+      <Panel className={`flex flex-col gap-3 p-5 ${CARD_HEIGHT.detailLarge}`}>
         <SectionHeader title="Loading period" />
-        <SkeletonChart height={230} columns={range === 'Y' ? 12 : 7} />
+        <SkeletonChart height={240} columns={range === 'Y' ? 12 : 7} />
       </Panel>
     </>
   )
@@ -167,6 +167,17 @@ function MetricDetailSkeleton({ range, hasGoal }: { range: Range; hasGoal: boole
 function shiftBack(isoDate: string): string {
   const [y, m, d] = isoDate.split('-').map(Number)
   return new Date(Date.UTC(y, m - 1, d - 1, 12)).toISOString().slice(0, 10)
+}
+
+function axisLabelFor(metricKey: MetricKey, unit: string): string {
+  if (metricKey === 'sleepMinutes' || metricKey === 'sedentaryMinutes') return 'min'
+  if (metricKey === 'steps') return 'steps'
+  if (metricKey === 'floors') return 'floors'
+  return unit
+}
+
+function axisDomainFor(metricKey: MetricKey): { max: number } | undefined {
+  return metricKey === 'sleepEfficiency' || metricKey === 'spo2Pct' ? { max: 100 } : undefined
 }
 
 function RangeTabs({ range, onChange }: { range: Range; onChange: (r: Range) => void }): React.JSX.Element {
@@ -217,6 +228,7 @@ function DayDetail({
   const value = points.find((p) => p.date === date)?.value ?? null
   const base = baseline(points, date)
   const emphasis = points.findIndex((p) => p.date === date)
+  const axisLabel = axisLabelFor(metricKey, def.unit)
 
   return (
     <>
@@ -256,12 +268,12 @@ function DayDetail({
 
       <motion.div custom={2} variants={fade} initial="hidden" animate="show">
         {metricKey === 'steps' && intradayPending ? (
-          <Panel className={`flex flex-col gap-4 p-6 ${CARD_HEIGHT.detail}`}>
+          <Panel className={`flex flex-col gap-3 p-5 ${CARD_HEIGHT.detail}`}>
             <SectionHeader title="Across the day" hint="Steps per hour" />
-            <SkeletonChart height={200} columns={12} />
+            <SkeletonChart height={210} columns={12} />
           </Panel>
         ) : metricKey === 'steps' && intradayData && intradayData.stepsHourly.length > 0 ? (
-          <Panel className={`flex flex-col gap-4 p-6 ${CARD_HEIGHT.detail}`}>
+          <Panel className={`flex flex-col gap-3 p-5 ${CARD_HEIGHT.detail}`}>
             <SectionHeader title="Across the day" hint="Steps per hour" />
             <ColumnChart
               data={intradayData.stepsHourly.map((h) => ({
@@ -271,18 +283,18 @@ function DayDetail({
                 tick: h.hour % 6 === 0 ? formatHour(h.hour) : undefined
               }))}
               color={def.color}
-              height={200}
+              height={210}
               format={formatInt}
               unitLabel="steps"
             />
           </Panel>
         ) : metricKey === 'restingHeartRate' && intradayPending ? (
-          <Panel className={`flex flex-col gap-4 p-6 ${CARD_HEIGHT.detail}`}>
+          <Panel className={`flex flex-col gap-3 p-5 ${CARD_HEIGHT.detail}`}>
             <SectionHeader title="Across the day" hint="Heart rate samples" />
-            <SkeletonChart height={200} columns={12} />
+            <SkeletonChart height={210} columns={12} />
           </Panel>
         ) : metricKey === 'restingHeartRate' && intradayData && intradayData.heartRate.length > 1 ? (
-          <Panel className={`flex flex-col gap-4 p-6 ${CARD_HEIGHT.detail}`}>
+          <Panel className={`flex flex-col gap-3 p-5 ${CARD_HEIGHT.detail}`}>
             <SectionHeader
               title="Across the day"
               hint="Heart rate samples"
@@ -295,10 +307,10 @@ function DayDetail({
                 ) : undefined
               }
             />
-            <IntradayLine points={intradayData.heartRate} color={def.color} height={200} />
+            <IntradayLine points={intradayData.heartRate} color={def.color} height={210} />
           </Panel>
         ) : (
-          <Panel className={`flex flex-col gap-4 p-6 ${CARD_HEIGHT.detail}`}>
+          <Panel className={`flex flex-col gap-3 p-5 ${CARD_HEIGHT.detail}`}>
             <SectionHeader title="In context" hint="The last 14 days, this day highlighted" />
             {def.chart === 'bar' ? (
               <ColumnChart
@@ -309,11 +321,12 @@ function DayDetail({
                   tick: weekdayShort(p.date).slice(0, 1)
                 }))}
                 color={def.color}
-                height={200}
+                height={210}
                 goal={goal != null ? { value: goal, label: 'goal' } : null}
                 emphasisIndex={emphasis}
                 format={def.format}
                 unitLabel={def.unit}
+                axisLabel={axisLabel}
               />
             ) : (
               <TrendLine
@@ -323,10 +336,12 @@ function DayDetail({
                   value: p.value
                 }))}
                 color={def.color}
-                height={200}
+                height={210}
                 format={def.format}
                 baseline={base != null && def.deltaMode !== 'abs' ? { value: base, label: '7d avg' } : null}
                 unitLabel={def.unit}
+                axisLabel={axisLabel}
+                domain={axisDomainFor(metricKey)}
               />
             )}
           </Panel>
@@ -357,6 +372,7 @@ function PeriodDetail({
   goal: number | null
 }): React.JSX.Element {
   const def = METRICS[metricKey]
+  const axisLabel = axisLabelFor(metricKey, def.unit)
   const present = points.filter((p) => p.value != null).map((p) => p.value as number)
 
   const current = aggregatePoints(points, def.aggregate)
@@ -415,7 +431,7 @@ function PeriodDetail({
       </motion.div>
 
       <motion.div custom={2} variants={fade} initial="hidden" animate="show">
-        <Panel className={`flex flex-col gap-4 p-6 ${CARD_HEIGHT.detailLarge}`}>
+        <Panel className={`flex flex-col gap-3 p-5 ${CARD_HEIGHT.detailLarge}`}>
           <SectionHeader
             title={rangeTitle(range, date)}
             hint={range === 'Y' ? (def.aggregate === 'sum' ? 'Daily average per month' : 'Monthly values') : undefined}
@@ -429,11 +445,12 @@ function PeriodDetail({
                 tick: tickFor(range, p.date, i)
               }))}
               color={def.color}
-              height={230}
+              height={240}
               goal={goal != null && !buckets ? { value: goal, label: 'goal' } : null}
               emphasisIndex={buckets ? undefined : chartPoints.findIndex((p) => p.date === date)}
               format={def.format}
               unitLabel={def.unit}
+              axisLabel={axisLabel}
             />
           ) : (
             <TrendLine
@@ -443,10 +460,12 @@ function PeriodDetail({
                 value: p.value
               }))}
               color={def.color}
-              height={230}
+              height={240}
               format={def.format}
               baseline={avg != null ? { value: avg, label: 'avg' } : null}
               unitLabel={def.unit}
+              axisLabel={axisLabel}
+              domain={axisDomainFor(metricKey)}
             />
           )}
         </Panel>

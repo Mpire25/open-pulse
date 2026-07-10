@@ -1,7 +1,7 @@
 // Title-bar strip: draggable, hosting (right-aligned, openfit-style) the date
 // control, device battery, assistant toggle, and refresh with live progress.
 
-import { ArrowClockwise, BatteryFull, BatteryLow, BatteryMedium, Sparkle } from '@phosphor-icons/react'
+import { ArrowClockwise, BatteryFull, BatteryLow, BatteryMedium, SidebarSimple, Sparkle } from '@phosphor-icons/react'
 import { DateNav } from '@/components/DateNav'
 import { useDevices, useRefresh, useSyncBusy } from '@/hooks/useHealth'
 import { cn } from '@/lib/utils'
@@ -13,6 +13,8 @@ interface TopBarProps {
   showAsk: boolean
   chatOpen: boolean
   onToggleChat: () => void
+  sidebarOpen: boolean
+  onToggleSidebar: () => void
 }
 
 export function TopBar({
@@ -21,10 +23,24 @@ export function TopBar({
   onDateChange,
   showAsk,
   chatOpen,
-  onToggleChat
+  onToggleChat,
+  sidebarOpen,
+  onToggleSidebar
 }: TopBarProps): React.JSX.Element {
   return (
     <div className="drag-region relative z-30 flex h-11 shrink-0 items-center justify-end gap-2 px-3">
+      <button
+        onClick={onToggleSidebar}
+        aria-label={sidebarOpen ? 'Close sidebar' : 'Open sidebar'}
+        title={sidebarOpen ? 'Close sidebar' : 'Open sidebar'}
+        className={cn(
+          'no-drag mr-auto grid h-7 w-7 translate-y-1 place-items-center rounded-lg text-ink-dim transition-colors hover:bg-white/[0.06] hover:text-ink',
+          !sidebarOpen && 'ml-[84px]'
+        )}
+      >
+        <SidebarSimple size={16} weight="bold" />
+      </button>
+
       {showDateNav && <DateNav date={date} onChange={onDateChange} />}
 
       <BatteryPill />

@@ -30,6 +30,7 @@ export default function App(): React.JSX.Element {
   const [codex, setCodex] = useState<CodexAuthStatus>({ connected: false })
   const [selectedDate, setSelectedDate] = useState(isoToday)
   const [chatOpen, setChatOpen] = useState(false)
+  const [sidebarOpen, setSidebarOpen] = useState(true)
 
   // One conversation shared by the Assistant page and the side panel.
   const chat = useChat()
@@ -67,9 +68,19 @@ export default function App(): React.JSX.Element {
 
   return (
     <div className="flex h-full w-full overflow-hidden bg-canvas/60 text-ink">
-      <Sidebar view={view} onSelect={selectView} connected={google.connected} />
+      <AnimatePresence initial={false}>
+        {sidebarOpen && (
+          <Sidebar
+            view={view}
+            onSelect={selectView}
+            connected={google.connected}
+          />
+        )}
+      </AnimatePresence>
 
-      <main className="relative flex flex-1 flex-col overflow-hidden rounded-tl-[14px] border-l border-t border-hairline bg-canvas">
+      <main
+        className={`relative flex flex-1 flex-col overflow-hidden border-l border-t border-hairline bg-canvas transition-[border-radius] duration-200 ${sidebarOpen ? 'rounded-tl-[14px]' : ''}`}
+      >
         <TopBar
           showDateNav={isDataView}
           date={selectedDate}
@@ -77,6 +88,8 @@ export default function App(): React.JSX.Element {
           showAsk={view !== 'assistant'}
           chatOpen={chatOpen}
           onToggleChat={() => setChatOpen((o) => !o)}
+          sidebarOpen={sidebarOpen}
+          onToggleSidebar={() => setSidebarOpen((open) => !open)}
         />
 
         <div className="flex min-h-0 flex-1">

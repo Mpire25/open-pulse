@@ -15,6 +15,7 @@ interface MetricStatProps {
   upIsGood?: boolean | null
   /** Recent history for the corner sparkline. */
   spark?: Array<number | null>
+  sparkWidth?: number
   sub?: string
   /** When set, the tile is a button that opens the metric's detail page. */
   onOpen?: () => void
@@ -30,15 +31,16 @@ export function MetricStat({
   deltaPct,
   upIsGood = true,
   spark,
+  sparkWidth = 72,
   sub,
   onOpen
 }: MetricStatProps): React.JSX.Element {
   const body = (
     <>
-      <div className="flex items-center justify-between gap-1.5">
-        <div className="flex items-center gap-1.5">
+      <div className="flex min-w-0 items-center justify-between gap-1.5">
+        <div className="flex min-w-0 items-center gap-1.5">
           {IconCmp && <IconCmp size={13} weight="fill" style={{ color: accent }} />}
-          <span className="text-[11px] font-medium tracking-wide text-ink-faint">{label}</span>
+          <span className="truncate text-[11px] font-medium tracking-wide text-ink-faint">{label}</span>
         </div>
         {onOpen && (
           <CaretRight
@@ -48,17 +50,17 @@ export function MetricStat({
           />
         )}
       </div>
-      <div className="flex items-end justify-between gap-2">
-        <div className="flex items-baseline gap-1">
+      <div className="flex min-w-0 items-end justify-between gap-2">
+        <div className="flex min-w-0 items-baseline gap-1 whitespace-nowrap">
           <span className="text-[24px] font-semibold leading-none tracking-tight text-ink">{value}</span>
-          {unit && <span className="text-[11.5px] text-ink-dim">{unit}</span>}
+          {unit && <span className="shrink-0 text-[11.5px] text-ink-dim">{unit}</span>}
         </div>
-        {spark && <Spark values={spark} color={accent} />}
+        {spark && <Spark values={spark} color={accent} width={sparkWidth} />}
       </div>
       {(deltaPct != null || sub) && (
-        <div className="flex items-center gap-1.5 text-[11px] leading-none">
+        <div className="flex min-w-0 items-center gap-1.5 text-[11px] leading-none">
           <DeltaChip delta={deltaPct ?? null} upIsGood={upIsGood} />
-          <span className="text-ink-faint">{sub ?? 'vs 7-day baseline'}</span>
+          <span className="min-w-0 leading-tight text-ink-faint">{sub ?? 'vs 7-day baseline'}</span>
         </div>
       )}
     </>
@@ -68,11 +70,11 @@ export function MetricStat({
     return (
       <button
         onClick={onOpen}
-        className="group/stat flex flex-col gap-2 px-5 py-4 text-left transition-colors hover:bg-white/[0.03]"
+        className="group/stat flex min-w-0 flex-col gap-2 px-5 py-4 text-left transition-colors hover:bg-white/[0.03]"
       >
         {body}
       </button>
     )
   }
-  return <div className="flex flex-col gap-2 px-5 py-4">{body}</div>
+  return <div className="flex min-w-0 flex-col gap-2 px-5 py-4">{body}</div>
 }

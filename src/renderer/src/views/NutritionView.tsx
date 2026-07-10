@@ -60,7 +60,7 @@ export function NutritionView({ date, goals, onOpenMetric }: NutritionViewProps)
     return (
       <motion.div key={key} custom={index} variants={fade} initial="hidden" animate="show">
         <InteractivePanel
-          className={`flex h-full flex-col gap-4 p-6 ${CARD_HEIGHT.chart}`}
+          className={`flex h-full flex-col gap-3 p-5 ${CARD_HEIGHT.chart}`}
           onOpen={() => onOpenMetric(key)}
         >
           <DrillHeader

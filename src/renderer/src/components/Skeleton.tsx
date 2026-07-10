@@ -64,7 +64,7 @@ export function SkeletonRing({
 }
 
 export function SkeletonChart({
-  height = 150,
+  height = 170,
   columns = 7
 }: {
   height?: number
@@ -94,7 +94,7 @@ export function SkeletonChart({
   )
 }
 
-export function SkeletonMetricStat(): React.JSX.Element {
+export function SkeletonMetricStat({ sparkWidth = 72 }: { sparkWidth?: number }): React.JSX.Element {
   return (
     <div className="flex min-h-28 flex-col gap-2 px-5 py-4" aria-hidden>
       <div className="flex items-center gap-2">
@@ -103,7 +103,7 @@ export function SkeletonMetricStat(): React.JSX.Element {
       </div>
       <div className="flex items-end justify-between gap-2">
         <SkeletonBlock className="h-6 w-20" />
-        <SkeletonBlock className="h-6 w-[72px]" />
+        <SkeletonBlock className="h-6" style={{ width: sparkWidth }} />
       </div>
       <div className="flex items-center gap-2">
         <SkeletonBlock className="h-4 w-10 rounded-full" />

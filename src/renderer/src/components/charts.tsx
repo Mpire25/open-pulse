@@ -83,6 +83,33 @@ function compact(n: number): string {
   return String(Math.round(n))
 }
 
+function axisNumber(n: number): string {
+  if (Math.abs(n) < 10 && !Number.isInteger(n)) return String(+n.toFixed(1))
+  return compact(n)
+}
+
+function niceStep(raw: number): number {
+  if (!Number.isFinite(raw) || raw <= 0) return 1
+  const magnitude = 10 ** Math.floor(Math.log10(raw))
+  const fraction = raw / magnitude
+  for (const multiplier of [1, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10]) {
+    if (multiplier >= fraction) return multiplier * magnitude
+  }
+  return 10 * magnitude
+}
+
+function lineAxis(rawLo: number, rawHi: number): { min: number; max: number; ticks: number[] } {
+  const rawSpan = rawHi - rawLo
+  const span = rawSpan > 0 ? rawSpan : Math.max(Math.abs(rawHi) * 0.04, 0.1)
+  const paddedLo = rawLo - span * 0.15
+  const paddedHi = rawHi + span * 0.15
+  const step = niceStep((paddedHi - paddedLo) / 2)
+  const min = Math.floor(paddedLo / step) * step
+  const max = Math.ceil(paddedHi / step) * step
+  const midpoint = Math.abs((min + max) / 2) < 1e-10 ? 0 : (min + max) / 2
+  return { min, max, ticks: [min, midpoint, max] }
+}
+
 // ---------------------------------------------------------------------------
 // Columns — hourly buckets and N-day trends
 
@@ -104,22 +131,25 @@ interface ColumnChartProps {
   /** Index drawn at full strength while the rest recede (e.g. selected day). */
   emphasisIndex?: number
   unitLabel?: string
+  /** Short unit shown above the Y axis; defaults to the tooltip unit. */
+  axisLabel?: string
 }
 
 export function ColumnChart({
   data,
   color,
-  height = 150,
+  height = 170,
   format = (v) => compact(v),
   goal = null,
   emphasisIndex,
-  unitLabel = ''
+  unitLabel = '',
+  axisLabel = unitLabel
 }: ColumnChartProps): React.JSX.Element {
   const [ref, width] = useWidth()
   const [tip, setTip] = useState<TipState | null>(null)
   const [hovered, setHovered] = useState<number | null>(null)
 
-  const pad = { top: 14, bottom: 18, left: 0, right: 34 }
+  const pad = { top: 14, bottom: 18, left: 0, right: 46 }
   const plotW = Math.max(0, width - pad.left - pad.right)
   const plotH = height - pad.top - pad.bottom
 
@@ -129,7 +159,7 @@ export function ColumnChart({
   const barW = Math.min(24, Math.max(3, band - 2))
   const y = (v: number): number => pad.top + plotH * (1 - v / max)
 
-  const gridValues = [max / 2, max]
+  const gridValues = [0, max / 2, max]
 
   return (
     <div ref={ref} className="relative w-full select-none" style={{ height }}>
@@ -137,18 +167,37 @@ export function ColumnChart({
         <svg width={width} height={height} className="block">
           {gridValues.map((v) => (
             <g key={v}>
-              <line x1={0} x2={plotW} y1={y(v)} y2={y(v)} stroke="var(--color-hairline)" strokeWidth={1} />
+              <line
+                x1={0}
+                x2={plotW}
+                y1={y(v)}
+                y2={y(v)}
+                stroke={v === 0 ? 'var(--color-hairline-strong)' : 'var(--color-hairline)'}
+                strokeWidth={1}
+              />
               <text
                 x={plotW + 6}
                 y={y(v) + 3.5}
                 className="fill-[var(--color-ink-faint)] font-mono"
                 fontSize={10}
               >
-                {compact(v)}
+                {axisNumber(v)}
               </text>
             </g>
           ))}
-          <line x1={0} x2={plotW} y1={y(0)} y2={y(0)} stroke="var(--color-hairline-strong)" strokeWidth={1} />
+          {axisLabel && (
+            <text
+              x={width - 5}
+              y={pad.top + plotH / 2}
+              textAnchor="middle"
+              dominantBaseline="middle"
+              transform={`rotate(-90 ${width - 5} ${pad.top + plotH / 2})`}
+              className="fill-[var(--color-ink-faint)] font-mono"
+              fontSize={9}
+            >
+              {axisLabel}
+            </text>
+          )}
 
           {data.map((d, i) => {
             const cx = pad.left + band * i + band / 2
@@ -176,8 +225,8 @@ export function ColumnChart({
                 strokeWidth={1}
               />
               <text
-                x={plotW + 6}
-                y={y(goal.value) + 3.5}
+                x={6}
+                y={Math.max(pad.top + 9, y(goal.value) - 4)}
                 className="fill-[var(--color-ink-dim)] font-mono"
                 fontSize={10}
               >
@@ -261,21 +310,26 @@ interface TrendLineProps {
   format?: (v: number) => string
   baseline?: { value: number; label: string } | null
   unitLabel?: string
+  /** Short unit shown above the Y axis; defaults to the tooltip unit. */
+  axisLabel?: string
+  domain?: { min?: number; max?: number }
 }
 
 export function TrendLine({
   data,
   color,
-  height = 150,
+  height = 170,
   format = (v) => compact(v),
   baseline = null,
-  unitLabel = ''
+  unitLabel = '',
+  axisLabel = unitLabel,
+  domain
 }: TrendLineProps): React.JSX.Element {
   const [ref, width] = useWidth()
   const [tip, setTip] = useState<TipState | null>(null)
   const [cursor, setCursor] = useState<number | null>(null)
 
-  const pad = { top: 14, bottom: 18, left: 0, right: 40 }
+  const pad = { top: 14, bottom: 18, left: 0, right: 48 }
   const plotW = Math.max(0, width - pad.left - pad.right)
   const plotH = height - pad.top - pad.bottom
 
@@ -283,11 +337,15 @@ export function TrendLine({
   const values = present.map((d) => d.value)
   const lo = values.length ? Math.min(...values, baseline?.value ?? Infinity) : 0
   const hi = values.length ? Math.max(...values, baseline?.value ?? -Infinity) : 1
-  const span = Math.max(hi - lo, Math.abs(hi) * 0.05, 1)
-  const yLo = lo - span * 0.18
-  const yHi = hi + span * 0.18
+  const automaticAxis = lineAxis(
+    domain?.min != null ? Math.min(lo, domain.min) : lo,
+    domain?.max != null ? Math.max(hi, domain.max) : hi
+  )
+  const axisMin = domain?.min ?? automaticAxis.min
+  const axisMax = domain?.max ?? automaticAxis.max
+  const axis = { min: axisMin, max: axisMax, ticks: [axisMin, (axisMin + axisMax) / 2, axisMax] }
   const x = (i: number): number => pad.left + (data.length > 1 ? (plotW * i) / (data.length - 1) : plotW / 2)
-  const y = (v: number): number => pad.top + plotH * (1 - (v - yLo) / (yHi - yLo))
+  const y = (v: number): number => pad.top + plotH * (1 - (v - axis.min) / (axis.max - axis.min))
 
   const path = useMemo(() => {
     let d = ''
@@ -299,10 +357,13 @@ export function TrendLine({
     })
     return d
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data, width, height])
+  }, [axis.max, axis.min, data, height, width])
 
   const last = [...data].reverse().find((d) => d.value != null)
   const lastIndex = last ? data.lastIndexOf(last) : -1
+  const tickIndices = [...new Set([0, Math.floor((data.length - 1) / 2), data.length - 1])].filter(
+    (index) => index >= 0
+  )
 
   const onMove = (e: React.PointerEvent<SVGRectElement>): void => {
     const rect = e.currentTarget.getBoundingClientRect()
@@ -332,6 +393,39 @@ export function TrendLine({
     <div ref={ref} className="relative w-full select-none" style={{ height }}>
       {width > 0 && (
         <svg width={width} height={height} className="block">
+          {axis.ticks.map((value) => (
+            <g key={value}>
+              <line
+                x1={0}
+                x2={plotW}
+                y1={y(value)}
+                y2={y(value)}
+                stroke="var(--color-hairline)"
+                strokeWidth={1}
+              />
+              <text
+                x={plotW + 6}
+                y={y(value) + 3.5}
+                className="fill-[var(--color-ink-faint)] font-mono"
+                fontSize={10}
+              >
+                {format(value)}
+              </text>
+            </g>
+          ))}
+          {axisLabel && (
+            <text
+              x={width - 5}
+              y={pad.top + plotH / 2}
+              textAnchor="middle"
+              dominantBaseline="middle"
+              transform={`rotate(-90 ${width - 5} ${pad.top + plotH / 2})`}
+              className="fill-[var(--color-ink-faint)] font-mono"
+              fontSize={9}
+            >
+              {axisLabel}
+            </text>
+          )}
           {baseline && (
             <g>
               <line
@@ -343,8 +437,8 @@ export function TrendLine({
                 strokeWidth={1}
               />
               <text
-                x={plotW + 6}
-                y={y(baseline.value) + 3.5}
+                x={6}
+                y={Math.max(pad.top + 9, y(baseline.value) - 4)}
                 className="fill-[var(--color-ink-faint)] font-mono"
                 fontSize={10}
               >
@@ -398,23 +492,18 @@ export function TrendLine({
             />
           )}
 
-          {/* Sparse date ticks: first and last */}
-          {data.length > 1 && (
-            <>
-              <text x={0} y={height - 4} className="fill-[var(--color-ink-faint)] font-mono" fontSize={10}>
-                {data[0].label}
-              </text>
-              <text
-                x={plotW}
-                y={height - 4}
-                textAnchor="end"
-                className="fill-[var(--color-ink-faint)] font-mono"
-                fontSize={10}
-              >
-                {data[data.length - 1].label}
-              </text>
-            </>
-          )}
+          {tickIndices.map((index) => (
+            <text
+              key={`tick-${data[index].date}-${index}`}
+              x={x(index)}
+              y={height - 4}
+              textAnchor={index === 0 ? 'start' : index === data.length - 1 ? 'end' : 'middle'}
+              className="fill-[var(--color-ink-faint)] font-mono"
+              fontSize={10}
+            >
+              {data[index].label}
+            </text>
+          ))}
 
           <rect
             x={0}
@@ -449,7 +538,7 @@ export function IntradayLine({ points, color, height = 170 }: IntradayLineProps)
   const [tip, setTip] = useState<TipState | null>(null)
   const [cursorX, setCursorX] = useState<number | null>(null)
 
-  const pad = { top: 14, bottom: 18, left: 0, right: 34 }
+  const pad = { top: 14, bottom: 18, left: 0, right: 46 }
   const plotW = Math.max(0, width - pad.left - pad.right)
   const plotH = height - pad.top - pad.bottom
 
@@ -464,15 +553,16 @@ export function IntradayLine({ points, color, height = 170 }: IntradayLineProps)
     return out
   }, [points, plotW])
 
-  const lo = sampled.length ? Math.min(...sampled.map((p) => p.bpm)) - 8 : 40
-  const hi = sampled.length ? Math.max(...sampled.map((p) => p.bpm)) + 8 : 120
+  const rawLo = sampled.length ? Math.min(...sampled.map((p) => p.bpm)) - 8 : 40
+  const rawHi = sampled.length ? Math.max(...sampled.map((p) => p.bpm)) + 8 : 120
+  const axis = lineAxis(rawLo, rawHi)
   const x = (minute: number): number => pad.left + (plotW * minute) / 1440
-  const y = (bpm: number): number => pad.top + plotH * (1 - (bpm - lo) / (hi - lo))
+  const y = (bpm: number): number => pad.top + plotH * (1 - (bpm - axis.min) / (axis.max - axis.min))
 
   const path = useMemo(
     () => sampled.map((p, i) => `${i ? 'L' : 'M'} ${x(p.minute).toFixed(1)} ${y(p.bpm).toFixed(1)}`).join(' '),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [sampled, width, height]
+    [axis.max, axis.min, height, sampled, width]
   )
 
   const hours = [6, 12, 18]
@@ -498,6 +588,37 @@ export function IntradayLine({ points, color, height = 170 }: IntradayLineProps)
     <div ref={ref} className="relative w-full select-none" style={{ height }}>
       {width > 0 && (
         <svg width={width} height={height} className="block">
+          {axis.ticks.map((value) => (
+            <g key={value}>
+              <line
+                x1={0}
+                x2={plotW}
+                y1={y(value)}
+                y2={y(value)}
+                stroke="var(--color-hairline)"
+                strokeWidth={1}
+              />
+              <text
+                x={plotW + 6}
+                y={y(value) + 3.5}
+                className="fill-[var(--color-ink-faint)] font-mono"
+                fontSize={10}
+              >
+                {axisNumber(value)}
+              </text>
+            </g>
+          ))}
+          <text
+            x={width - 5}
+            y={pad.top + plotH / 2}
+            textAnchor="middle"
+            dominantBaseline="middle"
+            transform={`rotate(-90 ${width - 5} ${pad.top + plotH / 2})`}
+            className="fill-[var(--color-ink-faint)] font-mono"
+            fontSize={9}
+          >
+            bpm
+          </text>
           {hours.map((h) => (
             <g key={h}>
               <line
@@ -519,18 +640,6 @@ export function IntradayLine({ points, color, height = 170 }: IntradayLineProps)
               </text>
             </g>
           ))}
-          {[lo + 8, hi - 8].map((v) => (
-            <text
-              key={v}
-              x={plotW + 6}
-              y={y(v) + 3.5}
-              className="fill-[var(--color-ink-faint)] font-mono"
-              fontSize={10}
-            >
-              {Math.round(v)}
-            </text>
-          ))}
-
           {path && <path d={path} fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />}
 
           {cursorX != null && (

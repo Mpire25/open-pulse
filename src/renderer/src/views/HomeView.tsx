@@ -171,11 +171,11 @@ export function HomeView({ date, goals, onOpenMetric, onNavigate }: HomeViewProp
         </Panel>
       </motion.div>
 
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1.35fr_1fr]">
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
         {/* Daily movement */}
-        <motion.div custom={2} variants={fade} initial="hidden" animate="show">
+        <motion.div custom={2} variants={fade} initial="hidden" animate="show" className="min-w-0">
           <InteractivePanel
-            className={`flex h-full flex-col gap-4 p-6 ${CARD_HEIGHT.large}`}
+            className={`flex h-full min-w-0 flex-col gap-3 p-5 ${CARD_HEIGHT.large}`}
             onOpen={() => onOpenMetric('steps')}
           >
             <DrillHeader
@@ -210,10 +210,10 @@ export function HomeView({ date, goals, onOpenMetric, onNavigate }: HomeViewProp
         </motion.div>
 
         {/* Last night */}
-        <motion.div custom={3} variants={fade} initial="hidden" animate="show">
+        <motion.div custom={3} variants={fade} initial="hidden" animate="show" className="min-w-0">
           <InteractivePanel
-            className={`flex h-full flex-col gap-4 p-6 ${CARD_HEIGHT.large}`}
-            onOpen={() => onOpenMetric('sleepMinutes')}
+            className={`flex h-full min-w-0 flex-col gap-3 p-5 ${CARD_HEIGHT.large}`}
+            onOpen={() => onNavigate('sleep')}
           >
             <DrillHeader
               title="Sleep"

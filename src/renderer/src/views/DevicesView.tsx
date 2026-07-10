@@ -72,7 +72,7 @@ export function DevicesView({ connected }: DevicesViewProps): React.JSX.Element 
         </button>
       </motion.header>
 
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1.1fr_1fr]">
+      <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-[1.1fr_1fr]">
         {/* Product hero */}
         <motion.div custom={1} variants={fade} initial="hidden" animate="show">
           {devices.isPending ? (
@@ -99,7 +99,7 @@ export function DevicesView({ connected }: DevicesViewProps): React.JSX.Element 
 
         {/* Data coverage */}
         <motion.div custom={2} variants={fade} initial="hidden" animate="show">
-          <Panel className={`flex h-full flex-col p-6 ${CARD_HEIGHT.device}`}>
+          <Panel className={`flex flex-col p-6 ${CARD_HEIGHT.device}`}>
             <SectionHeader
               title="Data coverage"
               hint="What arrived over the last 7 days"
