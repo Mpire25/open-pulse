@@ -3,8 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { CaretDown, ForkKnife } from '@phosphor-icons/react'
 import { Panel, DrillHeader, InteractivePanel, SectionHeader } from '@/components/Panel'
 import { ColumnChart, ProgressRing } from '@/components/charts'
-import { DeltaChip } from '@/components/DeltaChip'
-import { CARD_HEIGHT, SkeletonBlock, SkeletonChart, SkeletonText } from '@/components/Skeleton'
+import { CARD_HEIGHT, SkeletonBlock, SkeletonChart, SkeletonRing, SkeletonText } from '@/components/Skeleton'
 import { ErrorState } from '@/components/ErrorState'
 import { useNutritionLogs, useSeries } from '@/hooks/useHealth'
 import { METRICS } from '@/lib/metric-registry'
@@ -17,7 +16,6 @@ import type { DayValues, Goals, MetricKey, NutritionLogEntry } from '@shared/typ
 
 const NUTRITION_METRICS: MetricKey[] = [
   'caloriesIn',
-  'caloriesOut',
   'proteinG',
   'carbsG',
   'fatG',
@@ -73,8 +71,9 @@ export function NutritionView({ date, goals, onOpenMetric, onSelectDate }: Nutri
     .map((dayDate) => ({ date: dayDate, values: days?.[dayDate] ?? {} }))
     .filter(({ values }) => values.caloriesIn != null || MACROS.some((macro) => values[macro.key] != null))
   const recentDays = [...recordedDays].reverse().filter((day) => day.date !== date)
-  const net =
-    today.caloriesIn != null && today.caloriesOut != null ? today.caloriesIn - today.caloriesOut : null
+  const intakePct = today.caloriesIn != null && goals.caloriesIn > 0
+    ? Math.round((today.caloriesIn / goals.caloriesIn) * 100)
+    : null
 
   const barCard = (key: MetricKey, index: number): React.JSX.Element => {
     const def = METRICS[key]
@@ -137,49 +136,45 @@ export function NutritionView({ date, goals, onOpenMetric, onSelectDate }: Nutri
         </Panel>
       ) : (
         <>
-          {/* Today: energy + macro split */}
+          {/* Today: intake goal + macro split */}
           <motion.div custom={1} variants={fade} initial="hidden" animate="show">
             <Panel className={`grid grid-cols-1 gap-6 p-6 lg:grid-cols-[auto_1fr] ${CARD_HEIGHT.hero}`}>
-              <div className="flex min-w-[220px] flex-col justify-center gap-2">
-                <SectionHeader
-                  title="Energy"
-                  hint="Logged intake vs burned"
-                  icon={<ForkKnife size={18} weight="fill" style={{ color: 'var(--color-recovery)' }} />}
-                />
-                <div className="mt-2 flex items-baseline gap-2">
-                  {intakePending ? (
-                    <SkeletonText className="h-8 w-24" />
-                  ) : (
-                    <span className="text-[34px] font-semibold leading-none tracking-tight text-ink">
-                      {today.caloriesIn != null ? formatInt(today.caloriesIn) : '—'}
-                    </span>
-                  )}
-                  <span className="text-[13px] text-ink-dim">kcal eaten</span>
-                </div>
+              <div className="flex min-w-[220px] items-center justify-center">
                 {intakePending ? (
-                  <SkeletonText className="mt-1 w-32" />
+                  <div className="flex flex-col items-center gap-2" aria-hidden>
+                    <SkeletonRing size={146} stroke={15} />
+                    <SkeletonText className="w-28" />
+                  </div>
                 ) : (
-                  <div className="text-[11px] text-ink-faint">
-                    {today.caloriesIn != null
-                      ? `${Math.round((today.caloriesIn / goals.caloriesIn) * 100)}% of ${formatInt(goals.caloriesIn)} kcal goal`
-                      : `${formatInt(goals.caloriesIn)} kcal goal`}
-                  </div>
+                  <button
+                    type="button"
+                    onClick={() => onOpenMetric('caloriesIn', 'D')}
+                    className="group flex flex-col items-center gap-2 rounded-2xl px-3 py-1 outline-none focus-visible:ring-2 focus-visible:ring-accent/60 active:scale-[0.98]"
+                    aria-label="Open calories eaten details"
+                  >
+                    <ProgressRing
+                      value={today.caloriesIn ?? 0}
+                      goal={goals.caloriesIn}
+                      color={METRICS.caloriesIn.color}
+                      size={146}
+                      stroke={15}
+                    >
+                      <div className="text-center">
+                        <div className="text-[26px] font-semibold leading-none tracking-tight text-ink">
+                          {today.caloriesIn != null ? formatInt(today.caloriesIn) : '—'}
+                        </div>
+                        <div className="mt-1.5 text-[10px] uppercase tracking-wide text-ink-faint">
+                          calories eaten
+                        </div>
+                      </div>
+                    </ProgressRing>
+                    <span className="font-mono text-[11px] text-ink-dim transition-colors group-hover:text-ink">
+                      {intakePct != null
+                        ? `${intakePct}% of ${formatInt(goals.caloriesIn)} kcal`
+                        : `${formatInt(goals.caloriesIn)} kcal goal`}
+                    </span>
+                  </button>
                 )}
-                {series.isMetricPending('caloriesOut') ? (
-                  <SkeletonText className="mt-1 w-36" />
-                ) : today.caloriesOut != null ? (
-                  <div className="flex items-center gap-2 text-[12.5px] text-ink-dim">
-                    {formatInt(today.caloriesOut)} kcal burned
-                    {net != null && (
-                      <DeltaChip
-                        delta={net}
-                        upIsGood={null}
-                        format={(m) => `${net > 0 ? '+' : '−'}${formatInt(m)} net`}
-                        minMagnitude={0}
-                      />
-                    )}
-                  </div>
-                ) : null}
               </div>
 
               <div className="lg:border-l lg:border-hairline lg:pl-6">
