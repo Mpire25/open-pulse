@@ -11,7 +11,7 @@ import { METRICS } from '@/lib/metric-registry'
 import { baseline, baselineDeltaPct, pointValues, rangeEnding, seriesPoints } from '@/lib/metrics'
 import { formatHour, formatInt, longDate, weekdayShort } from '@/lib/format'
 import { fade } from '@/lib/motion'
-import type { Goals, MetricKey } from '@shared/types'
+import type { Goals, MetricKey, Workout } from '@shared/types'
 
 const ACTIVITY_METRICS: MetricKey[] = [
   'steps',
@@ -26,9 +26,10 @@ interface ActivityViewProps {
   date: string
   goals: Goals
   onOpenMetric: (metric: MetricKey) => void
+  onOpenWorkout: (workout: Workout) => void
 }
 
-export function ActivityView({ date, goals, onOpenMetric }: ActivityViewProps): React.JSX.Element {
+export function ActivityView({ date, goals, onOpenMetric, onOpenWorkout }: ActivityViewProps): React.JSX.Element {
   const { start, end } = rangeEnding(date, 7)
   const series = useSeries(ACTIVITY_METRICS, start, end)
   const intraday = useIntraday(date)
@@ -154,23 +155,25 @@ export function ActivityView({ date, goals, onOpenMetric }: ActivityViewProps): 
         {/* Workouts */}
         <motion.div custom={3} variants={fade} initial="hidden" animate="show" className="min-w-0">
           <Panel className={`flex h-full min-w-0 flex-col gap-2 px-3 py-5 ${CARD_HEIGHT.large}`}>
-            <SectionHeader
-              title="Workouts"
-              hint={
-                workouts.isPending ? (
-                  <SkeletonText className="w-20" />
-                ) : workouts.data && workouts.data.length > 0 ? (
-                  `${workouts.data.length} session${workouts.data.length > 1 ? 's' : ''}`
-                ) : (
-                  'No sessions logged'
-                )
-              }
-              icon={<Barbell size={18} weight="fill" style={{ color: 'var(--color-recovery)' }} />}
-            />
+            <div className="px-2">
+              <SectionHeader
+                title="Workouts"
+                hint={
+                  workouts.isPending ? (
+                    <SkeletonText className="w-20" />
+                  ) : workouts.data && workouts.data.length > 0 ? (
+                    `${workouts.data.length} session${workouts.data.length > 1 ? 's' : ''}`
+                  ) : (
+                    'No sessions logged'
+                  )
+                }
+                icon={<Barbell size={18} weight="fill" style={{ color: 'var(--color-recovery)' }} />}
+              />
+            </div>
             {workouts.isPending ? (
               <SkeletonRows />
             ) : workouts.data && workouts.data.length > 0 ? (
-              <WorkoutList workouts={workouts.data} />
+              <WorkoutList workouts={workouts.data} onOpen={onOpenWorkout} />
             ) : (
               <div className="grid flex-1 place-items-center text-[13px] text-ink-faint">
                 Tracked exercises appear here automatically.

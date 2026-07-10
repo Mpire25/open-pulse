@@ -75,7 +75,12 @@ function bumpPending(delta: number): void {
   activityListener?.(pendingCount)
 }
 
-async function request<T>(token: string, path: string, init?: RequestInit, priority: Priority = 1): Promise<T> {
+async function requestResponse(
+  token: string,
+  path: string,
+  init?: RequestInit,
+  priority: Priority = 1
+): Promise<Response> {
   bumpPending(1)
   try {
     for (let retry = 0; ; retry++) {
@@ -100,11 +105,21 @@ async function request<T>(token: string, path: string, init?: RequestInit, prior
       if (!resp.ok) {
         throw new HealthApiError(resp.status, `Health API ${path} failed (${resp.status}): ${await resp.text()}`)
       }
-      return (await resp.json()) as T
+      return resp
     }
   } finally {
     bumpPending(-1)
   }
+}
+
+async function request<T>(token: string, path: string, init?: RequestInit, priority: Priority = 1): Promise<T> {
+  const response = await requestResponse(token, path, init, priority)
+  return (await response.json()) as T
+}
+
+async function requestText(token: string, path: string, priority: Priority = 1): Promise<string> {
+  const response = await requestResponse(token, path, undefined, priority)
+  return response.text()
 }
 
 // ---------------------------------------------------------------------------
@@ -150,7 +165,7 @@ export function dateFromCivil(value?: CivilDateTime | ApiDate | null): string | 
 export function minuteFromCivil(value?: CivilDateTime | null): number | null {
   const time = value?.time
   if (typeof time?.hours !== 'number') return null
-  return time.hours * 60 + (time.minutes ?? 0)
+  return time.hours * 60 + (time.minutes ?? 0) + (time.seconds ?? 0) / 60
 }
 
 // ---------------------------------------------------------------------------
@@ -216,6 +231,18 @@ export interface RawDataPoint {
   name?: string
   dataPointName?: string
   [key: string]: unknown
+}
+
+/** Export a recorded exercise as TCX. Partial data keeps non-GPS trackpoints
+ * available for exercises where only heart rate or altitude was recorded. */
+export async function exportExerciseTcx(token: string, workoutName: string): Promise<string> {
+  const fullName = workoutName.startsWith('users/')
+    ? workoutName
+    : `users/me/dataTypes/exercise/dataPoints/${encodeURIComponent(workoutName)}`
+  if (!/^users\/[^/]+\/dataTypes\/exercise\/dataPoints\/[^/?#:]+$/.test(fullName)) {
+    throw new HealthApiError(400, 'Invalid exercise resource name')
+  }
+  return requestText(token, `/${fullName}:exportExerciseTcx?alt=media&partialData=true`, 0)
 }
 
 /** How a data type's points are keyed, which decides the AIP-160 filter shape. */

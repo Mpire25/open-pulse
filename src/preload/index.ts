@@ -11,6 +11,7 @@ import type {
   SeriesResult,
   SleepRangeResult,
   SyncActivity,
+  WorkoutTrackResult,
   WorkoutsResult
 } from '../shared/types'
 
@@ -37,6 +38,8 @@ const api = {
       ipcRenderer.invoke('health:sleep-range', start, end, force),
     workouts: (start: string, end: string, force?: boolean): Promise<WorkoutsResult> =>
       ipcRenderer.invoke('health:workouts', start, end, force),
+    workoutTrack: (workoutId: string): Promise<WorkoutTrackResult> =>
+      ipcRenderer.invoke('health:workout-track', workoutId),
     intraday: (date: string, force?: boolean): Promise<IntradaySnapshot> =>
       ipcRenderer.invoke('health:intraday', date, force),
     devices: (force?: boolean): Promise<PairedDevice[]> => ipcRenderer.invoke('health:devices', force),

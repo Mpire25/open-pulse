@@ -20,7 +20,8 @@ import type {
   PairedDevice,
   SeriesResult,
   SleepNight,
-  Workout
+  Workout,
+  WorkoutTrackResult
 } from '@shared/types'
 
 // Past days barely change once synced; today does. Query-side staleness is
@@ -105,6 +106,15 @@ export function useWorkouts(start: string, end: string): UseQueryResult<Workout[
     queryKey: ['workouts', start, end],
     queryFn: async () => (await window.pulse.health.workouts(start, end)).workouts,
     staleTime: STALE_MS
+  })
+}
+
+export function useWorkoutTrack(workoutId: string, enabled: boolean): UseQueryResult<WorkoutTrackResult> {
+  return useQuery({
+    queryKey: ['workout-track', workoutId],
+    queryFn: () => window.pulse.health.workoutTrack(workoutId),
+    staleTime: Infinity,
+    enabled
   })
 }
 
