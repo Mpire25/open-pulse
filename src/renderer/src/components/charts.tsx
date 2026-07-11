@@ -114,6 +114,8 @@ interface ColumnChartProps {
   unitLabel?: string
   /** Short unit shown above the Y axis; defaults to the tooltip unit. */
   axisLabel?: string
+  /** Makes individual populated columns selectable without changing non-interactive charts. */
+  onSelect?: (datum: ColumnDatum) => void
 }
 
 export function ColumnChart({
@@ -124,7 +126,8 @@ export function ColumnChart({
   goal = null,
   emphasisIndex,
   unitLabel = '',
-  axisLabel = unitLabel
+  axisLabel = unitLabel,
+  onSelect
 }: ColumnChartProps): React.JSX.Element {
   const [ref, width] = useWidth()
   const [tip, setTip] = useState<TipState | null>(null)
@@ -241,6 +244,10 @@ export function ColumnChart({
               width={band}
               height={height}
               fill="transparent"
+              className={onSelect && d.value != null ? 'cursor-pointer' : undefined}
+              role={onSelect && d.value != null ? 'button' : undefined}
+              tabIndex={onSelect && d.value != null ? 0 : undefined}
+              aria-label={onSelect && d.value != null ? `View ${d.label}` : undefined}
               onPointerMove={() => {
                 setHovered(i)
                 setTip({
@@ -259,6 +266,14 @@ export function ColumnChart({
               onPointerLeave={() => {
                 setHovered(null)
                 setTip(null)
+              }}
+              onClick={() => {
+                if (d.value != null) onSelect?.(d)
+              }}
+              onKeyDown={(event) => {
+                if (d.value == null || !onSelect || (event.key !== 'Enter' && event.key !== ' ')) return
+                event.preventDefault()
+                onSelect(d)
               }}
             />
           ))}
@@ -296,6 +311,8 @@ interface TrendLineProps {
   /** Short unit shown above the Y axis; defaults to the tooltip unit. */
   axisLabel?: string
   domain?: { min?: number; max?: number }
+  /** Makes individual populated points selectable without changing non-interactive charts. */
+  onSelect?: (point: LinePoint) => void
 }
 
 export function TrendLine({
@@ -306,7 +323,8 @@ export function TrendLine({
   baseline = null,
   unitLabel = '',
   axisLabel = unitLabel,
-  domain
+  domain,
+  onSelect
 }: TrendLineProps): React.JSX.Element {
   const [ref, width] = useWidth()
   const [tip, setTip] = useState<TipState | null>(null)
@@ -489,18 +507,62 @@ export function TrendLine({
             </text>
           ))}
 
-          <rect
-            x={0}
-            y={0}
-            width={Math.max(0, width - pad.right)}
-            height={height}
-            fill="transparent"
-            onPointerMove={onMove}
-            onPointerLeave={() => {
-              setCursor(null)
-              setTip(null)
-            }}
-          />
+          {onSelect ? (
+            data.map((point, index) => {
+              const left = index === 0 ? 0 : (x(index - 1) + x(index)) / 2
+              const right = index === data.length - 1 ? plotW : (x(index) + x(index + 1)) / 2
+              const selectable = point.value != null
+              return (
+                <rect
+                  key={`hit-${point.date}-${index}`}
+                  x={left}
+                  y={0}
+                  width={Math.max(0, right - left)}
+                  height={height}
+                  fill="transparent"
+                  className={selectable ? 'cursor-pointer' : undefined}
+                  role={selectable ? 'button' : undefined}
+                  tabIndex={selectable ? 0 : undefined}
+                  aria-label={selectable ? `View ${point.label}` : undefined}
+                  onPointerMove={() => {
+                    if (!selectable) return
+                    setCursor(index)
+                    setTip({
+                      x: x(index),
+                      y: y(point.value!),
+                      title: point.label,
+                      rows: [{ label: unitLabel, value: format(point.value!), color }]
+                    })
+                  }}
+                  onPointerLeave={() => {
+                    setCursor(null)
+                    setTip(null)
+                  }}
+                  onClick={() => {
+                    if (selectable) onSelect(point)
+                  }}
+                  onKeyDown={(event) => {
+                    if (!selectable || (event.key !== 'Enter' && event.key !== ' ')) return
+                    event.preventDefault()
+                    onSelect(point)
+                  }}
+                />
+              )
+            })
+          ) : (
+            <rect
+              x={0}
+              y={0}
+              width={Math.max(0, width - pad.right)}
+              height={height}
+              fill="transparent"
+              onPointerMove={onMove}
+              onPointerLeave={() => {
+                setCursor(null)
+                setTip(null)
+              }}
+            />
+          )}
         </svg>
       )}
       {tip && <Tip tip={tip} width={width} />}

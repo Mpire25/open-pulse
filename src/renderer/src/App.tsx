@@ -204,6 +204,17 @@ export default function App(): React.JSX.Element {
     applyNavigationEntry(nextEntry)
   }
 
+  const selectMetricDate = (date: string): void => {
+    const entry = currentNavigationEntry()
+    if (!entry.detailMetric) return
+
+    navigate({
+      ...entry,
+      selectedDate: date,
+      detailMetric: { ...entry.detailMetric, range: 'D' }
+    })
+  }
+
   const openSleepStages = (): void => {
     navigate({
       ...currentNavigationEntry(),
@@ -297,6 +308,7 @@ export default function App(): React.JSX.Element {
                         goals={settings.goals}
                         onBack={navigateBack}
                         onRangeChange={selectMetricRange}
+                        onSelectDate={selectMetricDate}
                       />
                     ) : (
                       <>

@@ -56,6 +56,7 @@ interface MetricDetailViewProps {
   goals: Goals
   onBack: () => void
   onRangeChange: (range: MetricRange) => void
+  onSelectDate: (date: string) => void
 }
 
 export function MetricDetailView({
@@ -64,7 +65,8 @@ export function MetricDetailView({
   date,
   goals,
   onBack,
-  onRangeChange
+  onRangeChange,
+  onSelectDate
 }: MetricDetailViewProps): React.JSX.Element {
   const def = METRICS[metricKey]
   const spec = RANGES.find((r) => r.id === range)!
@@ -142,6 +144,7 @@ export function MetricDetailView({
           heartDetailData={wantsHeartDetail ? heartDetail.data : undefined}
           heartDetailPending={wantsHeartDetail && heartDetail.isPending}
           heartDetailError={wantsHeartDetail && heartDetail.isError}
+          onSelectDate={onSelectDate}
         />
       ) : (
         <PeriodDetail
@@ -151,6 +154,7 @@ export function MetricDetailView({
           points={points}
           prevPoints={prevPoints}
           goal={goal}
+          onSelectDate={onSelectDate}
         />
       )}
     </div>
@@ -291,7 +295,8 @@ function DayDetail({
   activityIntradayError,
   heartDetailData,
   heartDetailPending,
-  heartDetailError
+  heartDetailError,
+  onSelectDate
 }: {
   metricKey: MetricKey
   date: string
@@ -305,6 +310,7 @@ function DayDetail({
   heartDetailData?: HeartDetailResult
   heartDetailPending: boolean
   heartDetailError: boolean
+  onSelectDate: (date: string) => void
 }): React.JSX.Element {
   const def = METRICS[metricKey]
   const value = points.find((p) => p.date === date)?.value ?? null
@@ -424,6 +430,7 @@ function DayDetail({
                 format={def.format}
                 unitLabel={def.unit}
                 axisLabel={axisLabel}
+                onSelect={(point) => onSelectDate(point.key)}
               />
             ) : (
               <TrendLine
@@ -438,6 +445,7 @@ function DayDetail({
                 unitLabel={def.unit}
                 axisLabel={axisLabel}
                 domain={axisDomainFor(metricKey)}
+                onSelect={(point) => onSelectDate(point.date)}
               />
             )}
           </Panel>
@@ -449,7 +457,7 @@ function DayDetail({
         <HeartZonesPanel data={heartDetailData} pending={heartDetailPending} error={heartDetailError} />
       )}
 
-      <HistoryList metricKey={metricKey} rows={[...points].reverse()} selected={date} />
+      <HistoryList metricKey={metricKey} rows={[...points].reverse()} selected={date} onSelectDate={onSelectDate} />
     </>
   )
 }
@@ -692,7 +700,8 @@ function PeriodDetail({
   date,
   points,
   prevPoints,
-  goal
+  goal,
+  onSelectDate
 }: {
   metricKey: MetricKey
   range: MetricRange
@@ -700,6 +709,7 @@ function PeriodDetail({
   points: SeriesPoint[]
   prevPoints: SeriesPoint[]
   goal: number | null
+  onSelectDate: (date: string) => void
 }): React.JSX.Element {
   const def = METRICS[metricKey]
   const axisLabel = axisLabelFor(metricKey, def.unit)
@@ -784,6 +794,7 @@ function PeriodDetail({
               format={def.format}
               unitLabel={def.unit}
               axisLabel={axisLabel}
+              onSelect={weeklyBuckets ? undefined : (point) => onSelectDate(point.key)}
             />
           ) : (
             <TrendLine
@@ -799,6 +810,7 @@ function PeriodDetail({
               unitLabel={def.unit}
               axisLabel={axisLabel}
               domain={axisDomainFor(metricKey)}
+              onSelect={(point) => onSelectDate(point.date)}
             />
           )}
         </Panel>
@@ -809,6 +821,7 @@ function PeriodDetail({
         rows={[...(monthlyHistory ?? points)].reverse().slice(0, 31)}
         selected={date}
         monthly={monthlyHistory != null}
+        onSelectDate={monthlyHistory == null ? onSelectDate : undefined}
       />
     </>
   )
@@ -854,12 +867,14 @@ function HistoryList({
   metricKey,
   rows,
   selected,
-  monthly = false
+  monthly = false,
+  onSelectDate
 }: {
   metricKey: MetricKey
   rows: SeriesPoint[]
   selected: string
   monthly?: boolean
+  onSelectDate?: (date: string) => void
 }): React.JSX.Element | null {
   const def = METRICS[metricKey]
   const withValues = rows.filter((r) => r.value != null)
@@ -871,28 +886,37 @@ function HistoryList({
           <SectionHeader title="History" hint={monthly ? 'By month' : 'Most recent first'} />
         </div>
         <div className="divide-y divide-hairline">
-          {withValues.map((row) => (
-            <div
-              key={row.date}
-              className={cn(
-                'flex items-center justify-between px-5 py-2.5',
-                row.date === selected && 'bg-white/[0.03]'
-              )}
-            >
-              <span className="text-[12.5px] text-ink-dim">
-                {monthly
-                  ? new Date(`${row.date.slice(0, 7)}-15T12:00:00`).toLocaleDateString('en-US', {
-                      month: 'long',
-                      year: 'numeric'
-                    })
-                  : `${weekdayShort(row.date)} · ${shortDate(row.date)}`}
-              </span>
-              <span className="font-mono text-[13px] text-ink">
-                {def.format(row.value as number)}
-                {def.unit && <span className="ml-1 text-[10.5px] text-ink-faint">{def.unit}</span>}
-              </span>
-            </div>
-          ))}
+          {withValues.map((row) => {
+            const rowClassName = cn(
+              'flex w-full items-center justify-between px-5 py-2.5 text-left',
+              onSelectDate && 'transition-colors hover:bg-white/[0.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/50',
+              row.date === selected && 'bg-white/[0.03]'
+            )
+            const content = (
+              <>
+                <span className="text-[12.5px] text-ink-dim">
+                  {monthly
+                    ? new Date(`${row.date.slice(0, 7)}-15T12:00:00`).toLocaleDateString('en-US', {
+                        month: 'long',
+                        year: 'numeric'
+                      })
+                    : `${weekdayShort(row.date)} · ${shortDate(row.date)}`}
+                </span>
+                <span className="font-mono text-[13px] text-ink">
+                  {def.format(row.value as number)}
+                  {def.unit && <span className="ml-1 text-[10.5px] text-ink-faint">{def.unit}</span>}
+                </span>
+              </>
+            )
+
+            return onSelectDate ? (
+              <button type="button" key={row.date} onClick={() => onSelectDate(row.date)} className={rowClassName}>
+                {content}
+              </button>
+            ) : (
+              <div key={row.date} className={rowClassName}>{content}</div>
+            )
+          })}
         </div>
       </Panel>
     </motion.div>
