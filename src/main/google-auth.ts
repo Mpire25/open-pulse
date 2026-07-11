@@ -12,7 +12,6 @@ const SCOPES = [
   'https://www.googleapis.com/auth/googlehealth.health_metrics_and_measurements.readonly',
   'https://www.googleapis.com/auth/googlehealth.location.readonly',
   'https://www.googleapis.com/auth/googlehealth.nutrition.readonly',
-  'https://www.googleapis.com/auth/googlehealth.profile.readonly',
   'https://www.googleapis.com/auth/googlehealth.settings.readonly',
   'https://www.googleapis.com/auth/googlehealth.sleep.readonly'
 ]
@@ -37,6 +36,15 @@ const LANDING_HTML = `<!doctype html><meta charset="utf-8"><title>OpenPulse</tit
 
 let activeConnectReject: ((err: Error) => void) | null = null
 let authGeneration = 0
+let refreshRequest: { generation: number; controller: AbortController; promise: Promise<string | null> } | null = null
+let refreshRetryAfter = 0
+const REFRESH_FAILURE_COOLDOWN_MS = 30_000
+
+function cancelRefresh(): void {
+  refreshRequest?.controller.abort()
+  refreshRequest = null
+  refreshRetryAfter = 0
+}
 
 interface GoogleTokenError {
   error?: string
@@ -49,6 +57,7 @@ export function getGoogleStatus(): GoogleAuthStatus {
 }
 
 export function disconnectGoogle(): void {
+  cancelRefresh()
   authGeneration += 1
   activeConnectReject?.(new Error('Google sign-in was cancelled.'))
   deleteSecret(SECRET_KEY)
@@ -70,6 +79,7 @@ export async function connectGoogle(): Promise<GoogleAuthStatus> {
     throw new Error('No Google OAuth Client Secret configured. Paste the Client Secret from the same Web application OAuth client as the Client ID.')
   }
 
+  cancelRefresh()
   const generation = ++authGeneration
   const { verifier, challenge } = createPkcePair()
   const state = randomState()
@@ -185,6 +195,7 @@ export async function connectGoogle(): Promise<GoogleAuthStatus> {
     email: claims?.email
   }
   setSecret(SECRET_KEY, tokens)
+  refreshRetryAfter = 0
   return { connected: true, email: tokens.email }
 }
 
@@ -220,6 +231,8 @@ export async function getGoogleAccessToken(): Promise<string | null> {
   if (!tokens) return null
   if (Date.now() < tokens.expiresAt - 60_000) return tokens.accessToken
   if (!tokens.refreshToken) return null
+  if (refreshRequest?.generation === generation) return refreshRequest.promise
+  if (Date.now() < refreshRetryAfter) return null
 
   const clientSecret = getGoogleClientSecret()
   if (!clientSecret) return null
@@ -229,29 +242,50 @@ export async function getGoogleAccessToken(): Promise<string | null> {
     grant_type: 'refresh_token',
     refresh_token: tokens.refreshToken
   })
-  const resp = await fetch('https://oauth2.googleapis.com/token', {
+  const controller = new AbortController()
+  let promise!: Promise<string | null>
+  promise = fetch('https://oauth2.googleapis.com/token', {
     method: 'POST',
     headers: { 'content-type': 'application/x-www-form-urlencoded' },
-    body: body.toString()
+    body: body.toString(),
+    signal: controller.signal
   })
-  if (generation !== authGeneration) return null
-  if (!resp.ok) return null
-  const json = (await resp.json()) as { access_token: string; expires_in: number }
-  if (generation !== authGeneration) return null
-  const current = getSecret<GoogleTokens>(SECRET_KEY)
-  if (!current) return null
-  if (
-    current.accessToken !== tokens.accessToken ||
-    current.refreshToken !== tokens.refreshToken ||
-    current.expiresAt !== tokens.expiresAt
-  ) {
-    return current.accessToken
-  }
-  const updated: GoogleTokens = {
-    ...tokens,
-    accessToken: json.access_token,
-    expiresAt: Date.now() + json.expires_in * 1000
-  }
-  setSecret(SECRET_KEY, updated)
-  return updated.accessToken
+    .then(async (resp) => {
+      if (generation !== authGeneration) return null
+      if (!resp.ok) {
+        const payload = (await resp.json().catch(() => null)) as GoogleTokenError | null
+        if (payload?.error === 'invalid_grant') deleteSecret(SECRET_KEY)
+        else refreshRetryAfter = Date.now() + REFRESH_FAILURE_COOLDOWN_MS
+        return null
+      }
+      const json = (await resp.json()) as { access_token: string; expires_in: number }
+      if (generation !== authGeneration) return null
+      const current = getSecret<GoogleTokens>(SECRET_KEY)
+      if (!current) return null
+      if (
+        current.accessToken !== tokens.accessToken ||
+        current.refreshToken !== tokens.refreshToken ||
+        current.expiresAt !== tokens.expiresAt
+      ) {
+        return current.accessToken
+      }
+      const updated: GoogleTokens = {
+        ...tokens,
+        accessToken: json.access_token,
+        expiresAt: Date.now() + json.expires_in * 1000
+      }
+      setSecret(SECRET_KEY, updated)
+      refreshRetryAfter = 0
+      return updated.accessToken
+    })
+    .catch((error) => {
+      if (error instanceof Error && error.name === 'AbortError') return null
+      refreshRetryAfter = Date.now() + REFRESH_FAILURE_COOLDOWN_MS
+      return null
+    })
+    .finally(() => {
+      if (refreshRequest?.promise === promise) refreshRequest = null
+    })
+  refreshRequest = { generation, controller, promise }
+  return promise
 }

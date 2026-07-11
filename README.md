@@ -73,10 +73,8 @@ and OAuth tokens are encrypted with Electron `safeStorage`.
 
 Scopes requested (read-only):
 `googlehealth.activity_and_fitness.readonly`,
-`googlehealth.ecg.readonly`,
 `googlehealth.health_metrics_and_measurements.readonly`,
-`googlehealth.irn.readonly`, `googlehealth.location.readonly`,
-`googlehealth.nutrition.readonly`, `googlehealth.profile.readonly`,
+`googlehealth.location.readonly`, `googlehealth.nutrition.readonly`,
 `googlehealth.settings.readonly`, `googlehealth.sleep.readonly`.
 
 ## Connecting the AI assistant (Sign in with ChatGPT)

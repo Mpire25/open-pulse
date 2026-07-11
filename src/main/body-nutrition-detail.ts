@@ -2,6 +2,17 @@ import type { BodyMeasurement, DayValues, NutritionLogEntry } from '../shared/ty
 import { dateFromCivil, type CivilDateTime, type RawDataPoint } from './health-api'
 import { gramsFromNutrientNode, nutrientGrams, nutrientMineralGrams } from './nutrition'
 
+export const NUTRITION_DAY_METRICS = [
+  'caloriesIn',
+  'proteinG',
+  'carbsG',
+  'fatG',
+  'fiberG',
+  'saturatedFatG',
+  'sodiumG',
+  'sugarG'
+] as const
+
 function numberValue(value: unknown): number | null {
   if (value === undefined || value === null || value === '') return null
   const parsed = Number(value)
@@ -63,15 +74,20 @@ export function parseNutritionLogs(points: RawDataPoint[]): NutritionLogEntry[] 
     .sort((a, b) => Date.parse(a.startTime) - Date.parse(b.startTime))
 }
 
+export function nutritionLogDate(point: RawDataPoint): string | null {
+  const log = record(point.nutritionLog)
+  const interval = record(log?.interval)
+  const startTime = typeof interval?.startTime === 'string' ? interval.startTime : null
+  return dateFromCivil(interval?.civilStartTime as CivilDateTime | undefined)
+    ?? (startTime && /^\d{4}-\d{2}-\d{2}/.test(startTime) ? startTime.slice(0, 10) : null)
+}
+
 /** Daily totals recovered from raw food logs when Google's rollup omits nutrients. */
 export function parseNutritionLogTotals(points: RawDataPoint[]): Map<string, DayValues> {
   const totals = new Map<string, DayValues>()
   for (const point of points) {
     const log = record(point.nutritionLog)
-    const interval = record(log?.interval)
-    const startTime = typeof interval?.startTime === 'string' ? interval.startTime : null
-    const date = dateFromCivil(interval?.civilStartTime as CivilDateTime | undefined)
-      ?? (startTime && /^\d{4}-\d{2}-\d{2}/.test(startTime) ? startTime.slice(0, 10) : null)
+    const date = nutritionLogDate(point)
     const entry = parseNutritionLogs([point])[0]
     if (!date || !entry) continue
 
@@ -90,6 +106,13 @@ export function parseNutritionLogTotals(points: RawDataPoint[]): Map<string, Day
     totals.set(date, day)
   }
   return totals
+}
+
+export function nutritionFallbackDates(valuesByDate: Map<string, DayValues>): string[] {
+  return [...valuesByDate]
+    .filter(([, values]) => NUTRITION_DAY_METRICS.some((metric) => values[metric] == null))
+    .map(([date]) => date)
+    .sort()
 }
 
 interface PartialMeasurement extends BodyMeasurement {

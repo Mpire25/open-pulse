@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
+import { healthWireArgs, isHealthCancelled } from '../shared/health-ipc'
 import type {
   ActivityIntradayMetric,
   ActivityIntradayResult,
@@ -10,7 +11,9 @@ import type {
   GoogleAuthStatus,
   HeartDetailMetric,
   HeartDetailResult,
+  HeartDetailScope,
   IntradaySnapshot,
+  IntradayScope,
   MetricKey,
   NutritionLogsResult,
   PairedDevice,
@@ -20,6 +23,12 @@ import type {
   WorkoutTrackResult,
   WorkoutsResult
 } from '../shared/types'
+
+async function invokeHealth<T>(channel: string, args: unknown[], requestId: string): Promise<T> {
+  const result: unknown = await ipcRenderer.invoke(channel, ...healthWireArgs(args, requestId))
+  if (isHealthCancelled(result)) throw new DOMException('The request was cancelled.', 'AbortError')
+  return result as T
+}
 
 const api = {
   settings: {
@@ -38,28 +47,37 @@ const api = {
     disconnect: (): Promise<void> => ipcRenderer.invoke('codex:disconnect')
   },
   health: {
-    series: (metrics: MetricKey[], start: string, end: string, force?: boolean): Promise<SeriesResult> =>
-      ipcRenderer.invoke('health:series', metrics, start, end, force),
-    sleepRange: (start: string, end: string, force?: boolean): Promise<SleepRangeResult> =>
-      ipcRenderer.invoke('health:sleep-range', start, end, force),
-    workouts: (start: string, end: string, force?: boolean): Promise<WorkoutsResult> =>
-      ipcRenderer.invoke('health:workouts', start, end, force),
-    workoutTrack: (workoutId: string): Promise<WorkoutTrackResult> =>
-      ipcRenderer.invoke('health:workout-track', workoutId),
-    intraday: (date: string, force?: boolean): Promise<IntradaySnapshot> =>
-      ipcRenderer.invoke('health:intraday', date, force),
+    series: (requestId: string, metrics: MetricKey[], start: string, end: string, force?: boolean): Promise<SeriesResult> =>
+      invokeHealth('health:series', [metrics, start, end, force], requestId),
+    sleepRange: (requestId: string, start: string, end: string, force?: boolean): Promise<SleepRangeResult> =>
+      invokeHealth('health:sleep-range', [start, end, force], requestId),
+    workouts: (requestId: string, start: string, end: string, force?: boolean): Promise<WorkoutsResult> =>
+      invokeHealth('health:workouts', [start, end, force], requestId),
+    workoutTrack: (requestId: string, workoutId: string): Promise<WorkoutTrackResult> =>
+      invokeHealth('health:workout-track', [workoutId], requestId),
+    intraday: (requestId: string, date: string, scope: IntradayScope, force?: boolean): Promise<IntradaySnapshot> =>
+      invokeHealth('health:intraday', [date, scope, force], requestId),
     activityIntraday: (
+      requestId: string,
       date: string,
       metric: ActivityIntradayMetric,
       force?: boolean
-    ): Promise<ActivityIntradayResult> => ipcRenderer.invoke('health:activity-intraday', date, metric, force),
-    heartDetail: (date: string, metric: HeartDetailMetric, force?: boolean): Promise<HeartDetailResult> =>
-      ipcRenderer.invoke('health:heart-detail', date, metric, force),
-    nutritionLogs: (date: string): Promise<NutritionLogsResult> =>
-      ipcRenderer.invoke('health:nutrition-logs', date),
-    bodyMeasurements: (start: string, end: string): Promise<BodyMeasurementsResult> =>
-      ipcRenderer.invoke('health:body-measurements', start, end),
-    devices: (force?: boolean): Promise<PairedDevice[]> => ipcRenderer.invoke('health:devices', force),
+    ): Promise<ActivityIntradayResult> =>
+      invokeHealth('health:activity-intraday', [date, metric, force], requestId),
+    heartDetail: (
+      requestId: string,
+      date: string,
+      metric: HeartDetailMetric,
+      scope: HeartDetailScope,
+      force?: boolean
+    ): Promise<HeartDetailResult> => invokeHealth('health:heart-detail', [date, metric, scope, force], requestId),
+    nutritionLogs: (requestId: string, date: string): Promise<NutritionLogsResult> =>
+      invokeHealth('health:nutrition-logs', [date], requestId),
+    bodyMeasurements: (requestId: string, start: string, end: string): Promise<BodyMeasurementsResult> =>
+      invokeHealth('health:body-measurements', [start, end], requestId),
+    devices: (requestId: string, force?: boolean): Promise<PairedDevice[]> =>
+      invokeHealth('health:devices', [force], requestId),
+    cancel: (requestId: string): Promise<void> => ipcRenderer.invoke('health:cancel', requestId),
     refresh: (): Promise<void> => ipcRenderer.invoke('health:refresh'),
     onActivity: (callback: (activity: SyncActivity) => void): (() => void) => {
       const listener = (_: unknown, activity: SyncActivity): void => callback(activity)

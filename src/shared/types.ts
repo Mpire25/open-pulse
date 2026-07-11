@@ -139,6 +139,8 @@ export interface IntradaySnapshot {
   currentHeartRate: number | null // only set when date is today
 }
 
+export type IntradayScope = 'steps' | 'heart' | 'both'
+
 export const ACTIVITY_INTRADAY_METRICS = [
   'distanceKm',
   'caloriesOut',
@@ -179,6 +181,7 @@ export const HEART_DETAIL_METRICS = [
 ] as const satisfies readonly MetricKey[]
 
 export type HeartDetailMetric = (typeof HEART_DETAIL_METRICS)[number]
+export type HeartDetailScope = 'thresholds' | 'full'
 
 export function isHeartDetailMetric(value: string): value is HeartDetailMetric {
   return HEART_DETAIL_METRICS.some((metric) => metric === value)

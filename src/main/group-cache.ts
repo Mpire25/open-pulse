@@ -1,4 +1,5 @@
 import type { DayValues, MetricKey } from '../shared/types'
+import { shiftIsoDate } from './health-api'
 
 export const PARTIAL_FETCH_RETRY_MS = 5 * 60_000
 
@@ -25,4 +26,24 @@ export function valuesToMerge(
     if (complete || value != null) values[metric] = value ?? null
   }
   return values
+}
+
+export interface DateSpan {
+  start: string
+  end: string
+  dates: string[]
+}
+
+export function contiguousDateSpans(dates: string[]): DateSpan[] {
+  const spans: DateSpan[] = []
+  for (const date of dates) {
+    const current = spans.at(-1)
+    if (current && date === shiftIsoDate(current.end, 1)) {
+      current.end = date
+      current.dates.push(date)
+    } else {
+      spans.push({ start: date, end: date, dates: [date] })
+    }
+  }
+  return spans
 }

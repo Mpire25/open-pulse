@@ -96,7 +96,7 @@ function ActivityGoalRing({
 export function ActivityView({ date, goals, onOpenMetric, onOpenWorkout }: ActivityViewProps): React.JSX.Element {
   const { start, end } = rangeEnding(date, 7)
   const series = useSeries(ACTIVITY_METRICS, start, end)
-  const intraday = useIntraday(date)
+  const intraday = useIntraday(date, true, 'steps')
   const workouts = useWorkouts(date, date)
 
   if (series.isError) {

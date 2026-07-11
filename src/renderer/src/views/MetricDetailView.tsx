@@ -78,7 +78,8 @@ export function MetricDetailView({
   const wantsActivityIntraday = range === 'D' && activityMetric != null
   const heartMetric = isHeartDetailMetric(metricKey) ? metricKey : null
   const wantsHeartDetail = range === 'D' && heartMetric != null
-  const intraday = useIntraday(date, wantsIntraday)
+  const intradayScope = metricKey === 'steps' ? 'steps' : 'heart'
+  const intraday = useIntraday(date, wantsIntraday, intradayScope)
   const activityIntraday = useActivityIntraday(date, activityMetric ?? 'distanceKm', wantsActivityIntraday)
   const heartDetail = useHeartDetail(date, heartMetric ?? 'restingHeartRate', wantsHeartDetail)
 

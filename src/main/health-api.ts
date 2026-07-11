@@ -32,6 +32,9 @@ interface Waiter {
   priority: Priority
   seq: number
   resolve: () => void
+  reject: (error: Error) => void
+  signal?: AbortSignal
+  onAbort?: () => void
 }
 
 let seq = 0
@@ -39,9 +42,38 @@ let nextSlotAt = 0
 let slotTimer: NodeJS.Timeout | null = null
 const waiters: Waiter[] = []
 
-function acquireSlot(priority: Priority): Promise<void> {
-  return new Promise((resolve) => {
-    waiters.push({ priority, seq: seq++, resolve })
+function abortError(): Error {
+  return new DOMException('The request was cancelled.', 'AbortError')
+}
+
+function waitFor(delay: number, signal?: AbortSignal | null): Promise<void> {
+  if (signal?.aborted) return Promise.reject(abortError())
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      signal?.removeEventListener('abort', onAbort)
+      resolve()
+    }, delay)
+    const onAbort = (): void => {
+      clearTimeout(timer)
+      reject(abortError())
+    }
+    signal?.addEventListener('abort', onAbort, { once: true })
+  })
+}
+
+function acquireSlot(priority: Priority, signal?: AbortSignal): Promise<void> {
+  if (signal?.aborted) return Promise.reject(abortError())
+  return new Promise((resolve, reject) => {
+    const waiter: Waiter = { priority, seq: seq++, resolve, reject, signal }
+    if (signal) {
+      waiter.onAbort = () => {
+        const index = waiters.indexOf(waiter)
+        if (index >= 0) waiters.splice(index, 1)
+        reject(abortError())
+      }
+      signal.addEventListener('abort', waiter.onAbort, { once: true })
+    }
+    waiters.push(waiter)
     waiters.sort((a, b) => a.priority - b.priority || a.seq - b.seq)
     pumpQueue()
   })
@@ -54,6 +86,7 @@ function pumpQueue(): void {
       slotTimer = null
       const next = waiters.shift()
       if (!next) return
+      if (next.signal && next.onAbort) next.signal.removeEventListener('abort', next.onAbort)
       nextSlotAt = Date.now() + SPACING_MS
       next.resolve()
       pumpQueue()
@@ -84,7 +117,7 @@ async function requestResponse(
   bumpPending(1)
   try {
     for (let retry = 0; ; retry++) {
-      await acquireSlot(priority)
+      await acquireSlot(priority, init?.signal ?? undefined)
       const resp = await fetch(`${BASE}${path}`, {
         ...init,
         headers: {
@@ -99,7 +132,7 @@ async function requestResponse(
           Number.isFinite(retryAfter) && retryAfter > 0
             ? Math.min(30_000, retryAfter * 1000)
             : Math.min(30_000, 1100 * 2 ** retry)
-        await new Promise((r) => setTimeout(r, delay))
+        await waitFor(delay, init?.signal)
         continue
       }
       if (!resp.ok) {
@@ -115,11 +148,6 @@ async function requestResponse(
 async function request<T>(token: string, path: string, init?: RequestInit, priority: Priority = 1): Promise<T> {
   const response = await requestResponse(token, path, init, priority)
   return (await response.json()) as T
-}
-
-async function requestText(token: string, path: string, priority: Priority = 1): Promise<string> {
-  const response = await requestResponse(token, path, undefined, priority)
-  return response.text()
 }
 
 // ---------------------------------------------------------------------------
@@ -189,6 +217,53 @@ function maxRollupRangeDays(dataType: string): number {
   return SHORT_ROLLUP_DATA_TYPES.has(dataType) ? 14 : 90
 }
 
+const ROLLUP_VALUE_FIELDS: Record<string, string> = {
+  steps: 'steps/countSum',
+  'total-calories': 'totalCalories/kcalSum',
+  distance: 'distance/millimetersSum',
+  floors: 'floors/countSum',
+  'active-minutes': 'activeMinutes/activeMinutesRollupByActivityLevel',
+  'active-zone-minutes': 'activeZoneMinutes',
+  'sedentary-period': 'sedentaryPeriod/durationSum',
+  weight: 'weight/weightGramsAvg',
+  'body-fat': 'bodyFat/bodyFatPercentageAvg',
+  'hydration-log': 'hydrationLog/amountConsumed/millilitersSum',
+  'nutrition-log': 'nutritionLog',
+  'time-in-heart-rate-zone': 'timeInHeartRateZone/timeInHeartRateZones',
+  'calories-in-heart-rate-zone': 'caloriesInHeartRateZone/caloriesInHeartRateZones',
+  'active-energy-burned': 'activeEnergyBurned/kcalSum'
+}
+
+const DATA_POINT_FIELDS: Record<string, string> = {
+  steps: 'steps',
+  'heart-rate': 'heartRate',
+  sleep: 'sleep',
+  exercise: 'dataPointName,exercise',
+  'daily-resting-heart-rate': 'dailyRestingHeartRate',
+  'daily-heart-rate-variability': 'dailyHeartRateVariability',
+  'daily-oxygen-saturation': 'dailyOxygenSaturation',
+  'daily-respiratory-rate': 'dailyRespiratoryRate',
+  'daily-sleep-temperature-derivations': 'dailySleepTemperatureDerivations',
+  'daily-heart-rate-zones': 'dailyHeartRateZones'
+}
+
+const RAW_DATA_POINT_FIELDS: Record<string, string> = {
+  'nutrition-log': 'name,nutritionLog',
+  weight: 'name,weight',
+  height: 'height'
+}
+
+function responseFieldsFor(fieldsByDataType: Record<string, string>, dataType: string): string {
+  const fields = fieldsByDataType[dataType]
+  if (!fields) throw new Error(`No Google Health response field projection configured for ${dataType}`)
+  return fields
+}
+
+function withFields(path: string, fields: string): string {
+  const separator = path.includes('?') ? '&' : '?'
+  return `${path}${separator}${new URLSearchParams({ fields })}`
+}
+
 /**
  * Daily rollup for a data type over a closed civil date range
  * (`startDate`..`endDateExclusive`, YYYY-MM-DD).
@@ -198,35 +273,43 @@ export async function dailyRollUp(
   dataType: string,
   startDate: string,
   endDateExclusive: string,
-  priority: Priority = 1
+  priority: Priority = 1,
+  signal?: AbortSignal
 ): Promise<RollupPoint[]> {
-  const points: RollupPoint[] = []
   const maxDays = maxRollupRangeDays(dataType)
+  const chunks: Array<{ start: string; endExclusive: string }> = []
 
   // The API rejects rollup ranges longer than 90 days (14 for a few data
   // types), even when the user has less data than that in the interval.
   for (let chunkStart = startDate; chunkStart < endDateExclusive; ) {
     const candidateEnd = shiftIsoDate(chunkStart, maxDays)
     const chunkEndExclusive = candidateEnd < endDateExclusive ? candidateEnd : endDateExclusive
+    chunks.push({ start: chunkStart, endExclusive: chunkEndExclusive })
+    chunkStart = chunkEndExclusive
+  }
+
+  const results = await Promise.all(chunks.map(async (chunk) => {
     const body = {
       range: {
-        start: civilDateTime(chunkStart),
-        end: civilDateTime(shiftIsoDate(chunkEndExclusive, -1), true)
+        start: civilDateTime(chunk.start),
+        end: civilDateTime(shiftIsoDate(chunk.endExclusive, -1), true)
       },
       windowSizeDays: 1,
       pageSize: maxDays
     }
     const json = await request<{ rollupDataPoints?: RollupPoint[] }>(
       token,
-      `/users/me/dataTypes/${dataType}/dataPoints:dailyRollUp`,
-      { method: 'POST', body: JSON.stringify(body) },
+      withFields(
+        `/users/me/dataTypes/${dataType}/dataPoints:dailyRollUp`,
+        `rollupDataPoints(civilStartTime,${responseFieldsFor(ROLLUP_VALUE_FIELDS, dataType)})`
+      ),
+      { method: 'POST', body: JSON.stringify(body), signal },
       priority
     )
-    points.push(...(json.rollupDataPoints ?? []))
-    chunkStart = chunkEndExclusive
-  }
+    return json.rollupDataPoints ?? []
+  }))
 
-  return points
+  return results.flat()
 }
 
 /**
@@ -241,7 +324,8 @@ export async function physicalRollUp(
   endTime: string,
   windowSeconds: number,
   dataSourceFamily: 'all-sources' | 'google-wearables' = 'all-sources',
-  priority: Priority = 1
+  priority: Priority = 1,
+  signal?: AbortSignal
 ): Promise<RollupPoint[]> {
   const points: RollupPoint[] = []
   const pageSize = Math.min(10_000, Math.ceil((Date.parse(endTime) - Date.parse(startTime)) / (windowSeconds * 1000)))
@@ -257,8 +341,11 @@ export async function physicalRollUp(
     }
     const json = await request<{ rollupDataPoints?: RollupPoint[]; nextPageToken?: string }>(
       token,
-      `/users/me/dataTypes/${dataType}/dataPoints:rollUp`,
-      { method: 'POST', body: JSON.stringify(body) },
+      withFields(
+        `/users/me/dataTypes/${dataType}/dataPoints:rollUp`,
+        `nextPageToken,rollupDataPoints(startTime,${responseFieldsFor(ROLLUP_VALUE_FIELDS, dataType)})`
+      ),
+      { method: 'POST', body: JSON.stringify(body), signal },
       priority
     )
     points.push(...(json.rollupDataPoints ?? []))
@@ -276,14 +363,20 @@ export interface RawDataPoint {
 
 /** Export a recorded exercise as TCX. Partial data keeps non-GPS trackpoints
  * available for exercises where only heart rate or altitude was recorded. */
-export async function exportExerciseTcx(token: string, workoutName: string): Promise<string> {
+export async function exportExerciseTcx(token: string, workoutName: string, signal?: AbortSignal): Promise<string> {
   const fullName = workoutName.startsWith('users/')
     ? workoutName
     : `users/me/dataTypes/exercise/dataPoints/${encodeURIComponent(workoutName)}`
   if (!/^users\/[^/]+\/dataTypes\/exercise\/dataPoints\/[^/?#:]+$/.test(fullName)) {
     throw new HealthApiError(400, 'Invalid exercise resource name')
   }
-  return requestText(token, `/${fullName}:exportExerciseTcx?alt=media&partialData=true`, 0)
+  const response = await requestResponse(
+    token,
+    `/${fullName}:exportExerciseTcx?alt=media&partialData=true`,
+    { signal },
+    0
+  )
+  return response.text()
 }
 
 /** How a data type's points are keyed, which decides the AIP-160 filter shape. */
@@ -315,12 +408,15 @@ export async function listData(
   startDate: string,
   endDateExclusive: string,
   dataSourceFamily: 'all-sources' | 'google-wearables' = 'all-sources',
-  priority: Priority = 1
+  priority: Priority = 1,
+  signal?: AbortSignal,
+  responseFields?: string
 ): Promise<RawDataPoint[]> {
   const params = new URLSearchParams({
     filter: dataFilter(dataType, kind, startDate, endDateExclusive),
     pageSize: kind === 'sleep' || kind === 'session' ? '25' : '10000',
-    dataSourceFamily: `users/me/dataSourceFamilies/${dataSourceFamily}`
+    dataSourceFamily: `users/me/dataSourceFamilies/${dataSourceFamily}`,
+    fields: `nextPageToken,dataPoints(${responseFields ?? responseFieldsFor(DATA_POINT_FIELDS, dataType)})`
   })
   const points: RawDataPoint[] = []
   let pageToken = ''
@@ -330,7 +426,7 @@ export async function listData(
     const json = await request<{ dataPoints?: RawDataPoint[]; nextPageToken?: string }>(
       token,
       `/users/me/dataTypes/${dataType}/dataPoints:reconcile?${params}`,
-      undefined,
+      { signal },
       priority
     )
     points.push(...(json.dataPoints ?? []))
@@ -351,11 +447,14 @@ export async function listRawData(
   kind: RecordKind,
   startDate: string,
   endDateExclusive: string,
-  priority: Priority = 1
+  priority: Priority = 1,
+  signal?: AbortSignal,
+  responseFields?: string
 ): Promise<RawDataPoint[]> {
   const params = new URLSearchParams({
     filter: dataFilter(dataType, kind, startDate, endDateExclusive),
-    pageSize: kind === 'sleep' || kind === 'session' ? '25' : '10000'
+    pageSize: kind === 'sleep' || kind === 'session' ? '25' : '10000',
+    fields: `nextPageToken,dataPoints(${responseFields ?? responseFieldsFor(RAW_DATA_POINT_FIELDS, dataType)})`
   })
   const points: RawDataPoint[] = []
   let pageToken = ''
@@ -365,7 +464,7 @@ export async function listRawData(
     const json = await request<{ dataPoints?: RawDataPoint[]; nextPageToken?: string }>(
       token,
       `/users/me/dataTypes/${dataType}/dataPoints?${params}`,
-      undefined,
+      { signal },
       priority
     )
     points.push(...(json.dataPoints ?? []))
@@ -389,16 +488,12 @@ export interface ApiPairedDevice {
   [key: string]: unknown
 }
 
-export async function listPairedDevices(token: string): Promise<ApiPairedDevice[]> {
+export async function listPairedDevices(token: string, signal?: AbortSignal): Promise<ApiPairedDevice[]> {
   const json = await request<{ pairedDevices?: ApiPairedDevice[] }>(
     token,
-    '/users/me/pairedDevices?pageSize=100',
-    undefined,
+    '/users/me/pairedDevices?pageSize=100&fields=pairedDevices(deviceType,batteryStatus,batteryLevel,lastSyncTime,deviceVersion,features)',
+    { signal },
     0
   )
   return json.pairedDevices ?? []
-}
-
-export async function getProfile(token: string): Promise<Record<string, unknown>> {
-  return request(token, '/users/me/profile')
 }

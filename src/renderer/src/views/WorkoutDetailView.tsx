@@ -38,9 +38,9 @@ interface DetailItem {
 
 export function WorkoutDetailView({ workout, date, onBack }: WorkoutDetailViewProps): React.JSX.Element {
   const [showHeartRateZones, setShowHeartRateZones] = useState(false)
-  const intraday = useIntraday(date)
+  const intraday = useIntraday(date, true, 'heart')
   const track = useWorkoutTrack(workout.id, workout.hasGps !== false)
-  const heartZoneDetail = useHeartDetail(date, 'restingHeartRate', workout.heartRateZones != null)
+  const heartZoneDetail = useHeartDetail(date, 'restingHeartRate', workout.heartRateZones != null, 'thresholds')
   const elapsedMinutes = workout.elapsedDurationMin ?? workout.durationMin
   const startDate = new Date(workout.startTime)
   const startMinute = workout.startMinute ?? startDate.getHours() * 60 + startDate.getMinutes()

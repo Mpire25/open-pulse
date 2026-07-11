@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import { motion } from 'framer-motion'
 import {
-  ArrowClockwise,
   BatteryFull,
   BatteryLow,
   BatteryMedium,
@@ -15,7 +14,6 @@ import {
   Scales,
   type Icon
 } from '@phosphor-icons/react'
-import { useQueryClient } from '@tanstack/react-query'
 import { Panel, SectionHeader } from '@/components/Panel'
 import { CARD_HEIGHT, SkeletonBlock, SkeletonText } from '@/components/Skeleton'
 import { useDevices, useSeries } from '@/hooks/useHealth'
@@ -44,7 +42,6 @@ interface DevicesViewProps {
 
 export function DevicesView({ connected }: DevicesViewProps): React.JSX.Element {
   const devices = useDevices()
-  const queryClient = useQueryClient()
   const today = isoToday()
   const { start, end } = rangeEnding(today, 7)
   const series = useSeries(COVERAGE_KEYS, start, end)
@@ -64,12 +61,6 @@ export function DevicesView({ connected }: DevicesViewProps): React.JSX.Element 
           <h1 className="display text-[27px] font-bold text-ink">Devices</h1>
           <p className="mt-1 text-[13px] text-ink-dim">Your tracker and what it’s delivering.</p>
         </div>
-        <button
-          onClick={() => void queryClient.invalidateQueries({ queryKey: ['devices'] })}
-          className="no-drag flex h-8 items-center gap-1.5 rounded-lg border border-hairline px-3 text-[12px] font-medium text-ink-dim transition-colors hover:bg-white/[0.05] hover:text-ink"
-        >
-          <ArrowClockwise size={13} weight="bold" /> Refresh
-        </button>
       </motion.header>
 
       <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-[1.1fr_1fr]">

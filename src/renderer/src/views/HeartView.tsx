@@ -23,7 +23,7 @@ interface HeartViewProps {
 export function HeartView({ date, onOpenMetric }: HeartViewProps): React.JSX.Element {
   const { start, end } = rangeEnding(date, 7)
   const series = useSeries(VITAL_KEYS, start, end)
-  const intraday = useIntraday(date)
+  const intraday = useIntraday(date, true, 'heart')
 
   if (series.isError) {
     return <ErrorState message={series.error instanceof Error ? series.error.message : undefined} onRetry={() => void series.refetch()} />

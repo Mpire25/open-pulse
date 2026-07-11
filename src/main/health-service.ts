@@ -17,8 +17,10 @@ import type {
   HeartRatePoint,
   HeartDetailMetric,
   HeartDetailResult,
+  HeartDetailScope,
   HourlySteps,
   IntradaySnapshot,
+  IntradayScope,
   MetricKey,
   NutritionLogsResult,
   PairedDevice,
@@ -63,6 +65,7 @@ import {
   wipeArchive
 } from './metric-store'
 import {
+  contiguousDateSpans,
   isPartialFetchCoolingDown,
   partialFetchGroupId,
   valuesToMerge
@@ -82,15 +85,24 @@ import {
 import { activityRollupBreakdown, activityRollupPoints, calorieEnergyBreakdown } from './activity-intraday'
 import {
   bmiFrom,
+  NUTRITION_DAY_METRICS,
+  nutritionFallbackDates,
+  nutritionLogDate,
   parseBodyMeasurements,
   parseLatestHeight,
   parseNutritionLogs,
   parseNutritionLogTotals
 } from './body-nutrition-detail'
 import { parseHeartZones } from './heart-detail'
-import { mapSleep, mapSleepRespiratory, type MappedRespiratorySummary } from './sleep-detail'
+import { mapSleep } from './sleep-detail'
 import { nutrientGrams, nutrientMineralGrams } from './nutrition'
 import { parseExerciseTcx } from './tcx'
+import {
+  abortSharedOperations,
+  createSharedOperation,
+  waitForSharedOperation,
+  type SharedOperation
+} from './shared-operation'
 
 let healthAccountGeneration = 0
 
@@ -99,6 +111,10 @@ class HealthAccountChangedError extends Error {
     super('The connected Google account changed while this health request was running.')
     this.name = 'HealthAccountChangedError'
   }
+}
+
+function rethrowIfAborted(error: unknown): void {
+  if (error instanceof DOMException && error.name === 'AbortError') throw error
 }
 
 function assertCurrentAccount(generation: number): void {
@@ -180,7 +196,8 @@ interface FetchGroup {
     token: string,
     start: string,
     endExclusive: string,
-    priority: Priority
+    priority: Priority,
+    signal?: AbortSignal
   ) => Promise<Map<string, DayValues> | PartialFetchResult>
 }
 
@@ -198,8 +215,8 @@ function rollupGroup(
   return {
     id,
     metrics,
-    fetch: async (token, start, endExclusive, priority) => {
-      const points = await dailyRollUp(token, dataType, start, endExclusive, priority)
+    fetch: async (token, start, endExclusive, priority, signal) => {
+      const points = await dailyRollUp(token, dataType, start, endExclusive, priority, signal)
       const map = new Map<string, DayValues>()
       for (const p of points) {
         const date = dateFromCivil(p.civilStartTime)
@@ -210,18 +227,202 @@ function rollupGroup(
   }
 }
 
-async function listNutritionRawData(
+async function fetchNutritionRawData(
   token: string,
   start: string,
   endExclusive: string,
-  priority: Priority
+  priority: Priority,
+  signal?: AbortSignal
 ): Promise<RawDataPoint[]> {
   try {
-    return await listRawData(token, 'nutrition-log', 'session', start, endExclusive, priority)
+    return await listRawData(token, 'nutrition-log', 'session', start, endExclusive, priority, signal)
   } catch (error) {
     if (!(error instanceof HealthApiError) || error.status !== 400) throw error
-    return listRawData(token, 'nutrition-log', 'sample', start, endExclusive, priority)
+    return listRawData(token, 'nutrition-log', 'sample', start, endExclusive, priority, signal)
   }
+}
+
+interface RawDayCacheEntry {
+  points: RawDataPoint[]
+  fetchedAt: number
+}
+
+const nutritionRawCache = new Map<string, RawDayCacheEntry>()
+const nutritionRawInFlight = new Map<string, SharedOperation<void>>()
+const weightRawCache = new Map<string, RawDayCacheEntry>()
+const weightRawInFlight = new Map<string, SharedOperation<void>>()
+const heartThresholdRawCache = new Map<string, RawDayCacheEntry>()
+const heartThresholdRawInFlight = new Map<string, SharedOperation<void>>()
+
+function rawDayFresh(entry: RawDayCacheEntry | undefined, date: string, now = Date.now()): boolean {
+  if (!entry) return false
+  const today = todayIso()
+  if (date >= today) return now - entry.fetchedAt < TTL_TODAY_MS
+  if (date >= shiftIsoDate(today, -2)) return now - entry.fetchedAt < TTL_RECENT_MS
+  return true
+}
+
+function rawSampleDate(point: RawDataPoint, key: 'weight'): string | null {
+  const value = point[key] as
+    | { sampleTime?: { civilTime?: CivilDateTime; physicalTime?: string } }
+    | undefined
+  return dateFromCivil(value?.sampleTime?.civilTime)
+    ?? (value?.sampleTime?.physicalTime?.slice(0, 10) || null)
+}
+
+function dailyHeartZoneDate(point: RawDataPoint): string | null {
+  const value = point.dailyHeartRateZones as { date?: CivilDateTime } | undefined
+  return dateFromCivil(value?.date)
+}
+
+async function cachedRawRange(
+  cache: Map<string, RawDayCacheEntry>,
+  inFlightByDate: Map<string, SharedOperation<void>>,
+  start: string,
+  endExclusive: string,
+  fetchRange: (start: string, endExclusive: string, signal: AbortSignal) => Promise<RawDataPoint[]>,
+  dateOf: (point: RawDataPoint) => string | null,
+  generation: number,
+  signal?: AbortSignal
+): Promise<RawDataPoint[]> {
+  const end = shiftIsoDate(endExclusive, -1)
+  const dates = listDates(start, end)
+  const waits = new Set<SharedOperation<void>>()
+  const uncovered = dates.filter((date) => {
+    if (rawDayFresh(cache.get(date), date)) return false
+    const pending = inFlightByDate.get(date)
+    if (pending && !pending.controller.signal.aborted) {
+      waits.add(pending)
+      return false
+    }
+    if (pending) inFlightByDate.delete(date)
+    return true
+  })
+
+  for (const span of contiguousDateSpans(uncovered)) {
+    const spanEndExclusive = shiftIsoDate(span.end, 1)
+    const operation = createSharedOperation(async (sharedSignal) => {
+      const points = await fetchRange(span.start, spanEndExclusive, sharedSignal)
+      assertCurrentAccount(generation)
+      const byDate = new Map<string, RawDataPoint[]>()
+      for (const point of points) {
+        const date = dateOf(point)
+        if (!date) continue
+        const values = byDate.get(date) ?? []
+        values.push(point)
+        byDate.set(date, values)
+      }
+      const fetchedAt = Date.now()
+      for (const date of span.dates) cache.set(date, { points: byDate.get(date) ?? [], fetchedAt })
+    })
+    const cleanup = (): void => {
+      for (const date of span.dates) {
+        if (inFlightByDate.get(date) === operation) inFlightByDate.delete(date)
+      }
+    }
+    operation.promise.then(cleanup, cleanup)
+    for (const date of span.dates) inFlightByDate.set(date, operation)
+    waits.add(operation)
+  }
+
+  await Promise.all([...waits].map((operation) => waitForSharedOperation(operation, signal)))
+  return dates.flatMap((date) => cache.get(date)?.points ?? [])
+}
+
+function nutritionRawRange(
+  token: string,
+  start: string,
+  endExclusive: string,
+  priority: Priority,
+  signal?: AbortSignal
+): Promise<RawDataPoint[]> {
+  const generation = healthAccountGeneration
+  return cachedRawRange(
+    nutritionRawCache,
+    nutritionRawInFlight,
+    start,
+    endExclusive,
+    (rangeStart, rangeEnd, sharedSignal) =>
+      fetchNutritionRawData(token, rangeStart, rangeEnd, priority, sharedSignal),
+    nutritionLogDate,
+    generation,
+    signal
+  )
+}
+
+function weightRawRange(
+  token: string,
+  start: string,
+  endExclusive: string,
+  priority: Priority,
+  signal?: AbortSignal
+): Promise<RawDataPoint[]> {
+  const generation = healthAccountGeneration
+  return cachedRawRange(
+    weightRawCache,
+    weightRawInFlight,
+    start,
+    endExclusive,
+    (rangeStart, rangeEnd, sharedSignal) =>
+      listRawData(token, 'weight', 'sample', rangeStart, rangeEnd, priority, sharedSignal),
+    (point) => rawSampleDate(point, 'weight'),
+    generation,
+    signal
+  )
+}
+
+function heartThresholdRawRange(
+  token: string,
+  start: string,
+  endExclusive: string,
+  priority: Priority,
+  signal?: AbortSignal
+): Promise<RawDataPoint[]> {
+  const generation = healthAccountGeneration
+  return cachedRawRange(
+    heartThresholdRawCache,
+    heartThresholdRawInFlight,
+    start,
+    endExclusive,
+    (rangeStart, rangeEnd, sharedSignal) =>
+      listData(token, 'daily-heart-rate-zones', 'daily', rangeStart, rangeEnd, 'all-sources', priority, sharedSignal),
+    dailyHeartZoneDate,
+    generation,
+    signal
+  )
+}
+
+let heightCache: { generation: number; value: number | null } | null = null
+let heightInFlight: SharedOperation<number | null> | null = null
+
+async function getLatestHeight(token: string, priority: Priority, signal?: AbortSignal): Promise<number | null> {
+  if (heightCache?.generation === healthAccountGeneration) return heightCache.value
+  if (heightInFlight && !heightInFlight.controller.signal.aborted) {
+    return waitForSharedOperation(heightInFlight, signal)
+  }
+  heightInFlight = null
+  const generation = healthAccountGeneration
+  const operation = createSharedOperation(async (sharedSignal) => {
+    const points = await listRawData(
+      token,
+      'height',
+      'sample',
+      '2000-01-01',
+      shiftIsoDate(todayIso(), 1),
+      priority,
+      sharedSignal
+    )
+      assertCurrentAccount(generation)
+      const value = parseLatestHeight(points)
+      heightCache = { generation, value }
+      return value
+  })
+  const cleanup = (): void => {
+    if (heightInFlight === operation) heightInFlight = null
+  }
+  operation.promise.then(cleanup, cleanup)
+  heightInFlight = operation
+  return waitForSharedOperation(operation, signal)
 }
 
 function dailyRecordGroup(
@@ -234,8 +435,8 @@ function dailyRecordGroup(
   return {
     id,
     metrics,
-    fetch: async (token, start, endExclusive, priority) => {
-      const points = await listData(token, dataType, 'daily', start, endExclusive, 'all-sources', priority)
+    fetch: async (token, start, endExclusive, priority, signal) => {
+      const points = await listData(token, dataType, 'daily', start, endExclusive, 'all-sources', priority, signal)
       const map = new Map<string, DayValues>()
       for (const p of points) {
         const record = p[recordKey] as Record<string, unknown> | undefined
@@ -288,12 +489,15 @@ const GROUPS: FetchGroup[] = [
   {
     id: 'weight-bmi-v1',
     metrics: ['weightKg', 'bmi'],
-    fetch: async (token, start, endExclusive, priority) => {
+    fetch: async (token, start, endExclusive, priority, signal) => {
       const [weightPoints, heightPoints] = await Promise.all([
-        dailyRollUp(token, 'weight', start, endExclusive, priority),
-        listRawData(token, 'height', 'sample', '2000-01-01', shiftIsoDate(todayIso(), 1), priority).catch(() => [])
+        dailyRollUp(token, 'weight', start, endExclusive, priority, signal),
+        getLatestHeight(token, priority, signal).catch((error) => {
+          rethrowIfAborted(error)
+          return null
+        })
       ])
-      const heightCm = parseLatestHeight(heightPoints)
+      const heightCm = heightPoints
       const map = new Map<string, DayValues>()
       for (const point of weightPoints) {
         const date = dateFromCivil(point.civilStartTime)
@@ -314,19 +518,11 @@ const GROUPS: FetchGroup[] = [
     )
   })),
   {
-    // Versioned so archived days refetch with raw-log nutrient fallbacks once.
-    id: 'nutrition-v6',
-    metrics: ['caloriesIn', 'proteinG', 'carbsG', 'fatG', 'fiberG', 'saturatedFatG', 'sodiumG', 'sugarG'],
-    fetch: async (token, start, endExclusive, priority) => {
-      const [points, rawResult] = await Promise.all([
-        dailyRollUp(token, 'nutrition-log', start, endExclusive, priority),
-        listNutritionRawData(token, start, endExclusive, priority)
-          .then((values) => ({ values, complete: true as const }))
-          .catch((error) => {
-            console.error(`[health] raw nutrition fallback failed for ${start}..${endExclusive}:`, error)
-            return { values: [], complete: false as const }
-          })
-      ])
+    // Versioned so archived days adopt selective raw-log fallbacks once.
+    id: 'nutrition-v7',
+    metrics: [...NUTRITION_DAY_METRICS],
+    fetch: async (token, start, endExclusive, priority, signal) => {
+      const points = await dailyRollUp(token, 'nutrition-log', start, endExclusive, priority, signal)
       const map = new Map<string, DayValues>()
       for (const p of points) {
         const date = dateFromCivil(p.civilStartTime)
@@ -348,15 +544,35 @@ const GROUPS: FetchGroup[] = [
         })
       }
 
-      for (const [date, rawValues] of parseNutritionLogTotals(rawResult.values)) {
+      let rawComplete = true
+      const rawPoints = (
+        await Promise.all(contiguousDateSpans(nutritionFallbackDates(map)).map(async (span) => {
+          try {
+            return await nutritionRawRange(
+              token,
+              span.start,
+              shiftIsoDate(span.end, 1),
+              priority,
+              signal
+            )
+          } catch (error) {
+            rethrowIfAborted(error)
+            rawComplete = false
+            console.error(`[health] raw nutrition fallback failed for ${span.start}..${span.end}:`, error)
+            return []
+          }
+        }))
+      ).flat()
+
+      for (const [date, rawValues] of parseNutritionLogTotals(rawPoints)) {
         const values = map.get(date) ?? {}
-        for (const metric of ['caloriesIn', 'proteinG', 'carbsG', 'fatG', 'fiberG', 'saturatedFatG', 'sodiumG', 'sugarG'] as const) {
+        for (const metric of NUTRITION_DAY_METRICS) {
           if (values[metric] == null && rawValues[metric] != null) values[metric] = rawValues[metric]
         }
         map.set(date, values)
       }
 
-      return rawResult.complete ? map : { values: map, complete: false }
+      return rawComplete ? map : { values: map, complete: false }
     }
   },
   dailyRecordGroup('rhr', 'daily-resting-heart-rate', 'dailyRestingHeartRate', ['restingHeartRate'], (r) => ({
@@ -406,31 +622,58 @@ async function ensureGroup(
   start: string,
   end: string,
   force: boolean,
-  generation: number
+  generation: number,
+  signal?: AbortSignal
 ): Promise<void> {
   const missing = listDates(start, end).filter((d) => force || !isFresh(group.id, d))
   if (missing.length === 0) return
-  const spanStart = missing[0]
-  const spanEnd = missing[missing.length - 1]
-  const spanDates = listDates(spanStart, spanEnd)
-  const result = await group.fetch(token, spanStart, shiftIsoDate(spanEnd, 1), spanPriority(spanDates.length))
-  assertCurrentAccount(generation)
-  const complete = result instanceof Map
-  const map = complete ? result : result.values
-  for (const date of spanDates) {
-    mergeValues(date, valuesToMerge(group.metrics, map.get(date), complete))
-  }
-  const partialGroup = partialFetchGroupId(group.id)
-  if (complete) {
-    clearFetched(partialGroup, spanDates)
-    markFetched(group.id, spanDates)
-  } else {
-    clearFetched(group.id, spanDates)
-    markFetched(partialGroup, spanDates)
-  }
+  await Promise.all(contiguousDateSpans(missing).map(async (span) => {
+    const result = await group.fetch(
+      token,
+      span.start,
+      shiftIsoDate(span.end, 1),
+      spanPriority(span.dates.length),
+      signal
+    )
+    assertCurrentAccount(generation)
+    const complete = result instanceof Map
+    const map = complete ? result : result.values
+    for (const date of span.dates) {
+      mergeValues(date, valuesToMerge(group.metrics, map.get(date), complete))
+    }
+    const partialGroup = partialFetchGroupId(group.id)
+    if (complete) {
+      clearFetched(partialGroup, span.dates)
+      markFetched(group.id, span.dates)
+    } else {
+      clearFetched(group.id, span.dates)
+      markFetched(partialGroup, span.dates)
+    }
+  }))
 }
 
-const inFlight = new Map<string, Promise<void>>()
+const inFlight = new Map<string, SharedOperation<void>>()
+
+function sharedHealthOperation(
+  key: string,
+  signal: AbortSignal | undefined,
+  run: (signal: AbortSignal) => Promise<void>
+): Promise<void> {
+  let operation = inFlight.get(key)
+  if (operation?.controller.signal.aborted) {
+    inFlight.delete(key)
+    operation = undefined
+  }
+  if (!operation) {
+    operation = createSharedOperation(run)
+    inFlight.set(key, operation)
+    const cleanup = (): void => {
+      if (inFlight.get(key) === operation) inFlight.delete(key)
+    }
+    operation.promise.then(cleanup, cleanup)
+  }
+  return waitForSharedOperation(operation, signal)
+}
 
 /** Dedupes concurrent syncs of the same group+span (several views share windows). */
 function ensureGroupOnce(
@@ -439,58 +682,24 @@ function ensureGroupOnce(
   start: string,
   end: string,
   force: boolean,
-  generation: number
+  generation: number,
+  signal?: AbortSignal
 ): Promise<void> {
   const key = `${generation}:${group.id}:${start}:${end}:${force}`
-  const pending = inFlight.get(key)
-  if (pending) return pending
-  const job = ensureGroup(token, group, start, end, force, generation).finally(() => inFlight.delete(key))
-  inFlight.set(key, job)
-  return job
+  return sharedHealthOperation(
+    key,
+    signal,
+    (sharedSignal) => ensureGroup(token, group, start, end, force, generation, sharedSignal)
+  )
 }
 
 // ---------------------------------------------------------------------------
-// Sleep sessions
+// Sleep summaries and sessions
 
-async function ensureSleepRange(
-  token: string,
-  start: string,
-  end: string,
-  force: boolean,
-  generation: number
-): Promise<void> {
-  const missing = listDates(start, end).filter((d) => force || !isFresh('sleep-v3', d))
-  if (missing.length === 0) return
-  const spanStart = missing[0]
-  const spanEnd = missing[missing.length - 1]
-  const spanDates = listDates(spanStart, spanEnd)
-  const [points, respiratoryPoints] = await Promise.all([
-    listData(
-      token,
-      'sleep',
-      'sleep',
-      spanStart,
-      shiftIsoDate(spanEnd, 1),
-      'google-wearables',
-      spanPriority(spanDates.length)
-    ),
-    listData(
-      token,
-      'respiratory-rate-sleep-summary',
-      'sample',
-      spanStart,
-      shiftIsoDate(spanEnd, 1),
-      'google-wearables',
-      spanPriority(spanDates.length)
-    ).catch((error) => {
-      console.error(`[health] sleep respiratory summary failed for ${spanStart}..${spanEnd}:`, error)
-      return []
-    })
-  ])
-  assertCurrentAccount(generation)
-  const respiratory = respiratoryPoints
-    .map(mapSleepRespiratory)
-    .filter((summary): summary is MappedRespiratorySummary => summary != null)
+const SLEEP_SUMMARY_GROUP = 'sleep-summary-v1'
+const SLEEP_DETAIL_GROUP = 'sleep-detail-v4'
+
+function sleepByDate(points: RawDataPoint[]): Map<string, SleepNight> {
   const byDate = new Map<string, SleepNight>()
   for (const point of points) {
     const night = mapSleep(point)
@@ -501,22 +710,78 @@ async function ensureSleepRange(
       if (!existing || night.isMainSleep || !existing.isMainSleep) byDate.set(night.date, night)
     }
   }
-  for (const date of spanDates) {
-    const night = byDate.get(date) ?? null
-    if (night && respiratory.length > 0) {
-      const nightEnd = Date.parse(night.endTime)
-      const nearest = respiratory.reduce((best, candidate) =>
-        Math.abs(candidate.timestamp - nightEnd) < Math.abs(best.timestamp - nightEnd) ? candidate : best
-      )
-      if (Math.abs(nearest.timestamp - nightEnd) <= 12 * 60 * 60_000) night.respiratory = nearest.summary
+  return byDate
+}
+
+async function ensureSleepSummaryRange(
+  token: string,
+  start: string,
+  end: string,
+  force: boolean,
+  generation: number,
+  signal?: AbortSignal
+): Promise<void> {
+  const missing = listDates(start, end).filter((d) => force || !isFresh(SLEEP_SUMMARY_GROUP, d))
+  if (missing.length === 0) return
+  await Promise.all(contiguousDateSpans(missing).map(async (span) => {
+    const points = await listData(
+      token,
+      'sleep',
+      'sleep',
+      span.start,
+      shiftIsoDate(span.end, 1),
+      'google-wearables',
+      spanPriority(span.dates.length),
+      signal,
+      'sleep(interval(startTime,endTime,civilEndTime),summary(minutesAsleep,minutesInSleepPeriod),metadata(nap))'
+    )
+    assertCurrentAccount(generation)
+    const byDate = sleepByDate(points)
+    for (const date of span.dates) {
+      const night = byDate.get(date)
+      mergeValues(date, {
+        sleepMinutes: night?.minutesAsleep ?? null,
+        sleepEfficiency: night?.efficiency ?? null
+      })
     }
-    setSleep(date, night)
-    mergeValues(date, {
-      sleepMinutes: night?.minutesAsleep ?? null,
-      sleepEfficiency: night?.efficiency ?? null
-    })
-  }
-  markFetched('sleep-v3', spanDates)
+    markFetched(SLEEP_SUMMARY_GROUP, span.dates)
+  }))
+}
+
+async function ensureSleepRange(
+  token: string,
+  start: string,
+  end: string,
+  force: boolean,
+  generation: number,
+  signal?: AbortSignal
+): Promise<void> {
+  const missing = listDates(start, end).filter((d) => force || !isFresh(SLEEP_DETAIL_GROUP, d))
+  if (missing.length === 0) return
+  await Promise.all(contiguousDateSpans(missing).map(async (span) => {
+    const points = await listData(
+      token,
+      'sleep',
+      'sleep',
+      span.start,
+      shiftIsoDate(span.end, 1),
+      'google-wearables',
+      spanPriority(span.dates.length),
+      signal
+    )
+    assertCurrentAccount(generation)
+    const byDate = sleepByDate(points)
+    for (const date of span.dates) {
+      const night = byDate.get(date) ?? null
+      setSleep(date, night)
+      mergeValues(date, {
+        sleepMinutes: night?.minutesAsleep ?? null,
+        sleepEfficiency: night?.efficiency ?? null
+      })
+    }
+    markFetched(SLEEP_DETAIL_GROUP, span.dates)
+    markFetched(SLEEP_SUMMARY_GROUP, span.dates)
+  }))
 }
 
 function ensureSleepOnce(
@@ -524,14 +789,31 @@ function ensureSleepOnce(
   start: string,
   end: string,
   force: boolean,
-  generation: number
+  generation: number,
+  signal?: AbortSignal
 ): Promise<void> {
-  const key = `${generation}:sleep-v3:${start}:${end}:${force}`
-  const pending = inFlight.get(key)
-  if (pending) return pending
-  const job = ensureSleepRange(token, start, end, force, generation).finally(() => inFlight.delete(key))
-  inFlight.set(key, job)
-  return job
+  const key = `${generation}:${SLEEP_DETAIL_GROUP}:${start}:${end}:${force}`
+  return sharedHealthOperation(
+    key,
+    signal,
+    (sharedSignal) => ensureSleepRange(token, start, end, force, generation, sharedSignal)
+  )
+}
+
+function ensureSleepSummaryOnce(
+  token: string,
+  start: string,
+  end: string,
+  force: boolean,
+  generation: number,
+  signal?: AbortSignal
+): Promise<void> {
+  const key = `${generation}:${SLEEP_SUMMARY_GROUP}:${start}:${end}:${force}`
+  return sharedHealthOperation(
+    key,
+    signal,
+    (sharedSignal) => ensureSleepSummaryRange(token, start, end, force, generation, sharedSignal)
+  )
 }
 
 // ---------------------------------------------------------------------------
@@ -717,42 +999,43 @@ async function ensureWorkoutsRange(
   start: string,
   end: string,
   force: boolean,
-  generation: number
+  generation: number,
+  signal?: AbortSignal
 ): Promise<void> {
   const missing = listDates(start, end).filter((d) => force || !isFresh('workouts', d))
   if (missing.length === 0) return
-  const spanStart = missing[0]
-  const spanEnd = missing[missing.length - 1]
-  const spanDates = listDates(spanStart, spanEnd)
-  const points = await listData(
-    token,
-    'exercise',
-    'session',
-    spanStart,
-    shiftIsoDate(spanEnd, 1),
-    'all-sources',
-    spanPriority(spanDates.length)
-  )
-  assertCurrentAccount(generation)
-  const byDate = new Map<string, Workout[]>()
-  for (const point of points) {
-    const workout = mapWorkout(point)
-    if (!workout) continue
-    const date = workout.startTime.slice(0, 10)
-    const list = byDate.get(date) ?? []
-    list.push(workout)
-    byDate.set(date, list)
-  }
-  for (const date of spanDates) {
-    const list = (byDate.get(date) ?? []).sort((a, b) => a.startTime.localeCompare(b.startTime))
-    setWorkouts(date, list)
-  }
-  markFetched('workouts', spanDates)
+  await Promise.all(contiguousDateSpans(missing).map(async (span) => {
+    const points = await listData(
+      token,
+      'exercise',
+      'session',
+      span.start,
+      shiftIsoDate(span.end, 1),
+      'all-sources',
+      spanPriority(span.dates.length),
+      signal
+    )
+    assertCurrentAccount(generation)
+    const byDate = new Map<string, Workout[]>()
+    for (const point of points) {
+      const workout = mapWorkout(point)
+      if (!workout) continue
+      const date = workout.startTime.slice(0, 10)
+      const list = byDate.get(date) ?? []
+      list.push(workout)
+      byDate.set(date, list)
+    }
+    for (const date of span.dates) {
+      const list = (byDate.get(date) ?? []).sort((a, b) => a.startTime.localeCompare(b.startTime))
+      setWorkouts(date, list)
+    }
+    markFetched('workouts', span.dates)
+  }))
 }
 
 const workoutTrackCache = new Map<string, WorkoutTrackResult>()
 
-export async function getWorkoutTrack(workoutId: string): Promise<WorkoutTrackResult> {
+export async function getWorkoutTrack(workoutId: string, signal?: AbortSignal): Promise<WorkoutTrackResult> {
   const generation = healthAccountGeneration
   const cached = workoutTrackCache.get(workoutId)
   if (cached) return cached
@@ -760,7 +1043,7 @@ export async function getWorkoutTrack(workoutId: string): Promise<WorkoutTrackRe
   assertCurrentAccount(generation)
   if (!token) return demoWorkoutTrack(workoutId)
   try {
-    const track = parseExerciseTcx(await exportExerciseTcx(token, workoutId))
+    const track = parseExerciseTcx(await exportExerciseTcx(token, workoutId, signal))
     assertCurrentAccount(generation)
     workoutTrackCache.set(workoutId, track)
     return track
@@ -799,9 +1082,15 @@ function physicalDayRange(date: string): { startTime: string; endTime: string; d
   }
 }
 
-async function ensureIntradaySteps(token: string, date: string, force: boolean, generation: number): Promise<void> {
+async function ensureIntradaySteps(
+  token: string,
+  date: string,
+  force: boolean,
+  generation: number,
+  signal?: AbortSignal
+): Promise<void> {
   if (!force && isFresh('intraday-steps', date)) return
-  const points = await listData(token, 'steps', 'interval', date, shiftIsoDate(date, 1), 'google-wearables', 0)
+  const points = await listData(token, 'steps', 'interval', date, shiftIsoDate(date, 1), 'google-wearables', 0, signal)
   assertCurrentAccount(generation)
   const hourly = new Array(24).fill(0) as number[]
   let saw = false
@@ -822,9 +1111,15 @@ async function ensureIntradaySteps(token: string, date: string, force: boolean, 
   markFetched('intraday-steps', [date])
 }
 
-async function ensureIntradayHeart(token: string, date: string, force: boolean, generation: number): Promise<void> {
+async function ensureIntradayHeart(
+  token: string,
+  date: string,
+  force: boolean,
+  generation: number,
+  signal?: AbortSignal
+): Promise<void> {
   if (!force && isFresh('intraday-heart', date)) return
-  const points = await listData(token, 'heart-rate', 'sample', date, shiftIsoDate(date, 1), 'google-wearables', 0)
+  const points = await listData(token, 'heart-rate', 'sample', date, shiftIsoDate(date, 1), 'google-wearables', 0, signal)
   assertCurrentAccount(generation)
   const series: HeartRatePoint[] = points
     .map((p) => {
@@ -860,7 +1155,13 @@ async function ensureIntradayHeart(token: string, date: string, force: boolean, 
 // ---------------------------------------------------------------------------
 // Public queries
 
-export async function getSeries(metrics: MetricKey[], start: string, end: string, force = false): Promise<SeriesResult> {
+export async function getSeries(
+  metrics: MetricKey[],
+  start: string,
+  end: string,
+  force = false,
+  signal?: AbortSignal
+): Promise<SeriesResult> {
   const generation = healthAccountGeneration
   const [s, e] = normalizeRange(start, end)
   const token = await getGoogleAccessToken()
@@ -869,14 +1170,16 @@ export async function getSeries(metrics: MetricKey[], start: string, end: string
 
   const groups = [...new Set(metrics.map((m) => GROUP_BY_METRIC.get(m)).filter((g): g is FetchGroup => g != null))]
   const jobs: Array<Promise<unknown>> = groups.map((group) =>
-    ensureGroupOnce(token, group, s, e, force, generation).catch((err) => {
+    ensureGroupOnce(token, group, s, e, force, generation, signal).catch((err) => {
+      rethrowIfAborted(err)
       console.error(`[health] ${group.id} failed for ${s}..${e}:`, err)
       return 'failed'
     })
   )
   if (metrics.some((m) => SLEEP_METRICS.includes(m))) {
     jobs.push(
-      ensureSleepOnce(token, s, e, force, generation).catch((err) => {
+      ensureSleepSummaryOnce(token, s, e, force, generation, signal).catch((err) => {
+        rethrowIfAborted(err)
         console.error(`[health] sleep failed for ${s}..${e}:`, err)
         return 'failed'
       })
@@ -900,15 +1203,21 @@ export async function getSeries(metrics: MetricKey[], start: string, end: string
   return { source: 'live', start: s, end: e, days }
 }
 
-export async function getSleepRange(start: string, end: string, force = false): Promise<SleepRangeResult> {
+export async function getSleepRange(
+  start: string,
+  end: string,
+  force = false,
+  signal?: AbortSignal
+): Promise<SleepRangeResult> {
   const generation = healthAccountGeneration
   const [s, e] = normalizeRange(start, end)
   const token = await getGoogleAccessToken()
   assertCurrentAccount(generation)
   if (!token) return { source: 'demo', nights: demoSleepRange(s, e) }
   try {
-    await ensureSleepOnce(token, s, e, force, generation)
+    await ensureSleepOnce(token, s, e, force, generation, signal)
   } catch (err) {
+    rethrowIfAborted(err)
     console.error(`[health] sleep range failed for ${s}..${e}:`, err)
   }
   assertCurrentAccount(generation)
@@ -918,15 +1227,21 @@ export async function getSleepRange(start: string, end: string, force = false): 
   return { source: 'live', nights }
 }
 
-export async function getWorkoutsRange(start: string, end: string, force = false): Promise<WorkoutsResult> {
+export async function getWorkoutsRange(
+  start: string,
+  end: string,
+  force = false,
+  signal?: AbortSignal
+): Promise<WorkoutsResult> {
   const generation = healthAccountGeneration
   const [s, e] = normalizeRange(start, end)
   const token = await getGoogleAccessToken()
   assertCurrentAccount(generation)
   if (!token) return { source: 'demo', workouts: demoWorkoutsRange(s, e) }
   try {
-    await ensureWorkoutsRange(token, s, e, force, generation)
+    await ensureWorkoutsRange(token, s, e, force, generation, signal)
   } catch (err) {
+    rethrowIfAborted(err)
     console.error(`[health] workouts failed for ${s}..${e}:`, err)
   }
   assertCurrentAccount(generation)
@@ -934,27 +1249,38 @@ export async function getWorkoutsRange(start: string, end: string, force = false
   return { source: 'live', workouts }
 }
 
-export async function getIntraday(date: string, force = false): Promise<IntradaySnapshot> {
+export async function getIntraday(
+  date: string,
+  force = false,
+  signal?: AbortSignal,
+  scope: IntradayScope = 'both'
+): Promise<IntradaySnapshot> {
   const generation = healthAccountGeneration
   const [d] = normalizeRange(date, date)
   const token = await getGoogleAccessToken()
   assertCurrentAccount(generation)
   if (!token) return demoIntraday(d)
-  await Promise.all([
-    ensureIntradaySteps(token, d, force, generation).catch((err) =>
+  const jobs: Array<Promise<void>> = []
+  if (scope === 'steps' || scope === 'both') {
+    jobs.push(ensureIntradaySteps(token, d, force, generation, signal).catch((err) => {
+      rethrowIfAborted(err)
       console.error(`[health] intraday steps failed for ${d}:`, err)
-    ),
-    ensureIntradayHeart(token, d, force, generation).catch((err) =>
+    }))
+  }
+  if (scope === 'heart' || scope === 'both') {
+    jobs.push(ensureIntradayHeart(token, d, force, generation, signal).catch((err) => {
+      rethrowIfAborted(err)
       console.error(`[health] intraday heart failed for ${d}:`, err)
-    )
-  ])
+    }))
+  }
+  await Promise.all(jobs)
   assertCurrentAccount(generation)
   const record = peekDay(d)
-  const heartRate = record?.heartRate ?? []
+  const heartRate = scope === 'steps' ? [] : (record?.heartRate ?? [])
   return {
     date: d,
     source: 'live',
-    stepsHourly: record?.stepsHourly ?? [],
+    stepsHourly: scope === 'heart' ? [] : (record?.stepsHourly ?? []),
     heartRate,
     currentHeartRate: d === todayIso() ? (heartRate.at(-1)?.bpm ?? null) : null
   }
@@ -963,7 +1289,8 @@ export async function getIntraday(date: string, force = false): Promise<Intraday
 export async function getActivityIntraday(
   date: string,
   metric: ActivityIntradayMetric,
-  force = false
+  force = false,
+  signal?: AbortSignal
 ): Promise<ActivityIntradayResult> {
   const generation = healthAccountGeneration
   const [d] = normalizeRange(date, date)
@@ -986,7 +1313,8 @@ export async function getActivityIntraday(
       endTime,
       ACTIVITY_INTRADAY_WINDOW_MINUTES * 60,
       'all-sources',
-      0
+      0,
+      signal
     ),
     metric === 'caloriesOut'
       ? physicalRollUp(
@@ -996,8 +1324,10 @@ export async function getActivityIntraday(
           endTime,
           ACTIVITY_INTRADAY_WINDOW_MINUTES * 60,
           'all-sources',
-          0
+          0,
+          signal
         ).catch((error) => {
+          rethrowIfAborted(error)
           console.error(`[health] active energy breakdown failed for ${d}:`, error)
           return []
         })
@@ -1030,7 +1360,9 @@ export async function getActivityIntraday(
 export async function getHeartDetail(
   date: string,
   metric: HeartDetailMetric,
-  force = false
+  force = false,
+  signal?: AbortSignal,
+  scope: HeartDetailScope = 'full'
 ): Promise<HeartDetailResult> {
   const generation = healthAccountGeneration
   const [d] = normalizeRange(date, date)
@@ -1040,19 +1372,27 @@ export async function getHeartDetail(
 
   const group = `heart-detail-v1-${metric}`
   const cached = peekDay(d)?.heartDetails?.[metric]
-  if (!force && cached && isFresh(group, d)) return cached
+  if (!force && cached && isFresh(group, d)) {
+    return scope === 'full'
+      ? cached
+      : { ...cached, zones: cached.zones.map((zone) => ({ ...zone, durationMin: null, calories: null })) }
+  }
+
+  const dailyZones = await heartThresholdRawRange(token, d, shiftIsoDate(d, 1), 0, signal)
+  if (scope === 'thresholds') return parseHeartZones(d, dailyZones, [], [])
 
   let result: HeartDetailResult
 
   switch (metric) {
     case 'restingHeartRate': {
-      const [dailyZones, timeRollups, calorieRollups] = await Promise.all([
-        listData(token, 'daily-heart-rate-zones', 'daily', d, shiftIsoDate(d, 1), 'all-sources', 0),
-        dailyRollUp(token, 'time-in-heart-rate-zone', d, shiftIsoDate(d, 1), 0).catch((error) => {
+      const [timeRollups, calorieRollups] = await Promise.all([
+        dailyRollUp(token, 'time-in-heart-rate-zone', d, shiftIsoDate(d, 1), 0, signal).catch((error) => {
+          rethrowIfAborted(error)
           console.error(`[health] time in heart-rate zones failed for ${d}:`, error)
           return []
         }),
-        dailyRollUp(token, 'calories-in-heart-rate-zone', d, shiftIsoDate(d, 1), 0).catch((error) => {
+        dailyRollUp(token, 'calories-in-heart-rate-zone', d, shiftIsoDate(d, 1), 0, signal).catch((error) => {
+          rethrowIfAborted(error)
           console.error(`[health] calories in heart-rate zones failed for ${d}:`, error)
           return []
         })
@@ -1068,37 +1408,40 @@ export async function getHeartDetail(
   return result
 }
 
-export async function getNutritionLogs(date: string): Promise<NutritionLogsResult> {
+export async function getNutritionLogs(date: string, signal?: AbortSignal): Promise<NutritionLogsResult> {
   const generation = healthAccountGeneration
   const [d] = normalizeRange(date, date)
   const token = await getGoogleAccessToken()
   assertCurrentAccount(generation)
   if (!token) return demoNutritionLogs(d)
-  const points = await listNutritionRawData(token, d, shiftIsoDate(d, 1), 0)
+  const points = await nutritionRawRange(token, d, shiftIsoDate(d, 1), 0, signal)
   assertCurrentAccount(generation)
   return { date: d, source: 'live', entries: parseNutritionLogs(points) }
 }
 
-export async function getBodyMeasurements(start: string, end: string): Promise<BodyMeasurementsResult> {
+export async function getBodyMeasurements(
+  start: string,
+  end: string,
+  signal?: AbortSignal
+): Promise<BodyMeasurementsResult> {
   const generation = healthAccountGeneration
   const [s, e] = normalizeRange(start, end)
   const token = await getGoogleAccessToken()
   assertCurrentAccount(generation)
   if (!token) return demoBodyMeasurements(s, e)
   const [weightResult, heightResult] = await Promise.allSettled([
-    listRawData(token, 'weight', 'sample', s, shiftIsoDate(e, 1), spanPriority(listDates(s, e).length)),
+    weightRawRange(token, s, shiftIsoDate(e, 1), spanPriority(listDates(s, e).length), signal),
     // Height is a profile-like input and may have been recorded years before
     // the visible weight range. Fetch its tiny history independently.
-    listRawData(token, 'height', 'sample', '2000-01-01', shiftIsoDate(todayIso(), 1), 1)
+    getLatestHeight(token, 1, signal)
   ])
   assertCurrentAccount(generation)
   if (weightResult.status === 'rejected' && heightResult.status === 'rejected') throw weightResult.reason
   const weightPoints = weightResult.status === 'fulfilled' ? weightResult.value : []
-  const heightPoints = heightResult.status === 'fulfilled' ? heightResult.value : []
   return {
     source: 'live',
     measurements: parseBodyMeasurements(weightPoints, []),
-    heightCm: parseLatestHeight(heightPoints)
+    heightCm: heightResult.status === 'fulfilled' ? heightResult.value : null
   }
 }
 
@@ -1114,11 +1457,8 @@ interface DevicesCache {
 let devicesCache: DevicesCache | null = null
 const DEVICES_TTL_MS = 5 * 60_000
 
-export async function getDevices(force = false): Promise<PairedDevice[]> {
+export async function getDevices(force = false, signal?: AbortSignal): Promise<PairedDevice[]> {
   const generation = healthAccountGeneration
-  const token = await getGoogleAccessToken()
-  assertCurrentAccount(generation)
-  if (!token) return demoDevices()
   if (
     !force &&
     devicesCache?.generation === generation &&
@@ -1126,8 +1466,11 @@ export async function getDevices(force = false): Promise<PairedDevice[]> {
   ) {
     return devicesCache.devices
   }
+  const token = await getGoogleAccessToken()
+  assertCurrentAccount(generation)
+  if (!token) return demoDevices()
   try {
-    const devices = (await listPairedDevices(token)).map((d) => ({
+    const devices = (await listPairedDevices(token, signal)).map((d) => ({
       name: d.displayName ?? d.model ?? d.deviceVersion ?? 'Tracker',
       model: d.deviceVersion ?? d.model ?? 'Unknown model',
       type: d.deviceType ?? null,
@@ -1141,6 +1484,7 @@ export async function getDevices(force = false): Promise<PairedDevice[]> {
     return devices
   } catch (err) {
     assertCurrentAccount(generation)
+    rethrowIfAborted(err)
     console.error('[health] devices failed:', err)
     return devicesCache?.generation === generation ? devicesCache.devices : []
   }
@@ -1154,14 +1498,31 @@ export function clearHealthCache(): void {
   markAllStale()
   devicesCache = null
   workoutTrackCache.clear()
+  nutritionRawCache.clear()
+  weightRawCache.clear()
+  heartThresholdRawCache.clear()
+  heightCache = null
 }
 
 /** Account change: invalidate pending work and remove every prior-account value. */
 export function resetHealthAccount(): void {
   healthAccountGeneration += 1
+  abortSharedOperations(inFlight.values())
+  abortSharedOperations(nutritionRawInFlight.values())
+  abortSharedOperations(weightRawInFlight.values())
+  abortSharedOperations(heartThresholdRawInFlight.values())
+  if (heightInFlight) heightInFlight.controller.abort()
   inFlight.clear()
   devicesCache = null
   workoutTrackCache.clear()
+  nutritionRawCache.clear()
+  nutritionRawInFlight.clear()
+  weightRawCache.clear()
+  weightRawInFlight.clear()
+  heartThresholdRawCache.clear()
+  heartThresholdRawInFlight.clear()
+  heightCache = null
+  heightInFlight = null
   wipeArchive()
 }
 
