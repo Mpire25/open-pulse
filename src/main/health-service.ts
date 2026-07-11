@@ -102,6 +102,10 @@ class HealthAccountChangedError extends Error {
   }
 }
 
+function rethrowIfAborted(error: unknown): void {
+  if (error instanceof DOMException && error.name === 'AbortError') throw error
+}
+
 function assertCurrentAccount(generation: number): void {
   if (generation !== healthAccountGeneration) throw new HealthAccountChangedError()
 }
@@ -181,7 +185,8 @@ interface FetchGroup {
     token: string,
     start: string,
     endExclusive: string,
-    priority: Priority
+    priority: Priority,
+    signal?: AbortSignal
   ) => Promise<Map<string, DayValues> | PartialFetchResult>
 }
 
@@ -199,8 +204,8 @@ function rollupGroup(
   return {
     id,
     metrics,
-    fetch: async (token, start, endExclusive, priority) => {
-      const points = await dailyRollUp(token, dataType, start, endExclusive, priority)
+    fetch: async (token, start, endExclusive, priority, signal) => {
+      const points = await dailyRollUp(token, dataType, start, endExclusive, priority, signal)
       const map = new Map<string, DayValues>()
       for (const p of points) {
         const date = dateFromCivil(p.civilStartTime)
@@ -215,13 +220,14 @@ async function fetchNutritionRawData(
   token: string,
   start: string,
   endExclusive: string,
-  priority: Priority
+  priority: Priority,
+  signal?: AbortSignal
 ): Promise<RawDataPoint[]> {
   try {
-    return await listRawData(token, 'nutrition-log', 'session', start, endExclusive, priority)
+    return await listRawData(token, 'nutrition-log', 'session', start, endExclusive, priority, signal)
   } catch (error) {
     if (!(error instanceof HealthApiError) || error.status !== 400) throw error
-    return listRawData(token, 'nutrition-log', 'sample', start, endExclusive, priority)
+    return listRawData(token, 'nutrition-log', 'sample', start, endExclusive, priority, signal)
   }
 }
 
@@ -306,7 +312,8 @@ function nutritionRawRange(
   token: string,
   start: string,
   endExclusive: string,
-  priority: Priority
+  priority: Priority,
+  signal?: AbortSignal
 ): Promise<RawDataPoint[]> {
   const generation = healthAccountGeneration
   return cachedRawRange(
@@ -314,7 +321,7 @@ function nutritionRawRange(
     nutritionRawInFlight,
     start,
     endExclusive,
-    (rangeStart, rangeEnd) => fetchNutritionRawData(token, rangeStart, rangeEnd, priority),
+    (rangeStart, rangeEnd) => fetchNutritionRawData(token, rangeStart, rangeEnd, priority, signal),
     nutritionLogDate,
     generation
   )
@@ -324,7 +331,8 @@ function weightRawRange(
   token: string,
   start: string,
   endExclusive: string,
-  priority: Priority
+  priority: Priority,
+  signal?: AbortSignal
 ): Promise<RawDataPoint[]> {
   const generation = healthAccountGeneration
   return cachedRawRange(
@@ -332,7 +340,7 @@ function weightRawRange(
     weightRawInFlight,
     start,
     endExclusive,
-    (rangeStart, rangeEnd) => listRawData(token, 'weight', 'sample', rangeStart, rangeEnd, priority),
+    (rangeStart, rangeEnd) => listRawData(token, 'weight', 'sample', rangeStart, rangeEnd, priority, signal),
     (point) => rawSampleDate(point, 'weight'),
     generation
   )
@@ -341,12 +349,12 @@ function weightRawRange(
 let heightCache: { generation: number; value: number | null } | null = null
 let heightInFlight: Promise<number | null> | null = null
 
-async function getLatestHeight(token: string, priority: Priority): Promise<number | null> {
+async function getLatestHeight(token: string, priority: Priority, signal?: AbortSignal): Promise<number | null> {
   if (heightCache?.generation === healthAccountGeneration) return heightCache.value
   if (heightInFlight) return heightInFlight
   const generation = healthAccountGeneration
   let job!: Promise<number | null>
-  job = listRawData(token, 'height', 'sample', '2000-01-01', shiftIsoDate(todayIso(), 1), priority)
+  job = listRawData(token, 'height', 'sample', '2000-01-01', shiftIsoDate(todayIso(), 1), priority, signal)
     .then((points) => {
       assertCurrentAccount(generation)
       const value = parseLatestHeight(points)
@@ -370,8 +378,8 @@ function dailyRecordGroup(
   return {
     id,
     metrics,
-    fetch: async (token, start, endExclusive, priority) => {
-      const points = await listData(token, dataType, 'daily', start, endExclusive, 'all-sources', priority)
+    fetch: async (token, start, endExclusive, priority, signal) => {
+      const points = await listData(token, dataType, 'daily', start, endExclusive, 'all-sources', priority, signal)
       const map = new Map<string, DayValues>()
       for (const p of points) {
         const record = p[recordKey] as Record<string, unknown> | undefined
@@ -424,10 +432,13 @@ const GROUPS: FetchGroup[] = [
   {
     id: 'weight-bmi-v1',
     metrics: ['weightKg', 'bmi'],
-    fetch: async (token, start, endExclusive, priority) => {
+    fetch: async (token, start, endExclusive, priority, signal) => {
       const [weightPoints, heightPoints] = await Promise.all([
-        dailyRollUp(token, 'weight', start, endExclusive, priority),
-        getLatestHeight(token, priority).catch(() => null)
+        dailyRollUp(token, 'weight', start, endExclusive, priority, signal),
+        getLatestHeight(token, priority, signal).catch((error) => {
+          rethrowIfAborted(error)
+          return null
+        })
       ])
       const heightCm = heightPoints
       const map = new Map<string, DayValues>()
@@ -453,12 +464,13 @@ const GROUPS: FetchGroup[] = [
     // Versioned so archived days refetch with raw-log nutrient fallbacks once.
     id: 'nutrition-v6',
     metrics: ['caloriesIn', 'proteinG', 'carbsG', 'fatG', 'fiberG', 'saturatedFatG', 'sodiumG', 'sugarG'],
-    fetch: async (token, start, endExclusive, priority) => {
+    fetch: async (token, start, endExclusive, priority, signal) => {
       const [points, rawResult] = await Promise.all([
-        dailyRollUp(token, 'nutrition-log', start, endExclusive, priority),
-        nutritionRawRange(token, start, endExclusive, priority)
+        dailyRollUp(token, 'nutrition-log', start, endExclusive, priority, signal),
+        nutritionRawRange(token, start, endExclusive, priority, signal)
           .then((values) => ({ values, complete: true as const }))
           .catch((error) => {
+            rethrowIfAborted(error)
             console.error(`[health] raw nutrition fallback failed for ${start}..${endExclusive}:`, error)
             return { values: [], complete: false as const }
           })
@@ -542,14 +554,21 @@ async function ensureGroup(
   start: string,
   end: string,
   force: boolean,
-  generation: number
+  generation: number,
+  signal?: AbortSignal
 ): Promise<void> {
   const missing = listDates(start, end).filter((d) => force || !isFresh(group.id, d))
   if (missing.length === 0) return
   const spanStart = missing[0]
   const spanEnd = missing[missing.length - 1]
   const spanDates = listDates(spanStart, spanEnd)
-  const result = await group.fetch(token, spanStart, shiftIsoDate(spanEnd, 1), spanPriority(spanDates.length))
+  const result = await group.fetch(
+    token,
+    spanStart,
+    shiftIsoDate(spanEnd, 1),
+    spanPriority(spanDates.length),
+    signal
+  )
   assertCurrentAccount(generation)
   const complete = result instanceof Map
   const map = complete ? result : result.values
@@ -575,12 +594,13 @@ function ensureGroupOnce(
   start: string,
   end: string,
   force: boolean,
-  generation: number
+  generation: number,
+  signal?: AbortSignal
 ): Promise<void> {
   const key = `${generation}:${group.id}:${start}:${end}:${force}`
   const pending = inFlight.get(key)
   if (pending) return pending
-  const job = ensureGroup(token, group, start, end, force, generation).finally(() => inFlight.delete(key))
+  const job = ensureGroup(token, group, start, end, force, generation, signal).finally(() => inFlight.delete(key))
   inFlight.set(key, job)
   return job
 }
@@ -610,7 +630,8 @@ async function ensureSleepSummaryRange(
   start: string,
   end: string,
   force: boolean,
-  generation: number
+  generation: number,
+  signal?: AbortSignal
 ): Promise<void> {
   const missing = listDates(start, end).filter((d) => force || !isFresh(SLEEP_SUMMARY_GROUP, d))
   if (missing.length === 0) return
@@ -624,7 +645,8 @@ async function ensureSleepSummaryRange(
     spanStart,
     shiftIsoDate(spanEnd, 1),
     'google-wearables',
-    spanPriority(spanDates.length)
+    spanPriority(spanDates.length),
+    signal
   )
   assertCurrentAccount(generation)
   const byDate = sleepByDate(points)
@@ -643,7 +665,8 @@ async function ensureSleepRange(
   start: string,
   end: string,
   force: boolean,
-  generation: number
+  generation: number,
+  signal?: AbortSignal
 ): Promise<void> {
   const missing = listDates(start, end).filter((d) => force || !isFresh(SLEEP_DETAIL_GROUP, d))
   if (missing.length === 0) return
@@ -657,7 +680,8 @@ async function ensureSleepRange(
     spanStart,
     shiftIsoDate(spanEnd, 1),
     'google-wearables',
-    spanPriority(spanDates.length)
+    spanPriority(spanDates.length),
+    signal
   )
   assertCurrentAccount(generation)
   const byDate = sleepByDate(points)
@@ -678,12 +702,13 @@ function ensureSleepOnce(
   start: string,
   end: string,
   force: boolean,
-  generation: number
+  generation: number,
+  signal?: AbortSignal
 ): Promise<void> {
   const key = `${generation}:${SLEEP_DETAIL_GROUP}:${start}:${end}:${force}`
   const pending = inFlight.get(key)
   if (pending) return pending
-  const job = ensureSleepRange(token, start, end, force, generation).finally(() => inFlight.delete(key))
+  const job = ensureSleepRange(token, start, end, force, generation, signal).finally(() => inFlight.delete(key))
   inFlight.set(key, job)
   return job
 }
@@ -693,12 +718,13 @@ function ensureSleepSummaryOnce(
   start: string,
   end: string,
   force: boolean,
-  generation: number
+  generation: number,
+  signal?: AbortSignal
 ): Promise<void> {
   const key = `${generation}:${SLEEP_SUMMARY_GROUP}:${start}:${end}:${force}`
   const pending = inFlight.get(key)
   if (pending) return pending
-  const job = ensureSleepSummaryRange(token, start, end, force, generation).finally(() => inFlight.delete(key))
+  const job = ensureSleepSummaryRange(token, start, end, force, generation, signal).finally(() => inFlight.delete(key))
   inFlight.set(key, job)
   return job
 }
@@ -886,7 +912,8 @@ async function ensureWorkoutsRange(
   start: string,
   end: string,
   force: boolean,
-  generation: number
+  generation: number,
+  signal?: AbortSignal
 ): Promise<void> {
   const missing = listDates(start, end).filter((d) => force || !isFresh('workouts', d))
   if (missing.length === 0) return
@@ -900,7 +927,8 @@ async function ensureWorkoutsRange(
     spanStart,
     shiftIsoDate(spanEnd, 1),
     'all-sources',
-    spanPriority(spanDates.length)
+    spanPriority(spanDates.length),
+    signal
   )
   assertCurrentAccount(generation)
   const byDate = new Map<string, Workout[]>()
@@ -921,7 +949,7 @@ async function ensureWorkoutsRange(
 
 const workoutTrackCache = new Map<string, WorkoutTrackResult>()
 
-export async function getWorkoutTrack(workoutId: string): Promise<WorkoutTrackResult> {
+export async function getWorkoutTrack(workoutId: string, signal?: AbortSignal): Promise<WorkoutTrackResult> {
   const generation = healthAccountGeneration
   const cached = workoutTrackCache.get(workoutId)
   if (cached) return cached
@@ -929,7 +957,7 @@ export async function getWorkoutTrack(workoutId: string): Promise<WorkoutTrackRe
   assertCurrentAccount(generation)
   if (!token) return demoWorkoutTrack(workoutId)
   try {
-    const track = parseExerciseTcx(await exportExerciseTcx(token, workoutId))
+    const track = parseExerciseTcx(await exportExerciseTcx(token, workoutId, signal))
     assertCurrentAccount(generation)
     workoutTrackCache.set(workoutId, track)
     return track
@@ -968,9 +996,15 @@ function physicalDayRange(date: string): { startTime: string; endTime: string; d
   }
 }
 
-async function ensureIntradaySteps(token: string, date: string, force: boolean, generation: number): Promise<void> {
+async function ensureIntradaySteps(
+  token: string,
+  date: string,
+  force: boolean,
+  generation: number,
+  signal?: AbortSignal
+): Promise<void> {
   if (!force && isFresh('intraday-steps', date)) return
-  const points = await listData(token, 'steps', 'interval', date, shiftIsoDate(date, 1), 'google-wearables', 0)
+  const points = await listData(token, 'steps', 'interval', date, shiftIsoDate(date, 1), 'google-wearables', 0, signal)
   assertCurrentAccount(generation)
   const hourly = new Array(24).fill(0) as number[]
   let saw = false
@@ -991,9 +1025,15 @@ async function ensureIntradaySteps(token: string, date: string, force: boolean, 
   markFetched('intraday-steps', [date])
 }
 
-async function ensureIntradayHeart(token: string, date: string, force: boolean, generation: number): Promise<void> {
+async function ensureIntradayHeart(
+  token: string,
+  date: string,
+  force: boolean,
+  generation: number,
+  signal?: AbortSignal
+): Promise<void> {
   if (!force && isFresh('intraday-heart', date)) return
-  const points = await listData(token, 'heart-rate', 'sample', date, shiftIsoDate(date, 1), 'google-wearables', 0)
+  const points = await listData(token, 'heart-rate', 'sample', date, shiftIsoDate(date, 1), 'google-wearables', 0, signal)
   assertCurrentAccount(generation)
   const series: HeartRatePoint[] = points
     .map((p) => {
@@ -1029,7 +1069,13 @@ async function ensureIntradayHeart(token: string, date: string, force: boolean, 
 // ---------------------------------------------------------------------------
 // Public queries
 
-export async function getSeries(metrics: MetricKey[], start: string, end: string, force = false): Promise<SeriesResult> {
+export async function getSeries(
+  metrics: MetricKey[],
+  start: string,
+  end: string,
+  force = false,
+  signal?: AbortSignal
+): Promise<SeriesResult> {
   const generation = healthAccountGeneration
   const [s, e] = normalizeRange(start, end)
   const token = await getGoogleAccessToken()
@@ -1038,14 +1084,16 @@ export async function getSeries(metrics: MetricKey[], start: string, end: string
 
   const groups = [...new Set(metrics.map((m) => GROUP_BY_METRIC.get(m)).filter((g): g is FetchGroup => g != null))]
   const jobs: Array<Promise<unknown>> = groups.map((group) =>
-    ensureGroupOnce(token, group, s, e, force, generation).catch((err) => {
+    ensureGroupOnce(token, group, s, e, force, generation, signal).catch((err) => {
+      rethrowIfAborted(err)
       console.error(`[health] ${group.id} failed for ${s}..${e}:`, err)
       return 'failed'
     })
   )
   if (metrics.some((m) => SLEEP_METRICS.includes(m))) {
     jobs.push(
-      ensureSleepSummaryOnce(token, s, e, force, generation).catch((err) => {
+      ensureSleepSummaryOnce(token, s, e, force, generation, signal).catch((err) => {
+        rethrowIfAborted(err)
         console.error(`[health] sleep failed for ${s}..${e}:`, err)
         return 'failed'
       })
@@ -1069,15 +1117,21 @@ export async function getSeries(metrics: MetricKey[], start: string, end: string
   return { source: 'live', start: s, end: e, days }
 }
 
-export async function getSleepRange(start: string, end: string, force = false): Promise<SleepRangeResult> {
+export async function getSleepRange(
+  start: string,
+  end: string,
+  force = false,
+  signal?: AbortSignal
+): Promise<SleepRangeResult> {
   const generation = healthAccountGeneration
   const [s, e] = normalizeRange(start, end)
   const token = await getGoogleAccessToken()
   assertCurrentAccount(generation)
   if (!token) return { source: 'demo', nights: demoSleepRange(s, e) }
   try {
-    await ensureSleepOnce(token, s, e, force, generation)
+    await ensureSleepOnce(token, s, e, force, generation, signal)
   } catch (err) {
+    rethrowIfAborted(err)
     console.error(`[health] sleep range failed for ${s}..${e}:`, err)
   }
   assertCurrentAccount(generation)
@@ -1087,15 +1141,21 @@ export async function getSleepRange(start: string, end: string, force = false): 
   return { source: 'live', nights }
 }
 
-export async function getWorkoutsRange(start: string, end: string, force = false): Promise<WorkoutsResult> {
+export async function getWorkoutsRange(
+  start: string,
+  end: string,
+  force = false,
+  signal?: AbortSignal
+): Promise<WorkoutsResult> {
   const generation = healthAccountGeneration
   const [s, e] = normalizeRange(start, end)
   const token = await getGoogleAccessToken()
   assertCurrentAccount(generation)
   if (!token) return { source: 'demo', workouts: demoWorkoutsRange(s, e) }
   try {
-    await ensureWorkoutsRange(token, s, e, force, generation)
+    await ensureWorkoutsRange(token, s, e, force, generation, signal)
   } catch (err) {
+    rethrowIfAborted(err)
     console.error(`[health] workouts failed for ${s}..${e}:`, err)
   }
   assertCurrentAccount(generation)
@@ -1103,19 +1163,21 @@ export async function getWorkoutsRange(start: string, end: string, force = false
   return { source: 'live', workouts }
 }
 
-export async function getIntraday(date: string, force = false): Promise<IntradaySnapshot> {
+export async function getIntraday(date: string, force = false, signal?: AbortSignal): Promise<IntradaySnapshot> {
   const generation = healthAccountGeneration
   const [d] = normalizeRange(date, date)
   const token = await getGoogleAccessToken()
   assertCurrentAccount(generation)
   if (!token) return demoIntraday(d)
   await Promise.all([
-    ensureIntradaySteps(token, d, force, generation).catch((err) =>
+    ensureIntradaySteps(token, d, force, generation, signal).catch((err) => {
+      rethrowIfAborted(err)
       console.error(`[health] intraday steps failed for ${d}:`, err)
-    ),
-    ensureIntradayHeart(token, d, force, generation).catch((err) =>
+    }),
+    ensureIntradayHeart(token, d, force, generation, signal).catch((err) => {
+      rethrowIfAborted(err)
       console.error(`[health] intraday heart failed for ${d}:`, err)
-    )
+    })
   ])
   assertCurrentAccount(generation)
   const record = peekDay(d)
@@ -1132,7 +1194,8 @@ export async function getIntraday(date: string, force = false): Promise<Intraday
 export async function getActivityIntraday(
   date: string,
   metric: ActivityIntradayMetric,
-  force = false
+  force = false,
+  signal?: AbortSignal
 ): Promise<ActivityIntradayResult> {
   const generation = healthAccountGeneration
   const [d] = normalizeRange(date, date)
@@ -1155,7 +1218,8 @@ export async function getActivityIntraday(
       endTime,
       ACTIVITY_INTRADAY_WINDOW_MINUTES * 60,
       'all-sources',
-      0
+      0,
+      signal
     ),
     metric === 'caloriesOut'
       ? physicalRollUp(
@@ -1165,8 +1229,10 @@ export async function getActivityIntraday(
           endTime,
           ACTIVITY_INTRADAY_WINDOW_MINUTES * 60,
           'all-sources',
-          0
+          0,
+          signal
         ).catch((error) => {
+          rethrowIfAborted(error)
           console.error(`[health] active energy breakdown failed for ${d}:`, error)
           return []
         })
@@ -1199,7 +1265,8 @@ export async function getActivityIntraday(
 export async function getHeartDetail(
   date: string,
   metric: HeartDetailMetric,
-  force = false
+  force = false,
+  signal?: AbortSignal
 ): Promise<HeartDetailResult> {
   const generation = healthAccountGeneration
   const [d] = normalizeRange(date, date)
@@ -1216,12 +1283,14 @@ export async function getHeartDetail(
   switch (metric) {
     case 'restingHeartRate': {
       const [dailyZones, timeRollups, calorieRollups] = await Promise.all([
-        listData(token, 'daily-heart-rate-zones', 'daily', d, shiftIsoDate(d, 1), 'all-sources', 0),
-        dailyRollUp(token, 'time-in-heart-rate-zone', d, shiftIsoDate(d, 1), 0).catch((error) => {
+        listData(token, 'daily-heart-rate-zones', 'daily', d, shiftIsoDate(d, 1), 'all-sources', 0, signal),
+        dailyRollUp(token, 'time-in-heart-rate-zone', d, shiftIsoDate(d, 1), 0, signal).catch((error) => {
+          rethrowIfAborted(error)
           console.error(`[health] time in heart-rate zones failed for ${d}:`, error)
           return []
         }),
-        dailyRollUp(token, 'calories-in-heart-rate-zone', d, shiftIsoDate(d, 1), 0).catch((error) => {
+        dailyRollUp(token, 'calories-in-heart-rate-zone', d, shiftIsoDate(d, 1), 0, signal).catch((error) => {
+          rethrowIfAborted(error)
           console.error(`[health] calories in heart-rate zones failed for ${d}:`, error)
           return []
         })
@@ -1237,28 +1306,32 @@ export async function getHeartDetail(
   return result
 }
 
-export async function getNutritionLogs(date: string): Promise<NutritionLogsResult> {
+export async function getNutritionLogs(date: string, signal?: AbortSignal): Promise<NutritionLogsResult> {
   const generation = healthAccountGeneration
   const [d] = normalizeRange(date, date)
   const token = await getGoogleAccessToken()
   assertCurrentAccount(generation)
   if (!token) return demoNutritionLogs(d)
-  const points = await nutritionRawRange(token, d, shiftIsoDate(d, 1), 0)
+  const points = await nutritionRawRange(token, d, shiftIsoDate(d, 1), 0, signal)
   assertCurrentAccount(generation)
   return { date: d, source: 'live', entries: parseNutritionLogs(points) }
 }
 
-export async function getBodyMeasurements(start: string, end: string): Promise<BodyMeasurementsResult> {
+export async function getBodyMeasurements(
+  start: string,
+  end: string,
+  signal?: AbortSignal
+): Promise<BodyMeasurementsResult> {
   const generation = healthAccountGeneration
   const [s, e] = normalizeRange(start, end)
   const token = await getGoogleAccessToken()
   assertCurrentAccount(generation)
   if (!token) return demoBodyMeasurements(s, e)
   const [weightResult, heightResult] = await Promise.allSettled([
-    weightRawRange(token, s, shiftIsoDate(e, 1), spanPriority(listDates(s, e).length)),
+    weightRawRange(token, s, shiftIsoDate(e, 1), spanPriority(listDates(s, e).length), signal),
     // Height is a profile-like input and may have been recorded years before
     // the visible weight range. Fetch its tiny history independently.
-    getLatestHeight(token, 1)
+    getLatestHeight(token, 1, signal)
   ])
   assertCurrentAccount(generation)
   if (weightResult.status === 'rejected' && heightResult.status === 'rejected') throw weightResult.reason
@@ -1282,7 +1355,7 @@ interface DevicesCache {
 let devicesCache: DevicesCache | null = null
 const DEVICES_TTL_MS = 5 * 60_000
 
-export async function getDevices(force = false): Promise<PairedDevice[]> {
+export async function getDevices(force = false, signal?: AbortSignal): Promise<PairedDevice[]> {
   const generation = healthAccountGeneration
   const token = await getGoogleAccessToken()
   assertCurrentAccount(generation)
@@ -1295,7 +1368,7 @@ export async function getDevices(force = false): Promise<PairedDevice[]> {
     return devicesCache.devices
   }
   try {
-    const devices = (await listPairedDevices(token)).map((d) => ({
+    const devices = (await listPairedDevices(token, signal)).map((d) => ({
       name: d.displayName ?? d.model ?? d.deviceVersion ?? 'Tracker',
       model: d.deviceVersion ?? d.model ?? 'Unknown model',
       type: d.deviceType ?? null,
@@ -1309,6 +1382,7 @@ export async function getDevices(force = false): Promise<PairedDevice[]> {
     return devices
   } catch (err) {
     assertCurrentAccount(generation)
+    rethrowIfAborted(err)
     console.error('[health] devices failed:', err)
     return devicesCache?.generation === generation ? devicesCache.devices : []
   }

@@ -33,6 +33,24 @@ import type {
 // Past days barely change once synced; today does. Query-side staleness is
 // short — the main process's per-day freshness rules do the real work.
 const STALE_MS = 60_000
+let healthRequestSequence = 0
+
+async function healthRequest<T>(
+  signal: AbortSignal,
+  invoke: (requestId: string) => Promise<T>
+): Promise<T> {
+  if (signal.aborted) throw new DOMException('The request was cancelled.', 'AbortError')
+  const requestId = `${Date.now()}-${healthRequestSequence++}`
+  const cancel = (): void => {
+    void window.pulse.health.cancel(requestId)
+  }
+  signal.addEventListener('abort', cancel, { once: true })
+  try {
+    return await invoke(requestId)
+  } finally {
+    signal.removeEventListener('abort', cancel)
+  }
+}
 
 export interface ProgressiveSeriesResult {
   data: SeriesResult | undefined
@@ -54,7 +72,9 @@ export function useSeries(metrics: MetricKey[], start: string, end: string): Pro
   const queries = useQueries({
     queries: metrics.map((metric) => ({
       queryKey: ['series-metric', metric, start, end],
-      queryFn: () => window.pulse.health.series([metric], start, end),
+      queryFn: ({ signal }) => healthRequest(signal, (requestId) =>
+        window.pulse.health.series(requestId, [metric], start, end)
+      ),
       staleTime: STALE_MS
     }))
   })
@@ -91,7 +111,9 @@ export function useSeries(metrics: MetricKey[], start: string, end: string): Pro
 export function useSleepRange(start: string, end: string): UseQueryResult<SleepNight[]> {
   return useQuery({
     queryKey: ['sleep', start, end],
-    queryFn: async () => (await window.pulse.health.sleepRange(start, end)).nights,
+    queryFn: ({ signal }) => healthRequest(signal, async (requestId) =>
+      (await window.pulse.health.sleepRange(requestId, start, end)).nights
+    ),
     staleTime: STALE_MS
   })
 }
@@ -99,10 +121,10 @@ export function useSleepRange(start: string, end: string): UseQueryResult<SleepN
 export function useSleepNight(date: string): UseQueryResult<SleepNight | null> {
   return useQuery({
     queryKey: ['sleep-night', date],
-    queryFn: async () => {
-      const result = await window.pulse.health.sleepRange(date, date)
+    queryFn: ({ signal }) => healthRequest(signal, async (requestId) => {
+      const result = await window.pulse.health.sleepRange(requestId, date, date)
       return result.nights.find((n) => n.date === date) ?? null
-    },
+    }),
     staleTime: STALE_MS
   })
 }
@@ -110,7 +132,9 @@ export function useSleepNight(date: string): UseQueryResult<SleepNight | null> {
 export function useWorkouts(start: string, end: string): UseQueryResult<Workout[]> {
   return useQuery({
     queryKey: ['workouts', start, end],
-    queryFn: async () => (await window.pulse.health.workouts(start, end)).workouts,
+    queryFn: ({ signal }) => healthRequest(signal, async (requestId) =>
+      (await window.pulse.health.workouts(requestId, start, end)).workouts
+    ),
     staleTime: STALE_MS
   })
 }
@@ -118,7 +142,9 @@ export function useWorkouts(start: string, end: string): UseQueryResult<Workout[
 export function useWorkoutTrack(workoutId: string, enabled: boolean): UseQueryResult<WorkoutTrackResult> {
   return useQuery({
     queryKey: ['workout-track', workoutId],
-    queryFn: () => window.pulse.health.workoutTrack(workoutId),
+    queryFn: ({ signal }) => healthRequest(signal, (requestId) =>
+      window.pulse.health.workoutTrack(requestId, workoutId)
+    ),
     staleTime: Infinity,
     enabled
   })
@@ -127,7 +153,9 @@ export function useWorkoutTrack(workoutId: string, enabled: boolean): UseQueryRe
 export function useIntraday(date: string, enabled = true): UseQueryResult<IntradaySnapshot> {
   return useQuery({
     queryKey: ['intraday', date],
-    queryFn: () => window.pulse.health.intraday(date),
+    queryFn: ({ signal }) => healthRequest(signal, (requestId) =>
+      window.pulse.health.intraday(requestId, date)
+    ),
     staleTime: STALE_MS,
     enabled
   })
@@ -140,7 +168,9 @@ export function useActivityIntraday(
 ): UseQueryResult<ActivityIntradayResult> {
   return useQuery({
     queryKey: ['activity-intraday', metric, date],
-    queryFn: () => window.pulse.health.activityIntraday(date, metric),
+    queryFn: ({ signal }) => healthRequest(signal, (requestId) =>
+      window.pulse.health.activityIntraday(requestId, date, metric)
+    ),
     staleTime: STALE_MS,
     enabled
   })
@@ -153,7 +183,9 @@ export function useHeartDetail(
 ): UseQueryResult<HeartDetailResult> {
   return useQuery({
     queryKey: ['heart-detail', metric, date],
-    queryFn: () => window.pulse.health.heartDetail(date, metric),
+    queryFn: ({ signal }) => healthRequest(signal, (requestId) =>
+      window.pulse.health.heartDetail(requestId, date, metric)
+    ),
     staleTime: STALE_MS,
     enabled
   })
@@ -164,7 +196,9 @@ export function useNutritionLogs(date: string): UseQueryResult<NutritionLogEntry
     // Versioned because the parsed entry shape now retains secondary
     // nutrients; do not reuse entries cached before those fields existed.
     queryKey: ['nutrition-logs-v2', date],
-    queryFn: async () => (await window.pulse.health.nutritionLogs(date)).entries,
+    queryFn: ({ signal }) => healthRequest(signal, async (requestId) =>
+      (await window.pulse.health.nutritionLogs(requestId, date)).entries
+    ),
     staleTime: STALE_MS
   })
 }
@@ -174,7 +208,9 @@ export function useBodyMeasurements(start: string, end: string): UseQueryResult<
     // Versioned because the result now includes the static height input used
     // for BMI; don't reuse the previous measurements-only response.
     queryKey: ['body-measurements-v2', start, end],
-    queryFn: () => window.pulse.health.bodyMeasurements(start, end),
+    queryFn: ({ signal }) => healthRequest(signal, (requestId) =>
+      window.pulse.health.bodyMeasurements(requestId, start, end)
+    ),
     staleTime: STALE_MS
   })
 }
@@ -182,7 +218,9 @@ export function useBodyMeasurements(start: string, end: string): UseQueryResult<
 export function useDevices(): UseQueryResult<PairedDevice[]> {
   return useQuery({
     queryKey: ['devices'],
-    queryFn: () => window.pulse.health.devices(),
+    queryFn: ({ signal }) => healthRequest(signal, (requestId) =>
+      window.pulse.health.devices(requestId)
+    ),
     staleTime: 5 * 60_000
   })
 }

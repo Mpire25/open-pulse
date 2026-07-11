@@ -1,6 +1,7 @@
 import { ipcMain } from 'electron'
 import type { IpcMainInvokeEvent, WebContents } from 'electron'
 import type { ActivityIntradayMetric, AppSettings, ChatMessage, HeartDetailMetric, MetricKey } from '../shared/types'
+import { HEALTH_CANCELLED, splitHealthWireArgs } from '../shared/health-ipc'
 import { isActivityIntradayMetric, isHeartDetailMetric } from '../shared/types'
 import { connectGoogle, disconnectGoogle, getGoogleStatus } from './google-auth'
 import { connectCodex, disconnectCodex, getCodexStatus } from './codex-auth'
@@ -37,6 +38,12 @@ export function registerTrustedRenderer(
   trustedRenderers.set(webContents.id, renderer)
   webContents.once('destroyed', () => {
     if (trustedRenderers.get(webContents.id) === renderer) trustedRenderers.delete(webContents.id)
+    const prefix = `${webContents.id}:`
+    for (const [key, controller] of healthControllers) {
+      if (!key.startsWith(prefix)) continue
+      controller.abort()
+      healthControllers.delete(key)
+    }
   })
 }
 
@@ -62,6 +69,42 @@ function handle<Args extends unknown[], Result>(
   })
 }
 
+const healthControllers = new Map<string, AbortController>()
+let legacyHealthRequestSequence = 0
+
+function abortAllHealthRequests(): void {
+  for (const controller of healthControllers.values()) controller.abort()
+  healthControllers.clear()
+}
+
+function healthRequestKey(event: IpcMainInvokeEvent, requestId: string): string {
+  return `${event.sender.id}:${requestId}`
+}
+
+function healthHandle<Args extends unknown[], Result>(
+  channel: string,
+  listener: (event: IpcMainInvokeEvent, signal: AbortSignal, ...args: Args) => Result
+): void {
+  handle(channel, (event, ...wireArgs: unknown[]) => {
+    const split = splitHealthWireArgs(wireArgs)
+    const requestId = split.requestId ?? `legacy-${Date.now()}-${legacyHealthRequestSequence++}`
+    const args = split.args as Args
+    const key = healthRequestKey(event, requestId)
+    const previous = healthControllers.get(key)
+    previous?.abort()
+    const controller = new AbortController()
+    healthControllers.set(key, controller)
+    return Promise.resolve(listener(event, controller.signal, ...args))
+      .catch((error: unknown) => {
+        if (error instanceof DOMException && error.name === 'AbortError') return HEALTH_CANCELLED
+        throw error
+      })
+      .finally(() => {
+        if (healthControllers.get(key) === controller) healthControllers.delete(key)
+      })
+  })
+}
+
 function sendToTrustedRenderers(channel: string, ...args: unknown[]): void {
   for (const renderer of trustedRenderers.values()) {
     const { webContents, isExpectedUrl } = renderer
@@ -79,12 +122,14 @@ export function registerIpc(): void {
   handle('google:connect', async () => {
     // Wipe the previous account before new credentials can be persisted, then
     // rotate again so any work started while OAuth was open is also stale.
+    abortAllHealthRequests()
     resetHealthAccount()
     const status = await connectGoogle()
     resetHealthAccount()
     return status
   })
   handle('google:disconnect', () => {
+    abortAllHealthRequests()
     disconnectGoogle()
     resetHealthAccount()
   })
@@ -93,31 +138,36 @@ export function registerIpc(): void {
   handle('codex:connect', () => connectCodex())
   handle('codex:disconnect', () => disconnectCodex())
 
-  handle('health:series', (_e, metrics: MetricKey[], start: string, end: string, force?: boolean) =>
-    getSeries(metrics, start, end, force)
+  handle('health:cancel', (event, requestId: string) => {
+    healthControllers.get(healthRequestKey(event, requestId))?.abort()
+  })
+  healthHandle('health:series', (_e, signal, metrics: MetricKey[], start: string, end: string, force?: boolean) =>
+    getSeries(metrics, start, end, force, signal)
   )
-  handle('health:sleep-range', (_e, start: string, end: string, force?: boolean) =>
-    getSleepRange(start, end, force)
+  healthHandle('health:sleep-range', (_e, signal, start: string, end: string, force?: boolean) =>
+    getSleepRange(start, end, force, signal)
   )
-  handle('health:workouts', (_e, start: string, end: string, force?: boolean) =>
-    getWorkoutsRange(start, end, force)
+  healthHandle('health:workouts', (_e, signal, start: string, end: string, force?: boolean) =>
+    getWorkoutsRange(start, end, force, signal)
   )
-  handle('health:workout-track', (_e, workoutId: string) => getWorkoutTrack(workoutId))
-  handle('health:intraday', (_e, date: string, force?: boolean) => getIntraday(date, force))
-  handle(
+  healthHandle('health:workout-track', (_e, signal, workoutId: string) => getWorkoutTrack(workoutId, signal))
+  healthHandle('health:intraday', (_e, signal, date: string, force?: boolean) => getIntraday(date, force, signal))
+  healthHandle(
     'health:activity-intraday',
-    (_e, date: string, metric: ActivityIntradayMetric, force?: boolean) => {
+    (_e, signal, date: string, metric: ActivityIntradayMetric, force?: boolean) => {
       if (!isActivityIntradayMetric(metric)) throw new Error('Unsupported intraday activity metric')
-      return getActivityIntraday(date, metric, force)
+      return getActivityIntraday(date, metric, force, signal)
     }
   )
-  handle('health:heart-detail', (_e, date: string, metric: HeartDetailMetric, force?: boolean) => {
+  healthHandle('health:heart-detail', (_e, signal, date: string, metric: HeartDetailMetric, force?: boolean) => {
     if (!isHeartDetailMetric(metric)) throw new Error('Unsupported heart detail metric')
-    return getHeartDetail(date, metric, force)
+    return getHeartDetail(date, metric, force, signal)
   })
-  handle('health:nutrition-logs', (_e, date: string) => getNutritionLogs(date))
-  handle('health:body-measurements', (_e, start: string, end: string) => getBodyMeasurements(start, end))
-  handle('health:devices', (_e, force?: boolean) => getDevices(force))
+  healthHandle('health:nutrition-logs', (_e, signal, date: string) => getNutritionLogs(date, signal))
+  healthHandle('health:body-measurements', (_e, signal, start: string, end: string) =>
+    getBodyMeasurements(start, end, signal)
+  )
+  healthHandle('health:devices', (_e, signal, force?: boolean) => getDevices(force, signal))
   handle('health:refresh', () => clearHealthCache())
 
   // Live "requests in flight" counter for the topbar sync indicator.
