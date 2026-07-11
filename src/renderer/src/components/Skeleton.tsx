@@ -14,7 +14,7 @@ export const CARD_HEIGHT = {
   large: 'min-h-[286px]',
   detail: 'min-h-[298px]',
   detailLarge: 'min-h-[312px]',
-  device: 'min-h-[380px]'
+  device: 'min-h-[440px]'
 } as const
 
 const pulse = 'animate-pulse bg-white/[0.055]'
