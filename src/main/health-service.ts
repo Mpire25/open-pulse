@@ -97,6 +97,12 @@ import { parseHeartZones } from './heart-detail'
 import { mapSleep } from './sleep-detail'
 import { nutrientGrams, nutrientMineralGrams } from './nutrition'
 import { parseExerciseTcx } from './tcx'
+import {
+  abortSharedOperations,
+  createSharedOperation,
+  waitForSharedOperation,
+  type SharedOperation
+} from './shared-operation'
 
 let healthAccountGeneration = 0
 
@@ -242,11 +248,11 @@ interface RawDayCacheEntry {
 }
 
 const nutritionRawCache = new Map<string, RawDayCacheEntry>()
-const nutritionRawInFlight = new Map<string, Promise<void>>()
+const nutritionRawInFlight = new Map<string, SharedOperation<void>>()
 const weightRawCache = new Map<string, RawDayCacheEntry>()
-const weightRawInFlight = new Map<string, Promise<void>>()
+const weightRawInFlight = new Map<string, SharedOperation<void>>()
 const heartThresholdRawCache = new Map<string, RawDayCacheEntry>()
-const heartThresholdRawInFlight = new Map<string, Promise<void>>()
+const heartThresholdRawInFlight = new Map<string, SharedOperation<void>>()
 
 function rawDayFresh(entry: RawDayCacheEntry | undefined, date: string, now = Date.now()): boolean {
   if (!entry) return false
@@ -271,50 +277,55 @@ function dailyHeartZoneDate(point: RawDataPoint): string | null {
 
 async function cachedRawRange(
   cache: Map<string, RawDayCacheEntry>,
-  inFlightByDate: Map<string, Promise<void>>,
+  inFlightByDate: Map<string, SharedOperation<void>>,
   start: string,
   endExclusive: string,
-  fetchRange: (start: string, endExclusive: string) => Promise<RawDataPoint[]>,
+  fetchRange: (start: string, endExclusive: string, signal: AbortSignal) => Promise<RawDataPoint[]>,
   dateOf: (point: RawDataPoint) => string | null,
-  generation: number
+  generation: number,
+  signal?: AbortSignal
 ): Promise<RawDataPoint[]> {
   const end = shiftIsoDate(endExclusive, -1)
   const dates = listDates(start, end)
-  const waits = new Set<Promise<void>>()
+  const waits = new Set<SharedOperation<void>>()
   const uncovered = dates.filter((date) => {
     if (rawDayFresh(cache.get(date), date)) return false
     const pending = inFlightByDate.get(date)
-    if (pending) waits.add(pending)
-    return pending == null
+    if (pending && !pending.controller.signal.aborted) {
+      waits.add(pending)
+      return false
+    }
+    if (pending) inFlightByDate.delete(date)
+    return true
   })
 
   for (const span of contiguousDateSpans(uncovered)) {
     const spanEndExclusive = shiftIsoDate(span.end, 1)
-    let job!: Promise<void>
-    job = fetchRange(span.start, spanEndExclusive)
-      .then((points) => {
-        assertCurrentAccount(generation)
-        const byDate = new Map<string, RawDataPoint[]>()
-        for (const point of points) {
-          const date = dateOf(point)
-          if (!date) continue
-          const values = byDate.get(date) ?? []
-          values.push(point)
-          byDate.set(date, values)
-        }
-        const fetchedAt = Date.now()
-        for (const date of span.dates) cache.set(date, { points: byDate.get(date) ?? [], fetchedAt })
-      })
-      .finally(() => {
-        for (const date of span.dates) {
-          if (inFlightByDate.get(date) === job) inFlightByDate.delete(date)
-        }
-      })
-    for (const date of span.dates) inFlightByDate.set(date, job)
-    waits.add(job)
+    const operation = createSharedOperation(async (sharedSignal) => {
+      const points = await fetchRange(span.start, spanEndExclusive, sharedSignal)
+      assertCurrentAccount(generation)
+      const byDate = new Map<string, RawDataPoint[]>()
+      for (const point of points) {
+        const date = dateOf(point)
+        if (!date) continue
+        const values = byDate.get(date) ?? []
+        values.push(point)
+        byDate.set(date, values)
+      }
+      const fetchedAt = Date.now()
+      for (const date of span.dates) cache.set(date, { points: byDate.get(date) ?? [], fetchedAt })
+    })
+    const cleanup = (): void => {
+      for (const date of span.dates) {
+        if (inFlightByDate.get(date) === operation) inFlightByDate.delete(date)
+      }
+    }
+    operation.promise.then(cleanup, cleanup)
+    for (const date of span.dates) inFlightByDate.set(date, operation)
+    waits.add(operation)
   }
 
-  await Promise.all(waits)
+  await Promise.all([...waits].map((operation) => waitForSharedOperation(operation, signal)))
   return dates.flatMap((date) => cache.get(date)?.points ?? [])
 }
 
@@ -331,9 +342,11 @@ function nutritionRawRange(
     nutritionRawInFlight,
     start,
     endExclusive,
-    (rangeStart, rangeEnd) => fetchNutritionRawData(token, rangeStart, rangeEnd, priority, signal),
+    (rangeStart, rangeEnd, sharedSignal) =>
+      fetchNutritionRawData(token, rangeStart, rangeEnd, priority, sharedSignal),
     nutritionLogDate,
-    generation
+    generation,
+    signal
   )
 }
 
@@ -350,9 +363,11 @@ function weightRawRange(
     weightRawInFlight,
     start,
     endExclusive,
-    (rangeStart, rangeEnd) => listRawData(token, 'weight', 'sample', rangeStart, rangeEnd, priority, signal),
+    (rangeStart, rangeEnd, sharedSignal) =>
+      listRawData(token, 'weight', 'sample', rangeStart, rangeEnd, priority, sharedSignal),
     (point) => rawSampleDate(point, 'weight'),
-    generation
+    generation,
+    signal
   )
 }
 
@@ -369,33 +384,45 @@ function heartThresholdRawRange(
     heartThresholdRawInFlight,
     start,
     endExclusive,
-    (rangeStart, rangeEnd) =>
-      listData(token, 'daily-heart-rate-zones', 'daily', rangeStart, rangeEnd, 'all-sources', priority, signal),
+    (rangeStart, rangeEnd, sharedSignal) =>
+      listData(token, 'daily-heart-rate-zones', 'daily', rangeStart, rangeEnd, 'all-sources', priority, sharedSignal),
     dailyHeartZoneDate,
-    generation
+    generation,
+    signal
   )
 }
 
 let heightCache: { generation: number; value: number | null } | null = null
-let heightInFlight: Promise<number | null> | null = null
+let heightInFlight: SharedOperation<number | null> | null = null
 
 async function getLatestHeight(token: string, priority: Priority, signal?: AbortSignal): Promise<number | null> {
   if (heightCache?.generation === healthAccountGeneration) return heightCache.value
-  if (heightInFlight) return heightInFlight
+  if (heightInFlight && !heightInFlight.controller.signal.aborted) {
+    return waitForSharedOperation(heightInFlight, signal)
+  }
+  heightInFlight = null
   const generation = healthAccountGeneration
-  let job!: Promise<number | null>
-  job = listRawData(token, 'height', 'sample', '2000-01-01', shiftIsoDate(todayIso(), 1), priority, signal)
-    .then((points) => {
+  const operation = createSharedOperation(async (sharedSignal) => {
+    const points = await listRawData(
+      token,
+      'height',
+      'sample',
+      '2000-01-01',
+      shiftIsoDate(todayIso(), 1),
+      priority,
+      sharedSignal
+    )
       assertCurrentAccount(generation)
       const value = parseLatestHeight(points)
       heightCache = { generation, value }
       return value
-    })
-    .finally(() => {
-      if (heightInFlight === job) heightInFlight = null
-    })
-  heightInFlight = job
-  return job
+  })
+  const cleanup = (): void => {
+    if (heightInFlight === operation) heightInFlight = null
+  }
+  operation.promise.then(cleanup, cleanup)
+  heightInFlight = operation
+  return waitForSharedOperation(operation, signal)
 }
 
 function dailyRecordGroup(
@@ -625,7 +652,28 @@ async function ensureGroup(
   }))
 }
 
-const inFlight = new Map<string, Promise<void>>()
+const inFlight = new Map<string, SharedOperation<void>>()
+
+function sharedHealthOperation(
+  key: string,
+  signal: AbortSignal | undefined,
+  run: (signal: AbortSignal) => Promise<void>
+): Promise<void> {
+  let operation = inFlight.get(key)
+  if (operation?.controller.signal.aborted) {
+    inFlight.delete(key)
+    operation = undefined
+  }
+  if (!operation) {
+    operation = createSharedOperation(run)
+    inFlight.set(key, operation)
+    const cleanup = (): void => {
+      if (inFlight.get(key) === operation) inFlight.delete(key)
+    }
+    operation.promise.then(cleanup, cleanup)
+  }
+  return waitForSharedOperation(operation, signal)
+}
 
 /** Dedupes concurrent syncs of the same group+span (several views share windows). */
 function ensureGroupOnce(
@@ -638,11 +686,11 @@ function ensureGroupOnce(
   signal?: AbortSignal
 ): Promise<void> {
   const key = `${generation}:${group.id}:${start}:${end}:${force}`
-  const pending = inFlight.get(key)
-  if (pending) return pending
-  const job = ensureGroup(token, group, start, end, force, generation, signal).finally(() => inFlight.delete(key))
-  inFlight.set(key, job)
-  return job
+  return sharedHealthOperation(
+    key,
+    signal,
+    (sharedSignal) => ensureGroup(token, group, start, end, force, generation, sharedSignal)
+  )
 }
 
 // ---------------------------------------------------------------------------
@@ -745,11 +793,11 @@ function ensureSleepOnce(
   signal?: AbortSignal
 ): Promise<void> {
   const key = `${generation}:${SLEEP_DETAIL_GROUP}:${start}:${end}:${force}`
-  const pending = inFlight.get(key)
-  if (pending) return pending
-  const job = ensureSleepRange(token, start, end, force, generation, signal).finally(() => inFlight.delete(key))
-  inFlight.set(key, job)
-  return job
+  return sharedHealthOperation(
+    key,
+    signal,
+    (sharedSignal) => ensureSleepRange(token, start, end, force, generation, sharedSignal)
+  )
 }
 
 function ensureSleepSummaryOnce(
@@ -761,11 +809,11 @@ function ensureSleepSummaryOnce(
   signal?: AbortSignal
 ): Promise<void> {
   const key = `${generation}:${SLEEP_SUMMARY_GROUP}:${start}:${end}:${force}`
-  const pending = inFlight.get(key)
-  if (pending) return pending
-  const job = ensureSleepSummaryRange(token, start, end, force, generation, signal).finally(() => inFlight.delete(key))
-  inFlight.set(key, job)
-  return job
+  return sharedHealthOperation(
+    key,
+    signal,
+    (sharedSignal) => ensureSleepSummaryRange(token, start, end, force, generation, sharedSignal)
+  )
 }
 
 // ---------------------------------------------------------------------------
@@ -1459,6 +1507,11 @@ export function clearHealthCache(): void {
 /** Account change: invalidate pending work and remove every prior-account value. */
 export function resetHealthAccount(): void {
   healthAccountGeneration += 1
+  abortSharedOperations(inFlight.values())
+  abortSharedOperations(nutritionRawInFlight.values())
+  abortSharedOperations(weightRawInFlight.values())
+  abortSharedOperations(heartThresholdRawInFlight.values())
+  if (heightInFlight) heightInFlight.controller.abort()
   inFlight.clear()
   devicesCache = null
   workoutTrackCache.clear()

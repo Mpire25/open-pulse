@@ -113,4 +113,46 @@ describe('health request budgets', () => {
     expect(requests).toHaveLength(1)
     expect(tokens).toEqual(new Array(10).fill('new-token'))
   })
+
+  test('keeps shared health work alive while another consumer is active', async () => {
+    globalThis.fetch = (async (input, init) => {
+      requests.push(String(input))
+      return new Promise<Response>((resolve, reject) => {
+        const timer = setTimeout(
+          () => resolve(new Response(JSON.stringify({ rollupDataPoints: [] }), { status: 200 })),
+          25
+        )
+        init?.signal?.addEventListener(
+          'abort',
+          () => {
+            clearTimeout(timer)
+            reject(new DOMException('aborted', 'AbortError'))
+          },
+          { once: true }
+        )
+      })
+    }) as typeof fetch
+    const firstController = new AbortController()
+    const secondController = new AbortController()
+    const first = getSeries(
+      ['steps'],
+      '2026-07-01',
+      '2026-07-01',
+      false,
+      firstController.signal
+    )
+    const second = getSeries(
+      ['steps'],
+      '2026-07-01',
+      '2026-07-01',
+      false,
+      secondController.signal
+    )
+
+    firstController.abort()
+
+    await expect(first).rejects.toHaveProperty('name', 'AbortError')
+    await expect(second).resolves.toMatchObject({ source: 'live' })
+    expect(requests).toHaveLength(1)
+  })
 })
