@@ -63,15 +63,20 @@ export function parseNutritionLogs(points: RawDataPoint[]): NutritionLogEntry[] 
     .sort((a, b) => Date.parse(a.startTime) - Date.parse(b.startTime))
 }
 
+export function nutritionLogDate(point: RawDataPoint): string | null {
+  const log = record(point.nutritionLog)
+  const interval = record(log?.interval)
+  const startTime = typeof interval?.startTime === 'string' ? interval.startTime : null
+  return dateFromCivil(interval?.civilStartTime as CivilDateTime | undefined)
+    ?? (startTime && /^\d{4}-\d{2}-\d{2}/.test(startTime) ? startTime.slice(0, 10) : null)
+}
+
 /** Daily totals recovered from raw food logs when Google's rollup omits nutrients. */
 export function parseNutritionLogTotals(points: RawDataPoint[]): Map<string, DayValues> {
   const totals = new Map<string, DayValues>()
   for (const point of points) {
     const log = record(point.nutritionLog)
-    const interval = record(log?.interval)
-    const startTime = typeof interval?.startTime === 'string' ? interval.startTime : null
-    const date = dateFromCivil(interval?.civilStartTime as CivilDateTime | undefined)
-      ?? (startTime && /^\d{4}-\d{2}-\d{2}/.test(startTime) ? startTime.slice(0, 10) : null)
+    const date = nutritionLogDate(point)
     const entry = parseNutritionLogs([point])[0]
     if (!date || !entry) continue
 

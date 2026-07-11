@@ -82,6 +82,7 @@ import {
 import { activityRollupBreakdown, activityRollupPoints, calorieEnergyBreakdown } from './activity-intraday'
 import {
   bmiFrom,
+  nutritionLogDate,
   parseBodyMeasurements,
   parseLatestHeight,
   parseNutritionLogs,
@@ -210,7 +211,7 @@ function rollupGroup(
   }
 }
 
-async function listNutritionRawData(
+async function fetchNutritionRawData(
   token: string,
   start: string,
   endExclusive: string,
@@ -222,6 +223,141 @@ async function listNutritionRawData(
     if (!(error instanceof HealthApiError) || error.status !== 400) throw error
     return listRawData(token, 'nutrition-log', 'sample', start, endExclusive, priority)
   }
+}
+
+interface RawDayCacheEntry {
+  points: RawDataPoint[]
+  fetchedAt: number
+}
+
+const nutritionRawCache = new Map<string, RawDayCacheEntry>()
+const nutritionRawInFlight = new Map<string, Promise<void>>()
+const weightRawCache = new Map<string, RawDayCacheEntry>()
+const weightRawInFlight = new Map<string, Promise<void>>()
+
+function rawDayFresh(entry: RawDayCacheEntry | undefined, date: string, now = Date.now()): boolean {
+  if (!entry) return false
+  const today = todayIso()
+  if (date >= today) return now - entry.fetchedAt < TTL_TODAY_MS
+  if (date >= shiftIsoDate(today, -2)) return now - entry.fetchedAt < TTL_RECENT_MS
+  return true
+}
+
+function rawSampleDate(point: RawDataPoint, key: 'weight'): string | null {
+  const value = point[key] as
+    | { sampleTime?: { civilTime?: CivilDateTime; physicalTime?: string } }
+    | undefined
+  return dateFromCivil(value?.sampleTime?.civilTime)
+    ?? (value?.sampleTime?.physicalTime?.slice(0, 10) || null)
+}
+
+async function cachedRawRange(
+  cache: Map<string, RawDayCacheEntry>,
+  inFlightByDate: Map<string, Promise<void>>,
+  start: string,
+  endExclusive: string,
+  fetchRange: (start: string, endExclusive: string) => Promise<RawDataPoint[]>,
+  dateOf: (point: RawDataPoint) => string | null,
+  generation: number
+): Promise<RawDataPoint[]> {
+  const end = shiftIsoDate(endExclusive, -1)
+  const dates = listDates(start, end)
+  const waits = new Set<Promise<void>>()
+  const uncovered = dates.filter((date) => {
+    if (rawDayFresh(cache.get(date), date)) return false
+    const pending = inFlightByDate.get(date)
+    if (pending) waits.add(pending)
+    return pending == null
+  })
+
+  if (uncovered.length > 0) {
+    const spanStart = uncovered[0]
+    const spanEndExclusive = shiftIsoDate(uncovered[uncovered.length - 1], 1)
+    const spanDates = listDates(spanStart, shiftIsoDate(spanEndExclusive, -1))
+    let job!: Promise<void>
+    job = fetchRange(spanStart, spanEndExclusive)
+      .then((points) => {
+        assertCurrentAccount(generation)
+        const byDate = new Map<string, RawDataPoint[]>()
+        for (const point of points) {
+          const date = dateOf(point)
+          if (!date) continue
+          const values = byDate.get(date) ?? []
+          values.push(point)
+          byDate.set(date, values)
+        }
+        const fetchedAt = Date.now()
+        for (const date of spanDates) cache.set(date, { points: byDate.get(date) ?? [], fetchedAt })
+      })
+      .finally(() => {
+        for (const date of uncovered) {
+          if (inFlightByDate.get(date) === job) inFlightByDate.delete(date)
+        }
+      })
+    for (const date of uncovered) inFlightByDate.set(date, job)
+    waits.add(job)
+  }
+
+  await Promise.all(waits)
+  return dates.flatMap((date) => cache.get(date)?.points ?? [])
+}
+
+function nutritionRawRange(
+  token: string,
+  start: string,
+  endExclusive: string,
+  priority: Priority
+): Promise<RawDataPoint[]> {
+  const generation = healthAccountGeneration
+  return cachedRawRange(
+    nutritionRawCache,
+    nutritionRawInFlight,
+    start,
+    endExclusive,
+    (rangeStart, rangeEnd) => fetchNutritionRawData(token, rangeStart, rangeEnd, priority),
+    nutritionLogDate,
+    generation
+  )
+}
+
+function weightRawRange(
+  token: string,
+  start: string,
+  endExclusive: string,
+  priority: Priority
+): Promise<RawDataPoint[]> {
+  const generation = healthAccountGeneration
+  return cachedRawRange(
+    weightRawCache,
+    weightRawInFlight,
+    start,
+    endExclusive,
+    (rangeStart, rangeEnd) => listRawData(token, 'weight', 'sample', rangeStart, rangeEnd, priority),
+    (point) => rawSampleDate(point, 'weight'),
+    generation
+  )
+}
+
+let heightCache: { generation: number; value: number | null } | null = null
+let heightInFlight: Promise<number | null> | null = null
+
+async function getLatestHeight(token: string, priority: Priority): Promise<number | null> {
+  if (heightCache?.generation === healthAccountGeneration) return heightCache.value
+  if (heightInFlight) return heightInFlight
+  const generation = healthAccountGeneration
+  let job!: Promise<number | null>
+  job = listRawData(token, 'height', 'sample', '2000-01-01', shiftIsoDate(todayIso(), 1), priority)
+    .then((points) => {
+      assertCurrentAccount(generation)
+      const value = parseLatestHeight(points)
+      heightCache = { generation, value }
+      return value
+    })
+    .finally(() => {
+      if (heightInFlight === job) heightInFlight = null
+    })
+  heightInFlight = job
+  return job
 }
 
 function dailyRecordGroup(
@@ -291,9 +427,9 @@ const GROUPS: FetchGroup[] = [
     fetch: async (token, start, endExclusive, priority) => {
       const [weightPoints, heightPoints] = await Promise.all([
         dailyRollUp(token, 'weight', start, endExclusive, priority),
-        listRawData(token, 'height', 'sample', '2000-01-01', shiftIsoDate(todayIso(), 1), priority).catch(() => [])
+        getLatestHeight(token, priority).catch(() => null)
       ])
-      const heightCm = parseLatestHeight(heightPoints)
+      const heightCm = heightPoints
       const map = new Map<string, DayValues>()
       for (const point of weightPoints) {
         const date = dateFromCivil(point.civilStartTime)
@@ -320,7 +456,7 @@ const GROUPS: FetchGroup[] = [
     fetch: async (token, start, endExclusive, priority) => {
       const [points, rawResult] = await Promise.all([
         dailyRollUp(token, 'nutrition-log', start, endExclusive, priority),
-        listNutritionRawData(token, start, endExclusive, priority)
+        nutritionRawRange(token, start, endExclusive, priority)
           .then((values) => ({ values, complete: true as const }))
           .catch((error) => {
             console.error(`[health] raw nutrition fallback failed for ${start}..${endExclusive}:`, error)
@@ -1107,7 +1243,7 @@ export async function getNutritionLogs(date: string): Promise<NutritionLogsResul
   const token = await getGoogleAccessToken()
   assertCurrentAccount(generation)
   if (!token) return demoNutritionLogs(d)
-  const points = await listNutritionRawData(token, d, shiftIsoDate(d, 1), 0)
+  const points = await nutritionRawRange(token, d, shiftIsoDate(d, 1), 0)
   assertCurrentAccount(generation)
   return { date: d, source: 'live', entries: parseNutritionLogs(points) }
 }
@@ -1119,19 +1255,18 @@ export async function getBodyMeasurements(start: string, end: string): Promise<B
   assertCurrentAccount(generation)
   if (!token) return demoBodyMeasurements(s, e)
   const [weightResult, heightResult] = await Promise.allSettled([
-    listRawData(token, 'weight', 'sample', s, shiftIsoDate(e, 1), spanPriority(listDates(s, e).length)),
+    weightRawRange(token, s, shiftIsoDate(e, 1), spanPriority(listDates(s, e).length)),
     // Height is a profile-like input and may have been recorded years before
     // the visible weight range. Fetch its tiny history independently.
-    listRawData(token, 'height', 'sample', '2000-01-01', shiftIsoDate(todayIso(), 1), 1)
+    getLatestHeight(token, 1)
   ])
   assertCurrentAccount(generation)
   if (weightResult.status === 'rejected' && heightResult.status === 'rejected') throw weightResult.reason
   const weightPoints = weightResult.status === 'fulfilled' ? weightResult.value : []
-  const heightPoints = heightResult.status === 'fulfilled' ? heightResult.value : []
   return {
     source: 'live',
     measurements: parseBodyMeasurements(weightPoints, []),
-    heightCm: parseLatestHeight(heightPoints)
+    heightCm: heightResult.status === 'fulfilled' ? heightResult.value : null
   }
 }
 
@@ -1187,6 +1322,9 @@ export function clearHealthCache(): void {
   markAllStale()
   devicesCache = null
   workoutTrackCache.clear()
+  nutritionRawCache.clear()
+  weightRawCache.clear()
+  heightCache = null
 }
 
 /** Account change: invalidate pending work and remove every prior-account value. */
@@ -1195,6 +1333,12 @@ export function resetHealthAccount(): void {
   inFlight.clear()
   devicesCache = null
   workoutTrackCache.clear()
+  nutritionRawCache.clear()
+  nutritionRawInFlight.clear()
+  weightRawCache.clear()
+  weightRawInFlight.clear()
+  heightCache = null
+  heightInFlight = null
   wipeArchive()
 }
 
