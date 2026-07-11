@@ -34,6 +34,7 @@ export interface ChatController {
   send: (text: string) => void
   create: () => Promise<void>
   select: (id: string) => void
+  pin: (id: string, pinned: boolean) => Promise<void>
   delete: (id: string) => Promise<void>
   reload: () => Promise<void>
 }
@@ -279,6 +280,23 @@ export function useChat(): ChatController {
     [chooseActive]
   )
 
+  const pin = useCallback(
+    async (id: string, pinned: boolean): Promise<void> => {
+      const epoch = accountEpochRef.current
+      // Optimistic: the list regroups immediately; the store confirms after.
+      publish(chatsRef.current.map((chat) => (chat.id === id ? { ...chat, pinned } : chat)))
+      try {
+        const session = await window.pulse.chats.setPinned(id, pinned)
+        if (epoch === accountEpochRef.current) mergeSession(session)
+      } catch {
+        if (epoch === accountEpochRef.current) {
+          publish(chatsRef.current.map((chat) => (chat.id === id ? { ...chat, pinned: !pinned } : chat)))
+        }
+      }
+    },
+    [mergeSession, publish]
+  )
+
   const cancelRun = useCallback((id: string): void => {
     const run = runsRef.current.get(id)
     if (!run) return
@@ -319,6 +337,7 @@ export function useChat(): ChatController {
     send,
     create,
     select,
+    pin,
     delete: deleteChat,
     reload
   }

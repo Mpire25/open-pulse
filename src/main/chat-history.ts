@@ -27,6 +27,10 @@ export function updateChatSession(id: string, messages: ChatSessionMessage[]) {
   return historyStore().update(getGoogleAccountScope(), id, messages)
 }
 
+export function setChatSessionPinned(id: string, pinned: boolean) {
+  return historyStore().setPinned(getGoogleAccountScope(), id, pinned)
+}
+
 export function deleteChatSession(id: string) {
   return historyStore().delete(getGoogleAccountScope(), id)
 }

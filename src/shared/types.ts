@@ -437,6 +437,8 @@ export interface ChatSession {
   title: string
   createdAt: string
   updatedAt: string
+  /** Pinned chats surface in their own group at the top of the history list. */
+  pinned?: boolean
   messages: ChatSessionMessage[]
 }
 
