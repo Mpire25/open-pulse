@@ -31,7 +31,7 @@ const TOOLS: ToolSpec[] = [
     type: 'function',
     name: 'get_health_day',
     description:
-      "Full snapshot for one calendar day: steps, distance, floors, calories out/in, active & zone minutes, sedentary time, resting heart rate, HRV, SpO2, breathing rate, skin-temperature deviation, VO2 max, weight, body fat, water, sleep (with stages), workouts, hourly steps, intraday heart rate, plus daily metrics for the 14 days ending on that date (the `trend` array).",
+      "Full snapshot for one calendar day: steps, distance, floors, calories out/in, active & zone minutes, sedentary time, resting heart rate, HRV, SpO2, breathing rate, skin-temperature deviation, weight, body fat, water, sleep (with stages), workouts, hourly steps, intraday heart rate, plus daily metrics for the 14 days ending on that date (the `trend` array).",
     strict: false,
     parameters: {
       type: 'object',

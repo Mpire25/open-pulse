@@ -13,7 +13,7 @@ import type { OpenMetric } from '@/lib/metric-navigation'
 import { fade } from '@/lib/motion'
 import type { MetricKey } from '@shared/types'
 
-const VITAL_KEYS: MetricKey[] = ['restingHeartRate', 'hrvMs', 'spo2Pct', 'breathingRate', 'skinTempDeltaC', 'vo2Max']
+const VITAL_KEYS: MetricKey[] = ['restingHeartRate', 'hrvMs', 'spo2Pct', 'breathingRate', 'skinTempDeltaC']
 
 interface HeartViewProps {
   date: string
@@ -154,9 +154,7 @@ function VitalCard({
             baseline={
               def.deltaMode === 'abs'
                 ? { value: 0, label: 'baseline' }
-                : base != null
-                  ? { value: base, label: '7d avg' }
-                  : null
+                : null
             }
             unitLabel={def.unit}
             domain={metricKey === 'spo2Pct' ? { max: 100 } : undefined}

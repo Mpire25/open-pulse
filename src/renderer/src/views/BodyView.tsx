@@ -125,7 +125,7 @@ export function BodyView({ date, onOpenMetric }: BodyViewProps): React.JSX.Eleme
                     <div className="text-[12px] font-medium text-ink-dim">{measurementDate(measurement.time)}</div>
                     <div className="mt-0.5 font-mono text-[10.5px] text-ink-faint">{formatClock(measurement.time)}</div>
                   </div>
-                  <div className="flex flex-wrap items-baseline gap-x-8 gap-y-1">
+                  <div className="flex flex-wrap items-baseline gap-x-8 gap-y-1 sm:justify-end sm:text-right">
                     {measurement.weightKg != null && (
                       <MeasurementValue label="Weight" value={measurement.weightKg.toFixed(2)} unit="kg" />
                     )}
@@ -176,7 +176,7 @@ function BodyMeasurementsSkeleton(): React.JSX.Element {
             <SkeletonText className="w-16" />
             <SkeletonText className="h-2.5 w-12" />
           </div>
-          <div className="flex flex-wrap items-center gap-8">
+          <div className="flex flex-wrap items-center gap-8 sm:justify-end">
             <SkeletonText className="h-4 w-24" />
             <SkeletonText className="h-4 w-24" />
           </div>

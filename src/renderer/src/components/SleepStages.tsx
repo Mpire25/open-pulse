@@ -16,24 +16,28 @@ export const STAGE_LABEL: Record<SleepStageType, string> = {
 }
 // Vertical band order, awake on top.
 const ROW_ORDER: SleepStageType[] = ['AWAKE', 'REM', 'LIGHT', 'DEEP']
-const ROW_HEIGHT = 22
-const ROW_GAP = 8
 
 interface SleepStagesProps {
-  night: SleepNight
+  night: SleepNight | null
+  compact?: boolean
 }
+
+const EMPTY_STAGES: SleepNight['stages'] = []
 
 // Hypnogram: each stage segment drawn as a rounded block on its own row,
 // with a per-segment hover readout.
-export function SleepStages({ night }: SleepStagesProps): React.JSX.Element {
-  const start = new Date(night.startTime).getTime()
-  const end = new Date(night.endTime).getTime()
+export function SleepStages({ night, compact = false }: SleepStagesProps): React.JSX.Element {
+  const stages = night?.stages ?? EMPTY_STAGES
+  const start = night ? new Date(night.startTime).getTime() : 0
+  const end = night ? new Date(night.endTime).getTime() : 1
   const total = Math.max(1, end - start)
+  const rowHeight = compact ? 18 : 22
+  const rowGap = compact ? 6 : 8
   const [hover, setHover] = useState<{ i: number; text: string; left: number; top: number } | null>(null)
 
   const blocks = useMemo(
     () =>
-      night.stages.map((seg, i) => {
+      stages.map((seg, i) => {
         const segStart = new Date(seg.startTime).getTime()
         const segEnd = new Date(seg.endTime).getTime()
         const left = ((segStart - start) / total) * 100
@@ -45,11 +49,11 @@ export function SleepStages({ night }: SleepStagesProps): React.JSX.Element {
           type: seg.type,
           left,
           width,
-          top: row * (ROW_HEIGHT + ROW_GAP),
+          top: row * (rowHeight + rowGap),
           tip: `${STAGE_LABEL[seg.type]} · ${formatMinutes(minutes)} · ${formatClock(seg.startTime)}`
         }
       }),
-    [night.stages, start, total]
+    [rowGap, rowHeight, stages, start, total]
   )
 
   const connectors = blocks.slice(1).flatMap((next, index) => {
@@ -59,8 +63,8 @@ export function SleepStages({ night }: SleepStagesProps): React.JSX.Element {
     const previousIsAbove = previous.top < next.top
     const upper = previousIsAbove ? previous : next
     const lower = previousIsAbove ? next : previous
-    const upperCenter = upper.top + ROW_HEIGHT / 2
-    const lowerCenter = lower.top + ROW_HEIGHT / 2
+    const upperCenter = upper.top + rowHeight / 2
+    const lowerCenter = lower.top + rowHeight / 2
 
     return [
       {
@@ -76,14 +80,18 @@ export function SleepStages({ night }: SleepStagesProps): React.JSX.Element {
     ]
   })
 
-  const chartHeight = ROW_ORDER.length * ROW_HEIGHT + (ROW_ORDER.length - 1) * ROW_GAP
+  const chartHeight = ROW_ORDER.length * rowHeight + (ROW_ORDER.length - 1) * rowGap
 
   return (
     <div>
       <div className="flex gap-3">
         <div className="flex flex-col justify-between py-0.5" style={{ height: chartHeight }}>
           {ROW_ORDER.map((t) => (
-            <span key={t} className="text-[11px] leading-none text-ink-faint" style={{ height: ROW_HEIGHT }}>
+            <span
+              key={t}
+              className={`${compact ? 'text-[10px]' : 'text-[11px]'} leading-none text-ink-faint`}
+              style={{ height: rowHeight }}
+            >
               {STAGE_LABEL[t]}
             </span>
           ))}
@@ -93,7 +101,7 @@ export function SleepStages({ night }: SleepStagesProps): React.JSX.Element {
             <div
               key={r}
               className="absolute inset-x-0 rounded-full bg-white/[0.03]"
-              style={{ top: r * (ROW_HEIGHT + ROW_GAP), height: ROW_HEIGHT }}
+              style={{ top: r * (rowHeight + rowGap), height: rowHeight }}
             />
           ))}
           {connectors.map((connector) => (
@@ -124,7 +132,7 @@ export function SleepStages({ night }: SleepStagesProps): React.JSX.Element {
                   left: `calc(${b.left}% - ${overlapLeft}px)`,
                   width: `calc(${b.width}% + ${overlapLeft + overlapRight}px)`,
                   top: b.top,
-                  height: ROW_HEIGHT,
+                  height: rowHeight,
                   background: STAGE_COLOR[b.type],
                   opacity: hover && hover.i !== b.key ? 0.55 : 1
                 }}
@@ -143,25 +151,22 @@ export function SleepStages({ night }: SleepStagesProps): React.JSX.Element {
           )}
         </div>
       </div>
-      <div className="mt-3 flex items-center justify-between pl-[52px] font-mono text-[11px] text-ink-faint">
-        <span>{formatClock(night.startTime)}</span>
-        <span>{formatClock(night.endTime)}</span>
+      <div
+        className={`${compact ? 'mt-2 pl-[47px] text-[10px]' : 'mt-3 pl-[52px] text-[11px]'} flex items-center justify-between font-mono text-ink-faint`}
+      >
+        <span>{night ? formatClock(night.startTime) : '—'}</span>
+        <span>{night ? formatClock(night.endTime) : '—'}</span>
       </div>
-      <div className="mt-4 grid grid-cols-4 gap-2">
+      <div className={`${compact ? 'mt-3' : 'mt-4'} grid grid-cols-4 gap-2`}>
         {ROW_ORDER.map((t) => (
           <div key={t} className="flex flex-col gap-1">
             <div className="flex items-center gap-1.5">
               <span className="h-2 w-2 rounded-full" style={{ background: STAGE_COLOR[t] }} />
-              <span className="text-[11px] text-ink-dim">{STAGE_LABEL[t]}</span>
+              <span className={`${compact ? 'text-[10px]' : 'text-[11px]'} text-ink-dim`}>{STAGE_LABEL[t]}</span>
             </div>
-            <span className="text-[13px] font-semibold text-ink">
-              {formatMinutes(night.stageMinutes[t] ?? 0)}
+            <span className={`${compact ? 'text-[12px]' : 'text-[13px]'} font-semibold text-ink`}>
+              {night ? formatMinutes(night.stageMinutes[t] ?? 0) : '—'}
             </span>
-            {(night.stageCounts?.[t] ?? 0) > 0 && (
-              <span className="text-[9.5px] text-ink-faint">
-                {night.stageCounts?.[t]} {night.stageCounts?.[t] === 1 ? 'period' : 'periods'}
-              </span>
-            )}
           </div>
         ))}
       </div>

@@ -24,7 +24,6 @@ export const METRIC_KEYS = [
   'spo2Pct',
   'breathingRate',
   'skinTempDeltaC',
-  'vo2Max',
   // Sleep summary (derived from sleep sessions)
   'sleepMinutes',
   'sleepEfficiency',
@@ -176,8 +175,7 @@ export interface ActivityIntradayResult {
 }
 
 export const HEART_DETAIL_METRICS = [
-  'restingHeartRate',
-  'vo2Max'
+  'restingHeartRate'
 ] as const satisfies readonly MetricKey[]
 
 export type HeartDetailMetric = (typeof HEART_DETAIL_METRICS)[number]
@@ -234,7 +232,6 @@ export interface Workout {
   averageSpeedKph?: number | null
   averagePaceSecPerKm?: number | null
   elevationGainM?: number | null
-  runVo2Max?: number | null
   totalSwimLengths?: number | null
   heartRateZones?: WorkoutHeartRateZones | null
   mobility?: WorkoutMobilityMetrics | null

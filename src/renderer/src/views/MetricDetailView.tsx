@@ -3,7 +3,6 @@
 // One data-driven page — the registry decides naming, color, chart type, and
 // aggregation, so every metric behaves identically.
 
-import { useState } from 'react'
 import { motion } from 'framer-motion'
 import { ArrowLeft } from '@phosphor-icons/react'
 import { Panel, SectionHeader } from '@/components/Panel'
@@ -18,9 +17,12 @@ import {
   baseline,
   baselineDeltaPct,
   latestPoint,
+  monthlyBuckets,
   rangeEnding,
   seriesPoints,
-  type SeriesPoint
+  weeklyAverageBuckets,
+  type SeriesPoint,
+  type WeeklySeriesPoint
 } from '@/lib/metrics'
 import { formatHour, formatInt, formatMinuteOfDay, longDate, shortDate, weekdayShort } from '@/lib/format'
 import type { MetricRange } from '@/lib/metric-navigation'
@@ -30,7 +32,6 @@ import type {
   ActivityIntradayMetric,
   ActivityIntradayResult,
   Goals,
-  HeartDetailMetric,
   HeartDetailResult,
   MetricKey
 } from '@shared/types'
@@ -49,15 +50,24 @@ const SUMMARY_ONLY_DAILY_METRICS = new Set<MetricKey>(['hrvMs', 'spo2Pct', 'brea
 
 interface MetricDetailViewProps {
   metricKey: MetricKey
-  initialRange: MetricRange
+  range: MetricRange
   date: string
   goals: Goals
   onBack: () => void
+  onRangeChange: (range: MetricRange) => void
+  onSelectDate: (date: string) => void
 }
 
-export function MetricDetailView({ metricKey, initialRange, date, goals, onBack }: MetricDetailViewProps): React.JSX.Element {
+export function MetricDetailView({
+  metricKey,
+  range,
+  date,
+  goals,
+  onBack,
+  onRangeChange,
+  onSelectDate
+}: MetricDetailViewProps): React.JSX.Element {
   const def = METRICS[metricKey]
-  const [range, setRange] = useState<MetricRange>(initialRange)
   const spec = RANGES.find((r) => r.id === range)!
 
   const fetchWindow = rangeEnding(date, spec.fetchDays)
@@ -70,7 +80,7 @@ export function MetricDetailView({ metricKey, initialRange, date, goals, onBack 
   const wantsHeartDetail = range === 'D' && heartMetric != null
   const intraday = useIntraday(date, wantsIntraday)
   const activityIntraday = useActivityIntraday(date, activityMetric ?? 'distanceKm', wantsActivityIntraday)
-  const heartDetail = useHeartDetail(date, heartMetric ?? 'vo2Max', wantsHeartDetail)
+  const heartDetail = useHeartDetail(date, heartMetric ?? 'restingHeartRate', wantsHeartDetail)
 
   if (series.isError) {
     return <ErrorState message={series.error instanceof Error ? series.error.message : undefined} onRetry={() => void series.refetch()} />
@@ -113,7 +123,7 @@ export function MetricDetailView({ metricKey, initialRange, date, goals, onBack 
               {def.hint && <p className="text-[13px] text-ink-dim">{def.hint}</p>}
             </div>
           </div>
-          <RangeTabs range={range} onChange={setRange} />
+          <RangeTabs range={range} onChange={onRangeChange} />
         </div>
       </motion.header>
 
@@ -133,6 +143,7 @@ export function MetricDetailView({ metricKey, initialRange, date, goals, onBack 
           heartDetailData={wantsHeartDetail ? heartDetail.data : undefined}
           heartDetailPending={wantsHeartDetail && heartDetail.isPending}
           heartDetailError={wantsHeartDetail && heartDetail.isError}
+          onSelectDate={onSelectDate}
         />
       ) : (
         <PeriodDetail
@@ -142,6 +153,7 @@ export function MetricDetailView({ metricKey, initialRange, date, goals, onBack 
           points={points}
           prevPoints={prevPoints}
           goal={goal}
+          onSelectDate={onSelectDate}
         />
       )}
     </div>
@@ -161,8 +173,7 @@ function MetricDetailSkeleton({
     const hasTimeline =
       metricKey === 'steps' ||
       metricKey === 'restingHeartRate' ||
-      isActivityIntradayMetric(metricKey) ||
-      metricKey === 'vo2Max'
+      isActivityIntradayMetric(metricKey)
     const breakdownCount = metricKey === 'caloriesOut' ? 2 : ['activeMinutes', 'activeZoneMinutes'].includes(metricKey) ? 3 : 0
     return (
       <>
@@ -282,7 +293,8 @@ function DayDetail({
   activityIntradayError,
   heartDetailData,
   heartDetailPending,
-  heartDetailError
+  heartDetailError,
+  onSelectDate
 }: {
   metricKey: MetricKey
   date: string
@@ -296,6 +308,7 @@ function DayDetail({
   heartDetailData?: HeartDetailResult
   heartDetailPending: boolean
   heartDetailError: boolean
+  onSelectDate: (date: string) => void
 }): React.JSX.Element {
   const def = METRICS[metricKey]
   const value = points.find((p) => p.date === date)?.value ?? null
@@ -390,13 +403,6 @@ function DayDetail({
             pending={activityIntradayPending}
             error={activityIntradayError}
           />
-        ) : isHeartDetailMetric(metricKey) && metricKey !== 'restingHeartRate' ? (
-          <HeartMetricDetailPanel
-            metricKey={metricKey}
-            data={heartDetailData}
-            pending={heartDetailPending}
-            error={heartDetailError}
-          />
         ) : (
           <Panel className={`flex flex-col gap-3 p-5 ${CARD_HEIGHT.detail}`}>
             <SectionHeader title="In context" hint="The last 14 days, this day highlighted" />
@@ -415,6 +421,7 @@ function DayDetail({
                 format={def.format}
                 unitLabel={def.unit}
                 axisLabel={axisLabel}
+                onSelect={(point) => onSelectDate(point.key)}
               />
             ) : (
               <TrendLine
@@ -426,10 +433,10 @@ function DayDetail({
                 color={def.color}
                 height={210}
                 format={def.format}
-                baseline={base != null && def.deltaMode !== 'abs' ? { value: base, label: '7d avg' } : null}
                 unitLabel={def.unit}
                 axisLabel={axisLabel}
                 domain={axisDomainFor(metricKey)}
+                onSelect={(point) => onSelectDate(point.date)}
               />
             )}
           </Panel>
@@ -441,7 +448,7 @@ function DayDetail({
         <HeartZonesPanel data={heartDetailData} pending={heartDetailPending} error={heartDetailError} />
       )}
 
-      <HistoryList metricKey={metricKey} rows={[...points].reverse()} selected={date} />
+      <HistoryList metricKey={metricKey} rows={[...points].reverse()} selected={date} onSelectDate={onSelectDate} />
     </>
   )
 }
@@ -515,95 +522,6 @@ function ActivityIntradayPanel({
       ) : (
         <div className="grid h-[190px] place-items-center text-[13px] text-ink-faint">
           No intraday {def.label.toLowerCase()} recorded for this day.
-        </div>
-      )}
-    </Panel>
-  )
-}
-
-function HeartDetailStats({ stats }: { stats: HeartDetailResult['stats'] }): React.JSX.Element | null {
-  if (stats.length === 0) return null
-  return (
-    <div
-      className="grid gap-x-5 gap-y-3 border-t border-hairline pt-3"
-      style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(125px, 1fr))' }}
-    >
-      {stats.map((item) => (
-        <div key={item.key} className="min-w-0">
-          <div className="truncate text-[10.5px] font-medium text-ink-faint">{item.label}</div>
-          <div className="mt-0.5 truncate font-mono text-[15px] font-medium text-ink">
-            {item.value}{' '}
-            {item.unit && <span className="text-[10.5px] text-ink-dim">{item.unit}</span>}
-          </div>
-        </div>
-      ))}
-    </div>
-  )
-}
-
-function HeartMetricDetailPanel({
-  metricKey,
-  data,
-  pending,
-  error
-}: {
-  metricKey: Exclude<HeartDetailMetric, 'restingHeartRate'>
-  data?: HeartDetailResult
-  pending: boolean
-  error: boolean
-}): React.JSX.Element {
-  const def = METRICS[metricKey]
-  const recorded = data?.points.some((point) => point.value != null) ?? false
-  const hasStats = (data?.stats.length ?? 0) > 0
-  return (
-    <Panel className={`flex flex-col gap-3 p-5 ${CARD_HEIGHT.detail}`}>
-      <SectionHeader
-        title={recorded ? 'Across the day' : 'Daily details'}
-        hint={
-          recorded
-            ? `${data?.windowMinutes ?? 30}-minute ${data?.sampleLabel ?? 'sample'} averages`
-            : 'What your device recorded'
-        }
-      />
-      {pending ? (
-        <>
-          <SkeletonChart height={170} columns={16} />
-          <div className="grid grid-cols-4 gap-4 border-t border-hairline pt-3" aria-hidden>
-            {Array.from({ length: 4 }, (_, index) => (
-              <div key={index} className="flex flex-col gap-2">
-                <SkeletonText className="w-20" />
-                <SkeletonText className="h-4 w-14" />
-              </div>
-            ))}
-          </div>
-        </>
-      ) : error ? (
-        <div className="grid h-[190px] place-items-center text-[13px] text-ink-faint">
-          Detailed heart data could not be loaded for this metric.
-        </div>
-      ) : recorded && data ? (
-        <>
-          <TrendLine
-            data={data.points.map((point) => ({
-              date: String(point.minute),
-              label: formatMinuteOfDay(point.minute),
-              value: point.value
-            }))}
-            color={def.color}
-            height={hasStats ? 170 : 210}
-            format={def.format}
-            unitLabel={data.sampleUnit ?? def.unit}
-            axisLabel={data.sampleUnit ?? def.unit}
-          />
-          <HeartDetailStats stats={data.stats} />
-        </>
-      ) : hasStats && data ? (
-        <div className="flex min-h-[190px] flex-col justify-center">
-          <HeartDetailStats stats={data.stats} />
-        </div>
-      ) : (
-        <div className="grid h-[190px] place-items-center text-[13px] text-ink-faint">
-          No detailed {def.label.toLowerCase()} data was recorded for this day.
         </div>
       )}
     </Panel>
@@ -684,7 +602,8 @@ function PeriodDetail({
   date,
   points,
   prevPoints,
-  goal
+  goal,
+  onSelectDate
 }: {
   metricKey: MetricKey
   range: MetricRange
@@ -692,6 +611,7 @@ function PeriodDetail({
   points: SeriesPoint[]
   prevPoints: SeriesPoint[]
   goal: number | null
+  onSelectDate: (date: string) => void
 }): React.JSX.Element {
   const def = METRICS[metricKey]
   const axisLabel = axisLabelFor(metricKey, def.unit)
@@ -702,8 +622,9 @@ function PeriodDetail({
   const deltaVsPrev =
     current != null && previous != null && previous !== 0 ? ((current - previous) / previous) * 100 : null
 
-  const buckets = range === 'Y' ? monthlyBuckets(points, def.aggregate) : null
-  const chartPoints = buckets ?? points
+  const monthlyHistory = range === 'Y' ? monthlyBuckets(points, def.aggregate) : null
+  const weeklyBuckets = range === 'Y' && def.chart === 'bar' ? weeklyAverageBuckets(points) : null
+  const chartPoints = weeklyBuckets ?? points
 
   const stats: Array<{ label: string; value: string }> =
     def.aggregate === 'sum'
@@ -723,8 +644,6 @@ function PeriodDetail({
           { label: 'Lowest', value: present.length ? def.format(Math.min(...present)) : '—' },
           { label: 'Highest', value: present.length ? def.format(Math.max(...present)) : '—' }
         ]
-
-  const avg = present.length ? present.reduce((s, v) => s + v, 0) / present.length : null
 
   return (
     <>
@@ -756,38 +675,44 @@ function PeriodDetail({
         <Panel className={`flex flex-col gap-3 p-5 ${CARD_HEIGHT.detailLarge}`}>
           <SectionHeader
             title={rangeTitle(range, date)}
-            hint={range === 'Y' ? (def.aggregate === 'sum' ? 'Daily average per month' : 'Monthly values') : undefined}
+            hint={range === 'Y' ? (def.chart === 'bar' ? 'Weekly daily averages' : 'Daily values') : undefined}
           />
           {def.chart === 'bar' ? (
             <ColumnChart
               data={chartPoints.map((p, i) => ({
                 key: p.date,
-                label: buckets ? monthLabel(p.date) : `${weekdayShort(p.date)} · ${shortDate(p.date)}`,
+                label: weeklyBuckets
+                  ? weekLabel(weeklyBuckets[i])
+                  : `${weekdayShort(p.date)} · ${shortDate(p.date)}`,
                 value: p.value,
-                tick: tickFor(range, p.date, i)
+                tick: weeklyBuckets
+                  ? weekMonthTick(weeklyBuckets, i)
+                  : tickFor(range, p.date, i)
               }))}
               color={def.color}
               height={240}
-              goal={goal != null && !buckets ? { value: goal, label: 'goal' } : null}
-              emphasisIndex={buckets ? undefined : chartPoints.findIndex((p) => p.date === date)}
+              goal={goal != null ? { value: goal, label: 'goal' } : null}
+              emphasisIndex={weeklyBuckets ? undefined : chartPoints.findIndex((p) => p.date === date)}
               format={def.format}
               unitLabel={def.unit}
               axisLabel={axisLabel}
+              onSelect={weeklyBuckets ? undefined : (point) => onSelectDate(point.key)}
             />
           ) : (
             <TrendLine
-              data={chartPoints.map((p) => ({
+              data={chartPoints.map((p, index) => ({
                 date: p.date,
-                label: buckets ? monthLabel(p.date) : `${weekdayShort(p.date)} · ${shortDate(p.date)}`,
-                value: p.value
+                label: `${weekdayShort(p.date)} · ${shortDate(p.date)}`,
+                value: p.value,
+                tick: range === 'Y' ? dailyMonthTick(chartPoints, index) : undefined
               }))}
               color={def.color}
               height={240}
               format={def.format}
-              baseline={avg != null ? { value: avg, label: 'avg' } : null}
               unitLabel={def.unit}
               axisLabel={axisLabel}
               domain={axisDomainFor(metricKey)}
+              onSelect={(point) => onSelectDate(point.date)}
             />
           )}
         </Panel>
@@ -795,9 +720,10 @@ function PeriodDetail({
 
       <HistoryList
         metricKey={metricKey}
-        rows={[...(buckets ?? points)].reverse().slice(0, 31)}
+        rows={[...(monthlyHistory ?? points)].reverse().slice(0, 31)}
         selected={date}
-        monthly={buckets != null}
+        monthly={monthlyHistory != null}
+        onSelectDate={monthlyHistory == null ? onSelectDate : undefined}
       />
     </>
   )
@@ -817,42 +743,40 @@ function tickFor(range: MetricRange, date: string, index: number): string | unde
   return monthLabel(date).slice(0, 1)
 }
 
-function monthLabel(isoDate: string): string {
-  return new Date(`${isoDate.slice(0, 7)}-15T12:00:00`).toLocaleDateString('en-US', { month: 'short' })
+function dailyMonthTick(points: SeriesPoint[], index: number): string | undefined {
+  const point = points[index]
+  const previous = points[index - 1]
+  return index === 0 || point.date.slice(0, 7) !== previous.date.slice(0, 7) ? monthLabel(point.date) : undefined
 }
 
-/** 365 daily points -> per calendar month; sums become daily averages. */
-function monthlyBuckets(points: SeriesPoint[], aggregate: 'sum' | 'avg' | 'last'): SeriesPoint[] {
-  const byMonth = new Map<string, number[]>()
-  for (const p of points) {
-    if (p.value == null) continue
-    const month = p.date.slice(0, 7)
-    const list = byMonth.get(month) ?? []
-    list.push(p.value)
-    byMonth.set(month, list)
-  }
-  const months = [...new Set(points.map((p) => p.date.slice(0, 7)))].sort()
-  return months.map((month) => {
-    const values = byMonth.get(month)
-    let value: number | null = null
-    if (values && values.length) {
-      if (aggregate === 'last') value = values[values.length - 1]
-      else value = values.reduce((s, v) => s + v, 0) / values.length
-    }
-    return { date: `${month}-01`, value }
-  })
+function weekMonthTick(points: WeeklySeriesPoint[], index: number): string | undefined {
+  const point = points[index]
+  const previous = points[index - 1]
+  return index === 0 || point.midpointDate.slice(0, 7) !== previous.midpointDate.slice(0, 7)
+    ? monthLabel(point.midpointDate)
+    : undefined
+}
+
+function weekLabel(point: WeeklySeriesPoint): string {
+  return `${shortDate(point.date)}–${shortDate(point.endDate)}`
+}
+
+function monthLabel(isoDate: string): string {
+  return new Date(`${isoDate.slice(0, 7)}-15T12:00:00`).toLocaleDateString('en-US', { month: 'short' })
 }
 
 function HistoryList({
   metricKey,
   rows,
   selected,
-  monthly = false
+  monthly = false,
+  onSelectDate
 }: {
   metricKey: MetricKey
   rows: SeriesPoint[]
   selected: string
   monthly?: boolean
+  onSelectDate?: (date: string) => void
 }): React.JSX.Element | null {
   const def = METRICS[metricKey]
   const withValues = rows.filter((r) => r.value != null)
@@ -864,28 +788,37 @@ function HistoryList({
           <SectionHeader title="History" hint={monthly ? 'By month' : 'Most recent first'} />
         </div>
         <div className="divide-y divide-hairline">
-          {withValues.map((row) => (
-            <div
-              key={row.date}
-              className={cn(
-                'flex items-center justify-between px-5 py-2.5',
-                row.date === selected && 'bg-white/[0.03]'
-              )}
-            >
-              <span className="text-[12.5px] text-ink-dim">
-                {monthly
-                  ? new Date(`${row.date.slice(0, 7)}-15T12:00:00`).toLocaleDateString('en-US', {
-                      month: 'long',
-                      year: 'numeric'
-                    })
-                  : `${weekdayShort(row.date)} · ${shortDate(row.date)}`}
-              </span>
-              <span className="font-mono text-[13px] text-ink">
-                {def.format(row.value as number)}
-                {def.unit && <span className="ml-1 text-[10.5px] text-ink-faint">{def.unit}</span>}
-              </span>
-            </div>
-          ))}
+          {withValues.map((row) => {
+            const rowClassName = cn(
+              'flex w-full items-center justify-between px-5 py-2.5 text-left',
+              onSelectDate && 'transition-colors hover:bg-white/[0.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/50',
+              row.date === selected && 'bg-white/[0.03]'
+            )
+            const content = (
+              <>
+                <span className="text-[12.5px] text-ink-dim">
+                  {monthly
+                    ? new Date(`${row.date.slice(0, 7)}-15T12:00:00`).toLocaleDateString('en-US', {
+                        month: 'long',
+                        year: 'numeric'
+                      })
+                    : `${weekdayShort(row.date)} · ${shortDate(row.date)}`}
+                </span>
+                <span className="font-mono text-[13px] text-ink">
+                  {def.format(row.value as number)}
+                  {def.unit && <span className="ml-1 text-[10.5px] text-ink-faint">{def.unit}</span>}
+                </span>
+              </>
+            )
+
+            return onSelectDate ? (
+              <button type="button" key={row.date} onClick={() => onSelectDate(row.date)} className={rowClassName}>
+                {content}
+              </button>
+            ) : (
+              <div key={row.date} className={rowClassName}>{content}</div>
+            )
+          })}
         </div>
       </Panel>
     </motion.div>

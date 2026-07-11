@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { motion } from 'framer-motion'
 import {
   ArrowLeft,
@@ -11,16 +12,17 @@ import {
   MapPin,
   Mountains,
   PersonSimpleRun,
+  StackSimple,
   SwimmingPool,
   Timer
 } from '@phosphor-icons/react'
 import { Panel, SectionHeader } from '@/components/Panel'
 import { IntradayLine } from '@/components/charts'
 import { SkeletonChart } from '@/components/Skeleton'
-import { useIntraday, useWorkoutTrack } from '@/hooks/useHealth'
+import { useHeartDetail, useIntraday, useWorkoutTrack } from '@/hooks/useHealth'
 import { formatClock, formatInt, formatMinuteOfDay, formatMinutes, longDate } from '@/lib/format'
 import { fade } from '@/lib/motion'
-import type { Workout, WorkoutSplit, WorkoutTrackPoint } from '@shared/types'
+import type { HeartZoneDetail, Workout, WorkoutSplit, WorkoutTrackPoint } from '@shared/types'
 
 interface WorkoutDetailViewProps {
   workout: Workout
@@ -35,8 +37,10 @@ interface DetailItem {
 }
 
 export function WorkoutDetailView({ workout, date, onBack }: WorkoutDetailViewProps): React.JSX.Element {
+  const [showHeartRateZones, setShowHeartRateZones] = useState(false)
   const intraday = useIntraday(date)
   const track = useWorkoutTrack(workout.id, workout.hasGps !== false)
+  const heartZoneDetail = useHeartDetail(date, 'restingHeartRate', workout.heartRateZones != null)
   const elapsedMinutes = workout.elapsedDurationMin ?? workout.durationMin
   const startDate = new Date(workout.startTime)
   const startMinute = workout.startMinute ?? startDate.getHours() * 60 + startDate.getMinutes()
@@ -84,7 +88,8 @@ export function WorkoutDetailView({ workout, date, onBack }: WorkoutDetailViewPr
       point.latitude != null && point.longitude != null
   )
   const showRoute = workout.hasGps === true || routePoints.length > 1
-  const zones = zoneItems(workout)
+  const zones = zoneItems(workout, heartZoneDetail.data?.zones)
+  const heartRateChartZones = chartZoneItems(heartZoneDetail.data?.zones)
   const specialized = specializedItems(workout)
 
   return (
@@ -133,11 +138,41 @@ export function WorkoutDetailView({ workout, date, onBack }: WorkoutDetailViewPr
             hint={heartPoints.length ? `${heartPoints.length} readings during this workout` : 'Recorded workout window'}
             icon={<Heartbeat size={18} weight="fill" className="text-heart" />}
             action={
-              heartValues.length > 0 ? (
-                <div className="hidden gap-4 text-right sm:flex">
-                  <SmallValue label="Low" value={`${heartMin} bpm`} />
-                  <SmallValue label="Average" value={`${heartAvg} bpm`} />
-                  <SmallValue label="High" value={`${heartMax} bpm`} />
+              heartValues.length > 0 || heartRateChartZones.length > 0 ? (
+                <div className="flex items-center gap-3">
+                  {heartValues.length > 0 && (
+                    <div className="hidden gap-4 text-right sm:flex">
+                      <SmallValue label="Low" value={`${heartMin} bpm`} />
+                      <SmallValue label="Average" value={`${heartAvg} bpm`} />
+                      <SmallValue label="High" value={`${heartMax} bpm`} />
+                    </div>
+                  )}
+                  {heartRateChartZones.length > 0 && (
+                    <>
+                      {heartValues.length > 0 && <span className="hidden h-8 w-px bg-hairline sm:block" />}
+                      <motion.button
+                        type="button"
+                        aria-pressed={showHeartRateZones}
+                        aria-label={`${showHeartRateZones ? 'Hide' : 'Show'} heart-rate zones on chart`}
+                        title={`${showHeartRateZones ? 'Hide' : 'Show'} zone overlay`}
+                        onClick={() => setShowHeartRateZones((visible) => !visible)}
+                        whileTap={{ scale: 0.97 }}
+                        transition={{ type: 'spring', stiffness: 350, damping: 24 }}
+                        className={`inline-flex h-8 items-center gap-1.5 rounded-[9px] border px-2.5 text-[10.5px] font-semibold transition-[background-color,border-color,color,box-shadow] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-heart/40 ${
+                          showHeartRateZones
+                            ? 'border-heart/30 bg-heart-soft text-ink shadow-[inset_0_1px_0_rgb(255_255_255/0.06)]'
+                            : 'border-hairline bg-white/[0.02] text-ink-dim hover:border-hairline-strong hover:bg-white/[0.045] hover:text-ink'
+                        }`}
+                      >
+                        <StackSimple
+                          size={14}
+                          weight={showHeartRateZones ? 'fill' : 'regular'}
+                          className={showHeartRateZones ? 'text-heart' : 'text-ink-faint'}
+                        />
+                        Zones
+                      </motion.button>
+                    </>
+                  )}
                 </div>
               ) : undefined
             }
@@ -158,6 +193,7 @@ export function WorkoutDetailView({ workout, date, onBack }: WorkoutDetailViewPr
                 color="var(--color-heart)"
                 height={190}
                 domain={{ startMinute, endMinute }}
+                zones={showHeartRateZones ? heartRateChartZones : undefined}
               />
             ) : (
               <div className="grid h-[190px] place-items-center text-[13px] text-ink-faint">
@@ -171,12 +207,24 @@ export function WorkoutDetailView({ workout, date, onBack }: WorkoutDetailViewPr
       {(zones.length > 0 || showRoute) && (
         <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
           {zones.length > 0 && (
-            <motion.div custom={3} variants={fade} initial="hidden" animate="show" className="min-w-0">
+            <motion.div
+              custom={3}
+              variants={fade}
+              initial="hidden"
+              animate="show"
+              className="min-w-0 lg:col-span-2"
+            >
               <HeartRateZones zones={zones} />
             </motion.div>
           )}
           {showRoute && (
-            <motion.div custom={4} variants={fade} initial="hidden" animate="show" className="min-w-0">
+            <motion.div
+              custom={4}
+              variants={fade}
+              initial="hidden"
+              animate="show"
+              className="min-w-0 lg:col-span-2"
+            >
               <Panel className="h-full min-h-[258px] p-5">
                 <SectionHeader
                   title="Route"
@@ -285,25 +333,6 @@ export function WorkoutDetailView({ workout, date, onBack }: WorkoutDetailViewPr
           <SplitsTable splits={workout.splits ?? []} />
         </motion.div>
       )}
-
-      {(workout.notes || workout.exerciseType || workout.recordingSource) && (
-        <motion.div custom={9} variants={fade} initial="hidden" animate="show">
-          <Panel className="p-5">
-            <SectionHeader title="Workout information" hint="Metadata saved with this exercise" />
-            <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
-              {workout.exerciseType && <InfoRow label="Activity type" value={titleCase(workout.exerciseType)} />}
-              {workout.recordingSource && <InfoRow label="Source" value={titleCase(workout.recordingSource)} />}
-              {workout.deviceName && <InfoRow label="Device" value={workout.deviceName} />}
-            </div>
-            {workout.notes && (
-              <div className="mt-4 border-t border-hairline pt-4">
-                <div className="text-[11px] text-ink-faint">Notes</div>
-                <p className="mt-1 text-[13px] leading-relaxed text-ink-dim select-text">{workout.notes}</p>
-              </div>
-            )}
-          </Panel>
-        </motion.div>
-      )}
     </div>
   )
 }
@@ -341,7 +370,7 @@ function TimePoint({ label, value, align = 'left' }: { label: string; value: str
 function HeartRateZones({ zones }: { zones: ReturnType<typeof zoneItems> }): React.JSX.Element {
   const total = zones.reduce((sum, zone) => sum + zone.minutes, 0)
   return (
-    <Panel className="h-full min-h-[258px] p-5">
+    <Panel className="p-5">
       <SectionHeader
         title="Heart-rate zones"
         hint={`${formatMinutes(total)} with a classified zone`}
@@ -352,12 +381,13 @@ function HeartRateZones({ zones }: { zones: ReturnType<typeof zoneItems> }): Rea
           <span key={zone.label} style={{ width: `${(zone.minutes / total) * 100}%`, background: zone.color }} />
         ))}
       </div>
-      <div className="mt-4 grid grid-cols-2 gap-x-5 gap-y-4">
+      <div className="mt-4 grid grid-cols-2 gap-x-5 gap-y-4 sm:grid-cols-3">
         {zones.map((zone) => (
           <div key={zone.label} className="flex items-center justify-between gap-3 border-t border-hairline pt-3">
-            <span className="flex items-center gap-2 text-[11.5px] text-ink-dim">
+            <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-[11.5px] text-ink-dim">
               <span className="h-2 w-2 rounded-full" style={{ background: zone.color }} />
-              {zone.label}
+              <span>{zone.label}</span>
+              {zone.range && <span className="whitespace-nowrap font-mono text-[10.5px] text-ink-faint">{zone.range}</span>}
             </span>
             <span className="font-mono text-[12px] text-ink">{formatMinutes(zone.minutes)}</span>
           </div>
@@ -455,15 +485,6 @@ function TableMetric({ value }: { value: string }): React.JSX.Element {
   return <td className="px-3 py-3 font-mono text-[12px] text-ink-dim">{value}</td>
 }
 
-function InfoRow({ label, value }: { label: string; value: string }): React.JSX.Element {
-  return (
-    <div className="border-t border-hairline pt-3">
-      <div className="text-[11px] text-ink-faint">{label}</div>
-      <div className="mt-1 text-[13px] font-medium text-ink">{value}</div>
-    </div>
-  )
-}
-
 function performanceItems(workout: Workout): Array<{ label: string; value: string }> {
   const durationHours = workout.durationMin / 60
   const pace = workout.averagePaceSecPerKm ??
@@ -489,9 +510,6 @@ function performanceItems(workout: Workout): Array<{ label: string; value: strin
 function specializedItems(workout: Workout): DetailItem[] {
   const mobility = workout.mobility
   return [
-    ...(workout.runVo2Max != null
-      ? [{ label: 'Run VO₂ max', value: `${workout.runVo2Max.toFixed(1)} ml/kg/min`, icon: <Gauge size={16} weight="fill" /> }]
-      : []),
     ...(mobility?.cadenceStepsPerMin != null
       ? [{ label: 'Cadence', value: `${formatInt(mobility.cadenceStepsPerMin)} spm`, icon: <Footprints size={16} weight="fill" /> }]
       : []),
@@ -516,14 +534,50 @@ function specializedItems(workout: Workout): DetailItem[] {
   ]
 }
 
-function zoneItems(workout: Workout): Array<{ label: string; minutes: number; color: string }> {
+const HEART_ZONE_PRESENTATION: Record<HeartZoneDetail['zone'], { label: string; color: string }> = {
+  light: { label: 'Light', color: 'var(--color-ink-dim)' },
+  moderate: { label: 'Moderate', color: 'var(--color-activity)' },
+  vigorous: { label: 'Vigorous', color: 'var(--color-heart)' },
+  peak: { label: 'Peak', color: 'var(--color-danger)' }
+}
+
+function chartZoneItems(thresholds: HeartZoneDetail[] = []): Array<{
+  label: string
+  minBpm: number | null
+  maxBpm: number | null
+  color: string
+}> {
+  return thresholds.flatMap((threshold) =>
+    threshold.minBpm != null || threshold.maxBpm != null
+      ? [
+          {
+            ...HEART_ZONE_PRESENTATION[threshold.zone],
+            minBpm: threshold.minBpm,
+            maxBpm: threshold.maxBpm
+          }
+        ]
+      : []
+  )
+}
+
+function zoneItems(
+  workout: Workout,
+  thresholds: HeartZoneDetail[] = []
+): Array<{ label: string; minutes: number; color: string; range: string | null }> {
   const zones = workout.heartRateZones
   if (!zones) return []
+  const range = (zone: HeartZoneDetail['zone']): string | null => {
+    const threshold = thresholds.find((item) => item.zone === zone)
+    if (threshold?.minBpm != null && threshold.maxBpm != null) return `${threshold.minBpm}–${threshold.maxBpm} bpm`
+    if (threshold?.minBpm != null) return `${threshold.minBpm}+ bpm`
+    if (threshold?.maxBpm != null) return `≤${threshold.maxBpm} bpm`
+    return null
+  }
   return [
-    { label: 'Light', minutes: zones.lightMin, color: 'var(--color-ink-dim)' },
-    { label: 'Moderate', minutes: zones.moderateMin, color: 'var(--color-activity)' },
-    { label: 'Vigorous', minutes: zones.vigorousMin, color: 'var(--color-heart)' },
-    { label: 'Peak', minutes: zones.peakMin, color: 'var(--color-danger)' }
+    { ...HEART_ZONE_PRESENTATION.light, minutes: zones.lightMin, range: range('light') },
+    { ...HEART_ZONE_PRESENTATION.moderate, minutes: zones.moderateMin, range: range('moderate') },
+    { ...HEART_ZONE_PRESENTATION.vigorous, minutes: zones.vigorousMin, range: range('vigorous') },
+    { ...HEART_ZONE_PRESENTATION.peak, minutes: zones.peakMin, range: range('peak') }
   ].flatMap((zone) => (zone.minutes != null && zone.minutes > 0 ? [{ ...zone, minutes: zone.minutes }] : []))
 }
 

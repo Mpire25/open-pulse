@@ -351,7 +351,12 @@ function GoalRing({
   const def = METRICS[metricKey]
   const pct = value != null && goal > 0 ? Math.round((value / goal) * 100) : null
   return (
-    <button onClick={() => onOpen(metricKey, 'D')} className="group flex flex-col items-center gap-2">
+    <button
+      type="button"
+      onClick={() => onOpen(metricKey, 'D')}
+      className="group -m-5 flex flex-col items-center gap-2 rounded-2xl p-5 outline-none transition-[background-color,box-shadow,transform] duration-200 hover:bg-white/[0.05] hover:shadow-[inset_0_0_0_1px_rgb(255_255_255/0.07)] focus-visible:bg-white/[0.05] focus-visible:ring-2 focus-visible:ring-accent/60 active:scale-[0.985]"
+      aria-label={`Open ${def.label} details`}
+    >
       <ProgressRing
         value={value ?? 0}
         goal={goal}

@@ -205,7 +205,6 @@ function demoDayValues(date: string): DayValues {
     spo2Pct: +(95.5 + rand() * 3).toFixed(1),
     breathingRate: +(13.2 + rand() * 3.4).toFixed(1),
     skinTempDeltaC: +((rand() - 0.5) * 1.2).toFixed(2),
-    vo2Max: +(41 + rand() * 4).toFixed(1),
     sleepMinutes: sleep.minutesAsleep,
     sleepEfficiency: sleep.efficiency,
     weightKg,
@@ -341,7 +340,6 @@ function demoWorkoutsFor(date: string, uptoMinute: number): Workout[] {
       averageSpeedKph: distanceKm != null ? +(distanceKm / (durationMin / 60)).toFixed(2) : null,
       averagePaceSecPerKm: distanceKm != null ? +((durationMin * 60) / distanceKm).toFixed(1) : null,
       elevationGainM: hasGps ? Math.round(18 + rand() * 75) : null,
-      runVo2Max: name === 'Run' ? +(42 + rand() * 8).toFixed(1) : null,
       totalSwimLengths: null,
       heartRateZones: {
         lightMin: +(durationMin * 0.2).toFixed(1),
@@ -565,23 +563,7 @@ export function demoActivityIntraday(date: string, metric: ActivityIntradayMetri
 
 export function demoHeartDetail(date: string, metric: HeartDetailMetric): HeartDetailResult {
   const windowMinutes = 30
-  const uptoMinute = uptoMinuteFor(date)
-  const daily = valuesFor(date)
-  const points = Array.from({ length: 48 }, (_, index) => {
-    const minute = index * windowMinutes
-    if (minute > uptoMinute) return { minute, value: null }
-    if (metric === 'vo2Max' && index === 36) return { minute, value: daily.vo2Max ?? 43 }
-    return { minute, value: null }
-  })
-  const stats: HeartDetailResult['stats'] =
-    metric === 'vo2Max'
-      ? [
-          { key: 'fitness', label: 'Fitness level', value: 'Good' },
-          { key: 'estimate', label: 'Reading type', value: 'Measured' },
-          { key: 'covariance', label: 'Estimate covariance', value: '0.34' },
-          { key: 'method', label: 'Measurement method', value: 'Fitbit Run' }
-        ]
-      : []
+  const points = Array.from({ length: 48 }, (_, index) => ({ minute: index * windowMinutes, value: null }))
   const zones: HeartDetailResult['zones'] =
     metric === 'restingHeartRate'
       ? [
@@ -598,9 +580,7 @@ export function demoHeartDetail(date: string, metric: HeartDetailMetric): HeartD
     metric,
     windowMinutes,
     points,
-    sampleLabel: metric === 'vo2Max' ? 'VO₂ max' : undefined,
-    sampleUnit: metric === 'vo2Max' ? 'ml/kg/min' : undefined,
-    stats,
+    stats: [],
     zones
   }
 }

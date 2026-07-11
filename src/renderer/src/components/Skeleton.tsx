@@ -103,7 +103,7 @@ export function SkeletonMetricStat({ sparkWidth = 72 }: { sparkWidth?: number })
       </div>
       <div className="flex items-end justify-between gap-2">
         <SkeletonBlock className="h-6 w-20" />
-        <SkeletonBlock className="h-6" style={{ width: sparkWidth }} />
+        <SkeletonBlock className="h-6 min-w-0 max-w-[55%] shrink" style={{ width: sparkWidth }} />
       </div>
       <div className="flex items-center gap-2">
         <SkeletonBlock className="h-4 w-10 rounded-full" />

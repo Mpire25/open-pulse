@@ -6,6 +6,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { animate, motion, useMotionValue, useReducedMotion, useTransform } from 'framer-motion'
 import { formatMinuteOfDay } from '@/lib/format'
 import { sampleHeartRateForChart } from '@/lib/heart-rate'
+import { lineAxis } from '@/lib/chart-scale'
 import { cn } from '@/lib/utils'
 
 // ---------------------------------------------------------------------------
@@ -90,30 +91,10 @@ function axisNumber(n: number): string {
   return compact(n)
 }
 
-function niceStep(raw: number): number {
-  if (!Number.isFinite(raw) || raw <= 0) return 1
-  const magnitude = 10 ** Math.floor(Math.log10(raw))
-  const fraction = raw / magnitude
-  for (const multiplier of [1, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10]) {
-    if (multiplier >= fraction) return multiplier * magnitude
-  }
-  return 10 * magnitude
-}
-
-function lineAxis(rawLo: number, rawHi: number): { min: number; max: number; ticks: number[] } {
-  const rawSpan = rawHi - rawLo
-  const span = rawSpan > 0 ? rawSpan : Math.max(Math.abs(rawHi) * 0.04, 0.1)
-  const paddedLo = rawLo - span * 0.15
-  const paddedHi = rawHi + span * 0.15
-  const step = niceStep((paddedHi - paddedLo) / 2)
-  const min = Math.floor(paddedLo / step) * step
-  const max = Math.ceil(paddedHi / step) * step
-  const midpoint = Math.abs((min + max) / 2) < 1e-10 ? 0 : (min + max) / 2
-  return { min, max, ticks: [min, midpoint, max] }
-}
-
 // ---------------------------------------------------------------------------
 // Columns — hourly buckets and N-day trends
+
+const MAX_KEYBOARD_SELECTABLE_POINTS = 60
 
 export interface ColumnDatum {
   key: string
@@ -135,6 +116,8 @@ interface ColumnChartProps {
   unitLabel?: string
   /** Short unit shown above the Y axis; defaults to the tooltip unit. */
   axisLabel?: string
+  /** Makes individual populated columns selectable without changing non-interactive charts. */
+  onSelect?: (datum: ColumnDatum) => void
 }
 
 export function ColumnChart({
@@ -145,7 +128,8 @@ export function ColumnChart({
   goal = null,
   emphasisIndex,
   unitLabel = '',
-  axisLabel = unitLabel
+  axisLabel = unitLabel,
+  onSelect
 }: ColumnChartProps): React.JSX.Element {
   const [ref, width] = useWidth()
   const [tip, setTip] = useState<TipState | null>(null)
@@ -158,6 +142,7 @@ export function ColumnChart({
   const rawMax = Math.max(goal?.value ?? 0, ...data.map((d) => d.value ?? 0))
   const max = niceMax(rawMax)
   const band = data.length > 0 ? plotW / data.length : 0
+  const keyboardSelectionEnabled = data.length <= MAX_KEYBOARD_SELECTABLE_POINTS
   const barW = Math.min(24, Math.max(3, band - 2))
   const y = (v: number): number => pad.top + plotH * (1 - v / max)
 
@@ -254,35 +239,50 @@ export function ColumnChart({
           )}
 
           {/* Full-band hit targets, larger than the marks */}
-          {data.map((d, i) => (
-            <rect
-              key={`h-${d.key}`}
-              x={pad.left + band * i}
-              y={0}
-              width={band}
-              height={height}
-              fill="transparent"
-              onPointerMove={() => {
-                setHovered(i)
-                setTip({
-                  x: pad.left + band * i + band / 2,
-                  y: d.value != null ? y(d.value) : y(0),
-                  title: d.label,
-                  rows: [
-                    {
-                      label: unitLabel,
-                      value: d.value != null ? format(d.value) : 'No data',
-                      color: d.value != null ? color : undefined
-                    }
-                  ]
-                })
-              }}
-              onPointerLeave={() => {
-                setHovered(null)
-                setTip(null)
-              }}
-            />
-          ))}
+          {data.map((d, i) => {
+            const keyboardSelectable = keyboardSelectionEnabled && onSelect != null && d.value != null
+            return (
+              <rect
+                key={`h-${d.key}`}
+                x={pad.left + band * i}
+                y={0}
+                width={band}
+                height={height}
+                fill="transparent"
+                className={onSelect && d.value != null ? 'cursor-pointer' : undefined}
+                role={keyboardSelectable ? 'button' : undefined}
+                tabIndex={keyboardSelectable ? 0 : undefined}
+                aria-label={keyboardSelectable ? `View ${d.label}` : undefined}
+                onPointerMove={() => {
+                  setHovered(i)
+                  setTip({
+                    x: pad.left + band * i + band / 2,
+                    y: d.value != null ? y(d.value) : y(0),
+                    title: d.label,
+                    rows: [
+                      {
+                        label: unitLabel,
+                        value: d.value != null ? format(d.value) : 'No data',
+                        color: d.value != null ? color : undefined
+                      }
+                    ]
+                  })
+                }}
+                onPointerLeave={() => {
+                  setHovered(null)
+                  setTip(null)
+                }}
+                onClick={() => {
+                  if (d.value != null) onSelect?.(d)
+                }}
+                onKeyDown={(event) => {
+                  if (!keyboardSelectable || !onSelect || (event.key !== 'Enter' && event.key !== ' ')) return
+                  event.preventDefault()
+                  onSelect(d)
+                }}
+              />
+            )
+          })}
         </svg>
       )}
       {tip && <Tip tip={tip} width={width} />}
@@ -303,6 +303,8 @@ export interface LinePoint {
   date: string
   label: string
   value: number | null
+  /** Optional tick under the line, used for denser time ranges. */
+  tick?: string
 }
 
 interface TrendLineProps {
@@ -315,6 +317,8 @@ interface TrendLineProps {
   /** Short unit shown above the Y axis; defaults to the tooltip unit. */
   axisLabel?: string
   domain?: { min?: number; max?: number }
+  /** Makes individual populated points selectable without changing non-interactive charts. */
+  onSelect?: (point: LinePoint) => void
 }
 
 export function TrendLine({
@@ -325,7 +329,8 @@ export function TrendLine({
   baseline = null,
   unitLabel = '',
   axisLabel = unitLabel,
-  domain
+  domain,
+  onSelect
 }: TrendLineProps): React.JSX.Element {
   const [ref, width] = useWidth()
   const [tip, setTip] = useState<TipState | null>(null)
@@ -336,6 +341,7 @@ export function TrendLine({
   const plotH = height - pad.top - pad.bottom
 
   const present = data.filter((d): d is LinePoint & { value: number } => d.value != null)
+  const keyboardSelectionEnabled = data.length <= MAX_KEYBOARD_SELECTABLE_POINTS
   const values = present.map((d) => d.value)
   const lo = values.length ? Math.min(...values, baseline?.value ?? Infinity) : 0
   const hi = values.length ? Math.max(...values, baseline?.value ?? -Infinity) : 1
@@ -363,9 +369,10 @@ export function TrendLine({
 
   const last = [...data].reverse().find((d) => d.value != null)
   const lastIndex = last ? data.lastIndexOf(last) : -1
-  const tickIndices = [...new Set([0, Math.floor((data.length - 1) / 2), data.length - 1])].filter(
-    (index) => index >= 0
-  )
+  const labelledTickIndices = data.flatMap((point, index) => (point.tick ? [index] : []))
+  const tickIndices = labelledTickIndices.length
+    ? labelledTickIndices
+    : [...new Set([0, Math.floor((data.length - 1) / 2), data.length - 1])].filter((index) => index >= 0)
 
   const onMove = (e: React.PointerEvent<SVGRectElement>): void => {
     const rect = e.currentTarget.getBoundingClientRect()
@@ -503,22 +510,67 @@ export function TrendLine({
               className="fill-[var(--color-ink-faint)] font-mono"
               fontSize={10}
             >
-              {data[index].label}
+              {data[index].tick ?? data[index].label}
             </text>
           ))}
 
-          <rect
-            x={0}
-            y={0}
-            width={Math.max(0, width - pad.right)}
-            height={height}
-            fill="transparent"
-            onPointerMove={onMove}
-            onPointerLeave={() => {
-              setCursor(null)
-              setTip(null)
-            }}
-          />
+          {onSelect ? (
+            data.map((point, index) => {
+              const left = index === 0 ? 0 : (x(index - 1) + x(index)) / 2
+              const right = index === data.length - 1 ? plotW : (x(index) + x(index + 1)) / 2
+              const selectable = point.value != null
+              const keyboardSelectable = selectable && keyboardSelectionEnabled
+              return (
+                <rect
+                  key={`hit-${point.date}-${index}`}
+                  x={left}
+                  y={0}
+                  width={Math.max(0, right - left)}
+                  height={height}
+                  fill="transparent"
+                  className={selectable ? 'cursor-pointer' : undefined}
+                  role={keyboardSelectable ? 'button' : undefined}
+                  tabIndex={keyboardSelectable ? 0 : undefined}
+                  aria-label={keyboardSelectable ? `View ${point.label}` : undefined}
+                  onPointerMove={() => {
+                    if (!selectable) return
+                    setCursor(index)
+                    setTip({
+                      x: x(index),
+                      y: y(point.value!),
+                      title: point.label,
+                      rows: [{ label: unitLabel, value: format(point.value!), color }]
+                    })
+                  }}
+                  onPointerLeave={() => {
+                    setCursor(null)
+                    setTip(null)
+                  }}
+                  onClick={() => {
+                    if (selectable) onSelect(point)
+                  }}
+                  onKeyDown={(event) => {
+                    if (!keyboardSelectable || (event.key !== 'Enter' && event.key !== ' ')) return
+                    event.preventDefault()
+                    onSelect(point)
+                  }}
+                />
+              )
+            })
+          ) : (
+            <rect
+              x={0}
+              y={0}
+              width={Math.max(0, width - pad.right)}
+              height={height}
+              fill="transparent"
+              onPointerMove={onMove}
+              onPointerLeave={() => {
+                setCursor(null)
+                setTip(null)
+              }}
+            />
+          )}
         </svg>
       )}
       {tip && <Tip tip={tip} width={width} />}
@@ -529,18 +581,26 @@ export function TrendLine({
 // ---------------------------------------------------------------------------
 // Intraday line — heart rate over the day, minute domain
 
+export interface IntradayHeartRateZone {
+  label: string
+  minBpm: number | null
+  maxBpm: number | null
+  color: string
+}
+
 interface IntradayLineProps {
   points: Array<{ minute: number; bpm: number }>
   color: string
   height?: number
   domain?: { startMinute: number; endMinute: number }
+  zones?: IntradayHeartRateZone[]
 }
 
 // A single SVG path and nearest-point hover remain responsive at this size.
 // Below the cap every received reading is drawn; only larger series are reduced.
 const MAX_HEART_RATE_CHART_POINTS = 2000
 
-export function IntradayLine({ points, color, height = 170, domain }: IntradayLineProps): React.JSX.Element {
+export function IntradayLine({ points, color, height = 170, domain, zones }: IntradayLineProps): React.JSX.Element {
   const [ref, width] = useWidth()
   const [tip, setTip] = useState<TipState | null>(null)
   const [cursorX, setCursorX] = useState<number | null>(null)
@@ -557,8 +617,8 @@ export function IntradayLine({ points, color, height = 170, domain }: IntradayLi
     [domainEnd, domainStart, points]
   )
 
-  const rawLo = sampled.length ? Math.min(...sampled.map((p) => p.bpm)) - 8 : 40
-  const rawHi = sampled.length ? Math.max(...sampled.map((p) => p.bpm)) + 8 : 120
+  const rawLo = sampled.length ? Math.min(...sampled.map((p) => p.bpm)) : 40
+  const rawHi = sampled.length ? Math.max(...sampled.map((p) => p.bpm)) : 120
   const axis = lineAxis(rawLo, rawHi)
   const x = (minute: number): number => pad.left + (plotW * (minute - domainStart)) / domainSpan
   const y = (bpm: number): number => pad.top + plotH * (1 - (bpm - axis.min) / (axis.max - axis.min))
@@ -568,6 +628,39 @@ export function IntradayLine({ points, color, height = 170, domain }: IntradayLi
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [axis.max, axis.min, domainSpan, domainStart, height, sampled, width]
   )
+
+  const zonePaths = useMemo(() => {
+    if (!zones?.length || sampled.length < 2) return []
+    const colorAt = (bpm: number): string => {
+      const zone = zones.find(
+        (item) => (item.minBpm == null || bpm >= item.minBpm) && (item.maxBpm == null || bpm <= item.maxBpm)
+      )
+      return zone?.color ?? color
+    }
+    const segments: Array<{ color: string; path: string }> = []
+    let previous = sampled[0]
+    let segmentColor = colorAt(previous.bpm)
+    let segmentPath = `M ${x(previous.minute).toFixed(1)} ${y(previous.bpm).toFixed(1)}`
+
+    for (let index = 1; index < sampled.length; index += 1) {
+      const current = sampled[index]
+      const currentColor = colorAt(Math.round((previous.bpm + current.bpm) / 2))
+      if (currentColor !== segmentColor) {
+        segments.push({ color: segmentColor, path: segmentPath })
+        segmentColor = currentColor
+        segmentPath = `M ${x(previous.minute).toFixed(1)} ${y(previous.bpm).toFixed(1)}`
+      }
+      segmentPath += ` L ${x(current.minute).toFixed(1)} ${y(current.bpm).toFixed(1)}`
+      previous = current
+    }
+    segments.push({ color: segmentColor, path: segmentPath })
+    return segments
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [axis.max, axis.min, color, domainSpan, domainStart, height, sampled, width, zones])
+
+  const visibleZoneBoundaries = [...(zones ?? [])]
+    .filter((zone) => zone.minBpm != null && zone.minBpm > axis.min && zone.minBpm < axis.max)
+    .sort((a, b) => a.minBpm! - b.minBpm!)
 
   const timeTicks = domain
     ? [domainStart, domainStart + domainSpan / 2, domainEnd]
@@ -586,7 +679,18 @@ export function IntradayLine({ points, color, height = 170, domain }: IntradayLi
       x: x(nearest.minute),
       y: y(nearest.bpm),
       title: formatMinuteOfDay(nearest.minute, domainSpan <= 60),
-      rows: [{ label: 'bpm', value: String(nearest.bpm), color }]
+      rows: [
+        {
+          label: 'bpm',
+          value: String(nearest.bpm),
+          color:
+            zones?.find(
+              (zone) =>
+                (zone.minBpm == null || nearest.bpm >= zone.minBpm) &&
+                (zone.maxBpm == null || nearest.bpm <= zone.maxBpm)
+            )?.color ?? color
+        }
+      ]
     })
   }
 
@@ -611,6 +715,31 @@ export function IntradayLine({ points, color, height = 170, domain }: IntradayLi
                 fontSize={10}
               >
                 {axisNumber(value)}
+              </text>
+            </g>
+          ))}
+          {visibleZoneBoundaries.map((zone) => (
+            <g key={`${zone.label}-${zone.minBpm}`}>
+              <line
+                x1={0}
+                x2={plotW}
+                y1={y(zone.minBpm!)}
+                y2={y(zone.minBpm!)}
+                stroke={zone.color}
+                strokeWidth={1}
+                strokeDasharray="4 4"
+                opacity={0.65}
+              />
+              <text
+                x={plotW - 6}
+                y={y(zone.minBpm!) - 4}
+                textAnchor="end"
+                fill={zone.color}
+                fontSize={9}
+                fontWeight={600}
+                opacity={0.9}
+              >
+                {zone.label} {zone.minBpm}
               </text>
             </g>
           ))}
@@ -646,7 +775,19 @@ export function IntradayLine({ points, color, height = 170, domain }: IntradayLi
               </text>
             </g>
           ))}
-          {path && <path d={path} fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />}
+          {zones?.length
+            ? zonePaths.map((segment, index) => (
+                <path
+                  key={`${segment.color}-${index}`}
+                  d={segment.path}
+                  fill="none"
+                  stroke={segment.color}
+                  strokeWidth={2}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              ))
+            : path && <path d={path} fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />}
 
           {cursorX != null && (
             <line

@@ -3,12 +3,11 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { CaretDown, ForkKnife } from '@phosphor-icons/react'
 import { Panel, DrillHeader, InteractivePanel, SectionHeader } from '@/components/Panel'
 import { ColumnChart, ProgressRing } from '@/components/charts'
-import { DeltaChip } from '@/components/DeltaChip'
-import { CARD_HEIGHT, SkeletonBlock, SkeletonChart, SkeletonText } from '@/components/Skeleton'
+import { CARD_HEIGHT, SkeletonBlock, SkeletonChart, SkeletonRing, SkeletonText } from '@/components/Skeleton'
 import { ErrorState } from '@/components/ErrorState'
 import { useNutritionLogs, useSeries } from '@/hooks/useHealth'
 import { METRICS } from '@/lib/metric-registry'
-import { listDates, metricAbsent, rangeEnding, seriesPoints } from '@/lib/metrics'
+import { listDates, rangeEnding, seriesPoints } from '@/lib/metrics'
 import { formatClock, formatInt, longDate, shortDate, weekdayShort } from '@/lib/format'
 import type { OpenMetric } from '@/lib/metric-navigation'
 import { fade } from '@/lib/motion'
@@ -17,7 +16,6 @@ import type { DayValues, Goals, MetricKey, NutritionLogEntry } from '@shared/typ
 
 const NUTRITION_METRICS: MetricKey[] = [
   'caloriesIn',
-  'caloriesOut',
   'proteinG',
   'carbsG',
   'fatG',
@@ -37,7 +35,7 @@ const MACROS = [
 const SECONDARY_NUTRIENTS = [
   { key: 'fiberG' as const, label: 'Fiber', unit: 'g', color: 'var(--color-hydration)', decimals: 0 },
   { key: 'saturatedFatG' as const, label: 'Saturated fat', unit: 'g', color: 'var(--color-heart)', decimals: 0 },
-  { key: 'sodiumG' as const, label: 'Sodium', unit: 'g', color: 'var(--color-activity)', decimals: 2 },
+  { key: 'sodiumG' as const, label: 'Sodium', unit: 'g', color: 'var(--color-recovery)', decimals: 2 },
   { key: 'sugarG' as const, label: 'Sugar', unit: 'g', color: 'var(--color-body-metric)', decimals: 0 }
 ]
 
@@ -63,18 +61,15 @@ export function NutritionView({ date, goals, onOpenMetric, onSelectDate }: Nutri
 
   const intakePending = series.isMetricPending('caloriesIn')
   const entries = nutritionLogs.data ?? []
-  const anyIntake = intakePending
-    || nutritionLogs.isPending
-    || entries.length > 0
-    || (series.data ? !metricAbsent(pointsFor('caloriesIn')) : true)
   const hasMacrosToday = MACROS.some((m) => today[m.key] != null)
   const macrosPending = MACROS.some((macro) => series.isMetricPending(macro.key))
   const recordedDays = listDates(start, end)
     .map((dayDate) => ({ date: dayDate, values: days?.[dayDate] ?? {} }))
     .filter(({ values }) => values.caloriesIn != null || MACROS.some((macro) => values[macro.key] != null))
   const recentDays = [...recordedDays].reverse().filter((day) => day.date !== date)
-  const net =
-    today.caloriesIn != null && today.caloriesOut != null ? today.caloriesIn - today.caloriesOut : null
+  const intakePct = today.caloriesIn != null && goals.caloriesIn > 0
+    ? Math.round((today.caloriesIn / goals.caloriesIn) * 100)
+    : null
 
   const barCard = (key: MetricKey, index: number): React.JSX.Element => {
     const def = METRICS[key]
@@ -131,55 +126,46 @@ export function NutritionView({ date, goals, onOpenMetric, onSelectDate }: Nutri
         <p className="mt-1 text-[13px] text-ink-dim">{longDate(date)} · logged food</p>
       </motion.header>
 
-      {!anyIntake ? (
-        <Panel className="grid place-items-center p-12 text-center text-[13px] leading-relaxed text-ink-faint">
-          No food logged in this window. Meals logged in the Fitbit app — calories and macros — appear here.
-        </Panel>
-      ) : (
-        <>
-          {/* Today: energy + macro split */}
+      <>
+          {/* Today: intake goal + macro split */}
           <motion.div custom={1} variants={fade} initial="hidden" animate="show">
-            <Panel className={`grid grid-cols-1 gap-6 p-6 lg:grid-cols-[auto_1fr] ${CARD_HEIGHT.hero}`}>
-              <div className="flex min-w-[220px] flex-col justify-center gap-2">
-                <SectionHeader
-                  title="Energy"
-                  hint="Logged intake vs burned"
-                  icon={<ForkKnife size={18} weight="fill" style={{ color: 'var(--color-activity)' }} />}
-                />
-                <div className="mt-2 flex items-baseline gap-2">
-                  {intakePending ? (
-                    <SkeletonText className="h-8 w-24" />
-                  ) : (
-                    <span className="text-[34px] font-semibold leading-none tracking-tight text-ink">
-                      {today.caloriesIn != null ? formatInt(today.caloriesIn) : '—'}
-                    </span>
-                  )}
-                  <span className="text-[13px] text-ink-dim">kcal eaten</span>
-                </div>
+            <Panel className={`grid grid-cols-1 gap-6 p-6 lg:grid-cols-[auto_1fr] lg:gap-4 ${CARD_HEIGHT.hero}`}>
+              <div className="flex min-w-[180px] items-center justify-center">
                 {intakePending ? (
-                  <SkeletonText className="mt-1 w-32" />
+                  <div className="flex flex-col items-center gap-2" aria-hidden>
+                    <SkeletonRing size={146} stroke={15} />
+                    <SkeletonText className="w-28" />
+                  </div>
                 ) : (
-                  <div className="text-[11px] text-ink-faint">
-                    {today.caloriesIn != null
-                      ? `${Math.round((today.caloriesIn / goals.caloriesIn) * 100)}% of ${formatInt(goals.caloriesIn)} kcal goal`
-                      : `${formatInt(goals.caloriesIn)} kcal goal`}
-                  </div>
+                  <button
+                    type="button"
+                    onClick={() => onOpenMetric('caloriesIn', 'D')}
+                    className="group -m-2 flex flex-col items-center gap-2 rounded-2xl p-3 outline-none transition-[background-color,box-shadow,transform] duration-200 hover:bg-white/[0.05] hover:shadow-[inset_0_0_0_1px_rgb(255_255_255/0.07)] focus-visible:bg-white/[0.05] focus-visible:ring-2 focus-visible:ring-accent/60 active:scale-[0.98]"
+                    aria-label="Open calories eaten details"
+                  >
+                    <ProgressRing
+                      value={today.caloriesIn ?? 0}
+                      goal={goals.caloriesIn}
+                      color={METRICS.caloriesIn.color}
+                      size={146}
+                      stroke={15}
+                    >
+                      <div className="text-center">
+                        <div className="text-[26px] font-semibold leading-none tracking-tight text-ink">
+                          {formatInt(today.caloriesIn ?? 0)}
+                        </div>
+                        <div className="mt-1.5 text-[10px] uppercase tracking-wide text-ink-faint">
+                          calories eaten
+                        </div>
+                      </div>
+                    </ProgressRing>
+                    <span className="font-mono text-[11px] text-ink-dim transition-colors group-hover:text-ink">
+                      {intakePct != null
+                        ? `${intakePct}% of ${formatInt(goals.caloriesIn)} kcal`
+                        : `${formatInt(goals.caloriesIn)} kcal goal`}
+                    </span>
+                  </button>
                 )}
-                {series.isMetricPending('caloriesOut') ? (
-                  <SkeletonText className="mt-1 w-36" />
-                ) : today.caloriesOut != null ? (
-                  <div className="flex items-center gap-2 text-[12.5px] text-ink-dim">
-                    {formatInt(today.caloriesOut)} kcal burned
-                    {net != null && (
-                      <DeltaChip
-                        delta={net}
-                        upIsGood={null}
-                        format={(m) => `${net > 0 ? '+' : '−'}${formatInt(m)} net`}
-                        minMagnitude={0}
-                      />
-                    )}
-                  </div>
-                ) : null}
               </div>
 
               <div className="lg:border-l lg:border-hairline lg:pl-6">
@@ -194,9 +180,14 @@ export function NutritionView({ date, goals, onOpenMetric, onSelectDate }: Nutri
                     isMetricPending={(key) => series.isMetricPending(key) || nutritionLogs.isPending}
                   />
                 ) : (
-                  <div className="grid h-full min-h-[120px] place-items-center text-[13px] text-ink-faint">
-                    No macro detail for this day — log meals in the Fitbit app to break energy into protein, carbs, and fat.
-                  </div>
+                  <MacroBreakdown
+                    today={today}
+                    goals={goals}
+                    entries={entries}
+                    onOpenMetric={onOpenMetric}
+                    isMetricPending={(key) => series.isMetricPending(key) || nutritionLogs.isPending}
+                    showEmptyNutrients
+                  />
                 )}
               </div>
             </Panel>
@@ -237,8 +228,7 @@ export function NutritionView({ date, goals, onOpenMetric, onSelectDate }: Nutri
               </div>
             </motion.div>
           )}
-        </>
-      )}
+      </>
     </div>
   )
 }
@@ -322,7 +312,7 @@ function NutritionLogsPanel({ entries }: { entries: NutritionLogEntry[] }): Reac
         <SectionHeader
           title="Logged meals"
           hint={`${entries.length} ${entries.length === 1 ? 'entry' : 'entries'} organized by meal`}
-          icon={<ForkKnife size={18} weight="fill" style={{ color: 'var(--color-activity)' }} />}
+          icon={<ForkKnife size={18} weight="fill" style={{ color: 'var(--color-recovery)' }} />}
         />
       </div>
       <div className="divide-y divide-hairline">
@@ -573,13 +563,15 @@ function MacroBreakdown({
   goals,
   entries,
   onOpenMetric,
-  isMetricPending
+  isMetricPending,
+  showEmptyNutrients = false
 }: {
   today: DayValues
   goals: Goals
   entries: NutritionLogEntry[]
   onOpenMetric: OpenMetric
   isMetricPending: (key: MetricKey) => boolean
+  showEmptyNutrients?: boolean
 }): React.JSX.Element {
   const parts = MACROS.map((m) => ({ ...m, grams: today[m.key] ?? null, kcal: (today[m.key] ?? 0) * m.kcalPerG }))
   const totalKcal = parts.reduce((s, p) => s + p.kcal, 0) || 1
@@ -592,12 +584,16 @@ function MacroBreakdown({
       const value = recorded != null && recorded > 0 ? recorded : null
       return { ...nutrient, value, pending }
     })
-    .filter((nutrient) => nutrient.pending || nutrient.value != null)
+    .filter((nutrient) => showEmptyNutrients || nutrient.pending || nutrient.value != null)
 
   return (
     <div className="flex h-full flex-col justify-center gap-4">
       {/* Stacked share bar */}
-      <div className="flex h-3 gap-[2px] overflow-hidden rounded-full">
+      <div
+        className="flex h-3 gap-[2px] overflow-hidden rounded-full bg-white/[0.045]"
+        role="img"
+        aria-label={showEmptyNutrients ? 'No macro details recorded' : 'Daily macro calorie share'}
+      >
         {parts.map(
           (p) =>
             p.kcal > 0 && (
@@ -609,8 +605,9 @@ function MacroBreakdown({
         {parts.map((p) => (
           <button
             key={p.key}
+            type="button"
             onClick={() => onOpenMetric(p.key, 'D')}
-            className="group min-w-0 rounded-xl px-2 py-1.5 text-left outline-none transition-colors hover:bg-white/[0.04] focus-visible:ring-2 focus-visible:ring-accent/60 active:scale-[0.98]"
+            className="group -m-1 min-w-0 rounded-xl p-3 text-left outline-none transition-[background-color,box-shadow,transform] duration-200 hover:bg-white/[0.05] hover:shadow-[inset_0_0_0_1px_rgb(255_255_255/0.07)] focus-visible:bg-white/[0.05] focus-visible:ring-2 focus-visible:ring-accent/60 active:scale-[0.98]"
           >
             <div className="flex items-center gap-1.5">
               <span className="h-2 w-2 rounded-full" style={{ background: p.color }} />
@@ -619,13 +616,13 @@ function MacroBreakdown({
             <div className="mt-1 flex items-center gap-3">
               <div className="min-w-0">
                 <div className="text-[17px] font-semibold text-ink">
-                  {p.grams != null ? `${formatInt(p.grams)} g` : '—'}
+                  {p.grams != null ? `${formatInt(p.grams)} g` : showEmptyNutrients ? '0 g' : '—'}
                 </div>
                 <div className="truncate text-[10.5px] text-ink-faint">{formatInt(goals[p.key])} g goal</div>
               </div>
               <ProgressRing value={p.grams ?? 0} goal={goals[p.key]} color={p.color} size={48} stroke={6}>
                 <span className="font-mono text-[9px] font-medium text-ink">
-                  {p.grams != null ? `${Math.round((p.grams / goals[p.key]) * 100)}%` : '—'}
+                  {p.grams != null ? `${Math.round((p.grams / goals[p.key]) * 100)}%` : showEmptyNutrients ? '0%' : '—'}
                 </span>
               </ProgressRing>
             </div>
@@ -635,10 +632,15 @@ function MacroBreakdown({
       {secondary.length > 0 && (
         <div className="grid grid-cols-[repeat(auto-fit,minmax(105px,1fr))] gap-3 border-t border-hairline pt-3">
           {secondary.map((nutrient) => (
-            <div key={nutrient.key} className="min-w-0 px-2 py-1">
+            <button
+              key={nutrient.key}
+              type="button"
+              onClick={() => onOpenMetric(nutrient.key, 'D')}
+              className="group min-w-0 rounded-xl px-2 py-1 text-left outline-none transition-colors hover:bg-white/[0.04] focus-visible:ring-2 focus-visible:ring-accent/60 active:scale-[0.98]"
+            >
               <div className="flex items-center gap-1.5 text-[10.5px] font-medium text-ink-faint">
                 <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: nutrient.color }} />
-                <span className="truncate">{nutrient.label}</span>
+                <span className="truncate transition-colors group-hover:text-ink-dim">{nutrient.label}</span>
               </div>
               {nutrient.pending ? (
                 <SkeletonBlock className="mt-1.5 h-4 w-12" />
@@ -648,11 +650,13 @@ function MacroBreakdown({
                     ? nutrient.decimals > 0 && nutrient.value < 0.01
                       ? '<0.01'
                       : nutrient.value.toFixed(nutrient.decimals)
-                    : '—'}{' '}
+                    : showEmptyNutrients
+                      ? (0).toFixed(nutrient.decimals)
+                      : '—'}{' '}
                   <span className="text-[10px] font-normal text-ink-faint">{nutrient.unit}</span>
                 </div>
               )}
-            </div>
+            </button>
           ))}
         </div>
       )}

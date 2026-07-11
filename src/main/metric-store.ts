@@ -94,6 +94,14 @@ export function markFetched(group: string, dates: string[], at = Date.now()): vo
   scheduleSave()
 }
 
+export function clearFetched(group: string, dates: string[]): void {
+  for (const d of dates) {
+    const record = load().days[d]
+    if (record) delete record.fetched[group]
+  }
+  scheduleSave()
+}
+
 export function mergeValues(date: string, values: DayValues): void {
   Object.assign(dayRecord(date).values, values)
   scheduleSave()

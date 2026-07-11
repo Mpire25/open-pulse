@@ -1,5 +1,11 @@
 import { describe, expect, test } from 'bun:test'
-import { bmiFrom, parseBodyMeasurements, parseLatestHeight, parseNutritionLogs } from '../src/main/body-nutrition-detail'
+import {
+  bmiFrom,
+  parseBodyMeasurements,
+  parseLatestHeight,
+  parseNutritionLogs,
+  parseNutritionLogTotals
+} from '../src/main/body-nutrition-detail'
 
 describe('body and nutrition record normalization', () => {
   test('retains individual food, meal, serving, energy, and nutrient details', () => {
@@ -39,6 +45,37 @@ describe('body and nutrition record normalization', () => {
       sodiumG: 0.86,
       sugarG: 6
     }])
+  })
+
+  test('totals raw nutrients by day for missing daily rollup fields', () => {
+    const totals = parseNutritionLogTotals([
+      {
+        nutritionLog: {
+          interval: { startTime: '2026-07-10T08:00:00+01:00' },
+          energy: { kcal: 220 },
+          nutrients: [
+            { nutrient: 'SATURATED_FAT', quantity: { grams: 3 } },
+            { nutrient: 'SUGAR', quantity: { grams: 11 } }
+          ]
+        }
+      },
+      {
+        nutritionLog: {
+          interval: { startTime: '2026-07-10T18:00:00+01:00' },
+          energy: { kcal: 430 },
+          nutrients: [
+            { nutrient: 'SATURATED_FAT', quantity: { grams: 5 } },
+            { nutrient: 'SUGAR', quantity: { grams: 17 } }
+          ]
+        }
+      }
+    ])
+
+    expect(totals.get('2026-07-10')).toMatchObject({
+      caloriesIn: 650,
+      saturatedFatG: 8,
+      sugarG: 28
+    })
   })
 
   test('pairs weight and body-fat readings from the same scale session', () => {

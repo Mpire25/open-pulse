@@ -1,37 +1,31 @@
 import { motion } from 'framer-motion'
-import { Moon, Bed, Timer, Wind } from '@phosphor-icons/react'
+import { CaretRight, Moon, Timer } from '@phosphor-icons/react'
 import { Panel, DrillHeader, InteractivePanel } from '@/components/Panel'
 import { ColumnChart, ProgressRing, TrendLine } from '@/components/charts'
 import { SleepStages, STAGE_COLOR } from '@/components/SleepStages'
 import { CARD_HEIGHT, SkeletonChart, SkeletonRing, SkeletonSleepStages, SkeletonText } from '@/components/Skeleton'
 import { useSleepRange } from '@/hooks/useHealth'
 import { listDates, rangeEnding } from '@/lib/metrics'
-import {
-  interpretSleepNight,
-  type SleepInterpretation,
-  type SleepMetricInsight
-} from '@/lib/sleep-insights'
-import { formatClock, formatMinutes, longDate, shortDate, weekdayShort } from '@/lib/format'
+import { formatMinutes, longDate, shortDate, weekdayShort } from '@/lib/format'
 import type { OpenMetric } from '@/lib/metric-navigation'
 import { fade } from '@/lib/motion'
-import { cn } from '@/lib/utils'
 import type { Goals, SleepNight } from '@shared/types'
 
 interface SleepViewProps {
   date: string
   goals: Goals
   onOpenMetric: OpenMetric
+  onOpenStages: () => void
   onSelectDate: (date: string) => void
 }
 
-export function SleepView({ date, goals, onOpenMetric, onSelectDate }: SleepViewProps): React.JSX.Element {
+export function SleepView({ date, goals, onOpenMetric, onOpenStages, onSelectDate }: SleepViewProps): React.JSX.Element {
   const week = rangeEnding(date, 7)
   const historyRange = rangeEnding(date, 30)
   const nights = useSleepRange(historyRange.start, historyRange.end)
 
   const byDate = new Map((nights.data ?? []).map((n) => [n.date, n]))
   const night = byDate.get(date) ?? null
-  const interpretation = night ? interpretSleepNight(night, nights.data ?? [], goals.sleepMinutes) : null
   const recorded = nights.data?.filter((n) => n.date >= week.start && n.minutesAsleep > 0) ?? []
   const avgAsleep = recorded.length
     ? recorded.reduce((s, n) => s + n.minutesAsleep, 0) / recorded.length
@@ -52,28 +46,15 @@ export function SleepView({ date, goals, onOpenMetric, onSelectDate }: SleepView
       {/* Selected night */}
       <motion.div custom={1} variants={fade} initial="hidden" animate="show">
         {nights.isPending ? (
-          <InteractivePanel
-            className={`grid grid-cols-1 gap-8 p-7 lg:grid-cols-[auto_1fr] ${CARD_HEIGHT.detail}`}
-            onOpen={() => onOpenMetric('sleepMinutes', 'D')}
-          >
-            <div className="flex flex-col items-center justify-center gap-3" aria-hidden>
-              <SkeletonRing size={140} stroke={12} />
+          <Panel className="grid min-h-[340px] grid-cols-1 gap-2 p-3 lg:grid-cols-[250px_1fr]">
+            <div className="flex flex-col items-center justify-center gap-3 rounded-[18px] p-4" aria-hidden>
+              <SkeletonRing size={172} stroke={16} />
               <div className="flex flex-col items-center gap-1.5">
                 <SkeletonText className="w-28" />
                 <SkeletonText className="h-2.5 w-16" />
               </div>
-              <div className="flex gap-4">
-                <div className="flex flex-col items-center gap-2">
-                  <SkeletonText className="w-12" />
-                  <SkeletonText className="w-10" />
-                </div>
-                <div className="flex flex-col items-center gap-2">
-                  <SkeletonText className="w-14" />
-                  <SkeletonText className="w-10" />
-                </div>
-              </div>
             </div>
-            <div className="flex flex-col justify-center">
+            <div className="flex flex-col justify-center rounded-[18px] p-4">
               <DrillHeader
                 title="Stages"
                 hint={<SkeletonText className="w-32" />}
@@ -83,60 +64,57 @@ export function SleepView({ date, goals, onOpenMetric, onSelectDate }: SleepView
                 <SkeletonSleepStages />
               </div>
             </div>
-            <SleepNightDetailsSkeleton />
-          </InteractivePanel>
-        ) : night ? (
-          <InteractivePanel
-            className={`grid grid-cols-1 gap-8 p-7 lg:grid-cols-[auto_1fr] ${CARD_HEIGHT.detail}`}
-            onOpen={() => onOpenMetric('sleepMinutes', 'D')}
-          >
-            <div className="flex flex-col items-center justify-center gap-3">
+            <SleepNightSummarySkeleton />
+          </Panel>
+        ) : (
+          <Panel className="grid min-h-[340px] grid-cols-1 gap-2 p-3 lg:grid-cols-[250px_1fr]">
+            <button
+              type="button"
+              onClick={() => onOpenMetric('sleepMinutes', 'D')}
+              className="group/drill relative flex min-w-0 flex-col items-center justify-center gap-3 rounded-[18px] p-4 transition-colors hover:bg-white/[0.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+              aria-label="Open sleep duration details"
+            >
+              <CaretRight
+                size={14}
+                weight="bold"
+                className="absolute right-4 top-4 text-ink-faint transition-all group-hover/drill:translate-x-0.5 group-hover/drill:text-ink"
+              />
               <ProgressRing
-                value={night.minutesAsleep}
+                value={night?.minutesAsleep ?? 0}
                 goal={goals.sleepMinutes}
                 color="var(--color-sleep)"
-                size={140}
-                stroke={12}
+                size={172}
+                stroke={16}
               >
                 <div className="text-center">
-                  <div className="text-[19px] font-semibold leading-none text-ink">
-                    {formatMinutes(night.minutesAsleep)}
+                  <div className="text-[23px] font-semibold leading-none text-ink">
+                    {night ? formatMinutes(night.minutesAsleep) : '—'}
                   </div>
                   <div className="mt-1 text-[10px] uppercase tracking-wide text-ink-faint">asleep</div>
                 </div>
               </ProgressRing>
-              <div className="flex flex-col items-center gap-1.5">
-                <span className="font-mono text-[11px] text-ink-dim">
-                  {Math.round((night.minutesAsleep / goals.sleepMinutes) * 100)}% of {formatMinutes(goals.sleepMinutes)} goal
-                </span>
-                <InsightPill
-                  insight={{ label: interpretation!.headline, tone: interpretation!.tone, position: 'typical' }}
-                />
-              </div>
-              <div className="flex gap-4">
-                <MiniStat icon={<Bed size={13} weight="fill" />} label="In bed" value={formatMinutes(night.minutesInSleepPeriod)} />
-                <MiniStat
-                  icon={<Timer size={13} weight="fill" />}
-                  label="Efficiency"
-                  value={night.efficiency != null ? `${night.efficiency}%` : '—'}
-                />
-              </div>
-            </div>
-            <div className="flex flex-col justify-center">
+              <span className="font-mono text-[11px] text-ink-dim">
+                {night
+                  ? `${Math.round((night.minutesAsleep / goals.sleepMinutes) * 100)}% of ${formatMinutes(goals.sleepMinutes)} goal`
+                  : `${formatMinutes(goals.sleepMinutes)} goal`}
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={onOpenStages}
+              className="group/drill flex min-w-0 flex-col justify-center rounded-[18px] p-4 text-left transition-colors hover:bg-white/[0.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+              aria-label="Open sleep stages details"
+            >
               <DrillHeader
                 title="Stages"
-                hint="Hover a block for its timing"
+                hint={night ? 'Hover a block for its timing' : 'No stages recorded'}
                 icon={<Moon size={18} weight="fill" style={{ color: 'var(--color-sleep)' }} />}
               />
-              <div className="mt-5">
-                <SleepStages night={night} />
+              <div className="mt-4">
+                <SleepStages night={night} compact />
               </div>
-            </div>
-            <SleepNightDetails night={night} interpretation={interpretation!} />
-          </InteractivePanel>
-        ) : (
-          <Panel className="grid place-items-center p-12 text-[13px] text-ink-faint">
-            No sleep recorded for this night.
+            </button>
+            <SleepNightSummary night={night} />
           </Panel>
         )}
       </motion.div>
@@ -228,182 +206,37 @@ export function SleepView({ date, goals, onOpenMetric, onSelectDate }: SleepView
   )
 }
 
-function SleepNightDetailsSkeleton(): React.JSX.Element {
+function SleepNightSummarySkeleton(): React.JSX.Element {
   return (
-    <div className="border-t border-hairline pt-5 lg:col-span-2" aria-hidden>
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-        {Array.from({ length: 4 }, (_, index) => (
-          <div key={index} className="flex flex-col gap-2">
-            <SkeletonText className="w-20" />
-            <SkeletonText className="h-4 w-14" />
-            <SkeletonText className="h-2.5 w-20" />
-          </div>
-        ))}
-      </div>
-      <div className="mt-5 grid grid-cols-2 gap-4 border-t border-hairline pt-4 sm:grid-cols-4">
-        {Array.from({ length: 4 }, (_, index) => (
-          <div key={index} className="flex flex-col gap-2">
-            <SkeletonText className="w-16" />
-            <SkeletonText className="h-4 w-20" />
-          </div>
-        ))}
-      </div>
+    <div className="mx-4 mb-2 flex flex-wrap gap-x-8 gap-y-3 border-t border-hairline pt-4 lg:col-span-2" aria-hidden>
+      {Array.from({ length: 3 }, (_, index) => (
+        <div key={index} className="flex items-center gap-2">
+          <SkeletonText className="w-16" />
+          <SkeletonText className="h-4 w-14" />
+        </div>
+      ))}
     </div>
   )
 }
 
-function stageStatusLabel(status: string | null | undefined, processed: boolean | null | undefined): string | null {
-  if (processed === false) return 'Sleep stages still processing'
-  const labels: Record<string, string> = {
-    REJECTED_COVERAGE: 'Stages unavailable · low signal coverage',
-    REJECTED_MAX_GAP: 'Stages unavailable · large recording gap',
-    REJECTED_START_GAP: 'Stages unavailable · start gap',
-    REJECTED_END_GAP: 'Stages unavailable · end gap',
-    REJECTED_NAP: 'Stages unavailable for this nap',
-    REJECTED_SERVER: 'Stages unavailable · source data missing',
-    TIMEOUT: 'Stage processing timed out',
-    PROCESSING_INTERNAL_ERROR: 'Stage processing failed'
-  }
-  return status ? labels[status] ?? null : null
-}
-
-function SleepNightDetails({
-  night,
-  interpretation
-}: {
-  night: SleepNight
-  interpretation: SleepInterpretation
-}): React.JSX.Element {
-  const outOfBedSegments = night.outOfBedSegments ?? []
-  const outOfBedMinutes = outOfBedSegments.reduce(
-    (sum, segment) => sum + Math.max(0, (Date.parse(segment.endTime) - Date.parse(segment.startTime)) / 60_000),
-    0
-  )
-  const detailStats = [
-    {
-      label: 'To first deep/REM',
-      value: night.minutesToFirstDeepOrRem != null ? formatMinutes(night.minutesToFirstDeepOrRem) : '—',
-      insight: interpretation.firstDeepOrRem
-    },
-    {
-      label: 'Deep + REM',
-      value: night.stages.length > 0 ? formatMinutes(night.deepRemMinutes) : '—',
-      insight: interpretation.deepRem
-    },
-    {
-      label: 'Awake',
-      value: night.minutesAwake != null ? formatMinutes(night.minutesAwake) : '—',
-      insight: interpretation.awake
-    },
-    {
-      label: 'Interruptions',
-      value: night.stages.length > 0
-        ? `${formatMinutes(night.interruptionMinutes)} · ${night.interruptionCount} ${night.interruptionCount === 1 ? 'moment' : 'moments'}`
-        : '—',
-      insight: interpretation.interruptions
-    }
+function SleepNightSummary({ night }: { night: SleepNight | null }): React.JSX.Element {
+  const interruptions = night && night.stages.length > 0
+    ? `${night.interruptionCount} ${night.interruptionCount === 1 ? 'moment' : 'moments'} · ${formatMinutes(night.interruptionMinutes)}`
+    : '—'
+  const items = [
+    { label: 'In bed', value: night ? formatMinutes(night.minutesInSleepPeriod) : '—' },
+    { label: 'Efficiency', value: night?.efficiency != null ? `${night.efficiency}%` : '—' },
+    { label: 'Interruptions', value: interruptions }
   ]
-  const respiratory = night.respiratory
-  const respiratoryRows = respiratory
-    ? [
-        { label: 'Full night', value: respiratory.full },
-        { label: 'Light', value: respiratory.light },
-        { label: 'Deep', value: respiratory.deep },
-        { label: 'REM', value: respiratory.rem }
-      ].filter((row) => row.value != null)
-    : []
-  const status = stageStatusLabel(night.stagesStatus, night.processed)
 
   return (
-    <div className="border-t border-hairline pt-5 lg:col-span-2">
-      <div className="grid grid-cols-2 gap-x-5 gap-y-4 sm:grid-cols-4">
-        {detailStats.map((stat) => (
-          <div key={stat.label}>
-            <div className="text-[10.5px] font-medium text-ink-faint">{stat.label}</div>
-            <div className="mt-0.5 font-mono text-[14px] font-medium text-ink">{stat.value}</div>
-            <InsightPill insight={stat.insight} className="mt-1.5" />
-          </div>
-        ))}
-      </div>
-
-      {outOfBedSegments.length > 0 && (
-        <div className="mt-3 text-[10.5px] text-ink-faint">
-          Out of bed {formatMinutes(outOfBedMinutes)} ·{' '}
-          {outOfBedSegments
-            .map((segment) => `${formatClock(segment.startTime)}–${formatClock(segment.endTime)}`)
-            .join(' · ')}
+    <div className="mx-4 mb-2 flex flex-wrap items-center gap-x-8 gap-y-2 border-t border-hairline pt-4 lg:col-span-2">
+      {items.map((item) => (
+        <div key={item.label} className="flex items-baseline gap-2">
+          <span className="text-[10.5px] font-medium text-ink-faint">{item.label}</span>
+          <span className="font-mono text-[13px] font-medium text-ink">{item.value}</span>
         </div>
-      )}
-
-      {respiratoryRows.length > 0 && (
-        <div className="mt-5 border-t border-hairline pt-4">
-          <div className="mb-3 flex items-start gap-2">
-            <Wind className="mt-px" size={14} weight="fill" style={{ color: 'var(--color-sleep)' }} />
-            <div className="text-[11px] font-medium text-ink-dim">Breathing during sleep</div>
-          </div>
-          <div className="grid grid-cols-2 gap-x-5 gap-y-4 sm:grid-cols-4">
-            {respiratoryRows.map((row) => (
-              <div key={row.label}>
-                <div className="text-[10.5px] text-ink-faint">{row.label}</div>
-                <div className="mt-0.5 font-mono text-[14px] font-medium text-ink">
-                  {row.value!.breathsPerMinute.toFixed(1)}{' '}
-                  <span className="text-[9.5px] text-ink-dim">br/min</span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {(status || night.manuallyEdited) && (
-        <div className="mt-4 flex flex-wrap gap-x-4 gap-y-1 border-t border-hairline pt-3 text-[10px] text-ink-faint">
-          {status && <span>{status}</span>}
-          {night.manuallyEdited && <span>Manually edited</span>}
-        </div>
-      )}
-    </div>
-  )
-}
-
-function InsightPill({
-  insight,
-  className
-}: {
-  insight: SleepMetricInsight | null
-  className?: string
-}): React.JSX.Element | null {
-  if (!insight) return null
-  return (
-    <span
-      className={cn(
-        'inline-flex whitespace-nowrap rounded-full px-1.5 py-0.5 text-[9.5px] font-medium leading-none',
-        insight.tone === 'positive' && 'bg-recovery-soft text-recovery',
-        insight.tone === 'caution' && 'bg-activity-soft text-activity',
-        insight.tone === 'neutral' && 'bg-white/[0.055] text-ink-dim',
-        className
-      )}
-    >
-      {insight.label}
-    </span>
-  )
-}
-
-function MiniStat({
-  icon,
-  label,
-  value
-}: {
-  icon: React.ReactNode
-  label: string
-  value: string
-}): React.JSX.Element {
-  return (
-    <div className="flex flex-col items-center gap-0.5">
-      <span className="flex items-center gap-1 text-[11px] text-ink-faint">
-        <span className="text-ink-dim">{icon}</span>
-        {label}
-      </span>
-      <span className="text-[13px] font-semibold text-ink">{value}</span>
+      ))}
     </div>
   )
 }
