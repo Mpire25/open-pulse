@@ -8,11 +8,8 @@ import type { GoogleAuthStatus } from '../shared/types'
 const SCOPES = [
   'openid',
   'email',
-  'profile',
   'https://www.googleapis.com/auth/googlehealth.activity_and_fitness.readonly',
-  'https://www.googleapis.com/auth/googlehealth.ecg.readonly',
   'https://www.googleapis.com/auth/googlehealth.health_metrics_and_measurements.readonly',
-  'https://www.googleapis.com/auth/googlehealth.irn.readonly',
   'https://www.googleapis.com/auth/googlehealth.location.readonly',
   'https://www.googleapis.com/auth/googlehealth.nutrition.readonly',
   'https://www.googleapis.com/auth/googlehealth.profile.readonly',
@@ -39,6 +36,7 @@ const LANDING_HTML = `<!doctype html><meta charset="utf-8"><title>OpenPulse</tit
 <p style="color:#a1a1a8">You can close this window and return to OpenPulse.</p></div></body>`
 
 let activeConnectReject: ((err: Error) => void) | null = null
+let authGeneration = 0
 
 interface GoogleTokenError {
   error?: string
@@ -51,6 +49,8 @@ export function getGoogleStatus(): GoogleAuthStatus {
 }
 
 export function disconnectGoogle(): void {
+  authGeneration += 1
+  activeConnectReject?.(new Error('Google sign-in was cancelled.'))
   deleteSecret(SECRET_KEY)
 }
 
@@ -70,6 +70,7 @@ export async function connectGoogle(): Promise<GoogleAuthStatus> {
     throw new Error('No Google OAuth Client Secret configured. Paste the Client Secret from the same Web application OAuth client as the Client ID.')
   }
 
+  const generation = ++authGeneration
   const { verifier, challenge } = createPkcePair()
   const state = randomState()
 
@@ -132,6 +133,10 @@ export async function connectGoogle(): Promise<GoogleAuthStatus> {
       GOOGLE_SIGN_IN_TIMEOUT_MS
     )
     server.listen(GOOGLE_REDIRECT_PORT, '127.0.0.1', () => {
+      if (settled) {
+        server.close()
+        return
+      }
       const authUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth')
       authUrl.search = new URLSearchParams({
         client_id: clientId,
@@ -161,6 +166,7 @@ export async function connectGoogle(): Promise<GoogleAuthStatus> {
     headers: { 'content-type': 'application/x-www-form-urlencoded' },
     body: body.toString()
   })
+  assertCurrentGeneration(generation)
   if (!resp.ok) {
     throw new Error(await formatGoogleTokenError(resp))
   }
@@ -170,6 +176,7 @@ export async function connectGoogle(): Promise<GoogleAuthStatus> {
     expires_in: number
     id_token?: string
   }
+  assertCurrentGeneration(generation)
   const claims = json.id_token ? decodeJwtPayload<{ email?: string }>(json.id_token) : null
   const tokens: GoogleTokens = {
     accessToken: json.access_token,
@@ -179,6 +186,10 @@ export async function connectGoogle(): Promise<GoogleAuthStatus> {
   }
   setSecret(SECRET_KEY, tokens)
   return { connected: true, email: tokens.email }
+}
+
+function assertCurrentGeneration(generation: number): void {
+  if (generation !== authGeneration) throw new Error('Google sign-in was cancelled.')
 }
 
 async function formatGoogleTokenError(resp: Response): Promise<string> {
@@ -204,6 +215,7 @@ async function formatGoogleTokenError(resp: Response): Promise<string> {
 
 /** Returns a valid access token, refreshing it if needed, or null when not connected. */
 export async function getGoogleAccessToken(): Promise<string | null> {
+  const generation = authGeneration
   const tokens = getSecret<GoogleTokens>(SECRET_KEY)
   if (!tokens) return null
   if (Date.now() < tokens.expiresAt - 60_000) return tokens.accessToken
@@ -222,8 +234,19 @@ export async function getGoogleAccessToken(): Promise<string | null> {
     headers: { 'content-type': 'application/x-www-form-urlencoded' },
     body: body.toString()
   })
+  if (generation !== authGeneration) return null
   if (!resp.ok) return null
   const json = (await resp.json()) as { access_token: string; expires_in: number }
+  if (generation !== authGeneration) return null
+  const current = getSecret<GoogleTokens>(SECRET_KEY)
+  if (!current) return null
+  if (
+    current.accessToken !== tokens.accessToken ||
+    current.refreshToken !== tokens.refreshToken ||
+    current.expiresAt !== tokens.expiresAt
+  ) {
+    return current.accessToken
+  }
   const updated: GoogleTokens = {
     ...tokens,
     accessToken: json.access_token,

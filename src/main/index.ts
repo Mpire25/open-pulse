@@ -1,24 +1,48 @@
 import { app, BrowserWindow, session, shell } from 'electron'
 import { join } from 'node:path'
-import { registerIpc } from './ipc'
+import { registerIpc, registerTrustedRenderer } from './ipc'
+import { createRendererTarget, safeExternalUrl, type RendererTarget } from './renderer-security'
 
-// Lock the renderer down in production. Skipped in dev so Vite's HMR preamble
-// (inline module scripts + websocket) keeps working.
-function applyContentSecurityPolicy(): void {
-  if (process.env.ELECTRON_RENDERER_URL) return
+const PRODUCTION_CSP =
+  "default-src 'self'; base-uri 'none'; object-src 'none'; frame-src 'none'; form-action 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'"
+
+function rendererTarget(): RendererTarget {
+  return createRendererTarget({
+    isPackaged: app.isPackaged,
+    developmentUrl: process.env.ELECTRON_RENDERER_URL,
+    bundledRendererPath: join(import.meta.dirname, '../renderer/index.html')
+  })
+}
+
+function openExternalUrl(url: string): void {
+  const safeUrl = safeExternalUrl(url)
+  if (!safeUrl) return
+  void shell.openExternal(safeUrl).catch((error: unknown) => {
+    console.error('Failed to open external URL', error)
+  })
+}
+
+// Lock the bundled renderer down in production. Development still needs Vite's
+// inline HMR preamble and websocket connection.
+function applyContentSecurityPolicy(target: RendererTarget): void {
+  if (target.isDevelopment) return
+
   session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+    const responseHeaders = { ...details.responseHeaders }
+    for (const header of Object.keys(responseHeaders)) {
+      if (header.toLowerCase() === 'content-security-policy') delete responseHeaders[header]
+    }
+
     callback({
       responseHeaders: {
-        ...details.responseHeaders,
-        'Content-Security-Policy': [
-          "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'"
-        ]
+        ...responseHeaders,
+        'Content-Security-Policy': [PRODUCTION_CSP]
       }
     })
   })
 }
 
-function createWindow(): void {
+function createWindow(target: RendererTarget): void {
   const win = new BrowserWindow({
     width: 1280,
     height: 840,
@@ -32,32 +56,50 @@ function createWindow(): void {
     visualEffectState: 'active',
     webPreferences: {
       preload: join(import.meta.dirname, '../preload/index.mjs'),
+      // electron-vite emits this preload as ESM. Electron's sandboxed preload
+      // loader is CommonJS-only, so sandboxing here prevents window.pulse from
+      // being installed and leaves the renderer unusable.
       sandbox: false,
-      contextIsolation: true
+      contextIsolation: true,
+      nodeIntegration: false,
+      webSecurity: true,
+      allowRunningInsecureContent: false
     }
   })
+
+  registerTrustedRenderer(win.webContents, target.isExpectedUrl)
 
   win.on('ready-to-show', () => win.show())
 
   // Any external link opens in the default browser, never inside the app.
   win.webContents.setWindowOpenHandler(({ url }) => {
-    void shell.openExternal(url)
+    openExternalUrl(url)
     return { action: 'deny' }
   })
 
-  if (process.env.ELECTRON_RENDERER_URL) {
-    void win.loadURL(process.env.ELECTRON_RENDERER_URL)
-  } else {
-    void win.loadFile(join(import.meta.dirname, '../renderer/index.html'))
-  }
+  win.webContents.on('will-frame-navigate', (details) => {
+    if (details.isMainFrame && target.isExpectedUrl(details.url)) return
+    details.preventDefault()
+    if (details.isMainFrame) openExternalUrl(details.url)
+  })
+
+  win.webContents.on('will-redirect', (details) => {
+    if (details.isMainFrame && target.isExpectedUrl(details.url)) return
+    details.preventDefault()
+  })
+
+  win.webContents.on('will-attach-webview', (event) => event.preventDefault())
+
+  void win.loadURL(target.url.toString())
 }
 
 app.whenReady().then(() => {
-  applyContentSecurityPolicy()
+  const target = rendererTarget()
+  applyContentSecurityPolicy(target)
   registerIpc()
-  createWindow()
+  createWindow(target)
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow()
+    if (BrowserWindow.getAllWindows().length === 0) createWindow(target)
   })
 })
 

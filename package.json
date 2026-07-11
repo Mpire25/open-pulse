@@ -37,7 +37,7 @@
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "^5.0.0",
-    "electron": "^38.0.0",
+    "electron": "^43.0.0",
     "electron-builder": "^26.0.0",
     "electron-vite": "^4.0.0",
     "tailwindcss": "^4.1.0",
@@ -53,6 +53,12 @@
     "files": [
       "out/**/*"
     ],
+    "electronFuses": {
+      "runAsNode": false,
+      "enableCookieEncryption": true,
+      "enableNodeOptionsEnvironmentVariable": false,
+      "enableNodeCliInspectArguments": false
+    },
     "mac": {
       "category": "public.app-category.healthcare-fitness",
       "target": "dmg"

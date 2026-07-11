@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useQueryClient } from '@tanstack/react-query'
 import { Sidebar, type View } from '@/components/Sidebar'
@@ -24,7 +24,7 @@ import type { MetricRange, OpenMetric } from '@/lib/metric-navigation'
 import type { AppSettings, CodexAuthStatus, GoogleAuthStatus, MetricKey, Workout } from '@shared/types'
 
 const DATA_VIEWS: View[] = ['home', 'activity', 'heart', 'sleep', 'body', 'nutrition']
-const NAVIGATION_STATE_KEY = 'open-pulse-navigation-v3'
+const NAVIGATION_STATE_KEY = 'open-pulse-navigation-v4'
 
 interface MetricDetailSelection {
   metric: MetricKey
@@ -33,6 +33,7 @@ interface MetricDetailSelection {
 
 interface NavigationEntry {
   key: typeof NAVIGATION_STATE_KEY
+  accountEpoch: number
   view: View
   selectedDate: string
   detailMetric: MetricDetailSelection | null
@@ -45,12 +46,15 @@ function isNavigationEntry(value: unknown): value is NavigationEntry {
     typeof value === 'object' &&
     value != null &&
     'key' in value &&
-    value.key === NAVIGATION_STATE_KEY
+    value.key === NAVIGATION_STATE_KEY &&
+    'accountEpoch' in value &&
+    typeof value.accountEpoch === 'number'
   )
 }
 
 function sameNavigationEntry(a: NavigationEntry, b: NavigationEntry): boolean {
   return (
+    a.accountEpoch === b.accountEpoch &&
     a.view === b.view &&
     a.selectedDate === b.selectedDate &&
     a.detailMetric?.metric === b.detailMetric?.metric &&
@@ -73,22 +77,63 @@ export default function App(): React.JSX.Element {
   const [chatOpen, setChatOpen] = useState(false)
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const backNavigationPending = useRef(false)
+  const accountEpochRef = useRef(0)
 
   // One conversation shared by the Assistant page and the side panel.
   const chat = useChat()
   const queryClient = useQueryClient()
   useTrackpadHistoryNavigation()
 
+  const clearAccountScopedState = useCallback((): void => {
+    // Clear synchronously before publishing the new auth status. This also
+    // cancels active query retries so the previous account cannot repopulate
+    // the renderer cache after the boundary.
+    queryClient.clear()
+    chat.reset()
+    const accountEpoch = accountEpochRef.current + 1
+    accountEpochRef.current = accountEpoch
+    setDetailMetric(null)
+    setSleepStagesOpen(false)
+    setSelectedWorkout(null)
+
+    const historyEntry = window.history.state
+    if (isNavigationEntry(historyEntry)) {
+      window.history.replaceState(
+        {
+          ...historyEntry,
+          accountEpoch,
+          detailMetric: null,
+          sleepStagesOpen: false,
+          selectedWorkout: null
+        },
+        ''
+      )
+    }
+  }, [chat.reset, queryClient])
+
+  const forCurrentAccount = (entry: NavigationEntry): NavigationEntry => {
+    if (entry.accountEpoch === accountEpochRef.current) return entry
+    return {
+      ...entry,
+      accountEpoch: accountEpochRef.current,
+      detailMetric: null,
+      sleepStagesOpen: false,
+      selectedWorkout: null
+    }
+  }
+
   const applyNavigationEntry = (entry: NavigationEntry): void => {
-    setView(entry.view)
-    setSelectedDate(entry.selectedDate)
-    setDetailMetric(entry.detailMetric)
-    setSleepStagesOpen(entry.sleepStagesOpen)
-    setSelectedWorkout(entry.selectedWorkout)
+    const currentEntry = forCurrentAccount(entry)
+    setView(currentEntry.view)
+    setSelectedDate(currentEntry.selectedDate)
+    setDetailMetric(currentEntry.detailMetric)
+    setSleepStagesOpen(currentEntry.sleepStagesOpen)
+    setSelectedWorkout(currentEntry.selectedWorkout)
   }
 
   const renderedNavigationEntry = (): NavigationEntry => ({
     key: NAVIGATION_STATE_KEY,
+    accountEpoch: accountEpochRef.current,
     view,
     selectedDate,
     detailMetric,
@@ -98,7 +143,7 @@ export default function App(): React.JSX.Element {
 
   const currentNavigationEntry = (): NavigationEntry => {
     const historyEntry = window.history.state
-    return isNavigationEntry(historyEntry) ? historyEntry : renderedNavigationEntry()
+    return isNavigationEntry(historyEntry) ? forCurrentAccount(historyEntry) : renderedNavigationEntry()
   }
 
   const navigate = (entry: NavigationEntry): void => {
@@ -143,6 +188,7 @@ export default function App(): React.JSX.Element {
   useEffect(() => {
     const initialEntry: NavigationEntry = {
       key: NAVIGATION_STATE_KEY,
+      accountEpoch: accountEpochRef.current,
       view: 'home',
       selectedDate: isoToday(),
       detailMetric: null,
@@ -151,25 +197,35 @@ export default function App(): React.JSX.Element {
     }
 
     if (isNavigationEntry(window.history.state)) {
-      applyNavigationEntry(window.history.state)
+      const entry = forCurrentAccount(window.history.state)
+      if (entry !== window.history.state) window.history.replaceState(entry, '')
+      applyNavigationEntry(entry)
     } else {
       window.history.replaceState(initialEntry, '')
     }
 
     const handleHistoryNavigation = (event: PopStateEvent): void => {
       backNavigationPending.current = false
-      if (isNavigationEntry(event.state)) applyNavigationEntry(event.state)
+      if (!isNavigationEntry(event.state)) return
+      const entry = forCurrentAccount(event.state)
+      if (entry !== event.state) window.history.replaceState(entry, '')
+      applyNavigationEntry(entry)
     }
 
     window.addEventListener('popstate', handleHistoryNavigation)
     return () => window.removeEventListener('popstate', handleHistoryNavigation)
   }, [])
 
-  // A fresh connection invalidates whatever demo data is on screen.
-  const handleGoogleChange = (status: GoogleAuthStatus): void => {
+  const handleGoogleChange = useCallback((status: GoogleAuthStatus): void => {
+    clearAccountScopedState()
     setGoogle(status)
     void window.pulse.health.refresh().then(() => queryClient.invalidateQueries())
-  }
+  }, [clearAccountScopedState, queryClient])
+
+  const handleCodexChange = useCallback((status: CodexAuthStatus): void => {
+    clearAccountScopedState()
+    setCodex(status)
+  }, [clearAccountScopedState])
 
   const selectView = (v: View): void => {
     navigate({
@@ -381,7 +437,7 @@ export default function App(): React.JSX.Element {
                     codex={codex}
                     onSettingsChange={setSettings}
                     onGoogleChange={handleGoogleChange}
-                    onCodexChange={setCodex}
+                    onCodexChange={handleCodexChange}
                   />
                 )}
               </motion.div>
