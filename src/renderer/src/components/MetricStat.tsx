@@ -50,12 +50,16 @@ export function MetricStat({
           />
         )}
       </div>
-      <div className="flex min-w-0 items-end justify-between gap-2">
-        <div className="flex min-w-0 items-baseline gap-1 whitespace-nowrap">
+      <div className="flex min-w-0 items-end gap-2 overflow-hidden">
+        <div className="flex shrink-0 items-baseline gap-1 whitespace-nowrap">
           <span className="text-[24px] font-semibold leading-none tracking-tight text-ink">{value}</span>
           {unit && <span className="shrink-0 text-[11.5px] text-ink-dim">{unit}</span>}
         </div>
-        {spark && <Spark values={spark} color={accent} width={sparkWidth} />}
+        {spark && (
+          <div className="flex min-w-0 flex-1 justify-end overflow-hidden">
+            <Spark values={spark} color={accent} width={sparkWidth} />
+          </div>
+        )}
       </div>
       {(deltaPct != null || sub) && (
         <div className="flex min-w-0 items-center gap-1.5 text-[11px] leading-none">
@@ -70,11 +74,11 @@ export function MetricStat({
     return (
       <button
         onClick={onOpen}
-        className="group/stat flex min-w-0 flex-col gap-2 px-5 py-4 text-left transition-colors hover:bg-white/[0.03]"
+        className="group/stat flex w-full min-w-0 overflow-hidden flex-col gap-2 px-5 py-4 text-left transition-colors hover:bg-white/[0.03]"
       >
         {body}
       </button>
     )
   }
-  return <div className="flex min-w-0 flex-col gap-2 px-5 py-4">{body}</div>
+  return <div className="flex w-full min-w-0 overflow-hidden flex-col gap-2 px-5 py-4">{body}</div>
 }
