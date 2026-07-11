@@ -112,7 +112,7 @@ export function AssistantView({ chat, codex, onOpenSettings }: AssistantViewProp
             transition={{ type: 'spring', stiffness: 380, damping: 34 }}
             onMouseEnter={cancelClose}
             onMouseLeave={scheduleClose}
-            className="absolute bottom-3 right-3 top-1.5 z-30 flex w-[300px] flex-col overflow-hidden rounded-[22px] border border-hairline bg-panel shadow-[0_20px_50px_-30px_rgb(0_0_0/0.8)]"
+            className="absolute bottom-3 right-3 top-1.5 z-30 flex w-[300px] flex-col overflow-hidden rounded-[22px] border border-hairline bg-panel/75 shadow-[0_20px_50px_-30px_rgb(0_0_0/0.8),inset_0_1px_0_rgb(255_255_255/0.05)] backdrop-blur-2xl"
           >
             <div className="flex h-10 shrink-0 items-center justify-between border-b border-hairline pl-4 pr-2">
               <span className="display text-[13px] font-semibold text-ink">Chats</span>
