@@ -59,6 +59,7 @@ function normalizeSession(value: unknown): ChatSession | null {
           : DEFAULT_CHAT_TITLE,
     createdAt,
     updatedAt: validDate(candidate.updatedAt, createdAt),
+    ...(candidate.pinned === true ? { pinned: true } : {}),
     messages
   }
 }
@@ -111,6 +112,15 @@ export class ChatHistoryStore {
       session.title = generateChatTitle(firstUserMessage.text)
     }
     session.updatedAt = isoNow()
+    this.persist()
+    return structuredClone(session)
+  }
+
+  setPinned(accountScope: string, id: string, pinned: boolean): ChatSession {
+    const session = this.find(accountScope, id)
+    // Pinning deliberately leaves updatedAt alone so it doesn't fake recency.
+    if (pinned) session.pinned = true
+    else delete session.pinned
     this.persist()
     return structuredClone(session)
   }
