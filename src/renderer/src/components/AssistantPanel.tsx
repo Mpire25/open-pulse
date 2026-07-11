@@ -1,6 +1,9 @@
+import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
-import { Broom, Sparkle, X } from '@phosphor-icons/react'
+import { ClockCounterClockwise, Plus, Sparkle, X } from '@phosphor-icons/react'
 import { ChatPanel, type ChatState } from '@/components/ChatPanel'
+import { ChatHistory } from '@/components/ChatHistory'
+import { cn } from '@/lib/utils'
 
 interface AssistantPanelProps {
   open: boolean
@@ -24,6 +27,12 @@ export function AssistantPanel({
   codexConnected,
   onOpenSettings
 }: AssistantPanelProps): React.JSX.Element {
+  const [historyOpen, setHistoryOpen] = useState(false)
+
+  useEffect(() => {
+    if (!open) setHistoryOpen(false)
+  }, [open])
+
   return (
     <motion.aside
       initial={false}
@@ -41,18 +50,31 @@ export function AssistantPanel({
             <div className="grid h-6 w-6 place-items-center rounded-lg bg-accent-soft">
               <Sparkle size={13} weight="fill" className="text-accent" />
             </div>
-            <span className="text-[13.5px] font-semibold">Assistant</span>
+            <span className="text-[13.5px] font-semibold">{historyOpen ? 'Chats' : 'Assistant'}</span>
           </div>
           <div className="flex items-center gap-1">
-            {chat.turns.length > 0 && (
-              <button
-                onClick={chat.reset}
-                aria-label="New chat"
-                className="grid h-7 w-7 place-items-center rounded-lg text-ink-dim transition-colors hover:bg-white/[0.06] hover:text-ink"
-              >
-                <Broom size={15} />
-              </button>
-            )}
+            <button
+              onClick={() => {
+                void chat.create()
+                setHistoryOpen(false)
+              }}
+              disabled={chat.loading}
+              aria-label="New chat"
+              className="grid h-7 w-7 place-items-center rounded-lg text-ink-dim transition-colors hover:bg-white/[0.06] hover:text-ink disabled:opacity-40"
+            >
+              <Plus size={15} />
+            </button>
+            <button
+              onClick={() => setHistoryOpen((value) => !value)}
+              aria-label="Conversation history"
+              aria-pressed={historyOpen}
+              className={cn(
+                'grid h-7 w-7 place-items-center rounded-lg text-ink-dim transition-colors hover:bg-white/[0.06] hover:text-ink',
+                historyOpen && 'bg-white/[0.07] text-ink'
+              )}
+            >
+              <ClockCounterClockwise size={15} />
+            </button>
             <button
               onClick={onClose}
               aria-label="Close assistant"
@@ -63,7 +85,17 @@ export function AssistantPanel({
           </div>
         </div>
         <div className="min-h-0 flex-1">
-          <ChatPanel chat={chat} codexConnected={codexConnected} onOpenSettings={onOpenSettings} compact />
+          {historyOpen ? (
+            <ChatHistory chat={chat} compact onNavigate={() => setHistoryOpen(false)} />
+          ) : (
+            <ChatPanel
+              chat={chat}
+              codexConnected={codexConnected}
+              onOpenSettings={onOpenSettings}
+              compact
+              autoFocus={open}
+            />
+          )}
         </div>
       </div>
     </motion.aside>
