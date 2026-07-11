@@ -428,8 +428,8 @@ export interface ChatMessage {
 }
 
 export type AiEvent =
-  | { type: 'delta'; chatId: string; text: string }
-  | { type: 'reasoning'; chatId: string }
-  | { type: 'tool'; chatId: string; name: string; label: string }
-  | { type: 'done'; chatId: string; text: string }
-  | { type: 'error'; chatId: string; message: string }
+  | { type: 'delta'; chatId: string; runId: string; text: string }
+  | { type: 'reasoning'; chatId: string; runId: string }
+  | { type: 'tool'; chatId: string; runId: string; name: string; label: string }
+  | { type: 'done'; chatId: string; runId: string; text: string }
+  | { type: 'error'; chatId: string; runId: string; message: string }

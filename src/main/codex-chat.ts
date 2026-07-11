@@ -2,114 +2,47 @@
 // user's ChatGPT account. Runs an agentic tool loop: the model can query the
 // user's health data (live or demo) before answering.
 
-import { randomUUID } from 'node:crypto'
 import type { WebContents } from 'electron'
 import type { AiEvent, ChatMessage } from '../shared/types'
-import { getCodexTokens } from './codex-auth'
-import { getDevices, getHealthDay, getSleepHistory } from './health-service'
+import {
+  getCodexAuthGeneration,
+  getCodexTokens,
+  isCodexAuthGenerationCurrent
+} from './codex-auth'
+import { AGENT_TOOLS, AGENT_TOOL_LABELS, runHealthAgentTool } from './health-agent-tools'
 
 const CODEX_URL = 'https://chatgpt.com/backend-api/codex/responses'
 const MODEL = 'gpt-5.6-terra'
 const MAX_TOOL_TURNS = 8
 
-const INSTRUCTIONS = `You are OpenPulse, the built-in health assistant of a macOS app that displays the user's Google Fitbit Air data (via the Google Health API).
+function buildInstructions(): string {
+  const now = new Date()
+  const dateParts = new Intl.DateTimeFormat('en-GB', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).formatToParts(now)
+  const part = (type: Intl.DateTimeFormatPartTypes): string =>
+    dateParts.find((item) => item.type === type)?.value ?? ''
+  const today = `${part('year')}-${part('month')}-${part('day')}`
+  const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone
+  return `You are OpenPulse, the built-in health assistant for Google Fitbit health data.
 
-You have tools that return the user's real data: a full snapshot for any calendar day (with its 14-day trend window), detailed sleep history, and paired-device status. Always call the relevant tools before answering questions about the user's health — never invent numbers. If the data source is "demo", mention once that this is sample data because no Fitbit account is connected yet.
+Today is ${today}; the user's local timezone is ${timezone}. Use civil calendar dates in that timezone.
 
-Style: warm, precise, brief. Use plain language, concrete numbers and short paragraphs or compact bullet lists. Highlight trends, anomalies, and one actionable suggestion when relevant. You are not a doctor; for medical concerns (e.g. AFib alerts, persistently abnormal values) recommend seeing a professional, without being alarmist.`
+For every claim about the user's data, call only the narrowest relevant tools and never invent a value. Use one day for an exact fact, 7-14 days for short comparisons, about 30 days for a trend, and 60-90 days for an exploratory relationship. If observations are sparse or the result warns that evidence is thin, request a larger useful range or explain the limitation. Prefer analyze_daily_metrics for arithmetic and correlation rather than calculating from a large table yourself. Distinguish missing data from zero. Correlation is not causation.
 
-interface ToolSpec {
-  type: 'function'
-  name: string
-  description: string
-  strict: boolean
-  parameters: Record<string, unknown>
+If a tool reports source "demo", mention once that the values are sample data because no health account is connected. Be warm, precise and concise. Use plain language, concrete dates and numbers, and at most one practical suggestion when relevant. Separate what the data shows from possible interpretation. Do not diagnose; recommend professional care for concerning symptoms or persistently abnormal readings without being alarmist.`
 }
 
-const TOOLS: ToolSpec[] = [
-  {
-    type: 'function',
-    name: 'get_health_day',
-    description:
-      "Full snapshot for one calendar day: steps, distance, floors, calories out/in, active & zone minutes, sedentary time, resting heart rate, HRV, SpO2, breathing rate, skin-temperature deviation, weight, body fat, water, sleep (with stages), workouts, hourly steps, intraday heart rate, plus daily metrics for the 14 days ending on that date (the `trend` array).",
-    strict: false,
-    parameters: {
-      type: 'object',
-      properties: {
-        date: {
-          type: 'string',
-          description: 'Day to fetch, YYYY-MM-DD. Defaults to today. Future dates are clamped to today.'
-        }
-      },
-      additionalProperties: false
-    }
-  },
-  {
-    type: 'function',
-    name: 'get_sleep_history',
-    description: 'Detailed sleep sessions (start/end, minutes asleep, efficiency, stage totals) for the last N nights.',
-    strict: false,
-    parameters: {
-      type: 'object',
-      properties: {
-        nights: { type: 'number', description: 'How many nights to fetch (1-30). Default 7.' }
-      },
-      additionalProperties: false
-    }
-  },
-  {
-    type: 'function',
-    name: 'get_devices',
-    description: 'Paired trackers: model, type, battery level and state, last sync time, hardware features.',
-    strict: false,
-    parameters: { type: 'object', properties: {}, additionalProperties: false }
-  }
-]
-
-const TOOL_LABELS: Record<string, string> = {
-  get_health_day: 'Reading day metrics',
-  get_sleep_history: 'Reading sleep history',
-  get_devices: 'Checking devices'
-}
-
-async function runTool(name: string, args: Record<string, unknown>): Promise<string> {
-  switch (name) {
-    case 'get_health_day': {
-      const date = typeof args.date === 'string' ? args.date : new Date().toISOString().slice(0, 10)
-      const data = await getHealthDay(date)
-      // Trim intraday series to keep tool output compact.
-      const step = Math.max(1, Math.floor(data.heartRate.length / 48))
-      return JSON.stringify({
-        ...data,
-        heartRate: data.heartRate.filter((_, i) => i % step === 0),
-        sleep: data.sleep ? { ...data.sleep, stages: undefined, stageSegmentCount: data.sleep.stages.length } : null
-      })
-    }
-    case 'get_sleep_history': {
-      const nights = Math.min(30, Math.max(1, Number(args.nights) || 7))
-      const history = await getSleepHistory(nights)
-      // Stage segments are large; send stage totals plus timing only.
-      return JSON.stringify(
-        history.map(({ stages, ...rest }) => ({ ...rest, stageSegmentCount: stages.length }))
-      )
-    }
-    case 'get_devices':
-      return JSON.stringify(await getDevices())
-    default:
-      return JSON.stringify({ error: `Unknown tool: ${name}` })
-  }
-}
-
-type InputItem =
-  | { type: 'message'; role: 'user' | 'assistant'; content: Array<Record<string, string>> }
-  | { type: 'function_call'; name: string; arguments: string; call_id: string }
-  | { type: 'function_call_output'; call_id: string; output: string }
+type InputItem = Record<string, unknown>
 
 interface FunctionCallItem {
   type: string
   name?: string
   arguments?: string
   call_id?: string
+  [key: string]: unknown
 }
 
 function toInputItems(history: ChatMessage[]): InputItem[] {
@@ -120,32 +53,76 @@ function toInputItems(history: ChatMessage[]): InputItem[] {
   }))
 }
 
+interface ActiveRun {
+  sender: WebContents
+  chatId: string
+  runId: string
+  controller: AbortController
+}
+
+const activeRuns = new Map<string, ActiveRun>()
+
+function runKey(sender: WebContents, chatId: string): string {
+  return `${sender.id}:${chatId}`
+}
+
+export function cancelChat(sender: WebContents, chatId: string, runId: string): void {
+  const run = activeRuns.get(runKey(sender, chatId))
+  if (run?.runId === runId) run.controller.abort(new Error('Response stopped.'))
+}
+
+export function cancelAllChats(reason = 'Response cancelled.'): void {
+  for (const run of activeRuns.values()) run.controller.abort(new Error(reason))
+}
+
+function cancellationError(signal: AbortSignal): Error {
+  return signal.reason instanceof Error ? signal.reason : new Error('Response cancelled.')
+}
+
 export async function runChat(
   sender: WebContents,
   chatId: string,
+  runId: string,
   history: ChatMessage[]
 ): Promise<void> {
+  const key = runKey(sender, chatId)
+  if (activeRuns.has(key)) {
+    if (!sender.isDestroyed()) {
+      sender.send('ai:event', {
+        type: 'error',
+        chatId,
+        runId,
+        message: 'This chat already has a response in progress.'
+      } satisfies AiEvent)
+    }
+    return
+  }
+  const controller = new AbortController()
+  const { signal } = controller
+  const run: ActiveRun = { sender, chatId, runId, controller }
+  activeRuns.set(key, run)
+  const onDestroyed = (): void => controller.abort(new Error('Window closed.'))
+  sender.once('destroyed', onDestroyed)
+
   const emit = (event: AiEvent): void => {
     if (!sender.isDestroyed()) sender.send('ai:event', event)
   }
 
-  const tokens = await getCodexTokens()
-  if (!tokens) {
-    emit({
-      type: 'error',
-      chatId,
-      message: 'Not signed in. Connect ChatGPT in Settings to use the assistant.'
-    })
-    return
-  }
-
-  const input: InputItem[] = toInputItems(history)
-  let finalText = ''
-
   try {
+    const authGeneration = getCodexAuthGeneration()
+    const tokens = await getCodexTokens(signal)
+    if (!tokens || !isCodexAuthGenerationCurrent(authGeneration)) {
+      throw new Error('Not signed in. Connect ChatGPT in Settings to use the assistant.')
+    }
+    const input: InputItem[] = toInputItems(history)
+    let finalText = ''
+
     for (let turn = 0; turn < MAX_TOOL_TURNS; turn++) {
+      signal.throwIfAborted()
+      if (!isCodexAuthGenerationCurrent(authGeneration)) throw new Error('ChatGPT disconnected.')
       const resp = await fetch(CODEX_URL, {
         method: 'POST',
+        signal,
         headers: {
           authorization: `Bearer ${tokens.accessToken}`,
           'content-type': 'application/json',
@@ -157,14 +134,14 @@ export async function runChat(
         },
         body: JSON.stringify({
           model: MODEL,
-          instructions: INSTRUCTIONS,
+          instructions: buildInstructions(),
           input,
-          tools: TOOLS,
+          tools: AGENT_TOOLS,
           tool_choice: 'auto',
           parallel_tool_calls: false,
           store: false,
           stream: true,
-          include: [],
+          include: ['reasoning.encrypted_content'],
           prompt_cache_key: chatId
         })
       })
@@ -181,6 +158,7 @@ export async function runChat(
       }
 
       const functionCalls: FunctionCallItem[] = []
+      const continuationItems: InputItem[] = []
       let turnText = ''
       let buffer = ''
       const reader = resp.body.getReader()
@@ -207,14 +185,19 @@ export async function runChat(
               case 'response.output_text.delta':
                 if (event.delta) {
                   turnText += event.delta
-                  emit({ type: 'delta', chatId, text: event.delta })
+                  emit({ type: 'delta', chatId, runId, text: event.delta })
                 }
                 break
               case 'response.reasoning_summary_text.delta':
-                emit({ type: 'reasoning', chatId })
+                emit({ type: 'reasoning', chatId, runId })
                 break
               case 'response.output_item.done':
-                if (event.item?.type === 'function_call') functionCalls.push(event.item)
+                if (event.item?.type === 'function_call') {
+                  functionCalls.push(event.item)
+                  continuationItems.push(event.item)
+                } else if (event.item?.type === 'reasoning') {
+                  continuationItems.push(event.item)
+                }
                 break
               case 'response.failed':
                 throw new Error(event.response?.error?.message ?? 'The model reported a failure.')
@@ -224,37 +207,51 @@ export async function runChat(
       }
 
       finalText += turnText
+      signal.throwIfAborted()
+      if (!isCodexAuthGenerationCurrent(authGeneration)) throw new Error('ChatGPT disconnected.')
 
       if (functionCalls.length === 0) {
-        emit({ type: 'done', chatId, text: finalText })
+        emit({ type: 'done', chatId, runId, text: finalText })
         return
       }
 
+      input.push(...continuationItems)
       for (const call of functionCalls) {
         const name = call.name ?? ''
-        emit({ type: 'tool', chatId, name, label: TOOL_LABELS[name] ?? `Running ${name}` })
+        const callId = call.call_id
+        if (!callId) throw new Error(`Tool call ${name || '(unknown)'} did not include a call ID.`)
+        emit({ type: 'tool', chatId, runId, name, label: AGENT_TOOL_LABELS[name] ?? `Running ${name}` })
         let args: Record<string, unknown> = {}
         try {
           args = call.arguments ? JSON.parse(call.arguments) : {}
         } catch {
-          // tolerate malformed arguments; tools treat missing args as defaults
+          // The tool returns a structured validation error for malformed input.
         }
-        const output = await runTool(name, args)
-        input.push({
-          type: 'function_call',
-          name,
-          arguments: call.arguments ?? '{}',
-          call_id: call.call_id ?? randomUUID()
-        })
+        let output: string
+        try {
+          output = await runHealthAgentTool(name, args, signal)
+        } catch (error) {
+          if (signal.aborted) throw cancellationError(signal)
+          output = JSON.stringify({ error: error instanceof Error ? error.message : String(error) })
+        }
         input.push({
           type: 'function_call_output',
-          call_id: call.call_id ?? '',
+          call_id: callId,
           output
         })
       }
     }
-    emit({ type: 'done', chatId, text: finalText || 'I hit the tool-call limit before finishing — try a narrower question.' })
+    emit({
+      type: 'done',
+      chatId,
+      runId,
+      text: finalText || 'I hit the tool-call limit before finishing — try a narrower question.'
+    })
   } catch (err) {
-    emit({ type: 'error', chatId, message: err instanceof Error ? err.message : String(err) })
+    const error = signal.aborted ? cancellationError(signal) : err
+    emit({ type: 'error', chatId, runId, message: error instanceof Error ? error.message : String(error) })
+  } finally {
+    sender.removeListener('destroyed', onDestroyed)
+    if (activeRuns.get(key) === run) activeRuns.delete(key)
   }
 }

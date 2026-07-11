@@ -39,6 +39,14 @@ const LANDING_HTML = `<!doctype html><meta charset="utf-8"><title>OpenPulse</tit
 let activeConnectReject: ((err: Error) => void) | null = null
 let authGeneration = 0
 
+export function getCodexAuthGeneration(): number {
+  return authGeneration
+}
+
+export function isCodexAuthGenerationCurrent(generation: number): boolean {
+  return generation === authGeneration
+}
+
 export function getCodexStatus(): CodexAuthStatus {
   const tokens = getSecret<CodexTokens>(SECRET_KEY)
   return tokens
@@ -181,7 +189,7 @@ function assertCurrentGeneration(generation: number): void {
   if (generation !== authGeneration) throw new Error('ChatGPT sign-in was cancelled.')
 }
 
-export async function getCodexTokens(): Promise<CodexTokens | null> {
+export async function getCodexTokens(signal?: AbortSignal): Promise<CodexTokens | null> {
   const generation = authGeneration
   const tokens = getSecret<CodexTokens>(SECRET_KEY)
   if (!tokens) return null
@@ -190,6 +198,7 @@ export async function getCodexTokens(): Promise<CodexTokens | null> {
 
   const resp = await fetch(`${ISSUER}/oauth/token`, {
     method: 'POST',
+    signal,
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
       grant_type: 'refresh_token',

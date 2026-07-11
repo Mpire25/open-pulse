@@ -22,11 +22,13 @@ export function useChat(): {
   const turnsRef = useRef<ChatTurn[]>([])
   const busyRef = useRef(false)
   const chatIdRef = useRef<string>(nextId())
+  const activeRunId = useRef<string | null>(null)
   const activeAssistantId = useRef<string | null>(null)
 
   useEffect(() => {
     const off = window.pulse.ai.onEvent((event: AiEvent) => {
       if (event.chatId !== chatIdRef.current) return
+      if (event.runId !== activeRunId.current) return
       const assistantId = activeAssistantId.current
       if (!assistantId) return
 
@@ -54,6 +56,7 @@ export function useChat(): {
         busyRef.current = false
         setBusy(false)
         activeAssistantId.current = null
+        activeRunId.current = null
       }
     })
     return off
@@ -67,9 +70,11 @@ export function useChat(): {
       const userTurn: ChatTurn = { id: nextId(), role: 'user', text: trimmed }
       const assistantTurn: ChatTurn = { id: nextId(), role: 'assistant', text: '', streaming: true }
       const chatId = chatIdRef.current
+      const runId = nextId()
       const nextTurns = [...turnsRef.current, userTurn, assistantTurn]
 
       activeAssistantId.current = assistantTurn.id
+      activeRunId.current = runId
       busyRef.current = true
       turnsRef.current = nextTurns
       setBusy(true)
@@ -80,7 +85,7 @@ export function useChat(): {
       const history: ChatMessage[] = nextTurns
         .filter((turn) => turn.id !== assistantTurn.id && !turn.error)
         .map(({ role, text }) => ({ role, text }))
-      void window.pulse.ai.send(chatId, history)
+      void window.pulse.ai.send(chatId, runId, history)
     },
     []
   )
@@ -89,6 +94,7 @@ export function useChat(): {
     // Rotate the id and refs synchronously so late events from the old request
     // are rejected even before React commits the empty UI state.
     chatIdRef.current = nextId()
+    activeRunId.current = null
     activeAssistantId.current = null
     busyRef.current = false
     turnsRef.current = []
