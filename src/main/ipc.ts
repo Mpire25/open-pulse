@@ -4,6 +4,7 @@ import type {
   ActivityIntradayMetric,
   AppSettings,
   ChatMessage,
+  ChatSessionMessage,
   HeartDetailMetric,
   HeartDetailScope,
   IntradayScope,
@@ -30,6 +31,12 @@ import {
 import { setApiActivityListener } from './health-api'
 import { getSettings, updateSettings } from './store'
 import { cancelAllChats, cancelChat, runChat } from './codex-chat'
+import {
+  createChatSession,
+  deleteChatSession,
+  getChatHistory,
+  updateChatSession
+} from './chat-history'
 
 interface TrustedRenderer {
   webContents: WebContents
@@ -137,6 +144,7 @@ export function registerIpc(): void {
     abortAllHealthRequests()
     cancelAllChats('Health account changed.')
     resetHealthAccount()
+    sendToTrustedRenderers('chats:account-changed')
     return status
   })
   handle('google:disconnect', () => {
@@ -144,6 +152,7 @@ export function registerIpc(): void {
     cancelAllChats('Health account disconnected.')
     disconnectGoogle()
     resetHealthAccount()
+    sendToTrustedRenderers('chats:account-changed')
   })
 
   handle('codex:status', () => getCodexStatus())
@@ -155,6 +164,13 @@ export function registerIpc(): void {
     cancelAllChats('ChatGPT disconnected.')
     disconnectCodex()
   })
+
+  handle('chats:list', () => getChatHistory())
+  handle('chats:create', (_event, id?: string) => createChatSession(id))
+  handle('chats:update', (_event, id: string, messages: ChatSessionMessage[]) =>
+    updateChatSession(id, messages)
+  )
+  handle('chats:delete', (_event, id: string) => deleteChatSession(id))
 
   handle('health:cancel', (event, requestId: string) => {
     healthControllers.get(healthRequestKey(event, requestId))?.abort()
