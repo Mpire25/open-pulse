@@ -20,7 +20,9 @@ import type {
   BodyMeasurementsResult,
   HeartDetailMetric,
   HeartDetailResult,
+  HeartDetailScope,
   IntradaySnapshot,
+  IntradayScope,
   MetricKey,
   NutritionLogEntry,
   PairedDevice,
@@ -150,11 +152,15 @@ export function useWorkoutTrack(workoutId: string, enabled: boolean): UseQueryRe
   })
 }
 
-export function useIntraday(date: string, enabled = true): UseQueryResult<IntradaySnapshot> {
+export function useIntraday(
+  date: string,
+  enabled = true,
+  scope: IntradayScope = 'both'
+): UseQueryResult<IntradaySnapshot> {
   return useQuery({
-    queryKey: ['intraday', date],
+    queryKey: ['intraday', scope, date],
     queryFn: ({ signal }) => healthRequest(signal, (requestId) =>
-      window.pulse.health.intraday(requestId, date)
+      window.pulse.health.intraday(requestId, date, scope)
     ),
     staleTime: STALE_MS,
     enabled
@@ -179,12 +185,13 @@ export function useActivityIntraday(
 export function useHeartDetail(
   date: string,
   metric: HeartDetailMetric,
-  enabled = true
+  enabled = true,
+  scope: HeartDetailScope = 'full'
 ): UseQueryResult<HeartDetailResult> {
   return useQuery({
-    queryKey: ['heart-detail', metric, date],
+    queryKey: ['heart-detail', scope, metric, date],
     queryFn: ({ signal }) => healthRequest(signal, (requestId) =>
-      window.pulse.health.heartDetail(requestId, date, metric)
+      window.pulse.health.heartDetail(requestId, date, metric, scope)
     ),
     staleTime: STALE_MS,
     enabled

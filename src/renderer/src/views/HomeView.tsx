@@ -51,7 +51,7 @@ export function HomeView({ date, goals, onOpenMetric, onOpenWorkout, onNavigate 
   const series = useSeries(HOME_METRICS, start, end)
   const night = useSleepNight(date)
   const workouts = useWorkouts(date, date)
-  const intraday = useIntraday(date)
+  const intraday = useIntraday(date, true, 'steps')
 
   const isToday = date === isoToday()
 

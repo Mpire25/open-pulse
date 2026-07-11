@@ -11,7 +11,9 @@ import type {
   GoogleAuthStatus,
   HeartDetailMetric,
   HeartDetailResult,
+  HeartDetailScope,
   IntradaySnapshot,
+  IntradayScope,
   MetricKey,
   NutritionLogsResult,
   PairedDevice,
@@ -53,8 +55,8 @@ const api = {
       invokeHealth('health:workouts', [start, end, force], requestId),
     workoutTrack: (requestId: string, workoutId: string): Promise<WorkoutTrackResult> =>
       invokeHealth('health:workout-track', [workoutId], requestId),
-    intraday: (requestId: string, date: string, force?: boolean): Promise<IntradaySnapshot> =>
-      invokeHealth('health:intraday', [date, force], requestId),
+    intraday: (requestId: string, date: string, scope: IntradayScope, force?: boolean): Promise<IntradaySnapshot> =>
+      invokeHealth('health:intraday', [date, scope, force], requestId),
     activityIntraday: (
       requestId: string,
       date: string,
@@ -62,8 +64,13 @@ const api = {
       force?: boolean
     ): Promise<ActivityIntradayResult> =>
       invokeHealth('health:activity-intraday', [date, metric, force], requestId),
-    heartDetail: (requestId: string, date: string, metric: HeartDetailMetric, force?: boolean): Promise<HeartDetailResult> =>
-      invokeHealth('health:heart-detail', [date, metric, force], requestId),
+    heartDetail: (
+      requestId: string,
+      date: string,
+      metric: HeartDetailMetric,
+      scope: HeartDetailScope,
+      force?: boolean
+    ): Promise<HeartDetailResult> => invokeHealth('health:heart-detail', [date, metric, scope, force], requestId),
     nutritionLogs: (requestId: string, date: string): Promise<NutritionLogsResult> =>
       invokeHealth('health:nutrition-logs', [date], requestId),
     bodyMeasurements: (requestId: string, start: string, end: string): Promise<BodyMeasurementsResult> =>

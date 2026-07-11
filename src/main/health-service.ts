@@ -17,8 +17,10 @@ import type {
   HeartRatePoint,
   HeartDetailMetric,
   HeartDetailResult,
+  HeartDetailScope,
   HourlySteps,
   IntradaySnapshot,
+  IntradayScope,
   MetricKey,
   NutritionLogsResult,
   PairedDevice,
@@ -240,6 +242,8 @@ const nutritionRawCache = new Map<string, RawDayCacheEntry>()
 const nutritionRawInFlight = new Map<string, Promise<void>>()
 const weightRawCache = new Map<string, RawDayCacheEntry>()
 const weightRawInFlight = new Map<string, Promise<void>>()
+const heartThresholdRawCache = new Map<string, RawDayCacheEntry>()
+const heartThresholdRawInFlight = new Map<string, Promise<void>>()
 
 function rawDayFresh(entry: RawDayCacheEntry | undefined, date: string, now = Date.now()): boolean {
   if (!entry) return false
@@ -255,6 +259,11 @@ function rawSampleDate(point: RawDataPoint, key: 'weight'): string | null {
     | undefined
   return dateFromCivil(value?.sampleTime?.civilTime)
     ?? (value?.sampleTime?.physicalTime?.slice(0, 10) || null)
+}
+
+function dailyHeartZoneDate(point: RawDataPoint): string | null {
+  const value = point.dailyHeartRateZones as { date?: CivilDateTime } | undefined
+  return dateFromCivil(value?.date)
 }
 
 async function cachedRawRange(
@@ -342,6 +351,26 @@ function weightRawRange(
     endExclusive,
     (rangeStart, rangeEnd) => listRawData(token, 'weight', 'sample', rangeStart, rangeEnd, priority, signal),
     (point) => rawSampleDate(point, 'weight'),
+    generation
+  )
+}
+
+function heartThresholdRawRange(
+  token: string,
+  start: string,
+  endExclusive: string,
+  priority: Priority,
+  signal?: AbortSignal
+): Promise<RawDataPoint[]> {
+  const generation = healthAccountGeneration
+  return cachedRawRange(
+    heartThresholdRawCache,
+    heartThresholdRawInFlight,
+    start,
+    endExclusive,
+    (rangeStart, rangeEnd) =>
+      listData(token, 'daily-heart-rate-zones', 'daily', rangeStart, rangeEnd, 'all-sources', priority, signal),
+    dailyHeartZoneDate,
     generation
   )
 }
@@ -1164,29 +1193,38 @@ export async function getWorkoutsRange(
   return { source: 'live', workouts }
 }
 
-export async function getIntraday(date: string, force = false, signal?: AbortSignal): Promise<IntradaySnapshot> {
+export async function getIntraday(
+  date: string,
+  force = false,
+  signal?: AbortSignal,
+  scope: IntradayScope = 'both'
+): Promise<IntradaySnapshot> {
   const generation = healthAccountGeneration
   const [d] = normalizeRange(date, date)
   const token = await getGoogleAccessToken()
   assertCurrentAccount(generation)
   if (!token) return demoIntraday(d)
-  await Promise.all([
-    ensureIntradaySteps(token, d, force, generation, signal).catch((err) => {
+  const jobs: Array<Promise<void>> = []
+  if (scope === 'steps' || scope === 'both') {
+    jobs.push(ensureIntradaySteps(token, d, force, generation, signal).catch((err) => {
       rethrowIfAborted(err)
       console.error(`[health] intraday steps failed for ${d}:`, err)
-    }),
-    ensureIntradayHeart(token, d, force, generation, signal).catch((err) => {
+    }))
+  }
+  if (scope === 'heart' || scope === 'both') {
+    jobs.push(ensureIntradayHeart(token, d, force, generation, signal).catch((err) => {
       rethrowIfAborted(err)
       console.error(`[health] intraday heart failed for ${d}:`, err)
-    })
-  ])
+    }))
+  }
+  await Promise.all(jobs)
   assertCurrentAccount(generation)
   const record = peekDay(d)
-  const heartRate = record?.heartRate ?? []
+  const heartRate = scope === 'steps' ? [] : (record?.heartRate ?? [])
   return {
     date: d,
     source: 'live',
-    stepsHourly: record?.stepsHourly ?? [],
+    stepsHourly: scope === 'heart' ? [] : (record?.stepsHourly ?? []),
     heartRate,
     currentHeartRate: d === todayIso() ? (heartRate.at(-1)?.bpm ?? null) : null
   }
@@ -1267,7 +1305,8 @@ export async function getHeartDetail(
   date: string,
   metric: HeartDetailMetric,
   force = false,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  scope: HeartDetailScope = 'full'
 ): Promise<HeartDetailResult> {
   const generation = healthAccountGeneration
   const [d] = normalizeRange(date, date)
@@ -1277,14 +1316,20 @@ export async function getHeartDetail(
 
   const group = `heart-detail-v1-${metric}`
   const cached = peekDay(d)?.heartDetails?.[metric]
-  if (!force && cached && isFresh(group, d)) return cached
+  if (!force && cached && isFresh(group, d)) {
+    return scope === 'full'
+      ? cached
+      : { ...cached, zones: cached.zones.map((zone) => ({ ...zone, durationMin: null, calories: null })) }
+  }
+
+  const dailyZones = await heartThresholdRawRange(token, d, shiftIsoDate(d, 1), 0, signal)
+  if (scope === 'thresholds') return parseHeartZones(d, dailyZones, [], [])
 
   let result: HeartDetailResult
 
   switch (metric) {
     case 'restingHeartRate': {
-      const [dailyZones, timeRollups, calorieRollups] = await Promise.all([
-        listData(token, 'daily-heart-rate-zones', 'daily', d, shiftIsoDate(d, 1), 'all-sources', 0, signal),
+      const [timeRollups, calorieRollups] = await Promise.all([
         dailyRollUp(token, 'time-in-heart-rate-zone', d, shiftIsoDate(d, 1), 0, signal).catch((error) => {
           rethrowIfAborted(error)
           console.error(`[health] time in heart-rate zones failed for ${d}:`, error)
@@ -1399,6 +1444,7 @@ export function clearHealthCache(): void {
   workoutTrackCache.clear()
   nutritionRawCache.clear()
   weightRawCache.clear()
+  heartThresholdRawCache.clear()
   heightCache = null
 }
 
@@ -1412,6 +1458,8 @@ export function resetHealthAccount(): void {
   nutritionRawInFlight.clear()
   weightRawCache.clear()
   weightRawInFlight.clear()
+  heartThresholdRawCache.clear()
+  heartThresholdRawInFlight.clear()
   heightCache = null
   heightInFlight = null
   wipeArchive()

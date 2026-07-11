@@ -1,6 +1,14 @@
 import { ipcMain } from 'electron'
 import type { IpcMainInvokeEvent, WebContents } from 'electron'
-import type { ActivityIntradayMetric, AppSettings, ChatMessage, HeartDetailMetric, MetricKey } from '../shared/types'
+import type {
+  ActivityIntradayMetric,
+  AppSettings,
+  ChatMessage,
+  HeartDetailMetric,
+  HeartDetailScope,
+  IntradayScope,
+  MetricKey
+} from '../shared/types'
 import { HEALTH_CANCELLED, splitHealthWireArgs } from '../shared/health-ipc'
 import { isActivityIntradayMetric, isHeartDetailMetric } from '../shared/types'
 import { connectGoogle, disconnectGoogle, getGoogleStatus } from './google-auth'
@@ -151,7 +159,11 @@ export function registerIpc(): void {
     getWorkoutsRange(start, end, force, signal)
   )
   healthHandle('health:workout-track', (_e, signal, workoutId: string) => getWorkoutTrack(workoutId, signal))
-  healthHandle('health:intraday', (_e, signal, date: string, force?: boolean) => getIntraday(date, force, signal))
+  healthHandle('health:intraday', (_e, signal, date: string, scopeOrForce?: IntradayScope | boolean, force?: boolean) => {
+    const scope = typeof scopeOrForce === 'string' ? scopeOrForce : 'both'
+    if (!['steps', 'heart', 'both'].includes(scope)) throw new Error('Unsupported intraday scope')
+    return getIntraday(date, typeof scopeOrForce === 'boolean' ? scopeOrForce : force, signal, scope)
+  })
   healthHandle(
     'health:activity-intraday',
     (_e, signal, date: string, metric: ActivityIntradayMetric, force?: boolean) => {
@@ -159,9 +171,11 @@ export function registerIpc(): void {
       return getActivityIntraday(date, metric, force, signal)
     }
   )
-  healthHandle('health:heart-detail', (_e, signal, date: string, metric: HeartDetailMetric, force?: boolean) => {
+  healthHandle('health:heart-detail', (_e, signal, date: string, metric: HeartDetailMetric, scopeOrForce?: HeartDetailScope | boolean, force?: boolean) => {
     if (!isHeartDetailMetric(metric)) throw new Error('Unsupported heart detail metric')
-    return getHeartDetail(date, metric, force, signal)
+    const scope = typeof scopeOrForce === 'string' ? scopeOrForce : 'full'
+    if (!['thresholds', 'full'].includes(scope)) throw new Error('Unsupported heart detail scope')
+    return getHeartDetail(date, metric, typeof scopeOrForce === 'boolean' ? scopeOrForce : force, signal, scope)
   })
   healthHandle('health:nutrition-logs', (_e, signal, date: string) => getNutritionLogs(date, signal))
   healthHandle('health:body-measurements', (_e, signal, start: string, end: string) =>
