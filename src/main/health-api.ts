@@ -270,18 +270,23 @@ export async function dailyRollUp(
   priority: Priority = 1,
   signal?: AbortSignal
 ): Promise<RollupPoint[]> {
-  const points: RollupPoint[] = []
   const maxDays = maxRollupRangeDays(dataType)
+  const chunks: Array<{ start: string; endExclusive: string }> = []
 
   // The API rejects rollup ranges longer than 90 days (14 for a few data
   // types), even when the user has less data than that in the interval.
   for (let chunkStart = startDate; chunkStart < endDateExclusive; ) {
     const candidateEnd = shiftIsoDate(chunkStart, maxDays)
     const chunkEndExclusive = candidateEnd < endDateExclusive ? candidateEnd : endDateExclusive
+    chunks.push({ start: chunkStart, endExclusive: chunkEndExclusive })
+    chunkStart = chunkEndExclusive
+  }
+
+  const results = await Promise.all(chunks.map(async (chunk) => {
     const body = {
       range: {
-        start: civilDateTime(chunkStart),
-        end: civilDateTime(shiftIsoDate(chunkEndExclusive, -1), true)
+        start: civilDateTime(chunk.start),
+        end: civilDateTime(shiftIsoDate(chunk.endExclusive, -1), true)
       },
       windowSizeDays: 1,
       pageSize: maxDays
@@ -295,11 +300,10 @@ export async function dailyRollUp(
       { method: 'POST', body: JSON.stringify(body), signal },
       priority
     )
-    points.push(...(json.rollupDataPoints ?? []))
-    chunkStart = chunkEndExclusive
-  }
+    return json.rollupDataPoints ?? []
+  }))
 
-  return points
+  return results.flat()
 }
 
 /**

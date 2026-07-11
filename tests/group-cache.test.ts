@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import {
+  contiguousDateSpans,
   isPartialFetchCoolingDown,
   PARTIAL_FETCH_RETRY_MS,
   partialFetchGroupId,
@@ -32,5 +33,15 @@ describe('partial fetch caching', () => {
     expect(partialFetchGroupId('nutrition-v6')).toBe('nutrition-v6:partial')
     expect(isPartialFetchCoolingDown(partialAt, now)).toBe(true)
     expect(isPartialFetchCoolingDown(partialAt, now + PARTIAL_FETCH_RETRY_MS)).toBe(false)
+  })
+})
+
+describe('contiguous date spans', () => {
+  test('keeps separate holes separate while coalescing adjacent dates', () => {
+    expect(contiguousDateSpans(['2026-07-01', '2026-07-02', '2026-07-05', '2026-07-07', '2026-07-08'])).toEqual([
+      { start: '2026-07-01', end: '2026-07-02', dates: ['2026-07-01', '2026-07-02'] },
+      { start: '2026-07-05', end: '2026-07-05', dates: ['2026-07-05'] },
+      { start: '2026-07-07', end: '2026-07-08', dates: ['2026-07-07', '2026-07-08'] }
+    ])
   })
 })

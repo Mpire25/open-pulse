@@ -65,6 +65,7 @@ import {
   wipeArchive
 } from './metric-store'
 import {
+  contiguousDateSpans,
   isPartialFetchCoolingDown,
   partialFetchGroupId,
   valuesToMerge
@@ -285,12 +286,10 @@ async function cachedRawRange(
     return pending == null
   })
 
-  if (uncovered.length > 0) {
-    const spanStart = uncovered[0]
-    const spanEndExclusive = shiftIsoDate(uncovered[uncovered.length - 1], 1)
-    const spanDates = listDates(spanStart, shiftIsoDate(spanEndExclusive, -1))
+  for (const span of contiguousDateSpans(uncovered)) {
+    const spanEndExclusive = shiftIsoDate(span.end, 1)
     let job!: Promise<void>
-    job = fetchRange(spanStart, spanEndExclusive)
+    job = fetchRange(span.start, spanEndExclusive)
       .then((points) => {
         assertCurrentAccount(generation)
         const byDate = new Map<string, RawDataPoint[]>()
@@ -302,14 +301,14 @@ async function cachedRawRange(
           byDate.set(date, values)
         }
         const fetchedAt = Date.now()
-        for (const date of spanDates) cache.set(date, { points: byDate.get(date) ?? [], fetchedAt })
+        for (const date of span.dates) cache.set(date, { points: byDate.get(date) ?? [], fetchedAt })
       })
       .finally(() => {
-        for (const date of uncovered) {
+        for (const date of span.dates) {
           if (inFlightByDate.get(date) === job) inFlightByDate.delete(date)
         }
       })
-    for (const date of uncovered) inFlightByDate.set(date, job)
+    for (const date of span.dates) inFlightByDate.set(date, job)
     waits.add(job)
   }
 
@@ -588,30 +587,29 @@ async function ensureGroup(
 ): Promise<void> {
   const missing = listDates(start, end).filter((d) => force || !isFresh(group.id, d))
   if (missing.length === 0) return
-  const spanStart = missing[0]
-  const spanEnd = missing[missing.length - 1]
-  const spanDates = listDates(spanStart, spanEnd)
-  const result = await group.fetch(
-    token,
-    spanStart,
-    shiftIsoDate(spanEnd, 1),
-    spanPriority(spanDates.length),
-    signal
-  )
-  assertCurrentAccount(generation)
-  const complete = result instanceof Map
-  const map = complete ? result : result.values
-  for (const date of spanDates) {
-    mergeValues(date, valuesToMerge(group.metrics, map.get(date), complete))
-  }
-  const partialGroup = partialFetchGroupId(group.id)
-  if (complete) {
-    clearFetched(partialGroup, spanDates)
-    markFetched(group.id, spanDates)
-  } else {
-    clearFetched(group.id, spanDates)
-    markFetched(partialGroup, spanDates)
-  }
+  await Promise.all(contiguousDateSpans(missing).map(async (span) => {
+    const result = await group.fetch(
+      token,
+      span.start,
+      shiftIsoDate(span.end, 1),
+      spanPriority(span.dates.length),
+      signal
+    )
+    assertCurrentAccount(generation)
+    const complete = result instanceof Map
+    const map = complete ? result : result.values
+    for (const date of span.dates) {
+      mergeValues(date, valuesToMerge(group.metrics, map.get(date), complete))
+    }
+    const partialGroup = partialFetchGroupId(group.id)
+    if (complete) {
+      clearFetched(partialGroup, span.dates)
+      markFetched(group.id, span.dates)
+    } else {
+      clearFetched(group.id, span.dates)
+      markFetched(partialGroup, span.dates)
+    }
+  }))
 }
 
 const inFlight = new Map<string, Promise<void>>()
@@ -664,30 +662,29 @@ async function ensureSleepSummaryRange(
 ): Promise<void> {
   const missing = listDates(start, end).filter((d) => force || !isFresh(SLEEP_SUMMARY_GROUP, d))
   if (missing.length === 0) return
-  const spanStart = missing[0]
-  const spanEnd = missing[missing.length - 1]
-  const spanDates = listDates(spanStart, spanEnd)
-  const points = await listData(
-    token,
-    'sleep',
-    'sleep',
-    spanStart,
-    shiftIsoDate(spanEnd, 1),
-    'google-wearables',
-    spanPriority(spanDates.length),
-    signal,
-    'sleep(interval(startTime,endTime,civilEndTime),summary(minutesAsleep,minutesInSleepPeriod),metadata(nap))'
-  )
-  assertCurrentAccount(generation)
-  const byDate = sleepByDate(points)
-  for (const date of spanDates) {
-    const night = byDate.get(date)
-    mergeValues(date, {
-      sleepMinutes: night?.minutesAsleep ?? null,
-      sleepEfficiency: night?.efficiency ?? null
-    })
-  }
-  markFetched(SLEEP_SUMMARY_GROUP, spanDates)
+  await Promise.all(contiguousDateSpans(missing).map(async (span) => {
+    const points = await listData(
+      token,
+      'sleep',
+      'sleep',
+      span.start,
+      shiftIsoDate(span.end, 1),
+      'google-wearables',
+      spanPriority(span.dates.length),
+      signal,
+      'sleep(interval(startTime,endTime,civilEndTime),summary(minutesAsleep,minutesInSleepPeriod),metadata(nap))'
+    )
+    assertCurrentAccount(generation)
+    const byDate = sleepByDate(points)
+    for (const date of span.dates) {
+      const night = byDate.get(date)
+      mergeValues(date, {
+        sleepMinutes: night?.minutesAsleep ?? null,
+        sleepEfficiency: night?.efficiency ?? null
+      })
+    }
+    markFetched(SLEEP_SUMMARY_GROUP, span.dates)
+  }))
 }
 
 async function ensureSleepRange(
@@ -700,31 +697,30 @@ async function ensureSleepRange(
 ): Promise<void> {
   const missing = listDates(start, end).filter((d) => force || !isFresh(SLEEP_DETAIL_GROUP, d))
   if (missing.length === 0) return
-  const spanStart = missing[0]
-  const spanEnd = missing[missing.length - 1]
-  const spanDates = listDates(spanStart, spanEnd)
-  const points = await listData(
-    token,
-    'sleep',
-    'sleep',
-    spanStart,
-    shiftIsoDate(spanEnd, 1),
-    'google-wearables',
-    spanPriority(spanDates.length),
-    signal
-  )
-  assertCurrentAccount(generation)
-  const byDate = sleepByDate(points)
-  for (const date of spanDates) {
-    const night = byDate.get(date) ?? null
-    setSleep(date, night)
-    mergeValues(date, {
-      sleepMinutes: night?.minutesAsleep ?? null,
-      sleepEfficiency: night?.efficiency ?? null
-    })
-  }
-  markFetched(SLEEP_DETAIL_GROUP, spanDates)
-  markFetched(SLEEP_SUMMARY_GROUP, spanDates)
+  await Promise.all(contiguousDateSpans(missing).map(async (span) => {
+    const points = await listData(
+      token,
+      'sleep',
+      'sleep',
+      span.start,
+      shiftIsoDate(span.end, 1),
+      'google-wearables',
+      spanPriority(span.dates.length),
+      signal
+    )
+    assertCurrentAccount(generation)
+    const byDate = sleepByDate(points)
+    for (const date of span.dates) {
+      const night = byDate.get(date) ?? null
+      setSleep(date, night)
+      mergeValues(date, {
+        sleepMinutes: night?.minutesAsleep ?? null,
+        sleepEfficiency: night?.efficiency ?? null
+      })
+    }
+    markFetched(SLEEP_DETAIL_GROUP, span.dates)
+    markFetched(SLEEP_SUMMARY_GROUP, span.dates)
+  }))
 }
 
 function ensureSleepOnce(
@@ -947,34 +943,33 @@ async function ensureWorkoutsRange(
 ): Promise<void> {
   const missing = listDates(start, end).filter((d) => force || !isFresh('workouts', d))
   if (missing.length === 0) return
-  const spanStart = missing[0]
-  const spanEnd = missing[missing.length - 1]
-  const spanDates = listDates(spanStart, spanEnd)
-  const points = await listData(
-    token,
-    'exercise',
-    'session',
-    spanStart,
-    shiftIsoDate(spanEnd, 1),
-    'all-sources',
-    spanPriority(spanDates.length),
-    signal
-  )
-  assertCurrentAccount(generation)
-  const byDate = new Map<string, Workout[]>()
-  for (const point of points) {
-    const workout = mapWorkout(point)
-    if (!workout) continue
-    const date = workout.startTime.slice(0, 10)
-    const list = byDate.get(date) ?? []
-    list.push(workout)
-    byDate.set(date, list)
-  }
-  for (const date of spanDates) {
-    const list = (byDate.get(date) ?? []).sort((a, b) => a.startTime.localeCompare(b.startTime))
-    setWorkouts(date, list)
-  }
-  markFetched('workouts', spanDates)
+  await Promise.all(contiguousDateSpans(missing).map(async (span) => {
+    const points = await listData(
+      token,
+      'exercise',
+      'session',
+      span.start,
+      shiftIsoDate(span.end, 1),
+      'all-sources',
+      spanPriority(span.dates.length),
+      signal
+    )
+    assertCurrentAccount(generation)
+    const byDate = new Map<string, Workout[]>()
+    for (const point of points) {
+      const workout = mapWorkout(point)
+      if (!workout) continue
+      const date = workout.startTime.slice(0, 10)
+      const list = byDate.get(date) ?? []
+      list.push(workout)
+      byDate.set(date, list)
+    }
+    for (const date of span.dates) {
+      const list = (byDate.get(date) ?? []).sort((a, b) => a.startTime.localeCompare(b.startTime))
+      setWorkouts(date, list)
+    }
+    markFetched('workouts', span.dates)
+  }))
 }
 
 const workoutTrackCache = new Map<string, WorkoutTrackResult>()
