@@ -253,6 +253,12 @@ const RAW_DATA_POINT_FIELDS: Record<string, string> = {
   height: 'height'
 }
 
+function responseFieldsFor(fieldsByDataType: Record<string, string>, dataType: string): string {
+  const fields = fieldsByDataType[dataType]
+  if (!fields) throw new Error(`No Google Health response field projection configured for ${dataType}`)
+  return fields
+}
+
 function withFields(path: string, fields: string): string {
   const separator = path.includes('?') ? '&' : '?'
   return `${path}${separator}${new URLSearchParams({ fields })}`
@@ -295,7 +301,7 @@ export async function dailyRollUp(
       token,
       withFields(
         `/users/me/dataTypes/${dataType}/dataPoints:dailyRollUp`,
-        `rollupDataPoints(civilStartTime,${ROLLUP_VALUE_FIELDS[dataType] ?? dataType.replaceAll('-', '')})`
+        `rollupDataPoints(civilStartTime,${responseFieldsFor(ROLLUP_VALUE_FIELDS, dataType)})`
       ),
       { method: 'POST', body: JSON.stringify(body), signal },
       priority
@@ -337,7 +343,7 @@ export async function physicalRollUp(
       token,
       withFields(
         `/users/me/dataTypes/${dataType}/dataPoints:rollUp`,
-        `nextPageToken,rollupDataPoints(startTime,${ROLLUP_VALUE_FIELDS[dataType] ?? dataType.replaceAll('-', '')})`
+        `nextPageToken,rollupDataPoints(startTime,${responseFieldsFor(ROLLUP_VALUE_FIELDS, dataType)})`
       ),
       { method: 'POST', body: JSON.stringify(body), signal },
       priority
@@ -410,7 +416,7 @@ export async function listData(
     filter: dataFilter(dataType, kind, startDate, endDateExclusive),
     pageSize: kind === 'sleep' || kind === 'session' ? '25' : '10000',
     dataSourceFamily: `users/me/dataSourceFamilies/${dataSourceFamily}`,
-    fields: `nextPageToken,dataPoints(${responseFields ?? DATA_POINT_FIELDS[dataType] ?? dataType.replaceAll('-', '')})`
+    fields: `nextPageToken,dataPoints(${responseFields ?? responseFieldsFor(DATA_POINT_FIELDS, dataType)})`
   })
   const points: RawDataPoint[] = []
   let pageToken = ''
@@ -448,7 +454,7 @@ export async function listRawData(
   const params = new URLSearchParams({
     filter: dataFilter(dataType, kind, startDate, endDateExclusive),
     pageSize: kind === 'sleep' || kind === 'session' ? '25' : '10000',
-    fields: `nextPageToken,dataPoints(${responseFields ?? RAW_DATA_POINT_FIELDS[dataType] ?? dataType.replaceAll('-', '')})`
+    fields: `nextPageToken,dataPoints(${responseFields ?? responseFieldsFor(RAW_DATA_POINT_FIELDS, dataType)})`
   })
   const points: RawDataPoint[] = []
   let pageToken = ''

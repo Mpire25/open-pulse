@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import { listData, listPairedDevices, listRawData } from '../src/main/health-api'
+import { dailyRollUp, listData, listPairedDevices, listRawData } from '../src/main/health-api'
 
 const originalFetch = globalThis.fetch
 
@@ -86,5 +86,18 @@ describe('Health API response projections', () => {
     const fields = new URL(requestedUrl).searchParams.get('fields')
     expect(fields).toContain('batteryLevel')
     expect(fields).not.toContain('macAddress')
+  })
+
+  test('fails locally instead of guessing a field name for an unmapped data type', async () => {
+    let fetchCount = 0
+    globalThis.fetch = (async () => {
+      fetchCount += 1
+      return new Response(JSON.stringify({ rollupDataPoints: [] }), { status: 200 })
+    }) as typeof fetch
+
+    await expect(
+      dailyRollUp('token', 'future-health-signal', '2026-07-01', '2026-07-02')
+    ).rejects.toThrow('No Google Health response field projection configured for future-health-signal')
+    expect(fetchCount).toBe(0)
   })
 })
