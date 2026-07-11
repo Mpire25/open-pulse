@@ -146,14 +146,16 @@ function SessionRow({ session, selected, streaming, onSelect, onPin, onDelete }:
       <button
         type="button"
         onClick={onSelect}
-        className="flex min-w-0 flex-1 items-center gap-2 rounded-[10px] px-3 py-2.5 pr-16 text-left outline-none focus-visible:ring-1 focus-visible:ring-accent/50"
+        className="flex min-w-0 flex-1 items-center gap-2 rounded-[10px] px-3 py-2.5 pr-14 text-left outline-none focus-visible:ring-1 focus-visible:ring-accent/50"
       >
         {streaming && <span className="size-1.5 shrink-0 animate-pulse rounded-full bg-accent" />}
         <span className="min-w-0 flex-1 truncate text-[12px] font-medium">{session.title}</span>
-        <span className="shrink-0 text-[9.5px] tabular-nums text-ink-faint transition-opacity group-hover:opacity-0 group-focus-within:opacity-0">
-          {relativeTime(session.updatedAt)}
-        </span>
       </button>
+      {/* Positioned outside the button so it never reflows when the hover
+          actions replace it — it just fades in place. */}
+      <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[9.5px] tabular-nums text-ink-faint transition-opacity group-hover:opacity-0 group-focus-within:opacity-0">
+        {relativeTime(session.updatedAt)}
+      </span>
       <div className="pointer-events-none absolute right-1 flex items-center opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100">
         <button
           type="button"
