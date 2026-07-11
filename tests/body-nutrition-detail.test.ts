@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import {
   bmiFrom,
+  nutritionFallbackDates,
   parseBodyMeasurements,
   parseLatestHeight,
   parseNutritionLogs,
@@ -76,6 +77,22 @@ describe('body and nutrition record normalization', () => {
       saturatedFatG: 8,
       sugarG: 28
     })
+  })
+
+  test('requests raw nutrition only for dates with incomplete rollups', () => {
+    expect(nutritionFallbackDates(new Map([
+      ['2026-07-09', {
+        caloriesIn: 1800,
+        proteinG: 120,
+        carbsG: 210,
+        fatG: 65,
+        fiberG: 28,
+        saturatedFatG: 18,
+        sodiumG: 2.1,
+        sugarG: 52
+      }],
+      ['2026-07-10', { caloriesIn: 1900, proteinG: 130 }]
+    ]))).toEqual(['2026-07-10'])
   })
 
   test('pairs weight and body-fat readings from the same scale session', () => {

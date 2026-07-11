@@ -85,6 +85,8 @@ import {
 import { activityRollupBreakdown, activityRollupPoints, calorieEnergyBreakdown } from './activity-intraday'
 import {
   bmiFrom,
+  NUTRITION_DAY_METRICS,
+  nutritionFallbackDates,
   nutritionLogDate,
   parseBodyMeasurements,
   parseLatestHeight,
@@ -489,20 +491,11 @@ const GROUPS: FetchGroup[] = [
     )
   })),
   {
-    // Versioned so archived days refetch with raw-log nutrient fallbacks once.
-    id: 'nutrition-v6',
-    metrics: ['caloriesIn', 'proteinG', 'carbsG', 'fatG', 'fiberG', 'saturatedFatG', 'sodiumG', 'sugarG'],
+    // Versioned so archived days adopt selective raw-log fallbacks once.
+    id: 'nutrition-v7',
+    metrics: [...NUTRITION_DAY_METRICS],
     fetch: async (token, start, endExclusive, priority, signal) => {
-      const [points, rawResult] = await Promise.all([
-        dailyRollUp(token, 'nutrition-log', start, endExclusive, priority, signal),
-        nutritionRawRange(token, start, endExclusive, priority, signal)
-          .then((values) => ({ values, complete: true as const }))
-          .catch((error) => {
-            rethrowIfAborted(error)
-            console.error(`[health] raw nutrition fallback failed for ${start}..${endExclusive}:`, error)
-            return { values: [], complete: false as const }
-          })
-      ])
+      const points = await dailyRollUp(token, 'nutrition-log', start, endExclusive, priority, signal)
       const map = new Map<string, DayValues>()
       for (const p of points) {
         const date = dateFromCivil(p.civilStartTime)
@@ -524,15 +517,35 @@ const GROUPS: FetchGroup[] = [
         })
       }
 
-      for (const [date, rawValues] of parseNutritionLogTotals(rawResult.values)) {
+      let rawComplete = true
+      const rawPoints = (
+        await Promise.all(contiguousDateSpans(nutritionFallbackDates(map)).map(async (span) => {
+          try {
+            return await nutritionRawRange(
+              token,
+              span.start,
+              shiftIsoDate(span.end, 1),
+              priority,
+              signal
+            )
+          } catch (error) {
+            rethrowIfAborted(error)
+            rawComplete = false
+            console.error(`[health] raw nutrition fallback failed for ${span.start}..${span.end}:`, error)
+            return []
+          }
+        }))
+      ).flat()
+
+      for (const [date, rawValues] of parseNutritionLogTotals(rawPoints)) {
         const values = map.get(date) ?? {}
-        for (const metric of ['caloriesIn', 'proteinG', 'carbsG', 'fatG', 'fiberG', 'saturatedFatG', 'sodiumG', 'sugarG'] as const) {
+        for (const metric of NUTRITION_DAY_METRICS) {
           if (values[metric] == null && rawValues[metric] != null) values[metric] = rawValues[metric]
         }
         map.set(date, values)
       }
 
-      return rawResult.complete ? map : { values: map, complete: false }
+      return rawComplete ? map : { values: map, complete: false }
     }
   },
   dailyRecordGroup('rhr', 'daily-resting-heart-rate', 'dailyRestingHeartRate', ['restingHeartRate'], (r) => ({

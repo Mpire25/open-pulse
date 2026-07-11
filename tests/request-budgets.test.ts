@@ -84,11 +84,12 @@ afterAll(() => {
 describe('health request budgets', () => {
   test('keeps cold and overlapping Home navigation within budget without refetching covered dates', async () => {
     await loadHome('2026-07-01')
-    expect(requests.length).toBeLessThanOrEqual(12)
+    expect(requests.length).toBeLessThanOrEqual(11)
+    expect(requests.some((url) => url.includes('/nutrition-log/dataPoints?'))).toBe(false)
 
     requests = []
     await loadHome('2026-07-02')
-    expect(requests.length).toBeLessThanOrEqual(12)
+    expect(requests.length).toBeLessThanOrEqual(11)
 
     requests = []
     await loadHome('2026-07-01')

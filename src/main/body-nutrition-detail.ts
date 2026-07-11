@@ -2,6 +2,17 @@ import type { BodyMeasurement, DayValues, NutritionLogEntry } from '../shared/ty
 import { dateFromCivil, type CivilDateTime, type RawDataPoint } from './health-api'
 import { gramsFromNutrientNode, nutrientGrams, nutrientMineralGrams } from './nutrition'
 
+export const NUTRITION_DAY_METRICS = [
+  'caloriesIn',
+  'proteinG',
+  'carbsG',
+  'fatG',
+  'fiberG',
+  'saturatedFatG',
+  'sodiumG',
+  'sugarG'
+] as const
+
 function numberValue(value: unknown): number | null {
   if (value === undefined || value === null || value === '') return null
   const parsed = Number(value)
@@ -95,6 +106,13 @@ export function parseNutritionLogTotals(points: RawDataPoint[]): Map<string, Day
     totals.set(date, day)
   }
   return totals
+}
+
+export function nutritionFallbackDates(valuesByDate: Map<string, DayValues>): string[] {
+  return [...valuesByDate]
+    .filter(([, values]) => NUTRITION_DAY_METRICS.some((metric) => values[metric] == null))
+    .map(([date]) => date)
+    .sort()
 }
 
 interface PartialMeasurement extends BodyMeasurement {
