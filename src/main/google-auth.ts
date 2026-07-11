@@ -1,5 +1,6 @@
 import { shell } from 'electron'
 import { createServer } from 'node:http'
+import { createHash } from 'node:crypto'
 import { createPkcePair, randomState, decodeJwtPayload } from './pkce'
 import { getSecret, setSecret, deleteSecret, getSettings, getGoogleClientSecret } from './store'
 import type { GoogleAuthStatus } from '../shared/types'
@@ -21,6 +22,7 @@ interface GoogleTokens {
   refreshToken?: string
   expiresAt: number // epoch ms
   email?: string
+  subject?: string
 }
 
 const SECRET_KEY = 'google-tokens'
@@ -54,6 +56,14 @@ interface GoogleTokenError {
 export function getGoogleStatus(): GoogleAuthStatus {
   const tokens = getSecret<GoogleTokens>(SECRET_KEY)
   return tokens ? { connected: true, email: tokens.email } : { connected: false }
+}
+
+export function getGoogleAccountScope(): string {
+  const tokens = getSecret<GoogleTokens>(SECRET_KEY)
+  if (!tokens) return 'demo'
+  const identity = tokens.subject ?? tokens.email?.trim().toLowerCase() ?? tokens.refreshToken
+  if (!identity) return 'connected-unknown'
+  return `google-${createHash('sha256').update(identity).digest('hex')}`
 }
 
 export function disconnectGoogle(): void {
@@ -187,12 +197,13 @@ export async function connectGoogle(): Promise<GoogleAuthStatus> {
     id_token?: string
   }
   assertCurrentGeneration(generation)
-  const claims = json.id_token ? decodeJwtPayload<{ email?: string }>(json.id_token) : null
+  const claims = json.id_token ? decodeJwtPayload<{ email?: string; sub?: string }>(json.id_token) : null
   const tokens: GoogleTokens = {
     accessToken: json.access_token,
     refreshToken: json.refresh_token,
     expiresAt: Date.now() + json.expires_in * 1000,
-    email: claims?.email
+    email: claims?.email,
+    subject: claims?.sub
   }
   setSecret(SECRET_KEY, tokens)
   refreshRetryAfter = 0

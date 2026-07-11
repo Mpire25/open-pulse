@@ -7,7 +7,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { ArrowUp, Sparkle, Heartbeat } from '@phosphor-icons/react'
 import { Button } from '@/components/ui/button'
 import { Markdownish } from '@/components/Markdownish'
-import type { ChatTurn } from '@/hooks/useChat'
+import type { ChatController, ChatTurn } from '@/hooks/useChat'
 import { cn } from '@/lib/utils'
 
 const SUGGESTIONS = [
@@ -17,22 +17,24 @@ const SUGGESTIONS = [
   'Any anomalies in my HRV I should watch?'
 ]
 
-export interface ChatState {
-  turns: ChatTurn[]
-  busy: boolean
-  send: (text: string) => void
-  reset: () => void
-}
+export type ChatState = ChatController
 
 interface ChatPanelProps {
   chat: ChatState
   codexConnected: boolean
   onOpenSettings: () => void
   compact?: boolean
+  autoFocus?: boolean
 }
 
-export function ChatPanel({ chat, codexConnected, onOpenSettings, compact }: ChatPanelProps): React.JSX.Element {
-  const { turns, busy, send } = chat
+export function ChatPanel({
+  chat,
+  codexConnected,
+  onOpenSettings,
+  compact,
+  autoFocus = true
+}: ChatPanelProps): React.JSX.Element {
+  const { turns, busy, loading, activeChatId, send } = chat
   const [draft, setDraft] = useState('')
   const scrollRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
@@ -49,8 +51,12 @@ export function ChatPanel({ chat, codexConnected, onOpenSettings, compact }: Cha
   }, [turns, busy])
 
   useEffect(() => {
-    if (codexConnected && !compact) inputRef.current?.focus()
-  }, [codexConnected, compact])
+    if (codexConnected && autoFocus) inputRef.current?.focus()
+  }, [activeChatId, autoFocus, codexConnected])
+
+  useEffect(() => {
+    setDraft('')
+  }, [activeChatId])
 
   const submit = (): void => {
     if (!draft.trim() || busy) return
@@ -60,6 +66,10 @@ export function ChatPanel({ chat, codexConnected, onOpenSettings, compact }: Cha
 
   if (!codexConnected) {
     return <SignInPrompt onOpenSettings={onOpenSettings} compact={compact} />
+  }
+
+  if (loading || !activeChatId) {
+    return <div className="grid h-full place-items-center"><ToolThinking label="Loading conversations" /></div>
   }
 
   const empty = turns.length === 0
@@ -112,7 +122,7 @@ export function ChatPanel({ chat, codexConnected, onOpenSettings, compact }: Cha
           <Button
             size="sm"
             onClick={submit}
-            disabled={!draft.trim() || busy}
+            disabled={!draft.trim() || busy || loading}
             className="h-8 w-8 shrink-0 rounded-full px-0"
             aria-label="Send"
           >

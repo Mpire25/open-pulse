@@ -427,6 +427,24 @@ export interface ChatMessage {
   text: string
 }
 
+export interface ChatSessionMessage extends ChatMessage {
+  id: string
+  createdAt: string
+}
+
+export interface ChatSession {
+  id: string
+  title: string
+  createdAt: string
+  updatedAt: string
+  messages: ChatSessionMessage[]
+}
+
+export interface ChatHistorySnapshot {
+  sessions: ChatSession[]
+  persistence: 'encrypted' | 'memory'
+}
+
 export type AiEvent =
   | { type: 'delta'; chatId: string; runId: string; text: string }
   | { type: 'reasoning'; chatId: string; runId: string }

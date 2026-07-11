@@ -6,7 +6,10 @@ import type {
   AiEvent,
   AppSettings,
   BodyMeasurementsResult,
+  ChatHistorySnapshot,
   ChatMessage,
+  ChatSession,
+  ChatSessionMessage,
   CodexAuthStatus,
   GoogleAuthStatus,
   HeartDetailMetric,
@@ -45,6 +48,18 @@ const api = {
     status: (): Promise<CodexAuthStatus> => ipcRenderer.invoke('codex:status'),
     connect: (): Promise<CodexAuthStatus> => ipcRenderer.invoke('codex:connect'),
     disconnect: (): Promise<void> => ipcRenderer.invoke('codex:disconnect')
+  },
+  chats: {
+    list: (): Promise<ChatHistorySnapshot> => ipcRenderer.invoke('chats:list'),
+    create: (id?: string): Promise<ChatSession> => ipcRenderer.invoke('chats:create', id),
+    update: (id: string, messages: ChatSessionMessage[]): Promise<ChatSession> =>
+      ipcRenderer.invoke('chats:update', id, messages),
+    delete: (id: string): Promise<ChatHistorySnapshot> => ipcRenderer.invoke('chats:delete', id),
+    onAccountChanged: (callback: () => void): (() => void) => {
+      const listener = (): void => callback()
+      ipcRenderer.on('chats:account-changed', listener)
+      return () => ipcRenderer.removeListener('chats:account-changed', listener)
+    }
   },
   health: {
     series: (requestId: string, metrics: MetricKey[], start: string, end: string, force?: boolean): Promise<SeriesResult> =>

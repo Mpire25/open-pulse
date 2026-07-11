@@ -85,7 +85,7 @@ export default function App(): React.JSX.Element {
   const backNavigationPending = useRef(false)
   const accountEpochRef = useRef(0)
 
-  // One conversation shared by the Assistant page and the side panel.
+  // One multi-chat controller shared by the Assistant page and side panel.
   const chat = useChat()
   const queryClient = useQueryClient()
   useTrackpadHistoryNavigation()
@@ -95,7 +95,6 @@ export default function App(): React.JSX.Element {
     // cancels active query retries so the previous account cannot repopulate
     // the renderer cache after the boundary.
     queryClient.clear()
-    chat.reset()
     const accountEpoch = accountEpochRef.current + 1
     accountEpochRef.current = accountEpoch
     setDetailMetric(null)
@@ -115,7 +114,7 @@ export default function App(): React.JSX.Element {
         ''
       )
     }
-  }, [chat.reset, queryClient])
+  }, [queryClient])
 
   const forCurrentAccount = (entry: NavigationEntry): NavigationEntry => {
     if (entry.accountEpoch === accountEpochRef.current) return entry
@@ -229,9 +228,8 @@ export default function App(): React.JSX.Element {
   }, [clearAccountScopedState, queryClient])
 
   const handleCodexChange = useCallback((status: CodexAuthStatus): void => {
-    clearAccountScopedState()
     setCodex(status)
-  }, [clearAccountScopedState])
+  }, [])
 
   const selectView = (v: View): void => {
     navigate({

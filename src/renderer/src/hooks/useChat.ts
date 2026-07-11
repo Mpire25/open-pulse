@@ -1,106 +1,325 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { AiEvent, ChatMessage } from '@shared/types'
+import { generateChatTitle } from '@shared/chat'
+import type {
+  AiEvent,
+  ChatHistorySnapshot,
+  ChatMessage,
+  ChatSession,
+  ChatSessionMessage
+} from '@shared/types'
 
-export interface ChatTurn extends ChatMessage {
-  id: string
+export interface ChatTurn extends ChatSessionMessage {
   streaming?: boolean
   toolLabel?: string
   error?: boolean
 }
 
-let counter = 0
-const nextId = (): string => `${Date.now()}-${counter++}`
+interface ViewChat extends Omit<ChatSession, 'messages'> {
+  turns: ChatTurn[]
+  persisted: boolean
+}
 
-export function useChat(): {
+interface ActiveRun {
+  runId: string
+  assistantId: string
+}
+
+export interface ChatController {
+  sessions: ChatSession[]
+  activeChatId: string | null
   turns: ChatTurn[]
   busy: boolean
+  loading: boolean
+  streamingChatIds: string[]
   send: (text: string) => void
-  reset: () => void
-} {
-  const [turns, setTurns] = useState<ChatTurn[]>([])
-  const [busy, setBusy] = useState(false)
-  const turnsRef = useRef<ChatTurn[]>([])
-  const busyRef = useRef(false)
-  const chatIdRef = useRef<string>(nextId())
-  const activeRunId = useRef<string | null>(null)
-  const activeAssistantId = useRef<string | null>(null)
+  create: () => Promise<void>
+  select: (id: string) => void
+  delete: (id: string) => Promise<void>
+  reload: () => Promise<void>
+}
 
-  useEffect(() => {
-    const off = window.pulse.ai.onEvent((event: AiEvent) => {
-      if (event.chatId !== chatIdRef.current) return
-      if (event.runId !== activeRunId.current) return
-      const assistantId = activeAssistantId.current
-      if (!assistantId) return
+const newId = (): string => crypto.randomUUID()
 
-      const nextTurns = turnsRef.current.map((turn) => {
-        if (turn.id !== assistantId) return turn
-        switch (event.type) {
-          case 'delta':
-            return { ...turn, text: turn.text + event.text, toolLabel: undefined }
-          case 'tool':
-            return { ...turn, toolLabel: event.label }
-          case 'reasoning':
-            return turn.text ? turn : { ...turn, toolLabel: turn.toolLabel ?? 'Thinking' }
-          case 'done':
-            return { ...turn, text: event.text || turn.text, streaming: false, toolLabel: undefined }
-          case 'error':
-            return { ...turn, text: event.message, streaming: false, error: true, toolLabel: undefined }
-          default:
-            return turn
-        }
-      })
-      turnsRef.current = nextTurns
-      setTurns(nextTurns)
+function toViewChat(session: ChatSession): ViewChat {
+  return { ...session, turns: session.messages.map((message) => ({ ...message })), persisted: true }
+}
 
-      if (event.type === 'done' || event.type === 'error') {
-        busyRef.current = false
-        setBusy(false)
-        activeAssistantId.current = null
-        activeRunId.current = null
-      }
-    })
-    return off
+function createDraftChat(): ViewChat {
+  const now = new Date().toISOString()
+  return {
+    id: newId(),
+    title: 'New chat',
+    createdAt: now,
+    updatedAt: now,
+    turns: [],
+    persisted: false
+  }
+}
+
+function persistedMessages(turns: ChatTurn[]): ChatSessionMessage[] {
+  return turns
+    .filter((turn) => !turn.error && !turn.streaming && turn.text.trim())
+    .map(({ id, role, text, createdAt }) => ({ id, role, text, createdAt }))
+}
+
+function asSession(chat: ViewChat): ChatSession {
+  const { turns, persisted: _persisted, ...session } = chat
+  return { ...session, messages: persistedMessages(turns) }
+}
+
+function sortChats(chats: ViewChat[]): ViewChat[] {
+  return [...chats].sort((left, right) => Date.parse(right.updatedAt) - Date.parse(left.updatedAt))
+}
+
+export function useChat(): ChatController {
+  const [chats, setChats] = useState<ViewChat[]>([])
+  const [activeChatId, setActiveChatId] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
+  const chatsRef = useRef<ViewChat[]>([])
+  const activeChatIdRef = useRef<string | null>(null)
+  const runsRef = useRef(new Map<string, ActiveRun>())
+  const accountEpochRef = useRef(0)
+
+  const publish = useCallback((next: ViewChat[]): void => {
+    const sorted = sortChats(next)
+    chatsRef.current = sorted
+    setChats(sorted)
   }, [])
 
-  const send = useCallback(
-    (text: string) => {
-      const trimmed = text.trim()
-      if (!trimmed || busyRef.current) return
+  const chooseActive = useCallback((id: string | null): void => {
+    activeChatIdRef.current = id
+    setActiveChatId(id)
+  }, [])
 
-      const userTurn: ChatTurn = { id: nextId(), role: 'user', text: trimmed }
-      const assistantTurn: ChatTurn = { id: nextId(), role: 'assistant', text: '', streaming: true }
-      const chatId = chatIdRef.current
-      const runId = nextId()
-      const nextTurns = [...turnsRef.current, userTurn, assistantTurn]
-
-      activeAssistantId.current = assistantTurn.id
-      activeRunId.current = runId
-      busyRef.current = true
-      turnsRef.current = nextTurns
-      setBusy(true)
-      setTurns(nextTurns)
-
-      // Capture the session id before dispatch. A reset can rotate the live id,
-      // but it must never move this conversation's history into the new session.
-      const history: ChatMessage[] = nextTurns
-        .filter((turn) => turn.id !== assistantTurn.id && !turn.error)
-        .map(({ role, text }) => ({ role, text }))
-      void window.pulse.ai.send(chatId, runId, history)
+  const mergeSession = useCallback(
+    (session: ChatSession): void => {
+      const current = chatsRef.current.find((chat) => chat.id === session.id)
+      publish([
+        ...chatsRef.current.filter((chat) => chat.id !== session.id),
+        current ? { ...session, turns: current.turns, persisted: true } : toViewChat(session)
+      ])
     },
-    []
+    [publish]
   )
 
-  const reset = useCallback(() => {
-    // Rotate the id and refs synchronously so late events from the old request
-    // are rejected even before React commits the empty UI state.
-    chatIdRef.current = nextId()
-    activeRunId.current = null
-    activeAssistantId.current = null
-    busyRef.current = false
-    turnsRef.current = []
-    setTurns([])
-    setBusy(false)
+  const applySnapshot = useCallback(
+    (snapshot: ChatHistorySnapshot, preserveRunning: boolean): void => {
+      const currentById = new Map(chatsRef.current.map((chat) => [chat.id, chat]))
+      const stored = snapshot.sessions.map((session) => {
+        const current = currentById.get(session.id)
+        return preserveRunning && current && runsRef.current.has(session.id)
+          ? { ...session, turns: current.turns, persisted: true }
+          : toViewChat(session)
+      })
+      const drafts = chatsRef.current.filter(
+        (chat) => !chat.persisted && !stored.some((session) => session.id === chat.id)
+      )
+      const next = [...drafts, ...stored]
+      publish(next)
+      const selected = next.find((chat) => chat.id === activeChatIdRef.current)
+      if (!selected) chooseActive(next[0]?.id ?? null)
+    },
+    [chooseActive, publish]
+  )
+
+  const create = useCallback(async (): Promise<void> => {
+    const reusable = chatsRef.current.find(
+      (chat) => !chat.persisted && chat.turns.length === 0 && !runsRef.current.has(chat.id)
+    )
+    if (reusable) {
+      chooseActive(reusable.id)
+      return
+    }
+    const draft = createDraftChat()
+    publish([draft, ...chatsRef.current])
+    chooseActive(draft.id)
+  }, [chooseActive, publish])
+
+  const reload = useCallback(async (): Promise<void> => {
+    const epoch = accountEpochRef.current + 1
+    accountEpochRef.current = epoch
+    runsRef.current.clear()
+    chooseActive(null)
+    publish([])
+    setLoading(true)
+    try {
+      const snapshot = await window.pulse.chats.list()
+      if (epoch !== accountEpochRef.current) return
+      let sessions = snapshot.sessions
+      if (!sessions.length) {
+        const draft = createDraftChat()
+        publish([draft])
+        chooseActive(draft.id)
+        return
+      }
+      const next = sessions.map(toViewChat)
+      publish(next)
+      chooseActive(next[0]?.id ?? null)
+    } finally {
+      if (epoch === accountEpochRef.current) setLoading(false)
+    }
+  }, [chooseActive, publish])
+
+  const updateTurns = useCallback(
+    (chatId: string, update: (turns: ChatTurn[]) => ChatTurn[]): void => {
+      publish(
+        chatsRef.current.map((chat) => (chat.id === chatId ? { ...chat, turns: update(chat.turns) } : chat))
+      )
+    },
+    [publish]
+  )
+
+  const saveCompletedChat = useCallback(
+    async (chatId: string): Promise<void> => {
+      const chat = chatsRef.current.find((candidate) => candidate.id === chatId)
+      if (!chat) return
+      const epoch = accountEpochRef.current
+      try {
+        const session = await window.pulse.chats.update(chatId, persistedMessages(chat.turns))
+        if (epoch === accountEpochRef.current) mergeSession(session)
+      } catch {
+        // The completed answer remains visible in memory if secure persistence fails.
+      }
+    },
+    [mergeSession]
+  )
+
+  useEffect(() => {
+    void reload()
+    const offAccount = window.pulse.chats.onAccountChanged(() => void reload())
+    return offAccount
+  }, [reload])
+
+  useEffect(() => {
+    return window.pulse.ai.onEvent((event: AiEvent) => {
+      const run = runsRef.current.get(event.chatId)
+      if (!run || run.runId !== event.runId) return
+
+      updateTurns(event.chatId, (turns) =>
+        turns.map((turn) => {
+          if (turn.id !== run.assistantId) return turn
+          switch (event.type) {
+            case 'delta':
+              return { ...turn, text: turn.text + event.text, toolLabel: undefined }
+            case 'tool':
+              return { ...turn, toolLabel: event.label }
+            case 'reasoning':
+              return turn.text ? turn : { ...turn, toolLabel: turn.toolLabel ?? 'Thinking' }
+            case 'done':
+              return { ...turn, text: event.text || turn.text, streaming: false, toolLabel: undefined }
+            case 'error':
+              return { ...turn, text: event.message, streaming: false, error: true, toolLabel: undefined }
+          }
+        })
+      )
+
+      if (event.type === 'done' || event.type === 'error') {
+        runsRef.current.delete(event.chatId)
+        if (event.type === 'done') void saveCompletedChat(event.chatId)
+      }
+    })
+  }, [saveCompletedChat, updateTurns])
+
+  const send = useCallback(
+    (text: string): void => {
+      const trimmed = text.trim()
+      const chatId = activeChatIdRef.current
+      const chat = chatsRef.current.find((candidate) => candidate.id === chatId)
+      if (!trimmed || !chat || runsRef.current.has(chat.id)) return
+
+      const createdAt = new Date().toISOString()
+      const userTurn: ChatTurn = { id: newId(), role: 'user', text: trimmed, createdAt }
+      const assistantTurn: ChatTurn = {
+        id: newId(),
+        role: 'assistant',
+        text: '',
+        createdAt,
+        streaming: true
+      }
+      const runId = newId()
+      const nextTurns = [...chat.turns, userTurn, assistantTurn]
+      const title = chat.title === 'New chat' ? generateChatTitle(trimmed) : chat.title
+      const updatedAt = new Date().toISOString()
+      runsRef.current.set(chat.id, { runId, assistantId: assistantTurn.id })
+      publish(
+        chatsRef.current.map((candidate) =>
+          candidate.id === chat.id ? { ...candidate, title, updatedAt, turns: nextTurns } : candidate
+        )
+      )
+
+      const history: ChatMessage[] = nextTurns
+        .filter((turn) => turn.id !== assistantTurn.id && !turn.error)
+        .map(({ role, text: messageText }) => ({ role, text: messageText }))
+      const epoch = accountEpochRef.current
+      const createIfNeeded = chat.persisted
+        ? Promise.resolve<ChatSession | null>(null)
+        : window.pulse.chats.create(chat.id)
+      void createIfNeeded
+        .then((session) => {
+          if (session && epoch === accountEpochRef.current) mergeSession(session)
+          return window.pulse.chats.update(chat.id, persistedMessages(nextTurns))
+        })
+        .then((session) => {
+          if (epoch === accountEpochRef.current) mergeSession(session)
+        })
+        .catch(() => undefined)
+        .finally(() => {
+          if (epoch === accountEpochRef.current && runsRef.current.get(chat.id)?.runId === runId) {
+            void window.pulse.ai.send(chat.id, runId, history)
+          }
+        })
+    },
+    [mergeSession, publish]
+  )
+
+  const select = useCallback(
+    (id: string): void => {
+      if (chatsRef.current.some((chat) => chat.id === id)) chooseActive(id)
+    },
+    [chooseActive]
+  )
+
+  const cancelRun = useCallback((id: string): void => {
+    const run = runsRef.current.get(id)
+    if (!run) return
+    runsRef.current.delete(id)
+    void window.pulse.ai.cancel(id, run.runId)
   }, [])
 
-  return { turns, busy, send, reset }
+  const ensureActive = useCallback(
+    async (snapshot: ChatHistorySnapshot): Promise<void> => {
+      if (chatsRef.current.length || snapshot.sessions.length) return
+      const draft = createDraftChat()
+      publish([draft])
+      chooseActive(draft.id)
+    },
+    [chooseActive, publish]
+  )
+
+  const deleteChat = useCallback(
+    async (id: string): Promise<void> => {
+      cancelRun(id)
+      const snapshot = await window.pulse.chats.delete(id)
+      applySnapshot(snapshot, true)
+      await ensureActive(snapshot)
+    },
+    [applySnapshot, cancelRun, ensureActive]
+  )
+
+  const activeChat = chats.find((chat) => chat.id === activeChatId) ?? null
+  const streamingChatIds = chats.filter((chat) => runsRef.current.has(chat.id)).map((chat) => chat.id)
+
+  return {
+    sessions: chats.filter((chat) => chat.persisted).map(asSession),
+    activeChatId,
+    turns: activeChat?.turns ?? [],
+    busy: activeChat ? runsRef.current.has(activeChat.id) : false,
+    loading,
+    streamingChatIds,
+    send,
+    create,
+    select,
+    delete: deleteChat,
+    reload
+  }
 }
