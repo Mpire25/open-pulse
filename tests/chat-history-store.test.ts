@@ -71,6 +71,24 @@ describe('encrypted chat history store', () => {
     expect(new ChatHistoryStore(path, encryptedAdapter(false)).snapshot('account-a').sessions).toEqual([])
   })
 
+  test('pins survive restarts and unpinning removes the flag', () => {
+    const path = temporaryPath()
+    const store = new ChatHistoryStore(path, encryptedAdapter())
+    const chat = store.create('account-a')
+    store.update('account-a', chat.id, [userMessage('Keep this one handy')])
+    const before = store.snapshot('account-a').sessions[0].updatedAt
+
+    const pinned = store.setPinned('account-a', chat.id, true)
+    expect(pinned.pinned).toBe(true)
+    expect(pinned.updatedAt).toBe(before)
+
+    const restored = new ChatHistoryStore(path, encryptedAdapter())
+    expect(restored.snapshot('account-a').sessions[0].pinned).toBe(true)
+
+    expect(restored.setPinned('account-a', chat.id, false).pinned).toBeUndefined()
+    expect(() => restored.setPinned('account-b', chat.id, true)).toThrow('Chat not found.')
+  })
+
   test('permanently deletes within one account', () => {
     const store = new ChatHistoryStore(temporaryPath(), encryptedAdapter())
     const chat = store.create('account-a')

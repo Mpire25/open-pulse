@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import * as Dialog from '@radix-ui/react-dialog'
-import { ChatsCircle, Trash } from '@phosphor-icons/react'
+import { ChatsCircle, PushPin, PushPinSlash, Trash } from '@phosphor-icons/react'
 import { Button } from '@/components/ui/button'
 import type { ChatController } from '@/hooks/useChat'
 import type { ChatSession } from '@shared/types'
@@ -21,54 +21,67 @@ function relativeTime(value: string): string {
   return new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short' }).format(date)
 }
 
+function dateGroupLabel(value: string, now: Date): string {
+  const startOfDay = (input: Date): number =>
+    new Date(input.getFullYear(), input.getMonth(), input.getDate()).getTime()
+  const dayDiff = Math.floor((startOfDay(now) - startOfDay(new Date(value))) / 86_400_000)
+  if (dayDiff <= 0) return 'Today'
+  if (dayDiff === 1) return 'Yesterday'
+  if (dayDiff < 7) return 'Previous 7 days'
+  if (dayDiff < 30) return 'Previous 30 days'
+  return 'Older'
+}
+
+interface SessionGroup {
+  label: string
+  sessions: ChatSession[]
+}
+
+/** Pinned chats first, then recency buckets; sessions arrive newest-first. */
+function groupSessions(sessions: ChatSession[]): SessionGroup[] {
+  const now = new Date()
+  const groups: SessionGroup[] = []
+  const pinned = sessions.filter((session) => session.pinned)
+  if (pinned.length) groups.push({ label: 'Pinned', sessions: pinned })
+  for (const session of sessions.filter((candidate) => !candidate.pinned)) {
+    const label = dateGroupLabel(session.updatedAt, now)
+    const group = groups[groups.length - 1]
+    if (group && group.label === label) group.sessions.push(session)
+    else groups.push({ label, sessions: [session] })
+  }
+  return groups
+}
+
 export function ChatHistory({ chat, onNavigate }: ChatHistoryProps): React.JSX.Element {
   const [deleteTarget, setDeleteTarget] = useState<ChatSession | null>(null)
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-3 pt-2">
+      <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-3 pt-1">
         {chat.sessions.length ? (
-          <div className="flex flex-col gap-0.5">
-            {chat.sessions.map((session) => {
-              const selected = session.id === chat.activeChatId
-              const streaming = chat.streamingChatIds.includes(session.id)
-              return (
-                <div
-                  key={session.id}
-                  className={cn(
-                    'group relative flex w-full items-center rounded-[10px] border text-left transition-colors',
-                    selected
-                      ? 'border-hairline bg-white/[0.065] text-ink'
-                      : 'border-transparent text-ink-dim hover:bg-white/[0.035] hover:text-ink'
-                  )}
-                >
-                  <button
-                    type="button"
-                    onClick={() => {
+          groupSessions(chat.sessions).map((group) => (
+            <div key={group.label}>
+              <p className="px-3 pb-1 pt-3 text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-faint">
+                {group.label}
+              </p>
+              <div className="flex flex-col gap-0.5">
+                {group.sessions.map((session) => (
+                  <SessionRow
+                    key={session.id}
+                    session={session}
+                    selected={session.id === chat.activeChatId}
+                    streaming={chat.streamingChatIds.includes(session.id)}
+                    onSelect={() => {
                       chat.select(session.id)
                       onNavigate?.()
                     }}
-                    className="flex min-w-0 flex-1 items-center gap-2 rounded-[10px] px-3 py-2.5 pr-10 text-left outline-none focus-visible:ring-1 focus-visible:ring-accent/50"
-                  >
-                    {streaming && <span className="size-1.5 shrink-0 animate-pulse rounded-full bg-accent" />}
-                    <span className="min-w-0 flex-1 truncate text-[12px] font-medium">{session.title}</span>
-                    <span className="shrink-0 text-[9.5px] tabular-nums text-ink-faint transition-opacity group-hover:opacity-0 group-focus-within:opacity-0">
-                      {relativeTime(session.updatedAt)}
-                    </span>
-                  </button>
-                  <button
-                    type="button"
-                    title="Delete chat"
-                    aria-label={`Delete ${session.title}`}
-                    onClick={() => setDeleteTarget(session)}
-                    className="pointer-events-none absolute right-1.5 grid size-7 place-items-center rounded-lg text-ink-faint opacity-0 transition-colors hover:bg-danger/10 hover:text-danger group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100"
-                  >
-                    <Trash size={13} />
-                  </button>
-                </div>
-              )
-            })}
-          </div>
+                    onPin={() => void chat.pin(session.id, !session.pinned)}
+                    onDelete={() => setDeleteTarget(session)}
+                  />
+                ))}
+              </div>
+            </div>
+          ))
         ) : (
           <div className="flex flex-col items-center gap-2 px-3 py-8 text-center">
             <ChatsCircle size={20} className="text-ink-faint" />
@@ -107,6 +120,60 @@ export function ChatHistory({ chat, onNavigate }: ChatHistoryProps): React.JSX.E
           </Dialog.Content>
         </Dialog.Portal>
       </Dialog.Root>
+    </div>
+  )
+}
+
+interface SessionRowProps {
+  session: ChatSession
+  selected: boolean
+  streaming: boolean
+  onSelect: () => void
+  onPin: () => void
+  onDelete: () => void
+}
+
+function SessionRow({ session, selected, streaming, onSelect, onPin, onDelete }: SessionRowProps): React.JSX.Element {
+  return (
+    <div
+      className={cn(
+        'group relative flex w-full items-center rounded-[10px] border text-left transition-colors',
+        selected
+          ? 'border-hairline bg-white/[0.065] text-ink'
+          : 'border-transparent text-ink-dim hover:bg-white/[0.035] hover:text-ink'
+      )}
+    >
+      <button
+        type="button"
+        onClick={onSelect}
+        className="flex min-w-0 flex-1 items-center gap-2 rounded-[10px] px-3 py-2.5 pr-16 text-left outline-none focus-visible:ring-1 focus-visible:ring-accent/50"
+      >
+        {streaming && <span className="size-1.5 shrink-0 animate-pulse rounded-full bg-accent" />}
+        <span className="min-w-0 flex-1 truncate text-[12px] font-medium">{session.title}</span>
+        <span className="shrink-0 text-[9.5px] tabular-nums text-ink-faint transition-opacity group-hover:opacity-0 group-focus-within:opacity-0">
+          {relativeTime(session.updatedAt)}
+        </span>
+      </button>
+      <div className="pointer-events-none absolute right-1 flex items-center opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100">
+        <button
+          type="button"
+          title={session.pinned ? 'Unpin chat' : 'Pin chat'}
+          aria-label={`${session.pinned ? 'Unpin' : 'Pin'} ${session.title}`}
+          onClick={onPin}
+          className="grid size-7 place-items-center rounded-lg text-ink-faint transition-colors hover:bg-white/[0.08] hover:text-ink"
+        >
+          {session.pinned ? <PushPinSlash size={13} /> : <PushPin size={13} />}
+        </button>
+        <button
+          type="button"
+          title="Delete chat"
+          aria-label={`Delete ${session.title}`}
+          onClick={onDelete}
+          className="grid size-7 place-items-center rounded-lg text-ink-faint transition-colors hover:bg-danger/10 hover:text-danger"
+        >
+          <Trash size={13} />
+        </button>
+      </div>
     </div>
   )
 }
