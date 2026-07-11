@@ -33,10 +33,7 @@ export function TopBar({
         onClick={onToggleSidebar}
         aria-label={sidebarOpen ? 'Close sidebar' : 'Open sidebar'}
         title={sidebarOpen ? 'Close sidebar' : 'Open sidebar'}
-        className={cn(
-          'no-drag mr-auto grid h-7 w-7 translate-y-1 place-items-center rounded-lg text-ink-dim transition-colors hover:bg-white/[0.06] hover:text-ink',
-          !sidebarOpen && 'ml-[84px]'
-        )}
+        className="no-drag fixed left-24 top-3 grid h-7 w-7 place-items-center rounded-lg text-ink-dim transition-colors hover:bg-white/[0.06] hover:text-ink"
       >
         <SidebarSimple size={16} weight="bold" />
       </button>
