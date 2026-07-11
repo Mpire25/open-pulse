@@ -9,23 +9,28 @@ Built with Electron + React 19, Radix primitives, Tailwind v4, and Framer Motion
 
 ## Features
 
-- **Date traversal** — every page is anchored to a selected day. Step back and
-  forward, or jump anywhere with the calendar in the title bar; each day loads
-  with its own 14-day trend window (cached per date).
-- **Home** — how the day is going: goal gauges (steps / calories / zone
-  minutes), hourly movement, last night's hypnogram, night signals (HRV, SpO₂,
-  breathing, skin temperature) compared against your own recent baseline, and
+- **Date traversal** — each health dashboard is anchored to a selected day.
+  Step back and forward, jump anywhere with the title-bar calendar, or use
+  trackpad history gestures to retrace pages and drill-downs.
+- **Home** — how the day is going: goal gauges for steps, calories burned, and
+  calories eaten; hourly movement; last night's hypnogram; night signals (HRV,
+  SpO₂, breathing, skin temperature) compared with your recent baseline; and
   the day's workouts.
 - **Activity** — day totals with baseline deltas and sparklines, hourly steps,
-  logged workouts (duration, calories, avg HR, zone minutes), and 14-day trends
+  logged workouts (duration, calories, avg HR, zone minutes), and 7-day trends
   with goal lines.
-- **Health** — intraday heart rate plus dedicated trend charts for resting HR,
-  HRV, SpO₂, respiratory rate, and skin-temperature deviation — each
-  drawn against your personal 7-day average.
+- **Heart** — intraday heart rate plus 7-day trends for resting HR, HRV, SpO₂,
+  respiratory rate, and skin-temperature deviation, with recent-baseline
+  comparisons where applicable.
 - **Sleep** — stage hypnogram with hover timing, duration vs goal, efficiency,
-  a 14-night duration chart, and a night-by-night stage-mix history.
-- **Body** — weight, body fat, logged water, and calories in (with net energy
-  balance), shown as trends. Sections hide themselves when nothing is logged.
+  7-night duration and efficiency charts, a night-by-night stage-mix history,
+  and a dedicated sleep-stage detail view.
+- **Body** — 30-day weight and BMI trends plus recent individual scale readings.
+- **Nutrition** — calories eaten and macro progress against configurable goals,
+  individual food logs, a 7-day calorie trend, and recent day-by-day macro mix.
+- **Metric drill-downs** — open dashboard metrics for daily, weekly, monthly,
+  three-month, or yearly detail, including period comparisons and intraday
+  breakdowns where the API supplies them.
 - **Devices** — paired trackers with battery level and state, last sync time,
   and hardware features.
 - **Assistant** — a streaming chat agent that calls tools to read your real
@@ -38,9 +43,11 @@ Built with Electron + React 19, Radix primitives, Tailwind v4, and Framer Motion
 
 ```bash
 bun install
-bun run dev      # launch in development with HMR
-bun run build    # type-check-clean production build into out/
-bun run build:mac # package a .dmg (needs electron-builder toolchain)
+bun run dev        # launch in development with HMR
+bun run typecheck  # check renderer and main/preload TypeScript
+bun test           # run the test suite
+bun run build      # create a production build in out/
+bun run build:mac  # package a .dmg (needs the electron-builder toolchain)
 ```
 
 The app opens in demo mode. Connect your accounts in **Settings**.
@@ -48,8 +55,8 @@ The app opens in demo mode. Connect your accounts in **Settings**.
 ## Connecting Google Health (your Fitbit Air data)
 
 The Google Health API uses Google OAuth 2.0. OpenPulse runs the flow locally with a
-loopback redirect + PKCE. Your Client Secret and OAuth tokens are stored by
-Electron `safeStorage`.
+loopback redirect + PKCE. When OS encryption is available, your Client Secret
+and OAuth tokens are encrypted with Electron `safeStorage`.
 
 1. In the [Google Cloud Console](https://console.cloud.google.com), create a
    project and enable the **Google Health API**.
@@ -96,19 +103,24 @@ Renderer (React)  ──IPC──▶  Main process  ──HTTPS──▶  health
 
 - **`src/main`** — Electron main: OAuth flows (`google-auth.ts`, `codex-auth.ts`),
   the Health API client (`health-api.ts`), the live/demo service layer
-  (`health-service.ts`), the streaming AI agent (`codex-chat.ts`), and encrypted
-  token storage (`store.ts`, via Electron `safeStorage`).
+  (`health-service.ts`), the streaming AI agent (`codex-chat.ts`), and account
+  storage (`store.ts`, using Electron `safeStorage` when available).
 - **`src/preload`** — the `window.pulse` bridge (context-isolated).
 - **`src/renderer`** — the React app: views, ring/chart components, hooks.
 - **`src/shared`** — types shared across processes.
 
 ## Security notes
 
-- Tokens are encrypted at rest with the OS keychain via Electron `safeStorage`.
+- OpenPulse uses Electron `safeStorage` to encrypt account secrets when OS
+  encryption is available. Synced health data is only persisted when that
+  encryption is available.
 - The renderer is context-isolated with `nodeIntegration` off; all privileged
   work happens in the main process over a typed IPC surface.
 - Production builds run under a strict Content-Security-Policy.
-- All network access is read-only against your own accounts.
+- Google Health access uses read-only scopes; OpenPulse does not write health
+  data back to your account.
+- When you use the assistant, the health metrics needed to answer your question
+  are sent to the ChatGPT Codex endpoint through your signed-in account.
 
 > OpenPulse is an independent project and is not affiliated with or endorsed by
 > Google or OpenAI. It is not a medical device; do not use it for diagnosis.
