@@ -159,17 +159,17 @@ export function ActivityView({ date, goals, onOpenMetric, onOpenWorkout }: Activ
         <Panel className="grid min-h-[300px] grid-cols-1 gap-6 p-6 lg:grid-cols-[auto_1fr] lg:gap-4">
           <div className="grid min-w-0 grid-cols-2 place-items-center gap-2 sm:min-w-[400px]">
             <ActivityGoalRing
-              metricKey="caloriesOut"
-              value={today.caloriesOut ?? null}
-              goal={goals.caloriesOut}
-              pending={series.isMetricPending('caloriesOut')}
-              onOpen={onOpenMetric}
-            />
-            <ActivityGoalRing
               metricKey="steps"
               value={today.steps ?? null}
               goal={goals.steps}
               pending={series.isMetricPending('steps')}
+              onOpen={onOpenMetric}
+            />
+            <ActivityGoalRing
+              metricKey="caloriesOut"
+              value={today.caloriesOut ?? null}
+              goal={goals.caloriesOut}
+              pending={series.isMetricPending('caloriesOut')}
               onOpen={onOpenMetric}
             />
           </div>
