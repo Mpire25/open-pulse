@@ -91,7 +91,7 @@ export function DevicesView({ connected }: DevicesViewProps): React.JSX.Element 
           ) : device ? (
             <DeviceHero device={device} connected={connected} />
           ) : (
-            <Panel className="grid h-full place-items-center p-12 text-[13px] text-ink-faint">
+            <Panel className={`grid place-items-center p-12 text-[13px] text-ink-faint ${CARD_HEIGHT.device}`}>
               No paired devices found on this Google account.
             </Panel>
           )}
