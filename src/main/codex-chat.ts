@@ -10,10 +10,12 @@ import {
   isCodexAuthGenerationCurrent
 } from './codex-auth'
 import { AGENT_TOOLS, AGENT_TOOL_LABELS, runHealthAgentTool } from './health-agent-tools'
+import { addUrlCitations, type UrlCitationAnnotation } from './ai-citations'
 
 const CODEX_URL = 'https://chatgpt.com/backend-api/codex/responses'
 const MODEL = 'gpt-5.6-terra'
 const MAX_TOOL_TURNS = 8
+const WEB_SEARCH_TOOL = { type: 'web_search', search_context_size: 'medium' } as const
 
 function buildInstructions(): string {
   const now = new Date()
@@ -32,6 +34,8 @@ Today is ${today}; the user's local timezone is ${timezone}. Use civil calendar 
 
 For every claim about the user's data, call only the narrowest relevant tools and never invent a value. Use one day for an exact fact, 7-14 days for short comparisons, about 30 days for a trend, and 60-90 days for an exploratory relationship. If observations are sparse or the result warns that evidence is thin, request a larger useful range or explain the limitation. Prefer analyze_daily_metrics for arithmetic and correlation rather than calculating from a large table yourself. Distinguish missing data from zero. Correlation is not causation.
 
+Use web search when the user explicitly asks for research or when an answer depends on current medical guidance, current product information, or external facts that may have changed. Do not search for simple questions that can be answered from the user's health data. Prefer authoritative primary sources and current clinical guidance. Never include identifying information, private measurements, or the user's health-record dates in a search query; translate the question into a general research query. Clearly separate external evidence from what the user's own data shows, and cite web-supported claims.
+
 If a tool reports source "demo", mention once that the values are sample data because no health account is connected. Be warm, precise and concise. Use plain language, concrete dates and numbers, and at most one practical suggestion when relevant. Separate what the data shows from possible interpretation. Do not diagnose; recommend professional care for concerning symptoms or persistently abnormal readings without being alarmist.`
 }
 
@@ -43,6 +47,25 @@ interface FunctionCallItem {
   arguments?: string
   call_id?: string
   [key: string]: unknown
+}
+
+interface OutputTextItem {
+  type?: string
+  text?: string
+  annotations?: UrlCitationAnnotation[]
+}
+
+interface ResponseOutputItem extends FunctionCallItem {
+  content?: OutputTextItem[]
+}
+
+function citedMessageText(item: ResponseOutputItem): string | null {
+  if (item.type !== 'message' || !Array.isArray(item.content)) return null
+  const output = item.content.filter((part) => part.type === 'output_text' && typeof part.text === 'string')
+  if (!output.length) return null
+  return output
+    .map((part) => addUrlCitations(part.text ?? '', Array.isArray(part.annotations) ? part.annotations : []))
+    .join('\n')
 }
 
 function toInputItems(history: ChatMessage[]): InputItem[] {
@@ -136,7 +159,7 @@ export async function runChat(
           model: MODEL,
           instructions: buildInstructions(),
           input,
-          tools: AGENT_TOOLS,
+          tools: [...AGENT_TOOLS, WEB_SEARCH_TOOL],
           tool_choice: 'auto',
           parallel_tool_calls: false,
           store: false,
@@ -160,6 +183,7 @@ export async function runChat(
       const functionCalls: FunctionCallItem[] = []
       const continuationItems: InputItem[] = []
       let turnText = ''
+      const completedMessages: string[] = []
       let buffer = ''
       const reader = resp.body.getReader()
       const decoder = new TextDecoder()
@@ -175,13 +199,29 @@ export async function runChat(
             if (!line.startsWith('data:')) continue
             const payload = line.slice(5).trim()
             if (!payload || payload === '[DONE]') continue
-            let event: { type?: string; delta?: string; item?: FunctionCallItem; response?: { error?: { message?: string } } }
+            let event: {
+              type?: string
+              delta?: string
+              item?: ResponseOutputItem
+              response?: { error?: { message?: string } }
+            }
             try {
               event = JSON.parse(payload)
             } catch {
               continue
             }
             switch (event.type) {
+              case 'response.output_item.added':
+                if (event.item?.type === 'web_search_call') {
+                  emit({
+                    type: 'tool',
+                    chatId,
+                    runId,
+                    name: 'web_search',
+                    label: 'Researching the web'
+                  })
+                }
+                break
               case 'response.output_text.delta':
                 if (event.delta) {
                   turnText += event.delta
@@ -195,8 +235,12 @@ export async function runChat(
                 if (event.item?.type === 'function_call') {
                   functionCalls.push(event.item)
                   continuationItems.push(event.item)
-                } else if (event.item?.type === 'reasoning') {
+                } else if (event.item?.type === 'reasoning' || event.item?.type === 'web_search_call') {
                   continuationItems.push(event.item)
+                } else if (event.item?.type === 'message') {
+                  continuationItems.push(event.item)
+                  const messageText = citedMessageText(event.item)
+                  if (messageText != null) completedMessages.push(messageText)
                 }
                 break
               case 'response.failed':
@@ -206,7 +250,7 @@ export async function runChat(
         }
       }
 
-      finalText += turnText
+      finalText += completedMessages.length ? completedMessages.join('\n') : turnText
       signal.throwIfAborted()
       if (!isCodexAuthGenerationCurrent(authGeneration)) throw new Error('ChatGPT disconnected.')
 
