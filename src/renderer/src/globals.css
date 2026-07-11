@@ -123,6 +123,31 @@ body {
   }
 }
 
+/* Agent activity label: a light band sweeps through the text while the
+   assistant is reading data or researching, so "working" reads at a glance. */
+.thinking-shimmer {
+  background: linear-gradient(
+    100deg,
+    var(--color-ink-faint) 20%,
+    var(--color-ink) 50%,
+    var(--color-ink-faint) 80%
+  );
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: thinking-shimmer 2.2s linear infinite;
+}
+
+@keyframes thinking-shimmer {
+  from {
+    background-position: 130% 0;
+  }
+  to {
+    background-position: -70% 0;
+  }
+}
+
 /* Understated overlay scrollbars, like AppKit */
 *::-webkit-scrollbar {
   width: 9px;
