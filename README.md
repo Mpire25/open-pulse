@@ -122,5 +122,11 @@ Renderer (React)  ──IPC──▶  Main process  ──HTTPS──▶  health
 - When you use the assistant, the health metrics needed to answer your question
   are sent to the ChatGPT Codex endpoint through your signed-in account.
 
+## Acknowledgements
+
+OpenPulse was originally inspired by [noop](https://github.com/ParthJadhav/noop)
+for WHOOP and also took ideas from
+[FlavioAdamo/openfit](https://github.com/FlavioAdamo/openfit).
+
 > OpenPulse is an independent project and is not affiliated with or endorsed by
 > Google or OpenAI. It is not a medical device; do not use it for diagnosis.
