@@ -66,11 +66,18 @@ export function ChatPanel({ chat, codexConnected, onOpenSettings, compact }: Cha
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div ref={scrollRef} className={cn('flex-1 overflow-y-auto pb-4', compact && 'px-4')}>
+      <div ref={scrollRef} className="flex-1 overflow-y-auto pb-4">
         {empty ? (
-          <EmptyState compact={compact} onPick={(s) => send(s)} />
+          <div className={cn('h-full', compact ? 'px-4' : 'mx-auto w-full max-w-[820px] px-6')}>
+            <EmptyState compact={compact} onPick={(s) => send(s)} />
+          </div>
         ) : (
-          <div className="flex flex-col gap-5 py-3">
+          <div
+            className={cn(
+              'flex flex-col gap-5 py-3',
+              compact ? 'px-4' : 'mx-auto w-full max-w-[820px] px-6'
+            )}
+          >
             <AnimatePresence initial={false}>
               {turns.map((turn) => (
                 <Bubble key={turn.id} turn={turn} compact={compact} />
@@ -80,7 +87,7 @@ export function ChatPanel({ chat, codexConnected, onOpenSettings, compact }: Cha
         )}
       </div>
 
-      <div className={cn('pb-4 pt-1', compact && 'px-3')}>
+      <div className={cn('pb-4 pt-1', compact ? 'px-3' : 'mx-auto w-full max-w-[820px] px-6')}>
         <div className="flex items-end gap-2 rounded-[18px] border border-hairline bg-panel/80 p-2 pl-4 shadow-[0_12px_40px_-24px_rgb(0_0_0/0.9)] backdrop-blur-xl transition-colors focus-within:border-hairline-strong">
           <textarea
             ref={inputRef}
@@ -139,15 +146,14 @@ function Bubble({ turn, compact }: { turn: ChatTurn; compact?: boolean }): React
         <div className={cn('w-full min-w-0 select-text', compact ? 'max-w-full' : 'max-w-[88%]')}>
           {turn.toolLabel && !turn.text ? (
             <ToolThinking label={turn.toolLabel} />
+          ) : turn.streaming && !turn.text ? (
+            <ToolThinking label="Thinking" />
           ) : turn.error ? (
             <div className="rounded-[16px] border border-danger/30 bg-danger/10 px-4 py-3 text-[13px] text-danger">
               {turn.text}
             </div>
           ) : (
-            <>
-              <Markdownish text={turn.text} />
-              {turn.streaming && <span className="ml-0.5 inline-block h-4 w-[2px] translate-y-1 animate-pulse bg-accent" />}
-            </>
+            <Markdownish text={turn.text} />
           )}
         </div>
       )}
@@ -158,10 +164,7 @@ function Bubble({ turn, compact }: { turn: ChatTurn; compact?: boolean }): React
 function ToolThinking({ label }: { label: string }): React.JSX.Element {
   return (
     <div className="flex items-center gap-2 text-[13px] text-ink-dim">
-      <span className="relative flex h-2 w-2">
-        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-accent opacity-60" />
-        <span className="relative inline-flex h-2 w-2 rounded-full bg-accent" />
-      </span>
+      <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-accent/80" />
       {label}…
     </div>
   )
