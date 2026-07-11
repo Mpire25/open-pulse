@@ -11,8 +11,8 @@ interface AssistantViewProps {
 
 export function AssistantView({ chat, codex, onOpenSettings }: AssistantViewProps): React.JSX.Element {
   return (
-    <div className="mx-auto flex h-full max-w-[820px] flex-col px-6">
-      <div className="flex items-center justify-between pb-2 pt-1">
+    <div className="flex h-full w-full flex-col">
+      <div className="mx-auto flex w-full max-w-[820px] items-center justify-between px-6 pb-2 pt-1">
         <div className="flex items-center gap-2">
           <div className="grid h-6 w-6 place-items-center rounded-lg bg-accent-soft">
             <Sparkle size={14} weight="fill" className="text-accent" />
