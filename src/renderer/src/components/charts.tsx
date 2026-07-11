@@ -94,6 +94,8 @@ function axisNumber(n: number): string {
 // ---------------------------------------------------------------------------
 // Columns — hourly buckets and N-day trends
 
+const MAX_KEYBOARD_SELECTABLE_POINTS = 60
+
 export interface ColumnDatum {
   key: string
   /** Tooltip title, e.g. "2 PM" or "Tue, Jun 30" */
@@ -140,6 +142,7 @@ export function ColumnChart({
   const rawMax = Math.max(goal?.value ?? 0, ...data.map((d) => d.value ?? 0))
   const max = niceMax(rawMax)
   const band = data.length > 0 ? plotW / data.length : 0
+  const keyboardSelectionEnabled = data.length <= MAX_KEYBOARD_SELECTABLE_POINTS
   const barW = Math.min(24, Math.max(3, band - 2))
   const y = (v: number): number => pad.top + plotH * (1 - v / max)
 
@@ -236,47 +239,50 @@ export function ColumnChart({
           )}
 
           {/* Full-band hit targets, larger than the marks */}
-          {data.map((d, i) => (
-            <rect
-              key={`h-${d.key}`}
-              x={pad.left + band * i}
-              y={0}
-              width={band}
-              height={height}
-              fill="transparent"
-              className={onSelect && d.value != null ? 'cursor-pointer' : undefined}
-              role={onSelect && d.value != null ? 'button' : undefined}
-              tabIndex={onSelect && d.value != null ? 0 : undefined}
-              aria-label={onSelect && d.value != null ? `View ${d.label}` : undefined}
-              onPointerMove={() => {
-                setHovered(i)
-                setTip({
-                  x: pad.left + band * i + band / 2,
-                  y: d.value != null ? y(d.value) : y(0),
-                  title: d.label,
-                  rows: [
-                    {
-                      label: unitLabel,
-                      value: d.value != null ? format(d.value) : 'No data',
-                      color: d.value != null ? color : undefined
-                    }
-                  ]
-                })
-              }}
-              onPointerLeave={() => {
-                setHovered(null)
-                setTip(null)
-              }}
-              onClick={() => {
-                if (d.value != null) onSelect?.(d)
-              }}
-              onKeyDown={(event) => {
-                if (d.value == null || !onSelect || (event.key !== 'Enter' && event.key !== ' ')) return
-                event.preventDefault()
-                onSelect(d)
-              }}
-            />
-          ))}
+          {data.map((d, i) => {
+            const keyboardSelectable = keyboardSelectionEnabled && onSelect != null && d.value != null
+            return (
+              <rect
+                key={`h-${d.key}`}
+                x={pad.left + band * i}
+                y={0}
+                width={band}
+                height={height}
+                fill="transparent"
+                className={onSelect && d.value != null ? 'cursor-pointer' : undefined}
+                role={keyboardSelectable ? 'button' : undefined}
+                tabIndex={keyboardSelectable ? 0 : undefined}
+                aria-label={keyboardSelectable ? `View ${d.label}` : undefined}
+                onPointerMove={() => {
+                  setHovered(i)
+                  setTip({
+                    x: pad.left + band * i + band / 2,
+                    y: d.value != null ? y(d.value) : y(0),
+                    title: d.label,
+                    rows: [
+                      {
+                        label: unitLabel,
+                        value: d.value != null ? format(d.value) : 'No data',
+                        color: d.value != null ? color : undefined
+                      }
+                    ]
+                  })
+                }}
+                onPointerLeave={() => {
+                  setHovered(null)
+                  setTip(null)
+                }}
+                onClick={() => {
+                  if (d.value != null) onSelect?.(d)
+                }}
+                onKeyDown={(event) => {
+                  if (!keyboardSelectable || !onSelect || (event.key !== 'Enter' && event.key !== ' ')) return
+                  event.preventDefault()
+                  onSelect(d)
+                }}
+              />
+            )
+          })}
         </svg>
       )}
       {tip && <Tip tip={tip} width={width} />}
@@ -335,6 +341,7 @@ export function TrendLine({
   const plotH = height - pad.top - pad.bottom
 
   const present = data.filter((d): d is LinePoint & { value: number } => d.value != null)
+  const keyboardSelectionEnabled = data.length <= MAX_KEYBOARD_SELECTABLE_POINTS
   const values = present.map((d) => d.value)
   const lo = values.length ? Math.min(...values, baseline?.value ?? Infinity) : 0
   const hi = values.length ? Math.max(...values, baseline?.value ?? -Infinity) : 1
@@ -512,6 +519,7 @@ export function TrendLine({
               const left = index === 0 ? 0 : (x(index - 1) + x(index)) / 2
               const right = index === data.length - 1 ? plotW : (x(index) + x(index + 1)) / 2
               const selectable = point.value != null
+              const keyboardSelectable = selectable && keyboardSelectionEnabled
               return (
                 <rect
                   key={`hit-${point.date}-${index}`}
@@ -521,9 +529,9 @@ export function TrendLine({
                   height={height}
                   fill="transparent"
                   className={selectable ? 'cursor-pointer' : undefined}
-                  role={selectable ? 'button' : undefined}
-                  tabIndex={selectable ? 0 : undefined}
-                  aria-label={selectable ? `View ${point.label}` : undefined}
+                  role={keyboardSelectable ? 'button' : undefined}
+                  tabIndex={keyboardSelectable ? 0 : undefined}
+                  aria-label={keyboardSelectable ? `View ${point.label}` : undefined}
                   onPointerMove={() => {
                     if (!selectable) return
                     setCursor(index)
@@ -542,7 +550,7 @@ export function TrendLine({
                     if (selectable) onSelect(point)
                   }}
                   onKeyDown={(event) => {
-                    if (!selectable || (event.key !== 'Enter' && event.key !== ' ')) return
+                    if (!keyboardSelectable || (event.key !== 'Enter' && event.key !== ' ')) return
                     event.preventDefault()
                     onSelect(point)
                   }}

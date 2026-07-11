@@ -46,10 +46,7 @@ export class TrackpadNavigationGesture {
   update(deltaX: number, deltaY: number): TrackpadGestureResult {
     const absX = Math.abs(deltaX)
     if (!isHorizontalTrackpadDelta(deltaX, deltaY)) {
-      if (absX < 1) {
-        this.previousAbsX = absX
-        if (this.triggered) this.readyForNextSameDirection = true
-      }
+      if (absX < 1) this.previousAbsX = absX
       return { capture: false, navigation: null }
     }
 

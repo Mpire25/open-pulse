@@ -6,6 +6,11 @@ import {
 } from '@/lib/trackpad-navigation'
 
 const GESTURE_END_DELAY_MS = 160
+const EDITABLE_SELECTOR = 'input, textarea, select, [contenteditable]:not([contenteditable="false"])'
+
+function isEditableTarget(target: EventTarget | null): boolean {
+  return target instanceof Element && target.closest(EDITABLE_SELECTOR) != null
+}
 
 function canScrollHorizontally(target: EventTarget | null, deltaX: number): boolean {
   if (!(target instanceof Element)) return false
@@ -44,6 +49,11 @@ export function useTrackpadHistoryNavigation(): void {
     const handleWheel = (event: WheelEvent): void => {
       // Trackpads report pixel deltas. Leave line/page-based mouse wheels alone.
       if (event.deltaMode !== WheelEvent.DOM_DELTA_PIXEL) return
+      if (isEditableTarget(event.target)) {
+        gesture.reset()
+        scrollGesture.reset()
+        return
+      }
 
       const startsNewGesture = Math.abs(event.deltaX) < 1 && Math.abs(event.deltaY) < 1
       const horizontalInput = isHorizontalTrackpadDelta(event.deltaX, event.deltaY)

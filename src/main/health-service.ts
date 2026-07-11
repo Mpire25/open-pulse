@@ -48,6 +48,7 @@ import {
   type RollupPoint
 } from './health-api'
 import {
+  clearFetched,
   fetchedAt,
   markAllStale,
   markFetched,
@@ -60,6 +61,11 @@ import {
   setSleep,
   setWorkouts
 } from './metric-store'
+import {
+  isPartialFetchCoolingDown,
+  partialFetchGroupId,
+  valuesToMerge
+} from './group-cache'
 import {
   demoActivityIntraday,
   demoBodyMeasurements,
@@ -119,11 +125,13 @@ const TTL_RECENT_MS = 30 * 60_000 // late device syncs still land on recent days
 
 function isFresh(group: string, date: string, now = Date.now()): boolean {
   const at = fetchedAt(group, date)
-  if (at == null) return false
-  const today = todayIso()
-  if (date >= today) return now - at < TTL_TODAY_MS
-  if (date >= shiftIsoDate(today, -2)) return now - at < TTL_RECENT_MS
-  return true // settled history: only a forced refresh refetches
+  if (at != null) {
+    const today = todayIso()
+    if (date >= today) return now - at < TTL_TODAY_MS
+    if (date >= shiftIsoDate(today, -2)) return now - at < TTL_RECENT_MS
+    return true // settled history: only a forced refresh refetches
+  }
+  return isPartialFetchCoolingDown(fetchedAt(partialFetchGroupId(group), date), now)
 }
 
 /** Small spans are what the user is looking at; long spans are backfill. */
@@ -154,7 +162,17 @@ function durationSeconds(value: unknown): number {
 interface FetchGroup {
   id: string
   metrics: MetricKey[]
-  fetch: (token: string, start: string, endExclusive: string, priority: Priority) => Promise<Map<string, DayValues>>
+  fetch: (
+    token: string,
+    start: string,
+    endExclusive: string,
+    priority: Priority
+  ) => Promise<Map<string, DayValues> | PartialFetchResult>
+}
+
+interface PartialFetchResult {
+  values: Map<string, DayValues>
+  complete: false
 }
 
 function rollupGroup(
@@ -286,12 +304,14 @@ const GROUPS: FetchGroup[] = [
     id: 'nutrition-v6',
     metrics: ['caloriesIn', 'proteinG', 'carbsG', 'fatG', 'fiberG', 'saturatedFatG', 'sodiumG', 'sugarG'],
     fetch: async (token, start, endExclusive, priority) => {
-      const [points, rawPoints] = await Promise.all([
+      const [points, rawResult] = await Promise.all([
         dailyRollUp(token, 'nutrition-log', start, endExclusive, priority),
-        listNutritionRawData(token, start, endExclusive, priority).catch((error) => {
-          console.error(`[health] raw nutrition fallback failed for ${start}..${endExclusive}:`, error)
-          return []
-        })
+        listNutritionRawData(token, start, endExclusive, priority)
+          .then((values) => ({ values, complete: true as const }))
+          .catch((error) => {
+            console.error(`[health] raw nutrition fallback failed for ${start}..${endExclusive}:`, error)
+            return { values: [], complete: false as const }
+          })
       ])
       const map = new Map<string, DayValues>()
       for (const p of points) {
@@ -314,7 +334,7 @@ const GROUPS: FetchGroup[] = [
         })
       }
 
-      for (const [date, rawValues] of parseNutritionLogTotals(rawPoints)) {
+      for (const [date, rawValues] of parseNutritionLogTotals(rawResult.values)) {
         const values = map.get(date) ?? {}
         for (const metric of ['caloriesIn', 'proteinG', 'carbsG', 'fatG', 'fiberG', 'saturatedFatG', 'sodiumG', 'sugarG'] as const) {
           if (values[metric] == null && rawValues[metric] != null) values[metric] = rawValues[metric]
@@ -322,7 +342,7 @@ const GROUPS: FetchGroup[] = [
         map.set(date, values)
       }
 
-      return map
+      return rawResult.complete ? map : { values: map, complete: false }
     }
   },
   dailyRecordGroup('rhr', 'daily-resting-heart-rate', 'dailyRestingHeartRate', ['restingHeartRate'], (r) => ({
@@ -372,14 +392,20 @@ async function ensureGroup(token: string, group: FetchGroup, start: string, end:
   const spanStart = missing[0]
   const spanEnd = missing[missing.length - 1]
   const spanDates = listDates(spanStart, spanEnd)
-  const map = await group.fetch(token, spanStart, shiftIsoDate(spanEnd, 1), spanPriority(spanDates.length))
+  const result = await group.fetch(token, spanStart, shiftIsoDate(spanEnd, 1), spanPriority(spanDates.length))
+  const complete = result instanceof Map
+  const map = complete ? result : result.values
   for (const date of spanDates) {
-    const fetched = map.get(date)
-    const merged: DayValues = {}
-    for (const key of group.metrics) merged[key] = fetched?.[key] ?? null
-    mergeValues(date, merged)
+    mergeValues(date, valuesToMerge(group.metrics, map.get(date), complete))
   }
-  markFetched(group.id, spanDates)
+  const partialGroup = partialFetchGroupId(group.id)
+  if (complete) {
+    clearFetched(partialGroup, spanDates)
+    markFetched(group.id, spanDates)
+  } else {
+    clearFetched(group.id, spanDates)
+    markFetched(partialGroup, spanDates)
+  }
 }
 
 const inFlight = new Map<string, Promise<void>>()

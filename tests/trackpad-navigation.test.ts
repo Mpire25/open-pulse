@@ -61,6 +61,15 @@ describe('trackpad history navigation', () => {
     expect(gesture.update(-80, 0).navigation).toBe('back')
   })
 
+  test('does not re-arm from a vertical interruption within one swipe', () => {
+    const gesture = new TrackpadNavigationGesture()
+
+    expect(gesture.update(-90, 0).navigation).toBe('back')
+    expect(gesture.update(-0.5, 20).navigation).toBeNull()
+    expect(gesture.update(-20, 1).navigation).toBeNull()
+    expect(gesture.update(-60, 1).navigation).toBeNull()
+  })
+
   test('restarts accumulation when the swipe changes direction', () => {
     const gesture = new TrackpadNavigationGesture()
 
