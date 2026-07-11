@@ -86,8 +86,10 @@ const api = {
     }
   },
   ai: {
-    send: (chatId: string, history: ChatMessage[]): Promise<void> =>
-      ipcRenderer.invoke('ai:send', chatId, history),
+    send: (chatId: string, runId: string, history: ChatMessage[]): Promise<void> =>
+      ipcRenderer.invoke('ai:send', chatId, runId, history),
+    cancel: (chatId: string, runId: string): Promise<void> =>
+      ipcRenderer.invoke('ai:cancel', chatId, runId),
     onEvent: (callback: (event: AiEvent) => void): (() => void) => {
       const listener = (_: unknown, event: AiEvent): void => callback(event)
       ipcRenderer.on('ai:event', listener)
