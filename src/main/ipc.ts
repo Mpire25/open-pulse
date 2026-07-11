@@ -29,7 +29,7 @@ import {
 } from './health-service'
 import { setApiActivityListener } from './health-api'
 import { getSettings, updateSettings } from './store'
-import { runChat } from './codex-chat'
+import { cancelAllChats, cancelChat, runChat } from './codex-chat'
 
 interface TrustedRenderer {
   webContents: WebContents
@@ -131,20 +131,30 @@ export function registerIpc(): void {
     // Wipe the previous account before new credentials can be persisted, then
     // rotate again so any work started while OAuth was open is also stale.
     abortAllHealthRequests()
+    cancelAllChats('Health account changed.')
     resetHealthAccount()
     const status = await connectGoogle()
+    abortAllHealthRequests()
+    cancelAllChats('Health account changed.')
     resetHealthAccount()
     return status
   })
   handle('google:disconnect', () => {
     abortAllHealthRequests()
+    cancelAllChats('Health account disconnected.')
     disconnectGoogle()
     resetHealthAccount()
   })
 
   handle('codex:status', () => getCodexStatus())
-  handle('codex:connect', () => connectCodex())
-  handle('codex:disconnect', () => disconnectCodex())
+  handle('codex:connect', () => {
+    cancelAllChats('ChatGPT sign-in changed.')
+    return connectCodex()
+  })
+  handle('codex:disconnect', () => {
+    cancelAllChats('ChatGPT disconnected.')
+    disconnectCodex()
+  })
 
   handle('health:cancel', (event, requestId: string) => {
     healthControllers.get(healthRequestKey(event, requestId))?.abort()
@@ -189,8 +199,11 @@ export function registerIpc(): void {
     sendToTrustedRenderers('health:activity', { pending })
   })
 
-  handle('ai:send', (event, chatId: string, history: ChatMessage[]) => {
+  handle('ai:send', (event, chatId: string, runId: string, history: ChatMessage[]) => {
     // Fire and forget: progress streams back over 'ai:event'.
-    void runChat(event.sender, chatId, history)
+    void runChat(event.sender, chatId, runId, history)
+  })
+  handle('ai:cancel', (event, chatId: string, runId: string) => {
+    cancelChat(event.sender, chatId, runId)
   })
 }
