@@ -217,6 +217,47 @@ function maxRollupRangeDays(dataType: string): number {
   return SHORT_ROLLUP_DATA_TYPES.has(dataType) ? 14 : 90
 }
 
+const ROLLUP_VALUE_FIELDS: Record<string, string> = {
+  steps: 'steps/countSum',
+  'total-calories': 'totalCalories/kcalSum',
+  distance: 'distance/millimetersSum',
+  floors: 'floors/countSum',
+  'active-minutes': 'activeMinutes/activeMinutesRollupByActivityLevel',
+  'active-zone-minutes': 'activeZoneMinutes',
+  'sedentary-period': 'sedentaryPeriod/durationSum',
+  weight: 'weight/weightGramsAvg',
+  'body-fat': 'bodyFat/bodyFatPercentageAvg',
+  'hydration-log': 'hydrationLog/amountConsumed/millilitersSum',
+  'nutrition-log': 'nutritionLog',
+  'time-in-heart-rate-zone': 'timeInHeartRateZone/timeInHeartRateZones',
+  'calories-in-heart-rate-zone': 'caloriesInHeartRateZone/caloriesInHeartRateZones',
+  'active-energy-burned': 'activeEnergyBurned/kcalSum'
+}
+
+const DATA_POINT_FIELDS: Record<string, string> = {
+  steps: 'steps',
+  'heart-rate': 'heartRate',
+  sleep: 'sleep',
+  exercise: 'dataPointName,exercise',
+  'daily-resting-heart-rate': 'dailyRestingHeartRate',
+  'daily-heart-rate-variability': 'dailyHeartRateVariability',
+  'daily-oxygen-saturation': 'dailyOxygenSaturation',
+  'daily-respiratory-rate': 'dailyRespiratoryRate',
+  'daily-sleep-temperature-derivations': 'dailySleepTemperatureDerivations',
+  'daily-heart-rate-zones': 'dailyHeartRateZones'
+}
+
+const RAW_DATA_POINT_FIELDS: Record<string, string> = {
+  'nutrition-log': 'name,nutritionLog',
+  weight: 'name,weight',
+  height: 'height'
+}
+
+function withFields(path: string, fields: string): string {
+  const separator = path.includes('?') ? '&' : '?'
+  return `${path}${separator}${new URLSearchParams({ fields })}`
+}
+
 /**
  * Daily rollup for a data type over a closed civil date range
  * (`startDate`..`endDateExclusive`, YYYY-MM-DD).
@@ -247,7 +288,10 @@ export async function dailyRollUp(
     }
     const json = await request<{ rollupDataPoints?: RollupPoint[] }>(
       token,
-      `/users/me/dataTypes/${dataType}/dataPoints:dailyRollUp`,
+      withFields(
+        `/users/me/dataTypes/${dataType}/dataPoints:dailyRollUp`,
+        `rollupDataPoints(civilStartTime,${ROLLUP_VALUE_FIELDS[dataType] ?? dataType.replaceAll('-', '')})`
+      ),
       { method: 'POST', body: JSON.stringify(body), signal },
       priority
     )
@@ -287,7 +331,10 @@ export async function physicalRollUp(
     }
     const json = await request<{ rollupDataPoints?: RollupPoint[]; nextPageToken?: string }>(
       token,
-      `/users/me/dataTypes/${dataType}/dataPoints:rollUp`,
+      withFields(
+        `/users/me/dataTypes/${dataType}/dataPoints:rollUp`,
+        `nextPageToken,rollupDataPoints(startTime,${ROLLUP_VALUE_FIELDS[dataType] ?? dataType.replaceAll('-', '')})`
+      ),
       { method: 'POST', body: JSON.stringify(body), signal },
       priority
     )
@@ -352,12 +399,14 @@ export async function listData(
   endDateExclusive: string,
   dataSourceFamily: 'all-sources' | 'google-wearables' = 'all-sources',
   priority: Priority = 1,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  responseFields?: string
 ): Promise<RawDataPoint[]> {
   const params = new URLSearchParams({
     filter: dataFilter(dataType, kind, startDate, endDateExclusive),
     pageSize: kind === 'sleep' || kind === 'session' ? '25' : '10000',
-    dataSourceFamily: `users/me/dataSourceFamilies/${dataSourceFamily}`
+    dataSourceFamily: `users/me/dataSourceFamilies/${dataSourceFamily}`,
+    fields: `nextPageToken,dataPoints(${responseFields ?? DATA_POINT_FIELDS[dataType] ?? dataType.replaceAll('-', '')})`
   })
   const points: RawDataPoint[] = []
   let pageToken = ''
@@ -389,11 +438,13 @@ export async function listRawData(
   startDate: string,
   endDateExclusive: string,
   priority: Priority = 1,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  responseFields?: string
 ): Promise<RawDataPoint[]> {
   const params = new URLSearchParams({
     filter: dataFilter(dataType, kind, startDate, endDateExclusive),
-    pageSize: kind === 'sleep' || kind === 'session' ? '25' : '10000'
+    pageSize: kind === 'sleep' || kind === 'session' ? '25' : '10000',
+    fields: `nextPageToken,dataPoints(${responseFields ?? RAW_DATA_POINT_FIELDS[dataType] ?? dataType.replaceAll('-', '')})`
   })
   const points: RawDataPoint[] = []
   let pageToken = ''
@@ -430,7 +481,7 @@ export interface ApiPairedDevice {
 export async function listPairedDevices(token: string, signal?: AbortSignal): Promise<ApiPairedDevice[]> {
   const json = await request<{ pairedDevices?: ApiPairedDevice[] }>(
     token,
-    '/users/me/pairedDevices?pageSize=100',
+    '/users/me/pairedDevices?pageSize=100&fields=pairedDevices(deviceType,batteryStatus,batteryLevel,lastSyncTime,deviceVersion,features)',
     { signal },
     0
   )

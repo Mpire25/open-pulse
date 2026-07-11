@@ -646,7 +646,8 @@ async function ensureSleepSummaryRange(
     shiftIsoDate(spanEnd, 1),
     'google-wearables',
     spanPriority(spanDates.length),
-    signal
+    signal,
+    'sleep(interval(startTime,endTime,civilEndTime),summary(minutesAsleep,minutesInSleepPeriod),metadata(nap))'
   )
   assertCurrentAccount(generation)
   const byDate = sleepByDate(points)
