@@ -491,7 +491,3 @@ export async function listPairedDevices(token: string, signal?: AbortSignal): Pr
   )
   return json.pairedDevices ?? []
 }
-
-export async function getProfile(token: string): Promise<Record<string, unknown>> {
-  return request(token, '/users/me/profile')
-}
