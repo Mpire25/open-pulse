@@ -13,7 +13,7 @@ import type { OpenMetric } from '@/lib/metric-navigation'
 import { fade } from '@/lib/motion'
 import type { MetricKey } from '@shared/types'
 
-const VITAL_KEYS: MetricKey[] = ['restingHeartRate', 'hrvMs', 'spo2Pct', 'breathingRate', 'skinTempDeltaC', 'vo2Max']
+const VITAL_KEYS: MetricKey[] = ['restingHeartRate', 'hrvMs', 'spo2Pct', 'breathingRate', 'skinTempDeltaC']
 
 interface HeartViewProps {
   date: string

@@ -20,7 +20,7 @@ Built with Electron + React 19, Radix primitives, Tailwind v4, and Framer Motion
   logged workouts (duration, calories, avg HR, zone minutes), and 14-day trends
   with goal lines.
 - **Health** — intraday heart rate plus dedicated trend charts for resting HR,
-  HRV, SpO₂, respiratory rate, skin-temperature deviation, and VO₂ max — each
+  HRV, SpO₂, respiratory rate, and skin-temperature deviation — each
   drawn against your personal 7-day average.
 - **Sleep** — stage hypnogram with hover timing, duration vs goal, efficiency,
   a 14-night duration chart, and a night-by-night stage-mix history.

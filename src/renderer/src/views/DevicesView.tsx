@@ -30,7 +30,7 @@ import fitbitAir from '@/assets/fitbit-air.png'
 // What the coverage panel checks, grouped the way a person thinks about it.
 const COVERAGE: Array<{ label: string; icon: Icon; keys: MetricKey[] }> = [
   { label: 'Movement', icon: PersonSimpleRun, keys: ['steps', 'distanceKm', 'activeZoneMinutes', 'caloriesOut'] },
-  { label: 'Heart', icon: Heartbeat, keys: ['restingHeartRate', 'hrvMs', 'vo2Max'] },
+  { label: 'Heart', icon: Heartbeat, keys: ['restingHeartRate', 'hrvMs'] },
   { label: 'Sleep', icon: Moon, keys: ['sleepMinutes', 'sleepEfficiency'] },
   { label: 'Night signals', icon: Pulse, keys: ['spo2Pct', 'breathingRate', 'skinTempDeltaC'] },
   { label: 'Body & nutrition', icon: Scales, keys: ['weightKg', 'bodyFatPct', 'waterMl', 'caloriesIn'] }

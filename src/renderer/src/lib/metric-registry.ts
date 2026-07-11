@@ -225,20 +225,6 @@ export const METRICS: Record<MetricKey, MetricDef> = {
     deltaMode: 'abs',
     hint: 'Nightly deviation from your device baseline'
   },
-  vo2Max: {
-    key: 'vo2Max',
-    label: 'Cardio fitness',
-    shortLabel: 'VO2 max',
-    unit: 'VO2 max',
-    icon: Gauge,
-    color: 'var(--color-activity)',
-    domain: 'heart',
-    aggregate: 'last',
-    chart: 'line',
-    upIsGood: true,
-    format: one,
-    hint: 'Estimated maximal oxygen uptake'
-  },
   sleepMinutes: {
     key: 'sleepMinutes',
     label: 'Sleep duration',

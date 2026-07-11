@@ -80,10 +80,7 @@ import {
   parseNutritionLogs,
   parseNutritionLogTotals
 } from './body-nutrition-detail'
-import {
-  parseHeartZones,
-  parseVo2Detail
-} from './heart-detail'
+import { parseHeartZones } from './heart-detail'
 import { mapSleep, mapSleepRespiratory, type MappedRespiratorySummary } from './sleep-detail'
 import { nutrientGrams, nutrientMineralGrams } from './nutrition'
 import { parseExerciseTcx } from './tcx'
@@ -350,8 +347,7 @@ const GROUPS: FetchGroup[] = [
       const baseline = num(r.baselineTemperatureCelsius)
       return { skinTempDeltaC: nightly == null || baseline == null ? null : +(nightly - baseline).toFixed(2) }
     }
-  ),
-  dailyRecordGroup('vo2', 'daily-vo2-max', 'dailyVo2Max', ['vo2Max'], (r) => ({ vo2Max: num(r.vo2Max) }))
+  )
 ]
 
 const GROUP_BY_METRIC = new Map<MetricKey, FetchGroup>()
@@ -495,7 +491,6 @@ interface RawWorkoutMetrics {
   averageHeartRateBeatsPerMinute?: string | number
   elevationGainMillimeters?: number
   activeZoneMinutes?: string | number
-  runVo2Max?: number
   totalSwimLengths?: number
 }
 
@@ -594,7 +589,6 @@ function mapWorkout(point: RawDataPoint): Workout | null {
     averageSpeedKph: metricSpeedKph(summary),
     averagePaceSecPerKm: metricPaceSecPerKm(summary),
     elevationGainM: metricElevationM(summary),
-    runVo2Max: num(summary.runVo2Max),
     totalSwimLengths: num(summary.totalSwimLengths),
     heartRateZones: zones
       ? {
@@ -934,8 +928,6 @@ export async function getActivityIntraday(
   return result
 }
 
-const HEART_DETAIL_WINDOW_MINUTES = 30
-
 export async function getHeartDetail(
   date: string,
   metric: HeartDetailMetric,
@@ -949,19 +941,9 @@ export async function getHeartDetail(
   const cached = peekDay(d)?.heartDetails?.[metric]
   if (!force && cached && isFresh(group, d)) return cached
 
-  const { startTime, endTime, dayEndTime } = physicalDayRange(d)
-  const bounds = { startTime, observedEndTime: endTime, dayEndTime }
   let result: HeartDetailResult
 
   switch (metric) {
-    case 'vo2Max': {
-      const [samples, daily] = await Promise.all([
-        listData(token, 'vo2-max', 'sample', d, shiftIsoDate(d, 1), 'all-sources', 0),
-        listData(token, 'daily-vo2-max', 'daily', d, shiftIsoDate(d, 1), 'all-sources', 0)
-      ])
-      result = parseVo2Detail(d, samples, daily, bounds, HEART_DETAIL_WINDOW_MINUTES)
-      break
-    }
     case 'restingHeartRate': {
       const [dailyZones, timeRollups, calorieRollups] = await Promise.all([
         listData(token, 'daily-heart-rate-zones', 'daily', d, shiftIsoDate(d, 1), 'all-sources', 0),

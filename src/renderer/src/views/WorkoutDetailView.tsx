@@ -510,9 +510,6 @@ function performanceItems(workout: Workout): Array<{ label: string; value: strin
 function specializedItems(workout: Workout): DetailItem[] {
   const mobility = workout.mobility
   return [
-    ...(workout.runVo2Max != null
-      ? [{ label: 'Run VO₂ max', value: `${workout.runVo2Max.toFixed(1)} ml/kg/min`, icon: <Gauge size={16} weight="fill" /> }]
-      : []),
     ...(mobility?.cadenceStepsPerMin != null
       ? [{ label: 'Cadence', value: `${formatInt(mobility.cadenceStepsPerMin)} spm`, icon: <Footprints size={16} weight="fill" /> }]
       : []),

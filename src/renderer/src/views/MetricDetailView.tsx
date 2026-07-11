@@ -32,7 +32,6 @@ import type {
   ActivityIntradayMetric,
   ActivityIntradayResult,
   Goals,
-  HeartDetailMetric,
   HeartDetailResult,
   MetricKey
 } from '@shared/types'
@@ -81,7 +80,7 @@ export function MetricDetailView({
   const wantsHeartDetail = range === 'D' && heartMetric != null
   const intraday = useIntraday(date, wantsIntraday)
   const activityIntraday = useActivityIntraday(date, activityMetric ?? 'distanceKm', wantsActivityIntraday)
-  const heartDetail = useHeartDetail(date, heartMetric ?? 'vo2Max', wantsHeartDetail)
+  const heartDetail = useHeartDetail(date, heartMetric ?? 'restingHeartRate', wantsHeartDetail)
 
   if (series.isError) {
     return <ErrorState message={series.error instanceof Error ? series.error.message : undefined} onRetry={() => void series.refetch()} />
@@ -174,8 +173,7 @@ function MetricDetailSkeleton({
     const hasTimeline =
       metricKey === 'steps' ||
       metricKey === 'restingHeartRate' ||
-      isActivityIntradayMetric(metricKey) ||
-      metricKey === 'vo2Max'
+      isActivityIntradayMetric(metricKey)
     const breakdownCount = metricKey === 'caloriesOut' ? 2 : ['activeMinutes', 'activeZoneMinutes'].includes(metricKey) ? 3 : 0
     return (
       <>
@@ -405,13 +403,6 @@ function DayDetail({
             pending={activityIntradayPending}
             error={activityIntradayError}
           />
-        ) : isHeartDetailMetric(metricKey) && metricKey !== 'restingHeartRate' ? (
-          <HeartMetricDetailPanel
-            metricKey={metricKey}
-            data={heartDetailData}
-            pending={heartDetailPending}
-            error={heartDetailError}
-          />
         ) : (
           <Panel className={`flex flex-col gap-3 p-5 ${CARD_HEIGHT.detail}`}>
             <SectionHeader title="In context" hint="The last 14 days, this day highlighted" />
@@ -531,95 +522,6 @@ function ActivityIntradayPanel({
       ) : (
         <div className="grid h-[190px] place-items-center text-[13px] text-ink-faint">
           No intraday {def.label.toLowerCase()} recorded for this day.
-        </div>
-      )}
-    </Panel>
-  )
-}
-
-function HeartDetailStats({ stats }: { stats: HeartDetailResult['stats'] }): React.JSX.Element | null {
-  if (stats.length === 0) return null
-  return (
-    <div
-      className="grid gap-x-5 gap-y-3 border-t border-hairline pt-3"
-      style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(125px, 1fr))' }}
-    >
-      {stats.map((item) => (
-        <div key={item.key} className="min-w-0">
-          <div className="truncate text-[10.5px] font-medium text-ink-faint">{item.label}</div>
-          <div className="mt-0.5 truncate font-mono text-[15px] font-medium text-ink">
-            {item.value}{' '}
-            {item.unit && <span className="text-[10.5px] text-ink-dim">{item.unit}</span>}
-          </div>
-        </div>
-      ))}
-    </div>
-  )
-}
-
-function HeartMetricDetailPanel({
-  metricKey,
-  data,
-  pending,
-  error
-}: {
-  metricKey: Exclude<HeartDetailMetric, 'restingHeartRate'>
-  data?: HeartDetailResult
-  pending: boolean
-  error: boolean
-}): React.JSX.Element {
-  const def = METRICS[metricKey]
-  const recorded = data?.points.some((point) => point.value != null) ?? false
-  const hasStats = (data?.stats.length ?? 0) > 0
-  return (
-    <Panel className={`flex flex-col gap-3 p-5 ${CARD_HEIGHT.detail}`}>
-      <SectionHeader
-        title={recorded ? 'Across the day' : 'Daily details'}
-        hint={
-          recorded
-            ? `${data?.windowMinutes ?? 30}-minute ${data?.sampleLabel ?? 'sample'} averages`
-            : 'What your device recorded'
-        }
-      />
-      {pending ? (
-        <>
-          <SkeletonChart height={170} columns={16} />
-          <div className="grid grid-cols-4 gap-4 border-t border-hairline pt-3" aria-hidden>
-            {Array.from({ length: 4 }, (_, index) => (
-              <div key={index} className="flex flex-col gap-2">
-                <SkeletonText className="w-20" />
-                <SkeletonText className="h-4 w-14" />
-              </div>
-            ))}
-          </div>
-        </>
-      ) : error ? (
-        <div className="grid h-[190px] place-items-center text-[13px] text-ink-faint">
-          Detailed heart data could not be loaded for this metric.
-        </div>
-      ) : recorded && data ? (
-        <>
-          <TrendLine
-            data={data.points.map((point) => ({
-              date: String(point.minute),
-              label: formatMinuteOfDay(point.minute),
-              value: point.value
-            }))}
-            color={def.color}
-            height={hasStats ? 170 : 210}
-            format={def.format}
-            unitLabel={data.sampleUnit ?? def.unit}
-            axisLabel={data.sampleUnit ?? def.unit}
-          />
-          <HeartDetailStats stats={data.stats} />
-        </>
-      ) : hasStats && data ? (
-        <div className="flex min-h-[190px] flex-col justify-center">
-          <HeartDetailStats stats={data.stats} />
-        </div>
-      ) : (
-        <div className="grid h-[190px] place-items-center text-[13px] text-ink-faint">
-          No detailed {def.label.toLowerCase()} data was recorded for this day.
         </div>
       )}
     </Panel>
