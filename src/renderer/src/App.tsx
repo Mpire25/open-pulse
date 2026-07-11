@@ -107,6 +107,12 @@ export default function App(): React.JSX.Element {
     applyNavigationEntry(entry)
   }
 
+  const replaceNavigation = (entry: NavigationEntry): void => {
+    if (sameNavigationEntry(currentNavigationEntry(), entry)) return
+    window.history.replaceState(entry, '')
+    applyNavigationEntry(entry)
+  }
+
   const navigateBack = (): void => {
     if (backNavigationPending.current) return
 
@@ -176,11 +182,18 @@ export default function App(): React.JSX.Element {
   }
 
   const selectDate = (date: string): void => {
-    navigate({
-      ...currentNavigationEntry(),
+    const entry = currentNavigationEntry()
+    const nextEntry: NavigationEntry = {
+      ...entry,
       selectedDate: date,
       selectedWorkout: null
-    })
+    }
+
+    if (entry.detailMetric || entry.sleepStagesOpen) {
+      replaceNavigation(nextEntry)
+    } else {
+      navigate(nextEntry)
+    }
   }
 
   const openMetric: OpenMetric = (metric, initialRange) => {
@@ -200,19 +213,24 @@ export default function App(): React.JSX.Element {
       ...entry,
       detailMetric: { ...entry.detailMetric, range }
     }
-    window.history.replaceState(nextEntry, '')
-    applyNavigationEntry(nextEntry)
+    replaceNavigation(nextEntry)
   }
 
   const selectMetricDate = (date: string): void => {
     const entry = currentNavigationEntry()
     if (!entry.detailMetric) return
 
-    navigate({
+    const nextEntry: NavigationEntry = {
       ...entry,
       selectedDate: date,
       detailMetric: { ...entry.detailMetric, range: 'D' }
-    })
+    }
+
+    if (entry.detailMetric.range === 'D') {
+      replaceNavigation(nextEntry)
+    } else {
+      navigate(nextEntry)
+    }
   }
 
   const openSleepStages = (): void => {
