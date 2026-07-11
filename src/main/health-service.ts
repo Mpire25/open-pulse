@@ -1357,9 +1357,6 @@ const DEVICES_TTL_MS = 5 * 60_000
 
 export async function getDevices(force = false, signal?: AbortSignal): Promise<PairedDevice[]> {
   const generation = healthAccountGeneration
-  const token = await getGoogleAccessToken()
-  assertCurrentAccount(generation)
-  if (!token) return demoDevices()
   if (
     !force &&
     devicesCache?.generation === generation &&
@@ -1367,6 +1364,9 @@ export async function getDevices(force = false, signal?: AbortSignal): Promise<P
   ) {
     return devicesCache.devices
   }
+  const token = await getGoogleAccessToken()
+  assertCurrentAccount(generation)
+  if (!token) return demoDevices()
   try {
     const devices = (await listPairedDevices(token, signal)).map((d) => ({
       name: d.displayName ?? d.model ?? d.deviceVersion ?? 'Tracker',
