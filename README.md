@@ -124,7 +124,7 @@ Renderer (React)  ──IPC──▶  Main process  ──HTTPS──▶  health
 
 ## Acknowledgements
 
-OpenPulse was originally inspired by [noop](https://github.com/ParthJadhav/noop)
+OpenPulse was originally inspired by [NOOP](https://github.com/ParthJadhav/noop)
 for WHOOP and also took ideas from
 [FlavioAdamo/openfit](https://github.com/FlavioAdamo/openfit).
 
