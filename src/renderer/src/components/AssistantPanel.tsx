@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { motion } from 'framer-motion'
+import { AnimatePresence, motion } from 'framer-motion'
 import { ClockCounterClockwise, Plus, Sparkle, X } from '@phosphor-icons/react'
 import { ChatPanel, type ChatState } from '@/components/ChatPanel'
 import { ChatHistory } from '@/components/ChatHistory'
@@ -85,17 +85,28 @@ export function AssistantPanel({
           </div>
         </div>
         <div className="min-h-0 flex-1">
-          {historyOpen ? (
-            <ChatHistory chat={chat} compact onNavigate={() => setHistoryOpen(false)} />
-          ) : (
-            <ChatPanel
-              chat={chat}
-              codexConnected={codexConnected}
-              onOpenSettings={onOpenSettings}
-              compact
-              autoFocus={open}
-            />
-          )}
+          <AnimatePresence initial={false} mode="wait">
+            <motion.div
+              key={historyOpen ? 'history' : 'chat'}
+              initial={{ opacity: 0, y: 4 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -4 }}
+              transition={{ duration: 0.12 }}
+              className="h-full"
+            >
+              {historyOpen ? (
+                <ChatHistory chat={chat} onNavigate={() => setHistoryOpen(false)} />
+              ) : (
+                <ChatPanel
+                  chat={chat}
+                  codexConnected={codexConnected}
+                  onOpenSettings={onOpenSettings}
+                  compact
+                  autoFocus={open}
+                />
+              )}
+            </motion.div>
+          </AnimatePresence>
         </div>
       </div>
     </motion.aside>
