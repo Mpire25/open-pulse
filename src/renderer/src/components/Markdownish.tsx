@@ -1,10 +1,10 @@
 import { memo } from 'react'
 
 // Minimal, dependency-free renderer for the light Markdown the model emits:
-// paragraphs, bullet lists, and **bold** / `code` inline spans.
+// paragraphs, bullet lists, **bold**, `code`, and safe HTTPS links.
 function renderInline(text: string): React.ReactNode[] {
   const nodes: React.ReactNode[] = []
-  const regex = /(\*\*[^*]+\*\*|`[^`]+`)/g
+  const regex = /(\*\*[^*]+\*\*|`[^`]+`|\[[^\]]+\]\(https:\/\/[^)\s]+\))/g
   let last = 0
   let match: RegExpExecArray | null
   let key = 0
@@ -17,12 +17,29 @@ function renderInline(text: string): React.ReactNode[] {
           {token.slice(2, -2)}
         </strong>
       )
-    } else {
+    } else if (token.startsWith('`')) {
       nodes.push(
         <code key={key++} className="rounded bg-white/10 px-1 py-0.5 font-mono text-[12px] text-ink">
           {token.slice(1, -1)}
         </code>
       )
+    } else {
+      const link = /^\[([^\]]+)\]\((https:\/\/[^)\s]+)\)$/.exec(token)
+      if (link) {
+        nodes.push(
+          <a
+            key={key++}
+            href={link[2]}
+            target="_blank"
+            rel="noreferrer"
+            className="font-medium text-accent underline decoration-accent/40 underline-offset-2 hover:decoration-accent"
+          >
+            {link[1]}
+          </a>
+        )
+      } else {
+        nodes.push(token)
+      }
     }
     last = match.index + token.length
   }
