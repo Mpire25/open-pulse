@@ -21,8 +21,7 @@ interface SleepViewProps {
 
 export function SleepView({ date, goals, onOpenMetric, onOpenStages, onSelectDate }: SleepViewProps): React.JSX.Element {
   const week = rangeEnding(date, 7)
-  const historyRange = rangeEnding(date, 30)
-  const nights = useSleepRange(historyRange.start, historyRange.end)
+  const nights = useSleepRange(week.start, week.end)
 
   const byDate = new Map((nights.data ?? []).map((n) => [n.date, n]))
   const night = byDate.get(date) ?? null

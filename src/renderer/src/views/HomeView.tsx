@@ -28,7 +28,6 @@ const HOME_METRICS: MetricKey[] = [
   'steps',
   'caloriesOut',
   'caloriesIn',
-  'sleepMinutes',
   'restingHeartRate',
   'hrvMs',
   'spo2Pct',
@@ -110,19 +109,19 @@ export function HomeView({ date, goals, onOpenMetric, onOpenWorkout, onNavigate 
               icon={<Moon size={15} weight="fill" style={{ color: 'var(--color-sleep)' }} />}
               label="Sleep"
               value={
-                series.isMetricPending('sleepMinutes') ? (
+                night.isPending ? (
                   <SkeletonText className="h-3.5 w-20" />
-                ) : today.sleepMinutes != null ? (
-                  formatMinutes(today.sleepMinutes)
+                ) : night.data ? (
+                  formatMinutes(night.data.minutesAsleep)
                 ) : (
                   'No data'
                 )
               }
               sub={
-                series.isMetricPending('sleepMinutes') ? (
+                night.isPending ? (
                   <SkeletonText className="w-28" />
-                ) : today.sleepMinutes != null ? (
-                  `${Math.round((today.sleepMinutes / goals.sleepMinutes) * 100)}% of ${formatMinutes(goals.sleepMinutes)} goal`
+                ) : night.data ? (
+                  `${Math.round((night.data.minutesAsleep / goals.sleepMinutes) * 100)}% of ${formatMinutes(goals.sleepMinutes)} goal`
                 ) : undefined
               }
               onClick={() => onNavigate('sleep')}

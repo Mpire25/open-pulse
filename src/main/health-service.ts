@@ -88,7 +88,7 @@ import {
   parseNutritionLogTotals
 } from './body-nutrition-detail'
 import { parseHeartZones } from './heart-detail'
-import { mapSleep, mapSleepRespiratory, type MappedRespiratorySummary } from './sleep-detail'
+import { mapSleep } from './sleep-detail'
 import { nutrientGrams, nutrientMineralGrams } from './nutrition'
 import { parseExerciseTcx } from './tcx'
 
@@ -450,47 +450,12 @@ function ensureGroupOnce(
 }
 
 // ---------------------------------------------------------------------------
-// Sleep sessions
+// Sleep summaries and sessions
 
-async function ensureSleepRange(
-  token: string,
-  start: string,
-  end: string,
-  force: boolean,
-  generation: number
-): Promise<void> {
-  const missing = listDates(start, end).filter((d) => force || !isFresh('sleep-v3', d))
-  if (missing.length === 0) return
-  const spanStart = missing[0]
-  const spanEnd = missing[missing.length - 1]
-  const spanDates = listDates(spanStart, spanEnd)
-  const [points, respiratoryPoints] = await Promise.all([
-    listData(
-      token,
-      'sleep',
-      'sleep',
-      spanStart,
-      shiftIsoDate(spanEnd, 1),
-      'google-wearables',
-      spanPriority(spanDates.length)
-    ),
-    listData(
-      token,
-      'respiratory-rate-sleep-summary',
-      'sample',
-      spanStart,
-      shiftIsoDate(spanEnd, 1),
-      'google-wearables',
-      spanPriority(spanDates.length)
-    ).catch((error) => {
-      console.error(`[health] sleep respiratory summary failed for ${spanStart}..${spanEnd}:`, error)
-      return []
-    })
-  ])
-  assertCurrentAccount(generation)
-  const respiratory = respiratoryPoints
-    .map(mapSleepRespiratory)
-    .filter((summary): summary is MappedRespiratorySummary => summary != null)
+const SLEEP_SUMMARY_GROUP = 'sleep-summary-v1'
+const SLEEP_DETAIL_GROUP = 'sleep-detail-v4'
+
+function sleepByDate(points: RawDataPoint[]): Map<string, SleepNight> {
   const byDate = new Map<string, SleepNight>()
   for (const point of points) {
     const night = mapSleep(point)
@@ -501,22 +466,75 @@ async function ensureSleepRange(
       if (!existing || night.isMainSleep || !existing.isMainSleep) byDate.set(night.date, night)
     }
   }
+  return byDate
+}
+
+async function ensureSleepSummaryRange(
+  token: string,
+  start: string,
+  end: string,
+  force: boolean,
+  generation: number
+): Promise<void> {
+  const missing = listDates(start, end).filter((d) => force || !isFresh(SLEEP_SUMMARY_GROUP, d))
+  if (missing.length === 0) return
+  const spanStart = missing[0]
+  const spanEnd = missing[missing.length - 1]
+  const spanDates = listDates(spanStart, spanEnd)
+  const points = await listData(
+    token,
+    'sleep',
+    'sleep',
+    spanStart,
+    shiftIsoDate(spanEnd, 1),
+    'google-wearables',
+    spanPriority(spanDates.length)
+  )
+  assertCurrentAccount(generation)
+  const byDate = sleepByDate(points)
+  for (const date of spanDates) {
+    const night = byDate.get(date)
+    mergeValues(date, {
+      sleepMinutes: night?.minutesAsleep ?? null,
+      sleepEfficiency: night?.efficiency ?? null
+    })
+  }
+  markFetched(SLEEP_SUMMARY_GROUP, spanDates)
+}
+
+async function ensureSleepRange(
+  token: string,
+  start: string,
+  end: string,
+  force: boolean,
+  generation: number
+): Promise<void> {
+  const missing = listDates(start, end).filter((d) => force || !isFresh(SLEEP_DETAIL_GROUP, d))
+  if (missing.length === 0) return
+  const spanStart = missing[0]
+  const spanEnd = missing[missing.length - 1]
+  const spanDates = listDates(spanStart, spanEnd)
+  const points = await listData(
+    token,
+    'sleep',
+    'sleep',
+    spanStart,
+    shiftIsoDate(spanEnd, 1),
+    'google-wearables',
+    spanPriority(spanDates.length)
+  )
+  assertCurrentAccount(generation)
+  const byDate = sleepByDate(points)
   for (const date of spanDates) {
     const night = byDate.get(date) ?? null
-    if (night && respiratory.length > 0) {
-      const nightEnd = Date.parse(night.endTime)
-      const nearest = respiratory.reduce((best, candidate) =>
-        Math.abs(candidate.timestamp - nightEnd) < Math.abs(best.timestamp - nightEnd) ? candidate : best
-      )
-      if (Math.abs(nearest.timestamp - nightEnd) <= 12 * 60 * 60_000) night.respiratory = nearest.summary
-    }
     setSleep(date, night)
     mergeValues(date, {
       sleepMinutes: night?.minutesAsleep ?? null,
       sleepEfficiency: night?.efficiency ?? null
     })
   }
-  markFetched('sleep-v3', spanDates)
+  markFetched(SLEEP_DETAIL_GROUP, spanDates)
+  markFetched(SLEEP_SUMMARY_GROUP, spanDates)
 }
 
 function ensureSleepOnce(
@@ -526,10 +544,25 @@ function ensureSleepOnce(
   force: boolean,
   generation: number
 ): Promise<void> {
-  const key = `${generation}:sleep-v3:${start}:${end}:${force}`
+  const key = `${generation}:${SLEEP_DETAIL_GROUP}:${start}:${end}:${force}`
   const pending = inFlight.get(key)
   if (pending) return pending
   const job = ensureSleepRange(token, start, end, force, generation).finally(() => inFlight.delete(key))
+  inFlight.set(key, job)
+  return job
+}
+
+function ensureSleepSummaryOnce(
+  token: string,
+  start: string,
+  end: string,
+  force: boolean,
+  generation: number
+): Promise<void> {
+  const key = `${generation}:${SLEEP_SUMMARY_GROUP}:${start}:${end}:${force}`
+  const pending = inFlight.get(key)
+  if (pending) return pending
+  const job = ensureSleepSummaryRange(token, start, end, force, generation).finally(() => inFlight.delete(key))
   inFlight.set(key, job)
   return job
 }
@@ -876,7 +909,7 @@ export async function getSeries(metrics: MetricKey[], start: string, end: string
   )
   if (metrics.some((m) => SLEEP_METRICS.includes(m))) {
     jobs.push(
-      ensureSleepOnce(token, s, e, force, generation).catch((err) => {
+      ensureSleepSummaryOnce(token, s, e, force, generation).catch((err) => {
         console.error(`[health] sleep failed for ${s}..${e}:`, err)
         return 'failed'
       })
