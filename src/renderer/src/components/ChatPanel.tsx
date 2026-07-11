@@ -4,17 +4,47 @@
 
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { ArrowUp, Sparkle, Heartbeat } from '@phosphor-icons/react'
+import {
+  ArrowUp,
+  Sparkle,
+  Heartbeat,
+  Moon,
+  PersonSimpleRun,
+  Pulse,
+  type Icon
+} from '@phosphor-icons/react'
 import { Button } from '@/components/ui/button'
 import { Markdownish } from '@/components/Markdownish'
 import type { ChatController, ChatTurn } from '@/hooks/useChat'
 import { cn } from '@/lib/utils'
 
-const SUGGESTIONS = [
-  'How did I sleep this week compared to last night?',
-  'Is my resting heart rate trending up or down?',
-  'How active have I been the last two weeks?',
-  'Any anomalies in my HRV I should watch?'
+// Each starter question wears its metric family's hue — the same rule the
+// rest of the app follows: color identifies the metric, never the value.
+const SUGGESTIONS: Array<{ text: string; icon: Icon; iconClass: string; tintClass: string }> = [
+  {
+    text: 'How did I sleep this week compared to last night?',
+    icon: Moon,
+    iconClass: 'text-sleep',
+    tintClass: 'bg-sleep-soft'
+  },
+  {
+    text: 'Is my resting heart rate trending up or down?',
+    icon: Heartbeat,
+    iconClass: 'text-heart',
+    tintClass: 'bg-heart-soft'
+  },
+  {
+    text: 'How active have I been the last two weeks?',
+    icon: PersonSimpleRun,
+    iconClass: 'text-activity',
+    tintClass: 'bg-activity-soft'
+  },
+  {
+    text: 'Any anomalies in my HRV I should watch?',
+    icon: Pulse,
+    iconClass: 'text-recovery',
+    tintClass: 'bg-recovery-soft'
+  }
 ]
 
 export type ChatState = ChatController
@@ -173,9 +203,23 @@ function Bubble({ turn, compact }: { turn: ChatTurn; compact?: boolean }): React
 
 function ToolThinking({ label }: { label: string }): React.JSX.Element {
   return (
-    <div className="flex items-center gap-2 text-[13px] text-ink-dim">
-      <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-accent/80" />
-      {label}…
+    <div className="flex items-center gap-2.5 text-[13px]">
+      <span className="relative flex size-2 shrink-0">
+        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-accent opacity-50" />
+        <span className="relative inline-flex size-2 rounded-full bg-accent/90" />
+      </span>
+      <AnimatePresence mode="wait" initial={false}>
+        <motion.span
+          key={label}
+          initial={{ opacity: 0, y: 3 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -3 }}
+          transition={{ duration: 0.18 }}
+          className="thinking-shimmer font-medium"
+        >
+          {label}…
+        </motion.span>
+      </AnimatePresence>
     </div>
   )
 }
@@ -197,18 +241,29 @@ function EmptyState({ compact, onPick }: { compact?: boolean; onPick: (s: string
         questions.
       </p>
       <div className={cn('mt-6 grid w-full gap-2', compact ? 'grid-cols-1' : 'max-w-lg grid-cols-1 sm:grid-cols-2')}>
-        {SUGGESTIONS.map((s, i) => (
-          <motion.button
-            key={s}
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.1 + i * 0.06, duration: 0.4 }}
-            onClick={() => onPick(s)}
-            className="rounded-2xl border border-hairline bg-white/[0.03] px-4 py-3 text-left text-[12.5px] leading-snug text-ink-dim transition-all duration-200 hover:-translate-y-px hover:border-hairline-strong hover:bg-white/[0.06] hover:text-ink"
-          >
-            {s}
-          </motion.button>
-        ))}
+        {SUGGESTIONS.map((suggestion, i) => {
+          const SuggestionIcon = suggestion.icon
+          return (
+            <motion.button
+              key={suggestion.text}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.1 + i * 0.06, duration: 0.4 }}
+              onClick={() => onPick(suggestion.text)}
+              className="group flex items-start gap-3 rounded-2xl border border-hairline bg-white/[0.03] px-3.5 py-3 text-left text-[12.5px] leading-snug text-ink-dim transition-all duration-200 hover:-translate-y-px hover:border-hairline-strong hover:bg-white/[0.06] hover:text-ink"
+            >
+              <span
+                className={cn(
+                  'mt-px grid size-6 shrink-0 place-items-center rounded-lg transition-transform duration-200 group-hover:scale-110',
+                  suggestion.tintClass
+                )}
+              >
+                <SuggestionIcon size={13} weight="fill" className={suggestion.iconClass} />
+              </span>
+              {suggestion.text}
+            </motion.button>
+          )
+        })}
       </div>
     </div>
   )

@@ -48,8 +48,24 @@ function MarkdownishBase({ text }: { text: string }): React.JSX.Element {
         strong: ({ children }) => <strong className="font-semibold text-ink">{children}</strong>,
         em: ({ children }) => <em className="italic text-ink">{children}</em>,
         del: ({ children }) => <del className="text-ink-faint decoration-ink-faint">{children}</del>,
-        a: ({ href, children }) =>
-          href ? (
+        a: ({ href, children }) => {
+          if (!href) return <span>{children}</span>
+          // Web-research citations arrive as bare numbered links — render them
+          // as superscript pills instead of underlined prose links.
+          if (typeof children === 'string' && /^\d{1,2}$/.test(children)) {
+            return (
+              <a
+                href={href}
+                target="_blank"
+                rel="noreferrer"
+                title={href}
+                className="mx-0.5 inline-flex min-w-[15px] -translate-y-[3px] items-center justify-center rounded-full bg-accent-soft px-1 py-px font-mono text-[9px] font-semibold leading-[13px] text-accent no-underline transition-colors hover:bg-accent hover:text-white"
+              >
+                {children}
+              </a>
+            )
+          }
+          return (
             <a
               href={href}
               target="_blank"
@@ -58,9 +74,8 @@ function MarkdownishBase({ text }: { text: string }): React.JSX.Element {
             >
               {children}
             </a>
-          ) : (
-            <span>{children}</span>
-          ),
+          )
+        },
         blockquote: ({ children }) => (
           <blockquote className="my-3 border-l-2 border-accent/50 pl-4 text-ink-dim">{children}</blockquote>
         ),
