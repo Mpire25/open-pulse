@@ -55,6 +55,8 @@ interface ChatPanelProps {
   onOpenSettings: () => void
   compact?: boolean
   autoFocus?: boolean
+  typeToFocus?: boolean
+  onTypeToFocus?: () => void
 }
 
 export function ChatPanel({
@@ -62,7 +64,9 @@ export function ChatPanel({
   codexConnected,
   onOpenSettings,
   compact,
-  autoFocus = true
+  autoFocus = true,
+  typeToFocus = false,
+  onTypeToFocus
 }: ChatPanelProps): React.JSX.Element {
   const { turns, busy, loading, activeChatId, send } = chat
   const [draft, setDraft] = useState('')
@@ -87,6 +91,35 @@ export function ChatPanel({
   useEffect(() => {
     setDraft('')
   }, [activeChatId])
+
+  useEffect(() => {
+    if (!typeToFocus || !codexConnected || loading || !activeChatId) return
+
+    const focusComposer = (event: KeyboardEvent): void => {
+      if (
+        event.defaultPrevented ||
+        event.isComposing ||
+        event.metaKey ||
+        event.ctrlKey ||
+        event.altKey ||
+        event.key.length !== 1
+      ) {
+        return
+      }
+
+      const target = event.target instanceof Element ? event.target : null
+      if (target?.closest('input, textarea, select, [contenteditable="true"], [role="textbox"]')) return
+      if (document.querySelector('[role="dialog"]')) return
+
+      event.preventDefault()
+      onTypeToFocus?.()
+      inputRef.current?.focus()
+      setDraft((current) => current + event.key)
+    }
+
+    window.addEventListener('keydown', focusComposer)
+    return () => window.removeEventListener('keydown', focusComposer)
+  }, [activeChatId, codexConnected, loading, onTypeToFocus, typeToFocus])
 
   const submit = (): void => {
     if (!draft.trim() || busy) return
