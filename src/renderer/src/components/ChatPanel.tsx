@@ -17,6 +17,11 @@ import { Button } from '@/components/ui/button'
 import { Markdownish } from '@/components/Markdownish'
 import { AssistantResponseParts } from '@/components/AssistantResponseParts'
 import type { ChatController, ChatTurn } from '@/hooks/useChat'
+import {
+  CHAT_TURN_TOP_INSET,
+  chatResponseSpacerHeight,
+  latestChatExchange
+} from '@/lib/chat-scroll'
 import { cn } from '@/lib/utils'
 import type { AssistantAction } from '@shared/types'
 
@@ -77,8 +82,13 @@ export function ChatPanel({
   const { turns, busy, loading, activeChatId, send } = chat
   const [draft, setDraft] = useState('')
   const scrollRef = useRef<HTMLDivElement>(null)
+  const responseSpaceRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const actionRef = useRef(onAssistantAction)
+  const anchoredChatRef = useRef<string | null>(null)
+  const anchoredAssistantRef = useRef<string | null>(null)
+  const followStreamRef = useRef(true)
+  const programmaticScrollUntilRef = useRef(0)
   const handleAssistantAction = useCallback((action: AssistantAction): void => {
     actionRef.current(action)
   }, [])
@@ -88,15 +98,71 @@ export function ChatPanel({
   }, [onAssistantAction])
 
   useLayoutEffect(() => {
-    const frame = requestAnimationFrame(() => {
-      scrollRef.current?.scrollTo({
-        top: scrollRef.current.scrollHeight,
-        // Repeated smooth-scroll animations fight each other on every token.
-        behavior: busy ? 'auto' : 'smooth'
+    const container = scrollRef.current
+    const spacer = responseSpaceRef.current
+    if (!container || !spacer || !activeChatId) return
+
+    const chatChanged = anchoredChatRef.current !== activeChatId
+    if (chatChanged) {
+      anchoredChatRef.current = activeChatId
+      anchoredAssistantRef.current = null
+      followStreamRef.current = true
+      spacer.style.height = '0px'
+    }
+
+    const exchange = latestChatExchange(turns)
+    if (!exchange) return
+    const newTurn = exchange.assistant.streaming && anchoredAssistantRef.current !== exchange.assistant.id
+    if (newTurn) {
+      anchoredAssistantRef.current = exchange.assistant.id
+      followStreamRef.current = true
+    }
+
+    if (anchoredAssistantRef.current !== exchange.assistant.id) {
+      if (chatChanged) container.scrollTop = container.scrollHeight
+      return
+    }
+
+    const userElement = container.querySelector<HTMLElement>(`[data-turn-id="${exchange.user.id}"]`)
+    const assistantElement = container.querySelector<HTMLElement>(`[data-turn-id="${exchange.assistant.id}"]`)
+    if (!userElement || !assistantElement) return
+
+    const containerBounds = container.getBoundingClientRect()
+    const userBounds = userElement.getBoundingClientRect()
+    const assistantBounds = assistantElement.getBoundingClientRect()
+    const userTop = userBounds.top - containerBounds.top + container.scrollTop
+    const assistantBottom = assistantBounds.bottom - containerBounds.top + container.scrollTop
+    const exchangeHeight = assistantBottom - userTop
+    const spacerHeight = chatResponseSpacerHeight(container.clientHeight, exchangeHeight)
+    spacer.style.height = `${spacerHeight}px`
+
+    if (newTurn) {
+      programmaticScrollUntilRef.current = performance.now() + 600
+      container.scrollTo({
+        top: Math.max(0, userTop - CHAT_TURN_TOP_INSET),
+        behavior: 'smooth'
       })
-    })
-    return () => cancelAnimationFrame(frame)
-  }, [turns, busy])
+      return
+    }
+
+    if (spacerHeight === 0 && followStreamRef.current && performance.now() >= programmaticScrollUntilRef.current) {
+      const target = assistantBottom - container.clientHeight + 20
+      if (target > container.scrollTop) container.scrollTop = target
+    }
+  }, [activeChatId, busy, turns])
+
+  const handleConversationScroll = useCallback((): void => {
+    if (performance.now() < programmaticScrollUntilRef.current) return
+    const container = scrollRef.current
+    const assistantId = anchoredAssistantRef.current
+    if (!container || !assistantId) return
+    const assistantElement = container.querySelector<HTMLElement>(`[data-turn-id="${assistantId}"]`)
+    if (!assistantElement) return
+    const visibleBottom = container.scrollTop + container.clientHeight
+    const assistantBottom =
+      assistantElement.getBoundingClientRect().bottom - container.getBoundingClientRect().top + container.scrollTop
+    followStreamRef.current = visibleBottom >= assistantBottom - 80
+  }, [])
 
   useEffect(() => {
     if (codexConnected && autoFocus) inputRef.current?.focus()
@@ -153,7 +219,7 @@ export function ChatPanel({
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div ref={scrollRef} className="flex-1 overflow-y-auto pb-4">
+      <div ref={scrollRef} onScroll={handleConversationScroll} className="flex-1 overflow-y-auto pb-4">
         {empty ? (
           <div className={cn('h-full', compact ? 'px-4' : 'mx-auto w-full max-w-[820px] px-6')}>
             <EmptyState compact={compact} onPick={(s) => send(s)} />
@@ -170,6 +236,7 @@ export function ChatPanel({
                 <Bubble key={turn.id} turn={turn} compact={compact} onAction={handleAssistantAction} />
               ))}
             </AnimatePresence>
+            <div ref={responseSpaceRef} aria-hidden="true" className="shrink-0" />
           </div>
         )}
       </div>
@@ -228,6 +295,7 @@ const Bubble = memo(function Bubble({
   const isUser = turn.role === 'user'
   return (
     <motion.div
+      data-turn-id={turn.id}
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ type: 'spring', stiffness: 220, damping: 26 }}
