@@ -1,11 +1,18 @@
-import { useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { ClockCounterClockwise, Plus, Sparkle, SquaresFour } from '@phosphor-icons/react'
-import { AssistantCardGallery } from '@/components/AssistantCardGallery'
 import { ChatPanel, type ChatState } from '@/components/ChatPanel'
 import { ChatHistory } from '@/components/ChatHistory'
 import { cn } from '@/lib/utils'
 import type { AssistantAction, CodexAuthStatus } from '@shared/types'
+
+const cardGalleryEnabled = import.meta.env.DEV && import.meta.env.VITE_OPENPULSE_CARD_GALLERY === '1'
+const AssistantCardGallery = import.meta.env.DEV
+  ? lazy(async () => {
+      const module = await import('@/components/AssistantCardGallery')
+      return { default: module.AssistantCardGallery }
+    })
+  : null
 
 interface AssistantViewProps {
   chat: ChatState
@@ -78,22 +85,24 @@ export function AssistantView({
           <span className="display text-[15px] font-bold">Assistant</span>
         </div>
         <div className="flex items-center gap-1">
-          <button
-            type="button"
-            onClick={() => {
-              setGalleryOpen((open) => !open)
-              setHistoryOpen(false)
-            }}
-            aria-label="Card gallery"
-            aria-pressed={galleryOpen}
-            title="Card gallery"
-            className={cn(
-              'grid h-7 w-7 place-items-center rounded-lg text-ink-dim transition-colors hover:bg-white/[0.06] hover:text-ink',
-              galleryOpen && 'bg-white/[0.07] text-ink'
-            )}
-          >
-            <SquaresFour size={15} />
-          </button>
+          {cardGalleryEnabled && (
+            <button
+              type="button"
+              onClick={() => {
+                setGalleryOpen((open) => !open)
+                setHistoryOpen(false)
+              }}
+              aria-label="Card gallery"
+              aria-pressed={galleryOpen}
+              title="Card gallery"
+              className={cn(
+                'grid h-7 w-7 place-items-center rounded-lg text-ink-dim transition-colors hover:bg-white/[0.06] hover:text-ink',
+                galleryOpen && 'bg-white/[0.07] text-ink'
+              )}
+            >
+              <SquaresFour size={15} />
+            </button>
+          )}
           <button
             type="button"
             onClick={() => {
@@ -127,8 +136,10 @@ export function AssistantView({
         </div>
       </div>
       <div className="min-h-0 flex-1">
-        {galleryOpen ? (
-          <AssistantCardGallery />
+        {cardGalleryEnabled && galleryOpen && AssistantCardGallery ? (
+          <Suspense fallback={null}>
+            <AssistantCardGallery />
+          </Suspense>
         ) : (
           <ChatPanel
             chat={chat}
