@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { ClockCounterClockwise, Plus, Sparkle, X } from '@phosphor-icons/react'
+import { ArrowSquareOut, ClockCounterClockwise, Plus, Sparkle, X } from '@phosphor-icons/react'
 import { ChatPanel, type ChatState } from '@/components/ChatPanel'
 import { ChatHistory } from '@/components/ChatHistory'
 import { cn } from '@/lib/utils'
@@ -9,6 +9,7 @@ import type { AssistantAction } from '@shared/types'
 interface AssistantPanelProps {
   open: boolean
   onClose: () => void
+  onOpenInAssistant: () => void
   chat: ChatState
   codexConnected: boolean
   composerFocusRequest: number
@@ -26,6 +27,7 @@ const PANEL_WIDTH = 384
 export function AssistantPanel({
   open,
   onClose,
+  onOpenInAssistant,
   chat,
   codexConnected,
   composerFocusRequest,
@@ -62,6 +64,14 @@ export function AssistantPanel({
             <span className="text-[13.5px] font-semibold">{historyOpen ? 'Chats' : 'Assistant'}</span>
           </div>
           <div className="flex items-center gap-1">
+            <button
+              onClick={onOpenInAssistant}
+              aria-label="Open in Assistant"
+              title="Open in Assistant"
+              className="grid h-7 w-7 place-items-center rounded-lg text-ink-dim transition-colors hover:bg-white/[0.06] hover:text-ink"
+            >
+              <ArrowSquareOut size={15} />
+            </button>
             <button
               onClick={() => {
                 void chat.create()
