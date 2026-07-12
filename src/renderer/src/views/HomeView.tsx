@@ -315,13 +315,15 @@ function SignalsPanel({
           const value = today(key)
           const base = baseline(points, date)
           const deltaPct = def.deltaMode === 'abs' ? null : baselineDeltaPct(value, base)
+          const displayedAbsoluteDelta =
+            def.deltaMode === 'abs' && value != null ? Number(value.toFixed(1)) : null
           const comparison =
             def.deltaMode === 'abs'
-              ? value == null
+              ? displayedAbsoluteDelta == null
                 ? undefined
-                : value > 0
+                : displayedAbsoluteDelta > 0
                   ? 'Above device baseline'
-                  : value < 0
+                  : displayedAbsoluteDelta < 0
                     ? 'Below device baseline'
                     : 'At device baseline'
               : deltaPct != null && Math.abs(deltaPct) < 1
