@@ -494,24 +494,11 @@ export interface AssistantWorkoutPart {
   action: AssistantAction
 }
 
-export interface AssistantEvidenceSource {
-  title: string
-  url: string
-  domain: string
-}
-
-export interface AssistantSourcesPart {
-  id: string
-  type: 'sources'
-  sources: AssistantEvidenceSource[]
-}
-
 export type AssistantVisualPart =
   | AssistantMetricCardPart
   | AssistantComparisonPart
   | AssistantChartPart
   | AssistantWorkoutPart
-  | AssistantSourcesPart
 
 export interface ChatMessage {
   role: ChatRole

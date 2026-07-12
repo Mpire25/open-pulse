@@ -1,8 +1,8 @@
 import { memo } from 'react'
-import { ArrowSquareOut, Minus, PersonSimpleRun, TrendDown, TrendUp } from '@phosphor-icons/react'
+import { Minus, PersonSimpleRun, TrendDown, TrendUp } from '@phosphor-icons/react'
 import { ColumnChart, TrendLine } from '@/components/charts'
 import { MetricStat } from '@/components/MetricStat'
-import { DrillHeader, Panel, SectionHeader } from '@/components/Panel'
+import { DrillHeader, Panel } from '@/components/Panel'
 import { METRICS } from '@/lib/metric-registry'
 import { formatClock, formatInt, formatMinutes, shortDate } from '@/lib/format'
 import { cn } from '@/lib/utils'
@@ -158,33 +158,7 @@ function AssistantResponsePartsBase({
           )
         }
 
-        return (
-          <Panel key={part.id} className="overflow-hidden">
-            <div className="border-b border-hairline px-5 pb-3 pt-4">
-              <SectionHeader title="Sources" hint={`${part.sources.length} reference${part.sources.length === 1 ? '' : 's'}`} />
-            </div>
-            <div className="divide-y divide-hairline">
-              {part.sources.map((source, index) => (
-                <a
-                  key={source.url}
-                  href={source.url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="group flex items-center gap-3 px-5 py-3.5 transition-colors hover:bg-white/[0.03] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/50"
-                >
-                  <span className="grid size-6 shrink-0 place-items-center rounded-full bg-accent-soft font-mono text-[10px] font-semibold text-accent">
-                    {index + 1}
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="line-clamp-2 block text-[12px] font-medium leading-snug text-ink">{source.title}</span>
-                    <span className="mt-0.5 block truncate text-[10.5px] text-ink-faint">{source.domain}</span>
-                  </span>
-                  <ArrowSquareOut size={13} className="shrink-0 text-ink-faint transition-colors group-hover:text-accent" />
-                </a>
-              ))}
-            </div>
-          </Panel>
-        )
+        return null
       })}
     </div>
   )
