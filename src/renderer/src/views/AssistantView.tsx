@@ -4,20 +4,22 @@ import { ClockCounterClockwise, Plus, Sparkle } from '@phosphor-icons/react'
 import { ChatPanel, type ChatState } from '@/components/ChatPanel'
 import { ChatHistory } from '@/components/ChatHistory'
 import { cn } from '@/lib/utils'
-import type { CodexAuthStatus } from '@shared/types'
+import type { AssistantAction, CodexAuthStatus } from '@shared/types'
 
 interface AssistantViewProps {
   chat: ChatState
   codex: CodexAuthStatus
   composerFocusRequest: number
   onOpenSettings: () => void
+  onAssistantAction: (action: AssistantAction) => void
 }
 
 export function AssistantView({
   chat,
   codex,
   composerFocusRequest,
-  onOpenSettings
+  onOpenSettings,
+  onAssistantAction
 }: AssistantViewProps): React.JSX.Element {
   // History is a transient sheet that slides in from the right — never
   // permanent chrome. Hovering the clock button summons it; it stays while
@@ -109,6 +111,7 @@ export function AssistantView({
           chat={chat}
           codexConnected={codex.connected}
           onOpenSettings={onOpenSettings}
+          onAssistantAction={onAssistantAction}
           focusRequest={composerFocusRequest}
           typeToFocus
           onTypeToFocus={() => setHistoryOpen(false)}

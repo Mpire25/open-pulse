@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { generateChatTitle } from '@shared/chat'
+import { assistantPartsContext } from '@shared/assistant-parts'
 import type {
   AiEvent,
+  AssistantVisualPart,
   ChatHistorySnapshot,
   ChatMessage,
   ChatSession,
@@ -59,8 +61,18 @@ function createDraftChat(): ViewChat {
 
 function persistedMessages(turns: ChatTurn[]): ChatSessionMessage[] {
   return turns
-    .filter((turn) => !turn.error && !turn.streaming && turn.text.trim())
-    .map(({ id, role, text, createdAt }) => ({ id, role, text, createdAt }))
+    .filter((turn) => !turn.error && !turn.streaming && (turn.text.trim() || turn.parts?.length))
+    .map(({ id, role, text, createdAt, parts }) => ({
+      id,
+      role,
+      text,
+      createdAt,
+      ...(role === 'assistant' && parts?.length ? { partsVersion: 1 as const, parts } : {})
+    }))
+}
+
+function withDisplayContext(role: ChatMessage['role'], text: string, parts?: AssistantVisualPart[]): string {
+  return role === 'assistant' ? text + assistantPartsContext(parts ?? []) : text
 }
 
 function asSession(chat: ViewChat): ChatSession {
@@ -206,8 +218,20 @@ export function useChat(): ChatController {
               return { ...turn, toolLabel: event.label }
             case 'reasoning':
               return turn.text ? turn : { ...turn, toolLabel: turn.toolLabel ?? 'Thinking' }
+            case 'part':
+              return {
+                ...turn,
+                parts: [...(turn.parts ?? []).filter((part) => part.id !== event.part.id), event.part],
+                toolLabel: undefined
+              }
             case 'done':
-              return { ...turn, text: event.text || turn.text, streaming: false, toolLabel: undefined }
+              return {
+                ...turn,
+                text: event.text || turn.text,
+                parts: event.parts,
+                streaming: false,
+                toolLabel: undefined
+              }
             case 'error':
               return { ...turn, text: event.message, streaming: false, error: true, toolLabel: undefined }
           }
@@ -250,7 +274,10 @@ export function useChat(): ChatController {
 
       const history: ChatMessage[] = nextTurns
         .filter((turn) => turn.id !== assistantTurn.id && !turn.error)
-        .map(({ role, text: messageText }) => ({ role, text: messageText }))
+        .map(({ role, text: messageText, parts }) => ({
+          role,
+          text: withDisplayContext(role, messageText, parts)
+        }))
       const epoch = accountEpochRef.current
       const createIfNeeded = chat.persisted
         ? Promise.resolve<ChatSession | null>(null)

@@ -96,4 +96,35 @@ describe('encrypted chat history store', () => {
     expect(store.delete('account-a', chat.id).sessions).toEqual([])
     expect(() => store.delete('account-b', chat.id)).toThrow('Chat not found.')
   })
+
+  test('persists validated structured assistant response parts', () => {
+    const path = temporaryPath()
+    const store = new ChatHistoryStore(path, encryptedAdapter())
+    const chat = store.create('account-a')
+    const now = new Date().toISOString()
+    store.update('account-a', chat.id, [
+      userMessage('Show my steps'),
+      {
+        id: crypto.randomUUID(),
+        role: 'assistant',
+        text: 'You recorded 7,000 steps.',
+        createdAt: now,
+        partsVersion: 1,
+        parts: [
+          {
+            id: 'part-1',
+            type: 'metric-card',
+            metric: 'steps',
+            date: '2026-07-04',
+            value: 7_000,
+            source: 'live',
+            action: { type: 'open-metric', view: 'activity', metric: 'steps', date: '2026-07-04', range: 'D' }
+          }
+        ]
+      }
+    ])
+
+    const restored = new ChatHistoryStore(path, encryptedAdapter()).snapshot('account-a')
+    expect(restored.sessions[0].messages[1].parts?.[0]).toMatchObject({ type: 'metric-card', value: 7_000 })
+  })
 })

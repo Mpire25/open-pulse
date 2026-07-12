@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { randomUUID } from 'node:crypto'
 import { generateChatTitle, DEFAULT_CHAT_TITLE } from '../shared/chat'
+import { normalizeAssistantParts } from '../shared/assistant-parts'
 import type { ChatHistorySnapshot, ChatSession, ChatSessionMessage } from '../shared/types'
 
 interface EncryptionAdapter {
@@ -38,7 +39,16 @@ function normalizeMessages(value: unknown): ChatSessionMessage[] {
       return []
     }
     const createdAt = validDate(candidate.createdAt, isoNow())
-    return [{ id: typeof candidate.id === 'string' ? candidate.id : randomUUID(), role: candidate.role, text: candidate.text, createdAt }]
+    const parts = candidate.role === 'assistant' && candidate.partsVersion === 1
+      ? normalizeAssistantParts(candidate.parts)
+      : []
+    return [{
+      id: typeof candidate.id === 'string' ? candidate.id : randomUUID(),
+      role: candidate.role,
+      text: candidate.text,
+      createdAt,
+      ...(parts.length ? { partsVersion: 1 as const, parts } : {})
+    }]
   })
 }
 
