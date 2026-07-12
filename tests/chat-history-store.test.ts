@@ -160,6 +160,63 @@ describe('encrypted chat history store', () => {
     })
   })
 
+  test('revalidates persisted comparison aggregation semantics', () => {
+    const path = temporaryPath()
+    const store = new ChatHistoryStore(path, encryptedAdapter())
+    const chat = store.create('account-a')
+    store.update('account-a', chat.id, [
+      userMessage('Compare today with the total last week'),
+      {
+        id: crypto.randomUUID(),
+        role: 'assistant',
+        text: 'These totals cover different period lengths.',
+        createdAt: new Date().toISOString(),
+        partsVersion: 1,
+        parts: [
+          {
+            id: 'comparison-part',
+            type: 'comparison',
+            title: 'Protein comparison',
+            metric: 'proteinG',
+            current: {
+              label: 'Today',
+              startDate: '2026-07-11',
+              endDate: '2026-07-11',
+              value: 135,
+              aggregation: 'total',
+              observations: 1,
+              days: 1
+            },
+            previous: {
+              label: 'Previous week',
+              startDate: '2026-07-04',
+              endDate: '2026-07-10',
+              value: 840,
+              aggregation: 'total',
+              observations: 7,
+              days: 7
+            },
+            comparable: true,
+            absoluteChange: -705,
+            percentChange: -83.9,
+            source: 'live',
+            action: {
+              type: 'open-metric',
+              view: 'nutrition',
+              metric: 'proteinG',
+              date: '2026-07-11',
+              range: 'D'
+            }
+          }
+        ]
+      }
+    ])
+
+    const part = new ChatHistoryStore(path, encryptedAdapter())
+      .snapshot('account-a').sessions[0].messages[1].parts?.[0]
+    expect(part).toMatchObject({ comparable: false, absoluteChange: null, percentChange: null })
+  })
+
   test('persists a validated sleep-stage card', () => {
     const path = temporaryPath()
     const store = new ChatHistoryStore(path, encryptedAdapter())

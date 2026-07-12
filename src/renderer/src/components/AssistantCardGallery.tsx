@@ -87,6 +87,11 @@ function metricCard(metric: MetricKey): AssistantVisualPart {
 }
 
 function comparisonCard(metric: MetricKey): AssistantVisualPart {
+  const aggregation = METRICS[metric].aggregate === 'sum'
+    ? 'total' as const
+    : METRICS[metric].aggregate === 'last'
+      ? 'latest' as const
+      : 'average' as const
   const currentValue = aggregate(metric, sampleValues(metric, 7))
   const previousValue = aggregate(metric, sampleValues(metric, 7, 4))
   const absoluteChange = currentValue - previousValue
@@ -100,6 +105,7 @@ function comparisonCard(metric: MetricKey): AssistantVisualPart {
       startDate: '2026-07-06',
       endDate: TODAY,
       value: currentValue,
+      aggregation,
       observations: 7,
       days: 7
     },
@@ -108,9 +114,11 @@ function comparisonCard(metric: MetricKey): AssistantVisualPart {
       startDate: '2026-06-29',
       endDate: '2026-07-05',
       value: previousValue,
+      aggregation,
       observations: 7,
       days: 7
     },
+    comparable: true,
     absoluteChange,
     percentChange: previousValue === 0 ? null : (absoluteChange / previousValue) * 100,
     source: 'live',

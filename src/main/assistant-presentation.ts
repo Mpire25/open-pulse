@@ -8,6 +8,7 @@ import {
 } from '../shared/nutrition'
 import type {
   AssistantAction,
+  AssistantComparisonAggregation,
   AssistantComparisonValue,
   AssistantDataView,
   AssistantMetricRange,
@@ -34,12 +35,13 @@ export interface AgentDataset {
 const DATE_SCHEMA = { type: 'string', pattern: '^\\d{4}-\\d{2}-\\d{2}$' }
 const DATASET_ID = { type: 'string', minLength: 1, maxLength: 200 }
 const METRIC = { type: 'string', enum: METRIC_KEYS }
+const COMPARISON_AGGREGATION = { type: 'string', enum: ['auto', 'value', 'total', 'average', 'latest'] }
 
 export const PRESENTATION_TOOL: AgentToolSpec = {
   type: 'function',
   name: 'present_health_data',
   description:
-    'Display trusted OpenPulse cards and charts from datasets returned by query_daily_metrics, analyze_daily_metrics, query_sleep, query_nutrition_logs, or query_workouts. Analysis dataset IDs can be used directly; never repeat a health query merely to make a visual. Use an overview for a broad multi-domain summary, a metric card for one exact value, a comparison for two periods, a chart for a trend, a sleep card for one night when stage detail is relevant, a nutrition card for one day, meal, or logged item, or a workout card for one workout. Use query_daily_metrics for a day nutrition card and query_nutrition_logs for a meal or item card. An overview is a standalone block: when requesting one, leave every other array empty. Otherwise normally show one block and never more than two unless the user explicitly asks for several. The app computes all values and navigation; never copy values into this call. All seven arrays are required and may be empty.',
+    'Display trusted OpenPulse cards and charts from datasets returned by query_daily_metrics, analyze_daily_metrics, query_sleep, query_nutrition_logs, or query_workouts. Analysis dataset IDs can be used directly; never repeat a health query merely to make a visual. Use an overview for a broad multi-domain summary, a metric card for one exact value, a comparison for two periods, a chart for a trend, a sleep card for one night when stage detail is relevant, a nutrition card for one day, meal, or logged item, or a workout card for one workout. Comparison aggregations are selected independently for each side: preserve explicit total/average/latest wording and use auto otherwise. Totals are rejected for rates, percentages, and state measurements. Use query_daily_metrics for a day nutrition card and query_nutrition_logs for a meal or item card. An overview is a standalone block: when requesting one, leave every other array empty. Otherwise normally show one block and never more than two unless the user explicitly asks for several. The app computes all values and navigation; never copy values into this call. All seven arrays are required and may be empty.',
   strict: true,
   parameters: {
     type: 'object',
@@ -87,9 +89,11 @@ export const PRESENTATION_TOOL: AgentToolSpec = {
             currentLabel: { type: 'string', minLength: 1, maxLength: 40 },
             currentStartDate: DATE_SCHEMA,
             currentEndDate: DATE_SCHEMA,
+            currentAggregation: COMPARISON_AGGREGATION,
             previousLabel: { type: 'string', minLength: 1, maxLength: 40 },
             previousStartDate: DATE_SCHEMA,
-            previousEndDate: DATE_SCHEMA
+            previousEndDate: DATE_SCHEMA,
+            previousAggregation: COMPARISON_AGGREGATION
           },
           required: [
             'datasetId',
@@ -98,9 +102,11 @@ export const PRESENTATION_TOOL: AgentToolSpec = {
             'currentLabel',
             'currentStartDate',
             'currentEndDate',
+            'currentAggregation',
             'previousLabel',
             'previousStartDate',
-            'previousEndDate'
+            'previousEndDate',
+            'previousAggregation'
           ],
           additionalProperties: false
         }
@@ -175,6 +181,7 @@ const SUM_METRICS = new Set<MetricKey>([
   'sugarG'
 ])
 const LAST_METRICS = new Set<MetricKey>(['weightKg', 'bodyFatPct', 'bmi'])
+const TOTAL_ALLOWED_METRICS = new Set<MetricKey>([...SUM_METRICS, 'sedentaryMinutes', 'sleepMinutes'])
 const OVERVIEW_TOTAL_METRICS = new Set<MetricKey>(['activeMinutes', 'activeZoneMinutes'])
 
 const VIEW_BY_METRIC: Record<MetricKey, AssistantDataView> = {
@@ -516,9 +523,11 @@ export function resolveAutomaticPresentation(
               currentLabel,
               currentStartDate: currentStart,
               currentEndDate: currentEnd,
+              currentAggregation: 'auto',
               previousLabel,
               previousStartDate: previousStart,
-              previousEndDate: previousEnd
+              previousEndDate: previousEnd,
+              previousAggregation: 'auto'
             }
           ],
           charts: [],
@@ -553,12 +562,15 @@ function metricValues(dataset: DailyDataset, metric: MetricKey, start: string, e
   return points
 }
 
-function aggregate(metric: MetricKey, points: Array<{ value: number | null }>): number | null {
+function aggregate(
+  points: Array<{ value: number | null }>,
+  aggregation: AssistantComparisonAggregation
+): number | null {
   const values = points.flatMap((point) => (point.value == null ? [] : [point.value]))
   if (!values.length) return null
-  if (LAST_METRICS.has(metric)) return values[values.length - 1]
+  if (aggregation === 'value' || aggregation === 'latest') return values[values.length - 1]
   const total = values.reduce((sum, value) => sum + value, 0)
-  return SUM_METRICS.has(metric) ? total : total / values.length
+  return aggregation === 'total' ? total : total / values.length
 }
 
 function overviewAggregation(metric: MetricKey): AssistantOverviewAggregation {
@@ -600,17 +612,66 @@ function comparisonValue(
   metric: MetricKey,
   label: string,
   startDate: string,
-  endDate: string
+  endDate: string,
+  aggregation: AssistantComparisonAggregation
 ): AssistantComparisonValue {
   const points = metricValues(dataset, metric, startDate, endDate)
   return {
     label,
     startDate,
     endDate,
-    value: aggregate(metric, points),
+    value: aggregate(points, aggregation),
+    aggregation,
     observations: points.filter((point) => point.value != null).length,
     days: points.length
   }
+}
+
+type ComparisonAggregationRequest = AssistantComparisonAggregation | 'auto'
+
+function requestedComparisonAggregation(value: unknown, field: string): ComparisonAggregationRequest {
+  if (value === 'auto' || value === 'value' || value === 'total' || value === 'average' || value === 'latest') {
+    return value
+  }
+  throw new Error(`${field} requires auto, value, total, average, or latest.`)
+}
+
+function resolveComparisonAggregation(
+  metric: MetricKey,
+  requested: ComparisonAggregationRequest,
+  days: number,
+  otherDays: number
+): AssistantComparisonAggregation {
+  if (requested === 'value') {
+    if (days !== 1) throw new Error('A single-value comparison requires a one-day period.')
+    return 'value'
+  }
+  if (requested === 'total') {
+    if (!TOTAL_ALLOWED_METRICS.has(metric)) {
+      throw new Error(`${fallbackMetricLabel(metric)} cannot be meaningfully totalled. Use average or latest.`)
+    }
+    return 'total'
+  }
+  if (requested === 'average' || requested === 'latest') return requested
+  if (days === 1) return 'value'
+  if (LAST_METRICS.has(metric)) return 'latest'
+  if (SUM_METRICS.has(metric) && days === otherDays) return 'total'
+  return 'average'
+}
+
+function comparisonValuesAreComparable(
+  current: AssistantComparisonValue,
+  previous: AssistantComparisonValue
+): boolean {
+  if (current.aggregation !== 'total' && previous.aggregation !== 'total') return true
+  if (current.aggregation === 'total' && previous.aggregation === 'total') {
+    return current.days === previous.days
+  }
+  const total = current.aggregation === 'total' ? current : previous
+  const other = current.aggregation === 'total' ? previous : current
+  return total.days === 1 && (
+    other.aggregation === 'average' || (other.days === 1 && other.aggregation === 'value')
+  )
 }
 
 function workoutDataset(datasetId: string, datasets: Map<string, AgentDataset>): { source: DataSource; workouts: Workout[] } {
@@ -854,9 +915,40 @@ export function resolvePresentation(
     const previousStart = requiredDate(item?.previousStartDate, 'previousStartDate')
     const previousEnd = requiredDate(item?.previousEndDate, 'previousEndDate')
     const dataset = dailyDataset(datasetId, datasets)
-    const current = comparisonValue(dataset, metric, requiredText(item?.currentLabel, 'currentLabel', 40), currentStart, currentEnd)
-    const previous = comparisonValue(dataset, metric, requiredText(item?.previousLabel, 'previousLabel', 40), previousStart, previousEnd)
-    const absoluteChange = current.value == null || previous.value == null ? null : current.value - previous.value
+    const currentDays = rangeDays(currentStart, currentEnd)
+    const previousDays = rangeDays(previousStart, previousEnd)
+    const currentAggregation = resolveComparisonAggregation(
+      metric,
+      requestedComparisonAggregation(item?.currentAggregation ?? 'auto', 'currentAggregation'),
+      currentDays,
+      previousDays
+    )
+    const previousAggregation = resolveComparisonAggregation(
+      metric,
+      requestedComparisonAggregation(item?.previousAggregation ?? 'auto', 'previousAggregation'),
+      previousDays,
+      currentDays
+    )
+    const current = comparisonValue(
+      dataset,
+      metric,
+      requiredText(item?.currentLabel, 'currentLabel', 40),
+      currentStart,
+      currentEnd,
+      currentAggregation
+    )
+    const previous = comparisonValue(
+      dataset,
+      metric,
+      requiredText(item?.previousLabel, 'previousLabel', 40),
+      previousStart,
+      previousEnd,
+      previousAggregation
+    )
+    const comparable = comparisonValuesAreComparable(current, previous)
+    const absoluteChange = !comparable || current.value == null || previous.value == null
+      ? null
+      : current.value - previous.value
     const previousValue = previous.value
     const percentChange = absoluteChange == null || previousValue == null || previousValue === 0 ? null : (absoluteChange / previousValue) * 100
     parts.push({
@@ -866,6 +958,7 @@ export function resolvePresentation(
       metric,
       current,
       previous,
+      comparable,
       absoluteChange,
       percentChange,
       source: dataset.source,
