@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { CaretDown, ForkKnife } from '@phosphor-icons/react'
 import { Panel, DrillHeader, InteractivePanel, SectionHeader } from '@/components/Panel'
+import { NutritionMacroBar, NutritionMacroTotal } from '@/components/NutritionMacros'
 import { ColumnChart, ProgressRing } from '@/components/charts'
 import { CARD_HEIGHT, SkeletonBlock, SkeletonChart, SkeletonRing, SkeletonText } from '@/components/Skeleton'
 import { ErrorState } from '@/components/ErrorState'
@@ -12,6 +13,13 @@ import { formatClock, formatInt, longDate, shortDate, weekdayShort } from '@/lib
 import type { OpenMetric } from '@/lib/metric-navigation'
 import { fade } from '@/lib/motion'
 import { cn } from '@/lib/utils'
+import {
+  NUTRITION_MEAL_GROUPS,
+  nutritionMealGroup,
+  nutritionTotals,
+  nutritionValue,
+  type NutritionMealGroup
+} from '@shared/nutrition'
 import type { DayValues, Goals, MetricKey, NutritionLogEntry } from '@shared/types'
 
 const NUTRITION_METRICS: MetricKey[] = [
@@ -275,7 +283,7 @@ function NutritionDayRow({
         </div>
         <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
           {parts.map((part) => (
-            <MacroTotal key={part.key} label={part.label} value={part.grams} color={part.color} />
+            <NutritionMacroTotal key={part.key} label={part.label} value={part.grams} color={part.color} />
           ))}
         </div>
       </div>
@@ -289,21 +297,10 @@ function NutritionDayRow({
   )
 }
 
-const MEAL_ORDER = ['Breakfast', 'Lunch', 'Dinner', 'Snack', 'Other'] as const
-type MealGroup = (typeof MEAL_ORDER)[number]
-
-function mealGroup(mealType: string | null): MealGroup {
-  if (mealType === 'BREAKFAST') return 'Breakfast'
-  if (mealType === 'LUNCH') return 'Lunch'
-  if (mealType === 'DINNER') return 'Dinner'
-  if (mealType === 'SNACK' || mealType?.startsWith('BEFORE_') || mealType === 'AFTER_DINNER') return 'Snack'
-  return 'Other'
-}
-
 function NutritionLogsPanel({ entries }: { entries: NutritionLogEntry[] }): React.JSX.Element {
-  const groups = MEAL_ORDER.map((label) => ({
+  const groups = NUTRITION_MEAL_GROUPS.map((label) => ({
     label,
-    entries: entries.filter((entry) => mealGroup(entry.mealType) === label)
+    entries: entries.filter((entry) => nutritionMealGroup(entry.mealType) === label)
   })).filter((group) => group.entries.length > 0)
 
   return (
@@ -326,7 +323,7 @@ function NutritionLogsPanel({ entries }: { entries: NutritionLogEntry[] }): Reac
 
 const MEAL_REVEAL_EASE = [0.16, 1, 0.3, 1] as const
 
-function MealGroupSection({ label, entries }: { label: MealGroup; entries: NutritionLogEntry[] }): React.JSX.Element {
+function MealGroupSection({ label, entries }: { label: NutritionMealGroup; entries: NutritionLogEntry[] }): React.JSX.Element {
   const [isOpen, setIsOpen] = useState(false)
   const contentId = `meal-${label.toLowerCase()}-items`
 
@@ -377,13 +374,13 @@ function NutritionItemRow({ entry }: { entry: NutritionLogEntry }): React.JSX.El
           <span className="font-mono">{formatClock(entry.startTime)}</span>
           {entry.servingLabel && <span>{entry.servingLabel}</span>}
         </div>
-        <MacroShareBar entries={[entry]} className="mt-2 max-w-[230px]" compact />
+        <NutritionMacroBar values={nutritionTotals([entry])} className="mt-2 max-w-[230px]" compact />
       </div>
       <div className="flex flex-wrap items-center justify-start gap-x-4 gap-y-1 whitespace-nowrap sm:justify-end sm:text-right">
         <div className="flex items-center gap-3">
-          <MacroTotal label="Protein" value={entry.proteinG} color="var(--color-recovery)" />
-          <MacroTotal label="Carbs" value={entry.carbsG} color="var(--color-activity)" />
-          <MacroTotal label="Fat" value={entry.fatG} color="var(--color-heart)" />
+          <NutritionMacroTotal label="Protein" value={entry.proteinG} color="var(--color-recovery)" />
+          <NutritionMacroTotal label="Carbs" value={entry.carbsG} color="var(--color-activity)" />
+          <NutritionMacroTotal label="Fat" value={entry.fatG} color="var(--color-heart)" />
         </div>
         <div>
           <span className="font-mono text-[13px] font-medium text-ink">
@@ -396,14 +393,6 @@ function NutritionItemRow({ entry }: { entry: NutritionLogEntry }): React.JSX.El
   )
 }
 
-function sumValue(
-  entries: NutritionLogEntry[],
-  key: 'calories' | 'proteinG' | 'carbsG' | 'fatG' | 'fiberG' | 'saturatedFatG' | 'sodiumG' | 'sugarG'
-): number | null {
-  const values = entries.flatMap((entry) => entry[key] == null ? [] : [entry[key]])
-  return values.length > 0 ? values.reduce((sum, value) => sum + value, 0) : null
-}
-
 function MealSummary({
   label,
   entries,
@@ -411,17 +400,17 @@ function MealSummary({
   contentId,
   onToggle
 }: {
-  label: MealGroup
+  label: NutritionMealGroup
   entries: NutritionLogEntry[]
   isOpen: boolean
   contentId: string
   onToggle: () => void
 }): React.JSX.Element {
-  const calories = sumValue(entries, 'calories')
-  const protein = sumValue(entries, 'proteinG')
-  const carbs = sumValue(entries, 'carbsG')
-  const fat = sumValue(entries, 'fatG')
-  const fiber = sumValue(entries, 'fiberG')
+  const calories = nutritionValue(entries, 'calories')
+  const protein = nutritionValue(entries, 'proteinG')
+  const carbs = nutritionValue(entries, 'carbsG')
+  const fat = nutritionValue(entries, 'fatG')
+  const fiber = nutritionValue(entries, 'fiberG')
   return (
     <button
       type="button"
@@ -448,56 +437,14 @@ function MealSummary({
           />
         </div>
       </div>
-      <MacroShareBar entries={entries} className="mt-3" />
+      <NutritionMacroBar values={nutritionTotals(entries)} className="mt-3" />
       <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
-        <MacroTotal label="Protein" value={protein} color="var(--color-recovery)" />
-        <MacroTotal label="Carbs" value={carbs} color="var(--color-activity)" />
-        <MacroTotal label="Fat" value={fat} color="var(--color-heart)" />
-        {fiber != null && <MacroTotal label="Fiber" value={fiber} color="var(--color-hydration)" />}
+        <NutritionMacroTotal label="Protein" value={protein} color="var(--color-recovery)" />
+        <NutritionMacroTotal label="Carbs" value={carbs} color="var(--color-activity)" />
+        <NutritionMacroTotal label="Fat" value={fat} color="var(--color-heart)" />
+        {fiber != null && <NutritionMacroTotal label="Fiber" value={fiber} color="var(--color-hydration)" />}
       </div>
     </button>
-  )
-}
-
-function MacroTotal({ label, value, color }: { label: string; value: number | null; color: string }): React.JSX.Element | null {
-  if (value == null) return null
-  return (
-    <span className="flex items-center gap-1.5 text-[10.5px] text-ink-faint">
-      <span className="h-1.5 w-1.5 rounded-full" style={{ background: color }} />
-      {label} <span className="font-mono text-ink-dim">{formatInt(value)}g</span>
-    </span>
-  )
-}
-
-function MacroShareBar({
-  entries,
-  compact = false,
-  className
-}: {
-  entries: NutritionLogEntry[]
-  compact?: boolean
-  className?: string
-}): React.JSX.Element {
-  const parts = [
-    { label: 'Protein', grams: sumValue(entries, 'proteinG') ?? 0, kcalPerG: 4, color: 'var(--color-recovery)' },
-    { label: 'Carbs', grams: sumValue(entries, 'carbsG') ?? 0, kcalPerG: 4, color: 'var(--color-activity)' },
-    { label: 'Fat', grams: sumValue(entries, 'fatG') ?? 0, kcalPerG: 9, color: 'var(--color-heart)' }
-  ].map((part) => ({ ...part, kcal: part.grams * part.kcalPerG }))
-  const total = parts.reduce((sum, part) => sum + part.kcal, 0)
-  const ariaLabel = parts.filter((part) => part.grams > 0).map((part) => `${part.label} ${formatInt(part.grams)} grams`).join(', ')
-  return (
-    <div
-      className={cn('flex overflow-hidden rounded-full bg-white/[0.04]', compact ? 'h-1' : 'h-2', className)}
-      role="img"
-      aria-label={ariaLabel || 'No macro details'}
-    >
-      {total > 0 && parts.map((part) => part.kcal > 0 ? (
-        <span
-          key={part.label}
-          style={{ width: `${(part.kcal / total) * 100}%`, background: part.color }}
-        />
-      ) : null)}
-    </div>
   )
 }
 
@@ -579,7 +526,7 @@ function MacroBreakdown({
     .map((nutrient) => {
       // Individual foods retain sugar, saturated fat, and mixed sodium units
       // that Google's daily rollup can omit or aggregate incorrectly.
-      const recorded = sumValue(entries, nutrient.key) ?? today[nutrient.key]
+      const recorded = nutritionValue(entries, nutrient.key) ?? today[nutrient.key]
       const pending = (recorded == null || recorded <= 0) && isMetricPending(nutrient.key)
       const value = recorded != null && recorded > 0 ? recorded : null
       return { ...nutrient, value, pending }

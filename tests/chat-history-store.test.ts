@@ -201,4 +201,53 @@ describe('encrypted chat history store', () => {
       action: { type: 'open-sleep-stages', date: '2026-07-11' }
     })
   })
+
+  test('persists a validated nutrition card', () => {
+    const path = temporaryPath()
+    const store = new ChatHistoryStore(path, encryptedAdapter())
+    const chat = store.create('account-a')
+    store.update('account-a', chat.id, [
+      userMessage('Show my lunch nutrition'),
+      {
+        id: crypto.randomUUID(),
+        role: 'assistant',
+        text: 'Here is your lunch breakdown.',
+        createdAt: new Date().toISOString(),
+        partsVersion: 1,
+        parts: [
+          {
+            id: 'nutrition-part',
+            type: 'nutrition-card',
+            scope: 'meal',
+            title: 'Lunch',
+            date: '2026-07-11',
+            time: null,
+            servingLabel: null,
+            itemCount: 2,
+            itemNames: ['Chicken salad', 'Apple'],
+            values: {
+              calories: 520,
+              proteinG: 39,
+              carbsG: 46,
+              fatG: 19,
+              fiberG: 11,
+              saturatedFatG: 4,
+              sodiumG: 0.8,
+              sugarG: 24
+            },
+            source: 'live',
+            action: { type: 'open-nutrition', date: '2026-07-11' }
+          }
+        ]
+      }
+    ])
+
+    const restored = new ChatHistoryStore(path, encryptedAdapter()).snapshot('account-a').sessions[0]
+    expect(restored.messages[1].parts?.[0]).toMatchObject({
+      type: 'nutrition-card',
+      scope: 'meal',
+      values: { calories: 520 },
+      action: { type: 'open-nutrition', date: '2026-07-11' }
+    })
+  })
 })

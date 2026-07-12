@@ -1,5 +1,11 @@
 import { randomUUID } from 'node:crypto'
 import { METRIC_KEYS } from '../shared/types'
+import {
+  NUTRITION_MEAL_GROUPS,
+  nutritionMealGroup,
+  nutritionTotals,
+  type NutritionMealGroup
+} from '../shared/nutrition'
 import type {
   AssistantAction,
   AssistantComparisonValue,
@@ -7,10 +13,14 @@ import type {
   AssistantMetricRange,
   AssistantOverviewAggregation,
   AssistantOverviewMetric,
+  AssistantNutritionPart,
+  AssistantNutritionScope,
+  AssistantNutritionValues,
   AssistantSleepNight,
   AssistantVisualPart,
   DataSource,
   MetricKey,
+  NutritionLogEntry,
   Workout
 } from '../shared/types'
 import type { AgentToolSpec } from './health-agent-tools'
@@ -29,7 +39,7 @@ export const PRESENTATION_TOOL: AgentToolSpec = {
   type: 'function',
   name: 'present_health_data',
   description:
-    'Display trusted OpenPulse cards and charts from datasets returned by query_daily_metrics, analyze_daily_metrics, query_sleep, or query_workouts. Analysis dataset IDs can be used directly; never repeat a health query merely to make a visual. Use an overview for a broad multi-domain summary, a metric card for one exact value, a comparison for two periods, a chart for a trend, a sleep card for one night when stage detail is relevant, or a workout card for one workout. An overview is a standalone block: when requesting one, leave every other array empty. Otherwise normally show one block and never more than two unless the user explicitly asks for several. The app computes all values and navigation; never copy values into this call. All six arrays are required and may be empty.',
+    'Display trusted OpenPulse cards and charts from datasets returned by query_daily_metrics, analyze_daily_metrics, query_sleep, query_nutrition_logs, or query_workouts. Analysis dataset IDs can be used directly; never repeat a health query merely to make a visual. Use an overview for a broad multi-domain summary, a metric card for one exact value, a comparison for two periods, a chart for a trend, a sleep card for one night when stage detail is relevant, a nutrition card for one day, meal, or logged item, or a workout card for one workout. Use query_daily_metrics for a day nutrition card and query_nutrition_logs for a meal or item card. An overview is a standalone block: when requesting one, leave every other array empty. Otherwise normally show one block and never more than two unless the user explicitly asks for several. The app computes all values and navigation; never copy values into this call. All seven arrays are required and may be empty.',
   strict: true,
   parameters: {
     type: 'object',
@@ -115,6 +125,22 @@ export const PRESENTATION_TOOL: AgentToolSpec = {
           additionalProperties: false
         }
       },
+      nutritionCards: {
+        type: 'array',
+        maxItems: 2,
+        items: {
+          type: 'object',
+          properties: {
+            datasetId: DATASET_ID,
+            date: DATE_SCHEMA,
+            scope: { type: 'string', enum: ['day', 'meal', 'item'] },
+            mealGroup: { type: ['string', 'null'], enum: [...NUTRITION_MEAL_GROUPS, null] },
+            entryId: { type: ['string', 'null'], maxLength: 200 }
+          },
+          required: ['datasetId', 'date', 'scope', 'mealGroup', 'entryId'],
+          additionalProperties: false
+        }
+      },
       workouts: {
         type: 'array',
         maxItems: 2,
@@ -126,7 +152,7 @@ export const PRESENTATION_TOOL: AgentToolSpec = {
         }
       }
     },
-    required: ['overviews', 'metricCards', 'comparisons', 'charts', 'sleepCards', 'workouts'],
+    required: ['overviews', 'metricCards', 'comparisons', 'charts', 'sleepCards', 'nutritionCards', 'workouts'],
     additionalProperties: false
   }
 }
@@ -368,8 +394,19 @@ export function resolveAutomaticPresentation(
   const asksForSleepStructure = /\b(sleep stages?|sleep breakdown|sleep structure)\b/.test(request)
   const identifiesOneNight = /\b(last night|yesterday|tonight|on \d{4}-\d{2}-\d{2})\b/.test(request)
   const asksForSleepNight = asksForSleepStructure || (identifiesOneNight && /\bhow did i sleep\b/.test(request))
+  const requestedMeal = NUTRITION_MEAL_GROUPS.find((meal) =>
+    new RegExp(`\\b${meal.toLowerCase()}\\b`).test(request)
+  ) ?? null
+  const asksForNutritionCard = requestedMeal != null || /\b(nutrition(?:al)?|macros?|what did i eat|meal breakdown)\b/.test(request)
+  const asksForMultiDayRange = /\b(this|last|past|previous) (week|month|year)|\b\d+ (days|weeks|months)\b/.test(request)
   if (asksForComparison && comparesExternalStandard) return []
-  if (!asksForTrend && (!asksForComparison || comparesExternalStandard) && !asksForExactValue && !asksForSleepNight) return []
+  if (
+    !asksForTrend &&
+    (!asksForComparison || comparesExternalStandard) &&
+    !asksForExactValue &&
+    !asksForSleepNight &&
+    !asksForNutritionCard
+  ) return []
 
   const candidates = [...datasets.entries()].reverse()
   if (asksForSleepNight && !asksForTrend && !asksForComparison) {
@@ -385,6 +422,37 @@ export function resolveAutomaticPresentation(
           { sleepCards: [{ datasetId, date: night.date }] },
           datasets
         ).slice(0, 1)
+      } catch {
+        continue
+      }
+    }
+  }
+  if (asksForNutritionCard && !asksForTrend && !asksForComparison && !comparesExternalStandard && !asksForMultiDayRange) {
+    for (const [datasetId, source] of candidates) {
+      try {
+        if (source.tool === 'query_nutrition_logs') {
+          const logs = nutritionLogDataset(datasetId, datasets)
+          const matchingItem = logs.entries
+            .filter((entry) => entry.foodName.length >= 3 && request.includes(entry.foodName.toLowerCase()))
+            .sort((left, right) => right.foodName.length - left.foodName.length)[0]
+          const scope: AssistantNutritionScope = matchingItem ? 'item' : requestedMeal ? 'meal' : 'day'
+          return [resolveNutritionCard({
+            datasetId,
+            date: logs.date,
+            scope,
+            mealGroup: requestedMeal,
+            entryId: matchingItem?.id ?? null
+          }, datasets)]
+        }
+        if (source.tool === 'query_daily_metrics' || source.tool === 'analyze_daily_metrics') {
+          const daily = dailyDataset(datasetId, datasets)
+          const date = Object.keys(daily.days)
+            .filter((date) => Object.values(NUTRITION_DAILY_KEYS).some((metric) => daily.days[date]?.[metric] != null))
+            .sort()
+            .at(-1)
+          if (!date) continue
+          return [resolveNutritionCard({ datasetId, date, scope: 'day', mealGroup: null, entryId: null }, datasets)]
+        }
       } catch {
         continue
       }
@@ -613,6 +681,119 @@ function sleepDataset(
   return { source, start, end, nights }
 }
 
+const NUTRITION_DAILY_KEYS = {
+  calories: 'caloriesIn',
+  proteinG: 'proteinG',
+  carbsG: 'carbsG',
+  fatG: 'fatG',
+  fiberG: 'fiberG',
+  saturatedFatG: 'saturatedFatG',
+  sodiumG: 'sodiumG',
+  sugarG: 'sugarG'
+} as const
+
+function nutritionValuesFromDay(
+  dataset: DailyDataset,
+  date: string
+): AssistantNutritionValues {
+  ensureWithin(dataset, date, date)
+  const day = dataset.days[date] ?? {}
+  return Object.fromEntries(
+    Object.entries(NUTRITION_DAILY_KEYS).map(([key, metric]) => {
+      const value = day[metric]
+      return [key, typeof value === 'number' && Number.isFinite(value) ? value : null]
+    })
+  ) as unknown as AssistantNutritionValues
+}
+
+function nutritionLogDataset(
+  datasetId: string,
+  datasets: Map<string, AgentDataset>
+): { source: DataSource; date: string; entries: NutritionLogEntry[] } {
+  const dataset = datasets.get(datasetId)
+  const data = record(dataset?.data)
+  if (dataset?.tool !== 'query_nutrition_logs' || !data || !Array.isArray(data.entries)) {
+    throw new Error(`Dataset ${datasetId} is not nutrition log data.`)
+  }
+  const source = data.source === 'demo' ? 'demo' : data.source === 'live' ? 'live' : null
+  const date = requiredDate(data.date, 'nutrition date')
+  if (!source) throw new Error(`Dataset ${datasetId} has no valid source.`)
+  return { source, date, entries: data.entries as NutritionLogEntry[] }
+}
+
+function hasNutritionValues(values: AssistantNutritionValues): boolean {
+  return Object.values(values).some((value) => typeof value === 'number' && Number.isFinite(value))
+}
+
+function resolveNutritionCard(
+  raw: unknown,
+  datasets: Map<string, AgentDataset>
+): AssistantNutritionPart {
+  const item = record(raw)
+  const datasetId = requiredText(item?.datasetId, 'datasetId', 200)
+  const date = requiredDate(item?.date, 'date')
+  const scope = item?.scope
+  if (scope !== 'day' && scope !== 'meal' && scope !== 'item') {
+    throw new Error('A nutrition card requires a valid scope.')
+  }
+
+  let title = 'Daily nutrition'
+  let time: string | null = null
+  let servingLabel: string | null = null
+  let itemCount: number | null = null
+  let itemNames: string[] = []
+  let values: AssistantNutritionValues
+  let source: DataSource
+
+  const dataset = datasets.get(datasetId)
+  if (scope === 'day' && (dataset?.tool === 'query_daily_metrics' || dataset?.tool === 'analyze_daily_metrics')) {
+    const daily = dailyDataset(datasetId, datasets)
+    values = nutritionValuesFromDay(daily, date)
+    source = daily.source
+  } else {
+    const logs = nutritionLogDataset(datasetId, datasets)
+    if (logs.date !== date) throw new Error('The requested nutrition card falls outside its dataset date.')
+    source = logs.source
+    let entries = logs.entries
+    if (scope === 'meal') {
+      const mealGroup = item?.mealGroup
+      if (!NUTRITION_MEAL_GROUPS.includes(mealGroup as NutritionMealGroup)) {
+        throw new Error('A meal nutrition card requires a valid meal group.')
+      }
+      title = mealGroup as NutritionMealGroup
+      entries = entries.filter((entry) => nutritionMealGroup(entry.mealType) === mealGroup)
+    } else if (scope === 'item') {
+      const entryId = requiredText(item?.entryId, 'entryId', 200)
+      const entry = entries.find((candidate) => candidate.id === entryId)
+      if (!entry) throw new Error(`Nutrition entry ${entryId} is not in dataset ${datasetId}.`)
+      title = entry.foodName
+      time = entry.startTime
+      servingLabel = entry.servingLabel
+      entries = [entry]
+    }
+    if (!entries.length) throw new Error(`No nutrition entries match the requested ${scope}.`)
+    values = nutritionTotals(entries)
+    itemCount = entries.length
+    itemNames = [...new Set(entries.map((entry) => entry.foodName).filter(Boolean))].slice(0, 4)
+  }
+
+  if (!hasNutritionValues(values)) throw new Error('The selected nutrition data has no recorded nutrient values.')
+  return {
+    id: randomUUID(),
+    type: 'nutrition-card',
+    scope: scope as AssistantNutritionScope,
+    title,
+    date,
+    time,
+    servingLabel,
+    itemCount,
+    itemNames,
+    values,
+    source,
+    action: { type: 'open-nutrition', date }
+  }
+}
+
 export function resolvePresentation(
   args: Record<string, unknown>,
   datasets: Map<string, AgentDataset>
@@ -730,6 +911,10 @@ export function resolvePresentation(
       source: selected.source,
       action: { type: 'open-sleep-stages', date }
     })
+  }
+
+  for (const raw of list(args.nutritionCards).slice(0, 2)) {
+    parts.push(resolveNutritionCard(raw, datasets))
   }
 
   for (const raw of list(args.workouts).slice(0, 2)) {

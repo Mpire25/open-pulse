@@ -1,8 +1,9 @@
 import { memo, useEffect, useState } from 'react'
-import { Minus, Moon, PersonSimpleRun, Pulse, TrendDown, TrendUp } from '@phosphor-icons/react'
+import { ForkKnife, Minus, Moon, PersonSimpleRun, Pulse, TrendDown, TrendUp } from '@phosphor-icons/react'
 import { motion } from 'framer-motion'
 import { ColumnChart, TrendLine } from '@/components/charts'
 import { MetricStat } from '@/components/MetricStat'
+import { NutritionMacroBar, NutritionMacroTotal } from '@/components/NutritionMacros'
 import { DrillHeader, Panel, SectionHeader } from '@/components/Panel'
 import { SleepStages } from '@/components/SleepStages'
 import { METRICS } from '@/lib/metric-registry'
@@ -17,6 +18,7 @@ import {
 import type {
   AssistantAction,
   AssistantComparisonValue,
+  AssistantNutritionPart,
   AssistantOverviewMetric,
   AssistantVisualPart,
   MetricKey
@@ -52,6 +54,7 @@ function visualCardClass(
   if (part.type === 'metric-card') return 'w-full max-w-[380px]'
   if (part.type === 'workout-card') return 'w-full max-w-[620px]'
   if (part.type === 'sleep-card') return 'w-full max-w-[760px]'
+  if (part.type === 'nutrition-card') return part.scope === 'item' ? 'w-full max-w-[620px]' : 'w-full max-w-[760px]'
   if (part.type === 'comparison') return 'w-full max-w-[760px]'
   return 'w-full'
 }
@@ -282,9 +285,105 @@ function AssistantResponsePartsBase({
           )
         }
 
+        if (part.type === 'nutrition-card') {
+          return (
+            <NutritionCard
+              key={part.id}
+              part={part}
+              compact={Boolean(compact)}
+              layoutClass={layoutClass}
+              entrance={entrance}
+              onOpen={() => onAction(part.action)}
+            />
+          )
+        }
+
         return null
       })}
     </div>
+  )
+}
+
+const SECONDARY_NUTRIENTS = [
+  { key: 'fiberG' as const, label: 'Fiber', color: 'var(--color-hydration)', decimals: 0 },
+  { key: 'saturatedFatG' as const, label: 'Saturated fat', color: 'var(--color-heart)', decimals: 0 },
+  { key: 'sodiumG' as const, label: 'Sodium', color: 'var(--color-recovery)', decimals: 2 },
+  { key: 'sugarG' as const, label: 'Sugar', color: 'var(--color-body-metric)', decimals: 0 }
+]
+
+function NutritionCard({
+  part,
+  compact,
+  layoutClass,
+  entrance,
+  onOpen
+}: {
+  part: AssistantNutritionPart
+  compact: boolean
+  layoutClass: string
+  entrance: {
+    initial: false
+    animate: { opacity: number; y: number }
+    transition: { delay: number; duration: number; ease: readonly [number, number, number, number] }
+  }
+  onOpen: () => void
+}): React.JSX.Element {
+  const { values } = part
+  const secondary = SECONDARY_NUTRIENTS.filter(({ key }) => values[key] != null)
+  const details = [
+    shortDate(part.date),
+    part.time ? formatClock(part.time) : null,
+    part.servingLabel,
+    part.itemCount == null ? null : `${part.itemCount} ${part.itemCount === 1 ? 'item' : 'items'}`,
+    part.source === 'demo' ? 'Sample data' : null
+  ].filter(Boolean).join(' · ')
+  return (
+    <MotionPanel {...entrance} className={cn('overflow-hidden', layoutClass)}>
+      <div className="border-b border-hairline px-5 pb-3 pt-4">
+        <DrillHeader
+          icon={<ForkKnife size={18} weight="fill" style={{ color: 'var(--color-recovery)' }} />}
+          title={part.title}
+          hint={details}
+          onOpen={onOpen}
+        />
+      </div>
+      <div className={cn('grid gap-5 px-5 py-4', compact ? 'grid-cols-1' : 'grid-cols-[minmax(110px,0.28fr)_1fr]')}>
+        <div className={cn(!compact && 'border-r border-hairline pr-5')}>
+          <div className="font-mono text-[25px] font-semibold leading-none tracking-tight text-ink">
+            {values.calories == null ? '—' : formatInt(values.calories)}
+          </div>
+          <div className="mt-1.5 text-[10px] uppercase tracking-wide text-ink-faint">Calories eaten</div>
+        </div>
+        <div className="flex min-w-0 flex-col justify-center">
+          <NutritionMacroBar values={values} />
+          <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1.5">
+            <NutritionMacroTotal label="Protein" value={values.proteinG} color="var(--color-recovery)" />
+            <NutritionMacroTotal label="Carbs" value={values.carbsG} color="var(--color-activity)" />
+            <NutritionMacroTotal label="Fat" value={values.fatG} color="var(--color-heart)" />
+          </div>
+        </div>
+      </div>
+      {secondary.length > 0 && (
+        <div className={cn('grid gap-3 border-t border-hairline px-5 py-3.5', compact ? 'grid-cols-2' : 'grid-cols-4')}>
+          {secondary.map((nutrient) => (
+            <div key={nutrient.key} className="min-w-0">
+              <div className="flex items-center gap-1.5 text-[10px] text-ink-faint">
+                <span className="size-1.5 rounded-full" style={{ background: nutrient.color }} />
+                <span className="truncate">{nutrient.label}</span>
+              </div>
+              <div className="mt-1 font-mono text-[12px] font-medium text-ink-dim">
+                {values[nutrient.key]?.toFixed(nutrient.decimals)}g
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      {part.itemNames.length > 0 && part.scope !== 'item' && (
+        <div className="truncate border-t border-hairline px-5 py-3 text-[10.5px] text-ink-faint">
+          {part.itemNames.join(' · ')}
+        </div>
+      )}
+    </MotionPanel>
   )
 }
 

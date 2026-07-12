@@ -435,6 +435,7 @@ export type AssistantAction =
     }
   | { type: 'open-workout'; workout: Workout; date: string }
   | { type: 'open-sleep-stages'; date: string }
+  | { type: 'open-nutrition'; date: string }
 
 export interface AssistantMetricCardPart {
   id: string
@@ -515,6 +516,34 @@ export interface AssistantSleepPart {
   action: AssistantAction
 }
 
+export type AssistantNutritionScope = 'day' | 'meal' | 'item'
+
+export interface AssistantNutritionValues {
+  calories: number | null
+  proteinG: number | null
+  carbsG: number | null
+  fatG: number | null
+  fiberG: number | null
+  saturatedFatG: number | null
+  sodiumG: number | null
+  sugarG: number | null
+}
+
+export interface AssistantNutritionPart {
+  id: string
+  type: 'nutrition-card'
+  scope: AssistantNutritionScope
+  title: string
+  date: string
+  time: string | null
+  servingLabel: string | null
+  itemCount: number | null
+  itemNames: string[]
+  values: AssistantNutritionValues
+  source: DataSource
+  action: AssistantAction
+}
+
 export type AssistantOverviewAggregation = 'average' | 'total' | 'latest'
 
 export interface AssistantOverviewMetric {
@@ -543,6 +572,7 @@ export type AssistantVisualPart =
   | AssistantChartPart
   | AssistantWorkoutPart
   | AssistantSleepPart
+  | AssistantNutritionPart
   | AssistantOverviewPart
 
 export interface ChatMessage {

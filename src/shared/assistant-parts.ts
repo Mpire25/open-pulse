@@ -1,4 +1,5 @@
 import { METRIC_KEYS } from './types'
+import { NUTRITION_VALUE_KEYS } from './nutrition'
 import type {
   AssistantAction,
   AssistantComparisonValue,
@@ -6,6 +7,8 @@ import type {
   AssistantMetricRange,
   AssistantOverviewAggregation,
   AssistantOverviewMetric,
+  AssistantNutritionScope,
+  AssistantNutritionValues,
   AssistantSleepNight,
   AssistantVisualPart,
   DataSource,
@@ -97,7 +100,23 @@ function action(value: unknown): AssistantAction | null {
     const selectedDate = date(item.date)
     return selectedDate ? { type: 'open-sleep-stages', date: selectedDate } : null
   }
+  if (item?.type === 'open-nutrition') {
+    const selectedDate = date(item.date)
+    return selectedDate ? { type: 'open-nutrition', date: selectedDate } : null
+  }
   return null
+}
+
+function nutritionValues(value: unknown): AssistantNutritionValues | null {
+  const item = record(value)
+  if (!item) return null
+  const result = {} as AssistantNutritionValues
+  for (const key of NUTRITION_VALUE_KEYS) {
+    const amount = numberOrNull(item[key])
+    if (amount === undefined || (typeof amount === 'number' && amount < 0)) return null
+    result[key] = amount
+  }
+  return Object.values(result).some((amount) => amount != null) ? result : null
 }
 
 const SLEEP_STAGES = ['AWAKE', 'LIGHT', 'DEEP', 'REM'] as const
@@ -307,6 +326,47 @@ export function normalizeAssistantParts(value: unknown): AssistantVisualPart[] {
         : []
     }
 
+    if (item.type === 'nutrition-card') {
+      if (!('time' in item) || !('servingLabel' in item) || !('itemCount' in item) || !Array.isArray(item.itemNames)) {
+        return []
+      }
+      const scope = ['day', 'meal', 'item'].includes(item.scope as string)
+        ? item.scope as AssistantNutritionScope
+        : null
+      const title = text(item.title, 100)
+      const selectedDate = date(item.date)
+      const time = item.time === null ? null : timestamp(item.time)
+      const servingLabel = item.servingLabel === null ? null : text(item.servingLabel, 120)
+      const itemCount = numberOrNull(item.itemCount)
+      const itemNames = Array.isArray(item.itemNames)
+        ? item.itemNames.slice(0, 4).flatMap((name) => {
+            const selected = text(name, 100)
+            return selected ? [selected] : []
+          })
+        : []
+      const values = nutritionValues(item.values)
+      const selectedSource = source(item.source)
+      const selectedAction = action(item.action)
+      return scope && title && selectedDate && time !== undefined && servingLabel !== undefined &&
+        itemCount !== undefined && (itemCount === null || itemCount >= 0) && values && selectedSource &&
+        selectedAction?.type === 'open-nutrition' && selectedAction.date === selectedDate
+        ? [{
+            id,
+            type: 'nutrition-card',
+            scope,
+            title,
+            date: selectedDate,
+            time,
+            servingLabel,
+            itemCount: itemCount === null ? null : Math.floor(itemCount),
+            itemNames,
+            values,
+            source: selectedSource,
+            action: selectedAction
+          }]
+        : []
+    }
+
     return []
   })
 }
@@ -320,6 +380,7 @@ export function assistantPartsContext(parts: AssistantVisualPart[]): string {
     if (part.type === 'trend-chart') return [`Displayed a ${part.metric} trend for ${part.startDate}–${part.endDate}.`]
     if (part.type === 'workout-card') return [`Displayed workout ${part.workout.name} on ${part.date}.`]
     if (part.type === 'sleep-card') return [`Displayed sleep stages for ${part.night.date}.`]
+    if (part.type === 'nutrition-card') return [`Displayed ${part.scope} nutrition for ${part.date}.`]
     return []
   })
   return summaries.length ? `\n\n[OpenPulse display context: ${summaries.join(' ')}]` : ''
