@@ -3,7 +3,7 @@ import type { AssistantVisualPart } from './types'
 export type AssistantVisualLayout = 'stack' | 'pair' | 'primary-supporting'
 
 export function isPrimaryAssistantVisual(part: AssistantVisualPart): boolean {
-  return part.type === 'overview' || part.type === 'trend-chart' || part.type === 'comparison'
+  return part.type === 'overview' || part.type === 'trend-chart' || part.type === 'comparison' || part.type === 'sleep-card'
 }
 
 export function assistantVisualLayout(

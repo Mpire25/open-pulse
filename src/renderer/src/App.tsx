@@ -339,6 +339,17 @@ export default function App(): React.JSX.Element {
 
   const handleAssistantAction = (action: AssistantAction): void => {
     setChatOpen(false)
+    if (action.type === 'open-sleep-stages') {
+      navigate({
+        ...currentNavigationEntry(),
+        view: 'sleep',
+        selectedDate: action.date,
+        detailMetric: null,
+        sleepStagesOpen: true,
+        selectedWorkout: null
+      })
+      return
+    }
     if (action.type === 'open-metric') {
       navigate({
         ...currentNavigationEntry(),

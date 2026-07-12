@@ -7,6 +7,7 @@ import type {
   AssistantMetricRange,
   AssistantOverviewAggregation,
   AssistantOverviewMetric,
+  AssistantSleepNight,
   AssistantVisualPart,
   DataSource,
   MetricKey,
@@ -28,7 +29,7 @@ export const PRESENTATION_TOOL: AgentToolSpec = {
   type: 'function',
   name: 'present_health_data',
   description:
-    'Display trusted OpenPulse cards and charts from datasets returned by query_daily_metrics, analyze_daily_metrics, query_sleep, or query_workouts. Analysis dataset IDs can be used directly; never repeat a health query merely to make a visual. Use an overview for a broad multi-domain summary, a metric card for one exact value, a comparison for two periods, a chart for a trend, or a workout card for one workout. An overview is a standalone block: when requesting one, leave every other array empty. Otherwise normally show one block and never more than two unless the user explicitly asks for several. The app computes all values and navigation; never copy values into this call. All five arrays are required and may be empty.',
+    'Display trusted OpenPulse cards and charts from datasets returned by query_daily_metrics, analyze_daily_metrics, query_sleep, or query_workouts. Analysis dataset IDs can be used directly; never repeat a health query merely to make a visual. Use an overview for a broad multi-domain summary, a metric card for one exact value, a comparison for two periods, a chart for a trend, a sleep card for one night when stage detail is relevant, or a workout card for one workout. An overview is a standalone block: when requesting one, leave every other array empty. Otherwise normally show one block and never more than two unless the user explicitly asks for several. The app computes all values and navigation; never copy values into this call. All six arrays are required and may be empty.',
   strict: true,
   parameters: {
     type: 'object',
@@ -104,6 +105,16 @@ export const PRESENTATION_TOOL: AgentToolSpec = {
           additionalProperties: false
         }
       },
+      sleepCards: {
+        type: 'array',
+        maxItems: 2,
+        items: {
+          type: 'object',
+          properties: { datasetId: DATASET_ID, date: DATE_SCHEMA },
+          required: ['datasetId', 'date'],
+          additionalProperties: false
+        }
+      },
       workouts: {
         type: 'array',
         maxItems: 2,
@@ -115,7 +126,7 @@ export const PRESENTATION_TOOL: AgentToolSpec = {
         }
       }
     },
-    required: ['overviews', 'metricCards', 'comparisons', 'charts', 'workouts'],
+    required: ['overviews', 'metricCards', 'comparisons', 'charts', 'sleepCards', 'workouts'],
     additionalProperties: false
   }
 }
@@ -354,10 +365,31 @@ export function resolveAutomaticPresentation(
   const asksForComparison = /\b(compar(?:e|ed|ing|ison)|versus|vs\.?|difference|than last)\b/.test(request)
   const comparesExternalStandard = /\b(nhs|guidelines?|recommend(?:ation|ed)|ideal|target|goal|baseline)\b/.test(request)
   const asksForExactValue = /\b(how many|how much|what (?:was|is|were|are))\b/.test(request)
+  const asksForSleepStructure = /\b(sleep stages?|sleep breakdown|sleep structure)\b/.test(request)
+  const identifiesOneNight = /\b(last night|yesterday|tonight|on \d{4}-\d{2}-\d{2})\b/.test(request)
+  const asksForSleepNight = asksForSleepStructure || (identifiesOneNight && /\bhow did i sleep\b/.test(request))
   if (asksForComparison && comparesExternalStandard) return []
-  if (!asksForTrend && (!asksForComparison || comparesExternalStandard) && !asksForExactValue) return []
+  if (!asksForTrend && (!asksForComparison || comparesExternalStandard) && !asksForExactValue && !asksForSleepNight) return []
 
   const candidates = [...datasets.entries()].reverse()
+  if (asksForSleepNight && !asksForTrend && !asksForComparison) {
+    for (const [datasetId, source] of candidates) {
+      if (source.tool !== 'query_sleep') continue
+      try {
+        const dataset = sleepDataset(datasetId, datasets)
+        const night = dataset.nights
+          .filter((candidate) => candidate.stages.length)
+          .sort((left, right) => right.date.localeCompare(left.date))[0]
+        if (!night) continue
+        return resolvePresentation(
+          { sleepCards: [{ datasetId, date: night.date }] },
+          datasets
+        ).slice(0, 1)
+      } catch {
+        continue
+      }
+    }
+  }
   for (const [datasetId, source] of candidates) {
     const metrics = datasetMetrics(source)
     if (!metrics.length) continue
@@ -524,6 +556,63 @@ function workoutDataset(datasetId: string, datasets: Map<string, AgentDataset>):
   return { source, workouts: data.workouts as Workout[] }
 }
 
+const SLEEP_STAGES = new Set(['AWAKE', 'LIGHT', 'DEEP', 'REM'])
+
+function sleepDataset(
+  datasetId: string,
+  datasets: Map<string, AgentDataset>
+): { source: DataSource; start: string; end: string; nights: AssistantSleepNight[] } {
+  const dataset = datasets.get(datasetId)
+  const data = record(dataset?.data)
+  const requestedRange = record(data?.requestedRange)
+  if (dataset?.tool !== 'query_sleep' || !data || !requestedRange || !Array.isArray(data.nights)) {
+    throw new Error(`Dataset ${datasetId} is not sleep data.`)
+  }
+  const source = data.source === 'demo' ? 'demo' : data.source === 'live' ? 'live' : null
+  const start = requiredDate(requestedRange.start, 'dataset start')
+  const end = requiredDate(requestedRange.end, 'dataset end')
+  if (!source) throw new Error(`Dataset ${datasetId} has no valid source.`)
+  const nights = data.nights.flatMap((candidate): AssistantSleepNight[] => {
+    const night = record(candidate)
+    if (!night) return []
+    const date = requiredDate(night.date, 'sleep date')
+    const startTime = requiredText(night.startTime, 'sleep startTime', 80)
+    const endTime = requiredText(night.endTime, 'sleep endTime', 80)
+    const minutesAsleep = night.minutesAsleep
+    const minutesInSleepPeriod = night.minutesInSleepPeriod
+    const efficiency = night.efficiency
+    if (
+      typeof minutesAsleep !== 'number' ||
+      !Number.isFinite(minutesAsleep) ||
+      typeof minutesInSleepPeriod !== 'number' ||
+      !Number.isFinite(minutesInSleepPeriod) ||
+      (efficiency !== null && (typeof efficiency !== 'number' || !Number.isFinite(efficiency)))
+    ) {
+      throw new Error(`Sleep night ${date} has invalid summary values.`)
+    }
+    const stages = list(night.stages).flatMap((candidate) => {
+      const stage = record(candidate)
+      if (
+        !stage ||
+        typeof stage.type !== 'string' ||
+        !SLEEP_STAGES.has(stage.type) ||
+        typeof stage.startTime !== 'string' ||
+        typeof stage.endTime !== 'string'
+      ) return []
+      return [{ type: stage.type as 'AWAKE' | 'LIGHT' | 'DEEP' | 'REM', startTime: stage.startTime, endTime: stage.endTime }]
+    })
+    const rawStageMinutes = record(night.stageMinutes) ?? {}
+    const stageMinutes = Object.fromEntries(
+      [...SLEEP_STAGES].flatMap((stage) => {
+        const value = rawStageMinutes[stage]
+        return typeof value === 'number' && Number.isFinite(value) ? [[stage, value]] : []
+      })
+    )
+    return [{ date, startTime, endTime, minutesAsleep, minutesInSleepPeriod, efficiency, stages, stageMinutes }]
+  })
+  return { source, start, end, nights }
+}
+
 export function resolvePresentation(
   args: Record<string, unknown>,
   datasets: Map<string, AgentDataset>
@@ -620,6 +709,26 @@ export function resolvePresentation(
       observations: points.filter((point) => point.value != null).length,
       source: dataset.source,
       action: metricAction(metric, dataset.end, rangeDays(dataset.start, dataset.end))
+    })
+  }
+
+  for (const raw of list(args.sleepCards).slice(0, 2)) {
+    const item = record(raw)
+    const datasetId = requiredText(item?.datasetId, 'datasetId', 200)
+    const date = requiredDate(item?.date, 'date')
+    const selected = sleepDataset(datasetId, datasets)
+    if (date < selected.start || date > selected.end) {
+      throw new Error('The requested sleep card falls outside its dataset range.')
+    }
+    const night = selected.nights.find((candidate) => candidate.date === date)
+    if (!night) throw new Error(`Sleep night ${date} is not in dataset ${datasetId}.`)
+    if (!night.stages.length) throw new Error(`Sleep night ${date} has no recorded stage timeline.`)
+    parts.push({
+      id: randomUUID(),
+      type: 'sleep-card',
+      night,
+      source: selected.source,
+      action: { type: 'open-sleep-stages', date }
     })
   }
 

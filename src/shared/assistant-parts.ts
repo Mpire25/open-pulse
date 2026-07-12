@@ -6,6 +6,7 @@ import type {
   AssistantMetricRange,
   AssistantOverviewAggregation,
   AssistantOverviewMetric,
+  AssistantSleepNight,
   AssistantVisualPart,
   DataSource,
   MetricKey,
@@ -92,7 +93,70 @@ function action(value: unknown): AssistantAction | null {
       ? { type: 'open-workout', workout: selectedWorkout, date: selectedDate }
       : null
   }
+  if (item?.type === 'open-sleep-stages') {
+    const selectedDate = date(item.date)
+    return selectedDate ? { type: 'open-sleep-stages', date: selectedDate } : null
+  }
   return null
+}
+
+const SLEEP_STAGES = ['AWAKE', 'LIGHT', 'DEEP', 'REM'] as const
+
+function timestamp(value: unknown): string | null {
+  const selected = text(value, 80)
+  return selected && !Number.isNaN(Date.parse(selected)) ? selected : null
+}
+
+function sleepNight(value: unknown): AssistantSleepNight | null {
+  const item = record(value)
+  const selectedDate = date(item?.date)
+  const startTime = timestamp(item?.startTime)
+  const endTime = timestamp(item?.endTime)
+  const minutesAsleep = numberOrNull(item?.minutesAsleep)
+  const minutesInSleepPeriod = numberOrNull(item?.minutesInSleepPeriod)
+  const efficiency = numberOrNull(item?.efficiency)
+  if (
+    !item ||
+    !selectedDate ||
+    !startTime ||
+    !endTime ||
+    minutesAsleep == null ||
+    minutesInSleepPeriod == null ||
+    efficiency === undefined ||
+    minutesAsleep < 0 ||
+    minutesInSleepPeriod < 0 ||
+    (efficiency != null && (efficiency < 0 || efficiency > 100))
+  ) return null
+
+  const stages = Array.isArray(item.stages)
+    ? item.stages.slice(0, 512).flatMap((candidate): AssistantSleepNight['stages'] => {
+        const stage = record(candidate)
+        const type = SLEEP_STAGES.find((candidate) => candidate === stage?.type)
+        const stageStart = timestamp(stage?.startTime)
+        const stageEnd = timestamp(stage?.endTime)
+        return type && stageStart && stageEnd && stageStart < stageEnd
+          ? [{ type, startTime: stageStart, endTime: stageEnd }]
+          : []
+      })
+    : []
+  if (!stages.length) return null
+
+  const rawStageMinutes = record(item.stageMinutes)
+  const stageMinutes: AssistantSleepNight['stageMinutes'] = {}
+  for (const type of SLEEP_STAGES) {
+    const amount = numberOrNull(rawStageMinutes?.[type])
+    if (typeof amount === 'number' && amount >= 0) stageMinutes[type] = amount
+  }
+  return {
+    date: selectedDate,
+    startTime,
+    endTime,
+    minutesAsleep,
+    minutesInSleepPeriod,
+    efficiency,
+    stages,
+    stageMinutes
+  }
 }
 
 function comparisonValue(value: unknown): AssistantComparisonValue | null {
@@ -234,6 +298,15 @@ export function normalizeAssistantParts(value: unknown): AssistantVisualPart[] {
         : []
     }
 
+    if (item.type === 'sleep-card') {
+      const night = sleepNight(item.night)
+      const selectedSource = source(item.source)
+      const selectedAction = action(item.action)
+      return night && selectedSource && selectedAction?.type === 'open-sleep-stages' && selectedAction.date === night.date
+        ? [{ id, type: 'sleep-card', night, source: selectedSource, action: selectedAction }]
+        : []
+    }
+
     return []
   })
 }
@@ -246,6 +319,7 @@ export function assistantPartsContext(parts: AssistantVisualPart[]): string {
     if (part.type === 'comparison') return [`Displayed a ${part.metric} comparison for ${part.current.startDate}–${part.current.endDate} versus ${part.previous.startDate}–${part.previous.endDate}.`]
     if (part.type === 'trend-chart') return [`Displayed a ${part.metric} trend for ${part.startDate}–${part.endDate}.`]
     if (part.type === 'workout-card') return [`Displayed workout ${part.workout.name} on ${part.date}.`]
+    if (part.type === 'sleep-card') return [`Displayed sleep stages for ${part.night.date}.`]
     return []
   })
   return summaries.length ? `\n\n[OpenPulse display context: ${summaries.join(' ')}]` : ''

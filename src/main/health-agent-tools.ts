@@ -318,12 +318,8 @@ export async function runHealthAgentTool(
       return JSON.stringify({
         source: result.source,
         requestedRange: { start, end },
-        nights: result.nights.map(({ stages, outOfBedSegments, ...night }) => ({
-          ...night,
-          ...(args.detail === 'detailed'
-            ? { stageSegmentCount: stages.length, outOfBedSegments }
-            : { stageSegmentCount: stages.length, outOfBedSegmentCount: outOfBedSegments.length })
-        }))
+        detail: args.detail,
+        nights: result.nights
       })
     }
     case 'query_workouts': {
