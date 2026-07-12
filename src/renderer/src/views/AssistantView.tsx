@@ -95,7 +95,13 @@ export function AssistantView({ chat, codex, onOpenSettings }: AssistantViewProp
         </div>
       </div>
       <div className="min-h-0 flex-1">
-        <ChatPanel chat={chat} codexConnected={codex.connected} onOpenSettings={onOpenSettings} />
+        <ChatPanel
+          chat={chat}
+          codexConnected={codex.connected}
+          onOpenSettings={onOpenSettings}
+          typeToFocus
+          onTypeToFocus={() => setHistoryOpen(false)}
+        />
       </div>
 
       {/* A floating card, not an edge-flush sheet: inset from the edges with
