@@ -130,7 +130,11 @@ export function AssistantView({ chat, codex, onOpenSettings }: AssistantViewProp
                 <Plus size={15} />
               </button>
             </div>
-            <ChatHistory chat={chat} onNavigate={() => setHistoryOpen(false)} />
+            <ChatHistory
+              chat={chat}
+              onNavigate={() => setHistoryOpen(false)}
+              onDeleteDialogClose={() => setHistoryOpen(false)}
+            />
           </motion.aside>
         )}
       </AnimatePresence>
