@@ -434,6 +434,7 @@ export type AssistantAction =
       range: AssistantMetricRange
     }
   | { type: 'open-workout'; workout: Workout; date: string }
+  | { type: 'open-sleep-stages'; date: string }
 
 export interface AssistantMetricCardPart {
   id: string
@@ -494,6 +495,26 @@ export interface AssistantWorkoutPart {
   action: AssistantAction
 }
 
+export type AssistantSleepNight = Pick<
+  SleepNight,
+  | 'date'
+  | 'startTime'
+  | 'endTime'
+  | 'minutesAsleep'
+  | 'minutesInSleepPeriod'
+  | 'efficiency'
+  | 'stages'
+  | 'stageMinutes'
+>
+
+export interface AssistantSleepPart {
+  id: string
+  type: 'sleep-card'
+  night: AssistantSleepNight
+  source: DataSource
+  action: AssistantAction
+}
+
 export type AssistantOverviewAggregation = 'average' | 'total' | 'latest'
 
 export interface AssistantOverviewMetric {
@@ -521,6 +542,7 @@ export type AssistantVisualPart =
   | AssistantComparisonPart
   | AssistantChartPart
   | AssistantWorkoutPart
+  | AssistantSleepPart
   | AssistantOverviewPart
 
 export interface ChatMessage {

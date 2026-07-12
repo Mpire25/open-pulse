@@ -183,6 +183,7 @@ export function summarizeToolArguments(name: string, args: Record<string, unknow
       metricCards: Array.isArray(args.metricCards) ? args.metricCards.length : 0,
       comparisons: Array.isArray(args.comparisons) ? args.comparisons.length : 0,
       charts: Array.isArray(args.charts) ? args.charts.length : 0,
+      sleepCards: Array.isArray(args.sleepCards) ? args.sleepCards.length : 0,
       workouts: Array.isArray(args.workouts) ? args.workouts.length : 0
     }
   }

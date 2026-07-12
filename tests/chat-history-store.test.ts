@@ -159,4 +159,46 @@ describe('encrypted chat history store', () => {
       items: [{ metric: 'steps' }, { metric: 'sleepMinutes' }]
     })
   })
+
+  test('persists a validated sleep-stage card', () => {
+    const path = temporaryPath()
+    const store = new ChatHistoryStore(path, encryptedAdapter())
+    const chat = store.create('account-a')
+    store.update('account-a', chat.id, [
+      userMessage('Show my sleep stages'),
+      {
+        id: crypto.randomUUID(),
+        role: 'assistant',
+        text: 'Here is your sleep-stage timeline.',
+        createdAt: new Date().toISOString(),
+        partsVersion: 1,
+        parts: [
+          {
+            id: 'sleep-part',
+            type: 'sleep-card',
+            source: 'live',
+            night: {
+              date: '2026-07-11',
+              startTime: '2026-07-10T22:45:00Z',
+              endTime: '2026-07-11T07:20:00Z',
+              minutesAsleep: 498,
+              minutesInSleepPeriod: 515,
+              efficiency: 97,
+              stageMinutes: { AWAKE: 17, REM: 80, LIGHT: 292, DEEP: 126 },
+              stages: [
+                { type: 'LIGHT', startTime: '2026-07-10T22:45:00Z', endTime: '2026-07-10T23:15:00Z' }
+              ]
+            },
+            action: { type: 'open-sleep-stages', date: '2026-07-11' }
+          }
+        ]
+      }
+    ])
+
+    const restored = new ChatHistoryStore(path, encryptedAdapter()).snapshot('account-a').sessions[0]
+    expect(restored.messages[1].parts?.[0]).toMatchObject({
+      type: 'sleep-card',
+      action: { type: 'open-sleep-stages', date: '2026-07-11' }
+    })
+  })
 })

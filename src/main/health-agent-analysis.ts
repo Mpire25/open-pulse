@@ -67,6 +67,31 @@ export function pearsonCorrelation(pairs: Array<[number, number]>): number | nul
 }
 
 export function healthAgentModelData(name: string, data: Record<string, unknown>): Record<string, unknown> {
+  if (name === 'query_sleep') {
+    const { detail, nights, ...rest } = data
+    return {
+      ...rest,
+      nights: Array.isArray(nights)
+        ? nights.map((candidate) => {
+            const night = candidate as Record<string, unknown>
+            const stages = Array.isArray(night.stages) ? night.stages : []
+            const outOfBedSegments = Array.isArray(night.outOfBedSegments) ? night.outOfBedSegments : []
+            const {
+              stages: _stages,
+              outOfBedSegments: _outOfBedSegments,
+              ...summary
+            } = night
+            return {
+              ...summary,
+              stageSegmentCount: stages.length,
+              ...(detail === 'detailed'
+                ? { outOfBedSegments }
+                : { outOfBedSegmentCount: outOfBedSegments.length })
+            }
+          })
+        : []
+    }
+  }
   if (name !== 'analyze_daily_metrics') return data
   const {
     days: _days,

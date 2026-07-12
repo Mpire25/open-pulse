@@ -69,8 +69,9 @@ describe('agent execution tracing', () => {
         metricCards: [{ title: 'Private generated title' }],
         comparisons: [{ title: 'Another private title' }],
         charts: [],
+        sleepCards: [{ date: '2026-07-11' }],
         workouts: []
       })
-    ).toEqual({ overviews: 1, metricCards: 1, comparisons: 1, charts: 0, workouts: 0 })
+    ).toEqual({ overviews: 1, metricCards: 1, comparisons: 1, charts: 0, sleepCards: 1, workouts: 0 })
   })
 })

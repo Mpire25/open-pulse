@@ -62,4 +62,27 @@ describe('health agent analysis', () => {
     })
     expect(JSON.stringify(compact)).not.toContain('restingHeartRate":61')
   })
+
+  test('keeps the full sleep-stage timeline local while exposing its availability', () => {
+    const compact = healthAgentModelData('query_sleep', {
+      source: 'live',
+      requestedRange: { start: '2026-07-11', end: '2026-07-11' },
+      detail: 'summary',
+      nights: [
+        {
+          date: '2026-07-11',
+          minutesAsleep: 498,
+          stages: [
+            { type: 'LIGHT', startTime: '2026-07-10T23:00:00Z', endTime: '2026-07-10T23:30:00Z' }
+          ],
+          outOfBedSegments: [{ startTime: '2026-07-11T03:00:00Z', endTime: '2026-07-11T03:05:00Z' }]
+        }
+      ]
+    })
+
+    expect(compact).toMatchObject({
+      nights: [{ date: '2026-07-11', minutesAsleep: 498, stageSegmentCount: 1, outOfBedSegmentCount: 1 }]
+    })
+    expect(JSON.stringify(compact)).not.toContain('2026-07-10T23:00:00Z')
+  })
 })

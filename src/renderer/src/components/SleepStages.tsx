@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import type { SleepNight, SleepStageType } from '@shared/types'
+import type { AssistantSleepNight, SleepStageType } from '@shared/types'
 import { formatClock, formatMinutes } from '@/lib/format'
 
 export const STAGE_COLOR: Record<SleepStageType, string> = {
@@ -18,11 +18,11 @@ export const STAGE_LABEL: Record<SleepStageType, string> = {
 const ROW_ORDER: SleepStageType[] = ['AWAKE', 'REM', 'LIGHT', 'DEEP']
 
 interface SleepStagesProps {
-  night: SleepNight | null
+  night: AssistantSleepNight | null
   compact?: boolean
 }
 
-const EMPTY_STAGES: SleepNight['stages'] = []
+const EMPTY_STAGES: AssistantSleepNight['stages'] = []
 
 // Hypnogram: each stage segment drawn as a rounded block on its own row,
 // with a per-segment hover readout.

@@ -1,9 +1,10 @@
 import { memo, useEffect, useState } from 'react'
-import { Minus, PersonSimpleRun, Pulse, TrendDown, TrendUp } from '@phosphor-icons/react'
+import { Minus, Moon, PersonSimpleRun, Pulse, TrendDown, TrendUp } from '@phosphor-icons/react'
 import { motion } from 'framer-motion'
 import { ColumnChart, TrendLine } from '@/components/charts'
 import { MetricStat } from '@/components/MetricStat'
 import { DrillHeader, Panel, SectionHeader } from '@/components/Panel'
+import { SleepStages } from '@/components/SleepStages'
 import { METRICS } from '@/lib/metric-registry'
 import { formatClock, formatInt, formatMinutes, shortDate } from '@/lib/format'
 import { cn } from '@/lib/utils'
@@ -50,6 +51,7 @@ function visualCardClass(
   if (layout === 'pair') return 'h-full w-full'
   if (part.type === 'metric-card') return 'w-full max-w-[380px]'
   if (part.type === 'workout-card') return 'w-full max-w-[620px]'
+  if (part.type === 'sleep-card') return 'w-full max-w-[760px]'
   if (part.type === 'comparison') return 'w-full max-w-[760px]'
   return 'w-full'
 }
@@ -256,6 +258,25 @@ function AssistantResponsePartsBase({
                 <WorkoutFact label="Calories" value={workout.calories == null ? null : `${formatInt(workout.calories)} kcal`} />
                 <WorkoutFact label="Average heart rate" value={workout.avgHeartRate == null ? null : `${formatInt(workout.avgHeartRate)} bpm`} />
                 <WorkoutFact label="Zone minutes" value={workout.activeZoneMinutes == null ? null : formatMinutes(workout.activeZoneMinutes)} />
+              </div>
+            </MotionPanel>
+          )
+        }
+
+        if (part.type === 'sleep-card') {
+          const night = part.night
+          return (
+            <MotionPanel key={part.id} {...entrance} className={cn('overflow-hidden', layoutClass)}>
+              <div className="border-b border-hairline px-5 pb-3 pt-4">
+                <DrillHeader
+                  icon={<Moon size={18} weight="fill" className="text-sleep" />}
+                  title="Sleep stages"
+                  hint={`${shortDate(night.date)} · ${formatMinutes(night.minutesAsleep)} asleep${night.efficiency == null ? '' : ` · ${formatInt(night.efficiency)}% efficiency`}${part.source === 'demo' ? ' · Sample data' : ''}`}
+                  onOpen={() => onAction(part.action)}
+                />
+              </div>
+              <div className={cn('px-5 py-4', !compact && 'pb-5')}>
+                <SleepStages night={night} compact={Boolean(compact)} />
               </div>
             </MotionPanel>
           )

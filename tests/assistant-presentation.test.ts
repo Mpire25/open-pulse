@@ -26,6 +26,36 @@ function dailyDatasets(): Map<string, AgentDataset> {
   ])
 }
 
+function sleepDatasets(): Map<string, AgentDataset> {
+  return new Map([
+    [
+      'sleep-1',
+      {
+        tool: 'query_sleep',
+        data: {
+          source: 'live',
+          requestedRange: { start: '2026-07-11', end: '2026-07-11' },
+          nights: [
+            {
+              date: '2026-07-11',
+              startTime: '2026-07-10T22:45:00Z',
+              endTime: '2026-07-11T07:20:00Z',
+              minutesAsleep: 498,
+              minutesInSleepPeriod: 515,
+              efficiency: 97,
+              stageMinutes: { AWAKE: 17, REM: 80, LIGHT: 292, DEEP: 126 },
+              stages: [
+                { type: 'LIGHT', startTime: '2026-07-10T22:45:00Z', endTime: '2026-07-10T23:15:00Z' },
+                { type: 'DEEP', startTime: '2026-07-10T23:15:00Z', endTime: '2026-07-11T00:00:00Z' }
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  ])
+}
+
 describe('assistant visual presentation', () => {
   test('resolves a trusted multi-metric overview with appropriate aggregations', () => {
     const parts = resolvePresentation(
@@ -150,6 +180,26 @@ describe('assistant visual presentation', () => {
     ).toThrow('is not in dataset')
   })
 
+  test('resolves a sleep-stage card only from a returned night', () => {
+    const parts = resolvePresentation(
+      { sleepCards: [{ datasetId: 'sleep-1', date: '2026-07-11' }] },
+      sleepDatasets()
+    )
+
+    expect(parts).toHaveLength(1)
+    expect(parts[0]).toMatchObject({
+      type: 'sleep-card',
+      night: { date: '2026-07-11', minutesAsleep: 498, efficiency: 97 },
+      action: { type: 'open-sleep-stages', date: '2026-07-11' }
+    })
+    expect(() =>
+      resolvePresentation(
+        { sleepCards: [{ datasetId: 'sleep-1', date: '2026-07-10' }] },
+        sleepDatasets()
+      )
+    ).toThrow('outside its dataset range')
+  })
+
   test('draws a trend directly from an analysis dataset', () => {
     const datasets = new Map<string, AgentDataset>([
       [
@@ -218,5 +268,13 @@ describe('assistant visual presentation', () => {
     expect(resolveAutomaticPresentation('Is my sleep trending up or down?', datasets)).toHaveLength(1)
     expect(resolveAutomaticPresentation('How do my steps compare with NHS recommendations?', datasets)).toEqual([])
     expect(resolveAutomaticPresentation('What is my current health compared with NHS ideals?', datasets)).toEqual([])
+  })
+
+  test('adds a sleep-stage card fallback for a specific-night breakdown', () => {
+    expect(resolveAutomaticPresentation('How did I sleep last night?', sleepDatasets())[0]).toMatchObject({
+      type: 'sleep-card',
+      night: { date: '2026-07-11' }
+    })
+    expect(resolveAutomaticPresentation('How did I sleep this week?', sleepDatasets())).toEqual([])
   })
 })
