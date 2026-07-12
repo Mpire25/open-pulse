@@ -18,7 +18,20 @@ function dailyDatasets(): Map<string, AgentDataset> {
             '2026-07-01': { steps: 4_000, sleepMinutes: 420, activeZoneMinutes: 20, bmi: 23.4 },
             '2026-07-02': { steps: 5_000, sleepMinutes: 450, activeZoneMinutes: 30, bmi: null },
             '2026-07-03': { steps: 6_000, sleepMinutes: null, activeZoneMinutes: 40, bmi: 23.2 },
-            '2026-07-04': { steps: 7_000, sleepMinutes: 480, activeZoneMinutes: null, bmi: null }
+            '2026-07-04': {
+              steps: 7_000,
+              sleepMinutes: 480,
+              activeZoneMinutes: null,
+              bmi: null,
+              caloriesIn: 2_050,
+              proteinG: 142,
+              carbsG: 220,
+              fatG: 72,
+              fiberG: 31,
+              saturatedFatG: 18,
+              sodiumG: 2.1,
+              sugarG: 54
+            }
           }
         }
       }
@@ -48,6 +61,55 @@ function sleepDatasets(): Map<string, AgentDataset> {
                 { type: 'LIGHT', startTime: '2026-07-10T22:45:00Z', endTime: '2026-07-10T23:15:00Z' },
                 { type: 'DEEP', startTime: '2026-07-10T23:15:00Z', endTime: '2026-07-11T00:00:00Z' }
               ]
+            }
+          ]
+        }
+      }
+    ]
+  ])
+}
+
+function nutritionDatasets(): Map<string, AgentDataset> {
+  return new Map([
+    [
+      'nutrition-1',
+      {
+        tool: 'query_nutrition_logs',
+        data: {
+          source: 'live',
+          date: '2026-07-11',
+          entries: [
+            {
+              id: 'yogurt',
+              startTime: '2026-07-11T08:00:00Z',
+              endTime: '2026-07-11T08:05:00Z',
+              foodName: 'Greek yogurt',
+              mealType: 'BREAKFAST',
+              servingLabel: '1 bowl',
+              calories: 180,
+              proteinG: 20,
+              carbsG: 12,
+              fatG: 5,
+              fiberG: 1,
+              saturatedFatG: 3,
+              sodiumG: 0.1,
+              sugarG: 8
+            },
+            {
+              id: 'salad',
+              startTime: '2026-07-11T12:30:00Z',
+              endTime: '2026-07-11T12:40:00Z',
+              foodName: 'Chicken salad',
+              mealType: 'LUNCH',
+              servingLabel: '1 plate',
+              calories: 430,
+              proteinG: 38,
+              carbsG: 24,
+              fatG: 19,
+              fiberG: 7,
+              saturatedFatG: 4,
+              sodiumG: 0.8,
+              sugarG: 6
             }
           ]
         }
@@ -200,6 +262,53 @@ describe('assistant visual presentation', () => {
     ).toThrow('outside its dataset range')
   })
 
+  test('resolves trusted nutrition cards for a day, meal, and returned item', () => {
+    const datasets = nutritionDatasets()
+    const parts = resolvePresentation(
+      {
+        nutritionCards: [
+          { datasetId: 'nutrition-1', date: '2026-07-11', scope: 'meal', mealGroup: 'Lunch', entryId: null },
+          { datasetId: 'nutrition-1', date: '2026-07-11', scope: 'item', mealGroup: null, entryId: 'yogurt' }
+        ]
+      },
+      datasets
+    )
+
+    expect(parts[0]).toMatchObject({
+      type: 'nutrition-card',
+      scope: 'meal',
+      title: 'Lunch',
+      itemCount: 1,
+      values: { calories: 430, proteinG: 38, carbsG: 24, fatG: 19 },
+      action: { type: 'open-nutrition', date: '2026-07-11' }
+    })
+    expect(parts[1]).toMatchObject({
+      type: 'nutrition-card',
+      scope: 'item',
+      title: 'Greek yogurt',
+      servingLabel: '1 bowl',
+      values: { calories: 180, proteinG: 20 }
+    })
+    expect(() => resolvePresentation({
+      nutritionCards: [
+        { datasetId: 'nutrition-1', date: '2026-07-11', scope: 'item', mealGroup: null, entryId: 'invented' }
+      ]
+    }, datasets)).toThrow('is not in dataset')
+  })
+
+  test('resolves a daily nutrition card from narrow daily metrics', () => {
+    expect(resolvePresentation({
+      nutritionCards: [
+        { datasetId: 'daily-1', date: '2026-07-04', scope: 'day', mealGroup: null, entryId: null }
+      ]
+    }, dailyDatasets())[0]).toMatchObject({
+      type: 'nutrition-card',
+      scope: 'day',
+      title: 'Daily nutrition',
+      values: { calories: 2_050, proteinG: 142, fiberG: 31 }
+    })
+  })
+
   test('draws a trend directly from an analysis dataset', () => {
     const datasets = new Map<string, AgentDataset>([
       [
@@ -276,5 +385,19 @@ describe('assistant visual presentation', () => {
       night: { date: '2026-07-11' }
     })
     expect(resolveAutomaticPresentation('How did I sleep this week?', sleepDatasets())).toEqual([])
+  })
+
+  test('adds the matching nutrition card fallback without substituting a trend card', () => {
+    expect(resolveAutomaticPresentation('What did I eat for lunch?', nutritionDatasets())[0]).toMatchObject({
+      type: 'nutrition-card',
+      scope: 'meal',
+      title: 'Lunch'
+    })
+    expect(resolveAutomaticPresentation('Show the nutrition for my Greek yogurt', nutritionDatasets())[0]).toMatchObject({
+      type: 'nutrition-card',
+      scope: 'item',
+      title: 'Greek yogurt'
+    })
+    expect(resolveAutomaticPresentation('How was my nutrition this week?', nutritionDatasets())).toEqual([])
   })
 })
