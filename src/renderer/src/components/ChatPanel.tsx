@@ -238,22 +238,30 @@ const Bubble = memo(function Bubble({
           {turn.text}
         </div>
       ) : (
-        <div className={cn('w-full min-w-0 select-text', compact ? 'max-w-full' : 'max-w-[88%]')}>
+        <div className="w-full min-w-0 select-text">
           {turn.toolLabel && !turn.text && !turn.parts?.length ? (
-            <ToolThinking label={turn.toolLabel} />
+            <div className={cn(!compact && 'max-w-[720px]')}>
+              <ToolThinking label={turn.toolLabel} />
+            </div>
           ) : turn.streaming && !turn.text && !turn.parts?.length ? (
-            <ToolThinking label="Thinking" />
+            <div className={cn(!compact && 'max-w-[720px]')}>
+              <ToolThinking label="Thinking" />
+            </div>
           ) : turn.error ? (
-            <div className="rounded-[16px] border border-danger/30 bg-danger/10 px-4 py-3 text-[13px] text-danger">
-              {turn.text}
+            <div className={cn(!compact && 'max-w-[720px]')}>
+              <div className="rounded-[16px] border border-danger/30 bg-danger/10 px-4 py-3 text-[13px] text-danger">
+                {turn.text}
+              </div>
             </div>
           ) : (
             <>
-              {turn.text && <Markdownish text={turn.text} />}
+              <div className={cn(!compact && 'max-w-[720px]')}>
+                {turn.text && <Markdownish text={turn.text} />}
+                {turn.streaming && turn.toolLabel && (
+                  <div className="mt-3"><ToolThinking label={turn.toolLabel} /></div>
+                )}
+              </div>
               <AssistantResponseParts parts={turn.parts ?? []} compact={compact} onAction={onAction} />
-              {turn.streaming && turn.toolLabel && (
-                <div className="mt-3"><ToolThinking label={turn.toolLabel} /></div>
-              )}
             </>
           )}
         </div>

@@ -7,6 +7,12 @@ import { DrillHeader, Panel } from '@/components/Panel'
 import { METRICS } from '@/lib/metric-registry'
 import { formatClock, formatInt, formatMinutes, shortDate } from '@/lib/format'
 import { cn } from '@/lib/utils'
+import {
+  assistantVisualLayout,
+  isPrimaryAssistantVisual,
+  orderAssistantVisuals,
+  type AssistantVisualLayout
+} from '@shared/assistant-layout'
 import type {
   AssistantAction,
   AssistantComparisonValue,
@@ -25,13 +31,37 @@ const CARD_ENTER = { opacity: 1, y: 0 }
 const CARD_HIDDEN = { opacity: 0, y: 10 }
 const CARD_EASE = [0.16, 1, 0.3, 1] as const
 
+function visualGridClass(layout: AssistantVisualLayout): string {
+  if (layout === 'pair') return 'grid grid-cols-1 gap-3 md:grid-cols-2'
+  if (layout === 'primary-supporting') return 'grid grid-cols-1 items-start gap-3 lg:grid-cols-3'
+  return 'grid grid-cols-1 gap-3'
+}
+
+function visualCardClass(
+  part: AssistantVisualPart,
+  layout: AssistantVisualLayout,
+  compact: boolean
+): string {
+  if (compact) return 'w-full'
+  if (layout === 'primary-supporting') {
+    return isPrimaryAssistantVisual(part) ? 'w-full lg:col-span-2' : 'w-full lg:col-span-1'
+  }
+  if (layout === 'pair') return 'h-full w-full'
+  if (part.type === 'metric-card') return 'w-full max-w-[380px]'
+  if (part.type === 'workout-card') return 'w-full max-w-[620px]'
+  if (part.type === 'comparison') return 'w-full max-w-[760px]'
+  return 'w-full'
+}
+
 function AssistantResponsePartsBase({
   parts,
   compact,
   onAction
 }: AssistantResponsePartsProps): React.JSX.Element | null {
   const [entered, setEntered] = useState(false)
-  const visualKey = parts.map((part) => part.id).join(':')
+  const layout = assistantVisualLayout(parts, Boolean(compact))
+  const orderedParts = orderAssistantVisuals(parts, layout)
+  const visualKey = orderedParts.map((part) => part.id).join(':')
 
   useEffect(() => {
     setEntered(false)
@@ -42,17 +72,18 @@ function AssistantResponsePartsBase({
 
   if (!parts.length) return null
   return (
-    <div className="mt-3 flex flex-col gap-2.5" aria-label="Assistant visuals">
-      {parts.map((part, index) => {
+    <div className={cn('mt-3', visualGridClass(layout))} aria-label="Assistant visuals">
+      {orderedParts.map((part, index) => {
         const entrance = {
           initial: false as const,
           animate: entered ? CARD_ENTER : CARD_HIDDEN,
           transition: { delay: index * 0.04, duration: 0.45, ease: CARD_EASE }
         }
+        const layoutClass = visualCardClass(part, layout, Boolean(compact))
         if (part.type === 'metric-card') {
           const def = METRICS[part.metric]
           return (
-            <MotionPanel key={part.id} {...entrance} className="overflow-hidden">
+            <MotionPanel key={part.id} {...entrance} className={cn('overflow-hidden', layoutClass)}>
               <MetricStat
                 icon={def.icon}
                 label={def.shortLabel ?? def.label}
@@ -73,7 +104,7 @@ function AssistantResponsePartsBase({
           const direction = comparisonDirection(part.current.value, part.previous.value)
           const tone = comparisonTone(direction, def.upIsGood)
           return (
-            <MotionPanel key={part.id} {...entrance} className="overflow-hidden">
+            <MotionPanel key={part.id} {...entrance} className={cn('overflow-hidden', layoutClass)}>
               <div className="border-b border-hairline px-5 pb-3 pt-4">
                 <DrillHeader
                   icon={<Icon size={18} weight="fill" style={{ color: def.color }} />}
@@ -127,7 +158,7 @@ function AssistantResponsePartsBase({
             if (part.action.type === 'open-metric') onAction({ ...part.action, date, range: 'D' })
           }
           return (
-            <MotionPanel key={part.id} {...entrance} className="flex flex-col gap-3 p-5">
+            <MotionPanel key={part.id} {...entrance} className={cn('flex flex-col gap-3 p-5', layoutClass)}>
               <DrillHeader
                 icon={<Icon size={18} weight="fill" style={{ color: def.color }} />}
                 title={`${def.shortLabel ?? def.label} trend`}
@@ -162,7 +193,7 @@ function AssistantResponsePartsBase({
         if (part.type === 'workout-card') {
           const workout = part.workout
           return (
-            <MotionPanel key={part.id} {...entrance} className="p-5">
+            <MotionPanel key={part.id} {...entrance} className={cn('p-5', layoutClass)}>
               <DrillHeader
                 icon={<PersonSimpleRun size={18} weight="fill" className="text-recovery" />}
                 title={workout.name}
