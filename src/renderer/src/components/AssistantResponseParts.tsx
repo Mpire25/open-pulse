@@ -160,7 +160,7 @@ function AssistantResponsePartsBase({
           const def = METRICS[part.metric]
           const Icon = def.icon
           const delta = def.deltaMode === 'abs' ? part.absoluteChange : part.percentChange
-          const direction = comparisonDirection(part.current.value, part.previous.value)
+          const direction = part.comparable ? comparisonDirection(part.current.value, part.previous.value) : null
           const tone = comparisonTone(direction, def.upIsGood)
           return (
             <MotionPanel key={part.id} {...entrance} className={cn('overflow-hidden', layoutClass)}>
@@ -181,15 +181,18 @@ function AssistantResponsePartsBase({
                 <ComparisonCell
                   metric={part.metric}
                   item={part.current}
-                  period="Current period"
+                  current
                   direction={direction}
                   tone={tone}
                 />
-                <ComparisonCell metric={part.metric} item={part.previous} period="Previous period" />
+                <ComparisonCell metric={part.metric} item={part.previous} />
               </div>
               <div className="flex items-center justify-between gap-3 border-t border-hairline px-5 py-3">
-                <span className="text-[10.5px] text-ink-faint">Compared with previous period</span>
+                <span className="text-[10.5px] text-ink-faint">
+                  {part.comparable ? `Compared with ${part.previous.label}` : 'Different period bases'}
+                </span>
                 <ComparisonChange
+                  comparable={part.comparable}
                   delta={delta}
                   direction={direction}
                   tone={tone}
@@ -416,13 +419,13 @@ function MetricValue({
 function ComparisonCell({
   metric,
   item,
-  period,
+  current = false,
   direction = null,
   tone = 'neutral'
 }: {
   metric: MetricKey
   item: AssistantComparisonValue
-  period: 'Current period' | 'Previous period'
+  current?: boolean
   direction?: ComparisonDirection
   tone?: ComparisonTone
 }): React.JSX.Element {
@@ -431,24 +434,26 @@ function ComparisonCell({
     <div
       className={cn(
         'flex min-w-0 flex-col gap-2 px-5 py-4',
-        period === 'Current period' && 'bg-white/[0.025]'
+        current && 'bg-white/[0.025]'
       )}
     >
       <div className="flex items-center justify-between gap-2">
         <div>
-          <div className={cn('text-[11px] font-semibold', period === 'Current period' ? 'text-ink' : 'text-ink-dim')}>
-            {period}
+          <div className={cn('text-[11px] font-semibold', current ? 'text-ink' : 'text-ink-dim')}>
+            {item.label}
           </div>
-          <div className="mt-0.5 text-[10px] text-ink-faint">{periodLabel(item.startDate, item.endDate)}</div>
+          <div className="mt-0.5 text-[10px] text-ink-faint">
+            {periodLabel(item.startDate, item.endDate)} · {comparisonAggregationLabel(item, metric)}
+          </div>
         </div>
-        {period === 'Current period' && direction && direction !== 'same' ? (
+        {current && direction && direction !== 'same' ? (
           <DirectionLabel direction={direction} tone={tone} />
         ) : missing > 0 ? (
           <span className="text-[9.5px] text-ink-faint">{item.observations}/{item.days} days</span>
         ) : null}
       </div>
       <MetricValue metric={metric} value={item.value} />
-      {missing > 0 && period === 'Current period' && (
+      {missing > 0 && current && (
         <div className="text-[9.5px] text-ink-faint">{item.observations} of {item.days} days recorded</div>
       )}
     </div>
@@ -485,16 +490,19 @@ function DirectionLabel({
 }
 
 function ComparisonChange({
+  comparable,
   delta,
   direction,
   tone,
   format
 }: {
+  comparable: boolean
   delta: number | null
   direction: ComparisonDirection
   tone: ComparisonTone
   format: (value: number) => string
 }): React.JSX.Element {
+  if (!comparable) return <span className="text-[10.5px] text-ink-faint">Descriptive only</span>
   if (delta == null || direction == null) return <span className="text-[10.5px] text-ink-faint">Not enough data</span>
   const Icon = direction === 'higher' ? TrendUp : direction === 'lower' ? TrendDown : Minus
   return (
@@ -537,4 +545,11 @@ function WorkoutFact({ label, value }: { label: string; value: string | null }):
 
 function periodLabel(start: string, end: string): string {
   return start === end ? shortDate(start) : `${shortDate(start)}–${shortDate(end)}`
+}
+
+function comparisonAggregationLabel(item: AssistantComparisonValue, metric: MetricKey): string {
+  if (item.aggregation === 'value') return 'Single day'
+  if (item.aggregation === 'total') return item.days === 1 ? 'Day total' : `${item.days}-day total`
+  if (item.aggregation === 'latest') return 'Latest reading'
+  return metric === 'sleepMinutes' || metric === 'sleepEfficiency' ? 'Nightly average' : 'Daily average'
 }

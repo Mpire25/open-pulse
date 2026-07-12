@@ -2,6 +2,7 @@ import { METRIC_KEYS } from './types'
 import { NUTRITION_VALUE_KEYS } from './nutrition'
 import type {
   AssistantAction,
+  AssistantComparisonAggregation,
   AssistantComparisonValue,
   AssistantDataView,
   AssistantMetricRange,
@@ -178,7 +179,27 @@ function sleepNight(value: unknown): AssistantSleepNight | null {
   }
 }
 
-function comparisonValue(value: unknown): AssistantComparisonValue | null {
+const COMPARISON_AGGREGATIONS = ['value', 'total', 'average', 'latest'] as const
+const LEGACY_TOTAL_METRICS = new Set<MetricKey>([
+  'steps',
+  'distanceKm',
+  'floors',
+  'caloriesOut',
+  'activeMinutes',
+  'activeZoneMinutes',
+  'waterMl',
+  'caloriesIn',
+  'proteinG',
+  'carbsG',
+  'fatG',
+  'fiberG',
+  'saturatedFatG',
+  'sodiumG',
+  'sugarG'
+])
+const LEGACY_LATEST_METRICS = new Set<MetricKey>(['weightKg', 'bodyFatPct', 'bmi'])
+
+function comparisonValue(value: unknown, selectedMetric: MetricKey): AssistantComparisonValue | null {
   const item = record(value)
   const label = text(item?.label, 60)
   const startDate = date(item?.startDate)
@@ -195,14 +216,35 @@ function comparisonValue(value: unknown): AssistantComparisonValue | null {
   ) {
     return null
   }
+  const days = Math.max(1, Math.floor(item.days))
+  const aggregation = COMPARISON_AGGREGATIONS.includes(item.aggregation as AssistantComparisonAggregation)
+    ? item.aggregation as AssistantComparisonAggregation
+    : days === 1
+      ? 'value'
+      : LEGACY_LATEST_METRICS.has(selectedMetric)
+        ? 'latest'
+        : LEGACY_TOTAL_METRICS.has(selectedMetric)
+          ? 'total'
+          : 'average'
   return {
     label,
     startDate,
     endDate,
     value: selectedValue,
+    aggregation,
     observations: Math.max(0, Math.floor(item.observations)),
-    days: Math.max(1, Math.floor(item.days))
+    days
   }
+}
+
+function comparableValues(current: AssistantComparisonValue, previous: AssistantComparisonValue): boolean {
+  if (current.aggregation !== 'total' && previous.aggregation !== 'total') return true
+  if (current.aggregation === 'total' && previous.aggregation === 'total') return current.days === previous.days
+  const total = current.aggregation === 'total' ? current : previous
+  const other = current.aggregation === 'total' ? previous : current
+  return total.days === 1 && (
+    other.aggregation === 'average' || (other.days === 1 && other.aggregation === 'value')
+  )
 }
 
 const OVERVIEW_AGGREGATIONS = ['average', 'total', 'latest'] as const
@@ -282,15 +324,29 @@ export function normalizeAssistantParts(value: unknown): AssistantVisualPart[] {
 
     if (item.type === 'comparison') {
       const selectedMetric = metric(item.metric)
-      const current = comparisonValue(item.current)
-      const previous = comparisonValue(item.previous)
+      if (!selectedMetric) return []
+      const current = comparisonValue(item.current, selectedMetric)
+      const previous = comparisonValue(item.previous, selectedMetric)
       const absoluteChange = numberOrNull(item.absoluteChange)
       const percentChange = numberOrNull(item.percentChange)
       const selectedSource = source(item.source)
       const selectedAction = action(item.action)
       const title = text(item.title, 100)
-      return selectedMetric && current && previous && absoluteChange !== undefined && percentChange !== undefined && selectedSource && selectedAction && title
-        ? [{ id, type: 'comparison', title, metric: selectedMetric, current, previous, absoluteChange, percentChange, source: selectedSource, action: selectedAction }]
+      const comparable = current && previous ? comparableValues(current, previous) : false
+      return current && previous && absoluteChange !== undefined && percentChange !== undefined && selectedSource && selectedAction && title
+        ? [{
+            id,
+            type: 'comparison',
+            title,
+            metric: selectedMetric,
+            current,
+            previous,
+            comparable,
+            absoluteChange: comparable ? absoluteChange : null,
+            percentChange: comparable ? percentChange : null,
+            source: selectedSource,
+            action: selectedAction
+          }]
         : []
     }
 

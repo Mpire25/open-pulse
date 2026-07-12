@@ -447,11 +447,14 @@ export interface AssistantMetricCardPart {
   action: AssistantAction
 }
 
+export type AssistantComparisonAggregation = 'value' | 'total' | 'average' | 'latest'
+
 export interface AssistantComparisonValue {
   label: string
   startDate: string
   endDate: string
   value: number | null
+  aggregation: AssistantComparisonAggregation
   observations: number
   days: number
 }
@@ -463,6 +466,7 @@ export interface AssistantComparisonPart {
   metric: MetricKey
   current: AssistantComparisonValue
   previous: AssistantComparisonValue
+  comparable: boolean
   absoluteChange: number | null
   percentChange: number | null
   source: DataSource

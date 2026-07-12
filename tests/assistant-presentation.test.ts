@@ -187,8 +187,9 @@ describe('assistant visual presentation', () => {
     expect(parts[0]).toMatchObject({ type: 'metric-card', metric: 'steps', value: 7_000 })
     expect(parts[1]).toMatchObject({
       type: 'comparison',
-      current: { value: 13_000, observations: 2 },
-      previous: { value: 9_000, observations: 2 },
+      current: { value: 13_000, aggregation: 'total', observations: 2 },
+      previous: { value: 9_000, aggregation: 'total', observations: 2 },
+      comparable: true,
       absoluteChange: 4_000
     })
     expect(parts[2]).toMatchObject({ type: 'trend-chart', observations: 3 })
@@ -367,9 +368,118 @@ describe('assistant visual presentation', () => {
     expect(parts[0]).toMatchObject({
       type: 'comparison',
       metric: 'sleepMinutes',
-      current: { label: 'Last night', startDate: '2026-07-11', endDate: '2026-07-11', value: 498 },
-      previous: { label: 'Earlier period', startDate: '2026-07-06', endDate: '2026-07-10', value: 435 }
+      current: { label: 'Last night', startDate: '2026-07-11', endDate: '2026-07-11', value: 498, aggregation: 'value' },
+      previous: { label: 'Earlier period', startDate: '2026-07-06', endDate: '2026-07-10', value: 435, aggregation: 'average' },
+      comparable: true
     })
+  })
+
+  test('uses averages for unequal additive periods unless totals are explicit', () => {
+    const datasets = new Map<string, AgentDataset>([
+      [
+        'protein-1',
+        {
+          tool: 'query_daily_metrics',
+          data: {
+            source: 'live',
+            requestedRange: { start: '2026-07-04', end: '2026-07-11' },
+            units: { proteinG: 'g' },
+            days: {
+              '2026-07-04': { proteinG: 90 },
+              '2026-07-05': { proteinG: 100 },
+              '2026-07-06': { proteinG: 110 },
+              '2026-07-07': { proteinG: 120 },
+              '2026-07-08': { proteinG: 130 },
+              '2026-07-09': { proteinG: 140 },
+              '2026-07-10': { proteinG: 150 },
+              '2026-07-11': { proteinG: 135 }
+            }
+          }
+        }
+      ]
+    ])
+    const request = {
+      datasetId: 'protein-1',
+      metric: 'proteinG',
+      title: 'Protein comparison',
+      currentLabel: 'Yesterday',
+      currentStartDate: '2026-07-11',
+      currentEndDate: '2026-07-11',
+      currentAggregation: 'auto',
+      previousLabel: 'Previous week',
+      previousStartDate: '2026-07-04',
+      previousEndDate: '2026-07-10',
+      previousAggregation: 'auto'
+    }
+
+    expect(resolvePresentation({ comparisons: [request] }, datasets)[0]).toMatchObject({
+      current: { value: 135, aggregation: 'value' },
+      previous: { value: 120, aggregation: 'average' },
+      comparable: true,
+      absoluteChange: 15,
+      percentChange: 12.5
+    })
+
+    expect(resolvePresentation({
+      comparisons: [{ ...request, currentAggregation: 'total', previousAggregation: 'total' }]
+    }, datasets)[0]).toMatchObject({
+      current: { value: 135, aggregation: 'total' },
+      previous: { value: 840, aggregation: 'total' },
+      comparable: false,
+      absoluteChange: null,
+      percentChange: null
+    })
+
+    expect(resolvePresentation({
+      comparisons: [{ ...request, currentAggregation: 'total', previousAggregation: 'average' }]
+    }, datasets)[0]).toMatchObject({
+      current: { value: 135, aggregation: 'total' },
+      previous: { value: 120, aggregation: 'average' },
+      comparable: true,
+      absoluteChange: 15
+    })
+  })
+
+  test('allows explicit sleep-duration totals but rejects totals of percentages', () => {
+    const datasets = new Map<string, AgentDataset>([
+      [
+        'sleep-daily',
+        {
+          tool: 'query_daily_metrics',
+          data: {
+            source: 'live',
+            requestedRange: { start: '2026-07-01', end: '2026-07-04' },
+            days: {
+              '2026-07-01': { sleepMinutes: 420, sleepEfficiency: 94 },
+              '2026-07-02': { sleepMinutes: 450, sleepEfficiency: 96 },
+              '2026-07-03': { sleepMinutes: 480, sleepEfficiency: 95 },
+              '2026-07-04': { sleepMinutes: 390, sleepEfficiency: 93 }
+            }
+          }
+        }
+      ]
+    ])
+    const comparison = {
+      datasetId: 'sleep-daily',
+      title: 'Sleep comparison',
+      currentLabel: 'Recent nights',
+      currentStartDate: '2026-07-03',
+      currentEndDate: '2026-07-04',
+      currentAggregation: 'total',
+      previousLabel: 'Earlier nights',
+      previousStartDate: '2026-07-01',
+      previousEndDate: '2026-07-02',
+      previousAggregation: 'total'
+    }
+
+    expect(resolvePresentation({ comparisons: [{ ...comparison, metric: 'sleepMinutes' }] }, datasets)[0]).toMatchObject({
+      current: { value: 870, aggregation: 'total' },
+      previous: { value: 870, aggregation: 'total' },
+      comparable: true
+    })
+    expect(() => resolvePresentation({
+      comparisons: [{ ...comparison, metric: 'sleepEfficiency' }]
+    }, datasets)).toThrow('cannot be meaningfully totalled')
   })
 
   test('adds a trend fallback but does not visualize an external guideline comparison', () => {
