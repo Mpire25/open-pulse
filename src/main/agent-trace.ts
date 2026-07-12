@@ -88,7 +88,7 @@ function traceMode(): AgentTraceMode {
   if (configured === '1' || configured === 'on' || configured === 'true' || configured === 'summary') {
     return 'summary'
   }
-  return process.env.ELECTRON_RENDERER_URL || process.env.NODE_ENV === 'development' ? 'summary' : 'off'
+  return 'off'
 }
 
 function shortId(value: string): string {

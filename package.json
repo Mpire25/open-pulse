@@ -8,6 +8,9 @@
   "private": true,
   "scripts": {
     "dev": "electron-vite dev",
+    "dev:cards": "VITE_OPENPULSE_CARD_GALLERY=1 electron-vite dev",
+    "dev:trace": "OPENPULSE_AI_TRACE=summary electron-vite dev",
+    "dev:debug": "VITE_OPENPULSE_CARD_GALLERY=1 OPENPULSE_AI_TRACE=summary electron-vite dev",
     "build": "electron-vite build",
     "test": "bun test",
     "typecheck": "tsc --noEmit -p tsconfig.web.json && tsc --noEmit -p tsconfig.node.json",
