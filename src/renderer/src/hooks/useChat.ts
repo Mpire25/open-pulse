@@ -304,24 +304,14 @@ export function useChat(): ChatController {
     void window.pulse.ai.cancel(id, run.runId)
   }, [])
 
-  const ensureActive = useCallback(
-    async (snapshot: ChatHistorySnapshot): Promise<void> => {
-      if (chatsRef.current.length || snapshot.sessions.length) return
-      const draft = createDraftChat()
-      publish([draft])
-      chooseActive(draft.id)
-    },
-    [chooseActive, publish]
-  )
-
   const deleteChat = useCallback(
     async (id: string): Promise<void> => {
       cancelRun(id)
       const snapshot = await window.pulse.chats.delete(id)
       applySnapshot(snapshot, true)
-      await ensureActive(snapshot)
+      await create()
     },
-    [applySnapshot, cancelRun, ensureActive]
+    [applySnapshot, cancelRun, create]
   )
 
   const activeChat = chats.find((chat) => chat.id === activeChatId) ?? null
