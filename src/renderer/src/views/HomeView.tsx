@@ -311,10 +311,13 @@ function SignalsPanel({
               value={value != null ? def.format(value) : '—'}
               unit={def.unit}
               accent={def.color}
-              deltaPct={def.deltaMode === 'abs' ? null : baselineDeltaPct(value, base)}
+              delta={def.deltaMode === 'abs' ? value : baselineDeltaPct(value, base)}
+              deltaFormat={def.deltaMode === 'abs' ? (magnitude) => `${magnitude.toFixed(1)}°C` : undefined}
+              deltaMinMagnitude={def.deltaMode === 'abs' ? 0.5 : undefined}
+              showTypicalDelta
               upIsGood={def.upIsGood}
               spark={pointValues(points)}
-              sub={def.deltaMode === 'abs' ? 'vs device baseline' : undefined}
+              sub={def.deltaMode === 'abs' && value != null ? 'vs device baseline' : undefined}
               onOpen={() => onOpenMetric(key, 'D')}
             />
           )

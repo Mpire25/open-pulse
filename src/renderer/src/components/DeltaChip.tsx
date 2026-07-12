@@ -1,4 +1,4 @@
-import { TrendDown, TrendUp } from '@phosphor-icons/react'
+import { Minus, TrendDown, TrendUp } from '@phosphor-icons/react'
 import { cn } from '@/lib/utils'
 
 interface DeltaChipProps {
@@ -10,6 +10,8 @@ interface DeltaChipProps {
   format?: (magnitude: number) => string
   /** Hide chips for deltas smaller than this magnitude. */
   minMagnitude?: number
+  /** Show a neutral status instead of hiding a valid sub-threshold delta. */
+  showTypical?: boolean
   className?: string
 }
 
@@ -22,9 +24,24 @@ export function DeltaChip({
   upIsGood,
   format = (m) => `${m.toFixed(0)}%`,
   minMagnitude = 1,
+  showTypical = false,
   className
 }: DeltaChipProps): React.JSX.Element | null {
-  if (delta == null || Math.abs(delta) < minMagnitude) return null
+  if (delta == null) return null
+  if (Math.abs(delta) < minMagnitude) {
+    if (!showTypical) return null
+    return (
+      <span
+        className={cn(
+          'inline-flex items-center gap-1 rounded-full bg-white/[0.06] px-1.5 py-0.5 text-[10.5px] font-semibold leading-none text-ink-dim',
+          className
+        )}
+      >
+        <Minus size={11} weight="bold" />
+        Typical
+      </span>
+    )
+  }
   const good = upIsGood == null ? null : delta > 0 ? upIsGood : !upIsGood
   return (
     <span
