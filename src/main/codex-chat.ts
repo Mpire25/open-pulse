@@ -2,16 +2,15 @@
 // user's ChatGPT account. Runs an agentic tool loop: the model can query the
 // user's health data (live or demo) before answering.
 
-import { randomUUID } from 'node:crypto'
 import type { WebContents } from 'electron'
-import type { AiEvent, AssistantEvidenceSource, AssistantVisualPart, ChatMessage } from '../shared/types'
+import type { AiEvent, AssistantVisualPart, ChatMessage } from '../shared/types'
 import {
   getCodexAuthGeneration,
   getCodexTokens,
   isCodexAuthGenerationCurrent
 } from './codex-auth'
 import { AGENT_TOOLS, AGENT_TOOL_LABELS, runHealthAgentTool } from './health-agent-tools'
-import { addUrlCitationMarkers, citationSources, type UrlCitationAnnotation } from './ai-citations'
+import { addUrlCitations, type UrlCitationAnnotation } from './ai-citations'
 import {
   PRESENTATION_TOOL,
   resolvePresentation,
@@ -67,24 +66,13 @@ interface ResponseOutputItem extends FunctionCallItem {
   content?: OutputTextItem[]
 }
 
-interface CitedMessage {
-  text: string
-  sources: AssistantEvidenceSource[]
-}
-
-function citedMessage(item: ResponseOutputItem): CitedMessage | null {
+function citedMessageText(item: ResponseOutputItem): string | null {
   if (item.type !== 'message' || !Array.isArray(item.content)) return null
   const output = item.content.filter((part) => part.type === 'output_text' && typeof part.text === 'string')
   if (!output.length) return null
-  const sources = new Map<string, AssistantEvidenceSource>()
-  const text = output
-    .map((part) => {
-      const annotations = Array.isArray(part.annotations) ? part.annotations : []
-      for (const source of citationSources(annotations)) sources.set(source.url, source)
-      return addUrlCitationMarkers(part.text ?? '', annotations)
-    })
+  return output
+    .map((part) => addUrlCitations(part.text ?? '', Array.isArray(part.annotations) ? part.annotations : []))
     .join('\n')
-  return { text, sources: [...sources.values()] }
 }
 
 function toInputItems(history: ChatMessage[]): InputItem[] {
@@ -160,15 +148,6 @@ export async function runChat(
     let finalText = ''
     const datasets = new Map<string, AgentDataset>()
     const visualParts: AssistantVisualPart[] = []
-    const evidenceSources = new Map<string, AssistantEvidenceSource>()
-
-    const completedParts = (): AssistantVisualPart[] => {
-      const parts = [...visualParts]
-      if (evidenceSources.size) {
-        parts.push({ id: randomUUID(), type: 'sources', sources: [...evidenceSources.values()] })
-      }
-      return parts
-    }
 
     for (let turn = 0; turn < MAX_TOOL_TURNS; turn++) {
       signal.throwIfAborted()
@@ -213,7 +192,7 @@ export async function runChat(
       const functionCalls: FunctionCallItem[] = []
       const continuationItems: InputItem[] = []
       let turnText = ''
-      const completedMessages: CitedMessage[] = []
+      const completedMessages: string[] = []
       let buffer = ''
       const reader = resp.body.getReader()
       const decoder = new TextDecoder()
@@ -269,8 +248,8 @@ export async function runChat(
                   continuationItems.push(event.item)
                 } else if (event.item?.type === 'message') {
                   continuationItems.push(event.item)
-                  const message = citedMessage(event.item)
-                  if (message != null) completedMessages.push(message)
+                  const messageText = citedMessageText(event.item)
+                  if (messageText != null) completedMessages.push(messageText)
                 }
                 break
               case 'response.failed':
@@ -280,19 +259,12 @@ export async function runChat(
         }
       }
 
-      if (completedMessages.length) {
-        finalText += completedMessages.map((message) => message.text).join('\n')
-        for (const message of completedMessages) {
-          for (const source of message.sources) evidenceSources.set(source.url, source)
-        }
-      } else {
-        finalText += turnText
-      }
+      finalText += completedMessages.length ? completedMessages.join('\n') : turnText
       signal.throwIfAborted()
       if (!isCodexAuthGenerationCurrent(authGeneration)) throw new Error('ChatGPT disconnected.')
 
       if (functionCalls.length === 0) {
-        emit({ type: 'done', chatId, runId, text: finalText, parts: completedParts() })
+        emit({ type: 'done', chatId, runId, text: finalText, parts: visualParts })
         return
       }
 
@@ -349,7 +321,7 @@ export async function runChat(
       chatId,
       runId,
       text: finalText || 'I hit the tool-call limit before finishing — try a narrower question.',
-      parts: completedParts()
+      parts: visualParts
     })
   } catch (err) {
     const error = signal.aborted ? cancellationError(signal) : err

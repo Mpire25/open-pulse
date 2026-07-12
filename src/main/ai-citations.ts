@@ -1,5 +1,3 @@
-import type { AssistantEvidenceSource } from '../shared/types'
-
 export interface UrlCitationAnnotation {
   type?: string
   start_index?: number
@@ -58,39 +56,6 @@ function citationsFromAnnotations(annotations: UrlCitationAnnotation[]): Citatio
     })
   }
   return citations
-}
-
-export function citationSources(annotations: UrlCitationAnnotation[]): AssistantEvidenceSource[] {
-  const seen = new Set<string>()
-  return citationsFromAnnotations(annotations).flatMap((citation): AssistantEvidenceSource[] => {
-    if (seen.has(citation.url)) return []
-    seen.add(citation.url)
-    return [{ title: citation.title, url: citation.url, domain: new URL(citation.url).hostname.replace(/^www\./, '') }]
-  })
-}
-
-/** Adds inline citation markers while source cards are rendered separately. */
-export function addUrlCitationMarkers(text: string, annotations: UrlCitationAnnotation[]): string {
-  const citations = citationsFromAnnotations(annotations).map((citation) => ({
-    ...citation,
-    startIndex: citation.startIndex != null && citation.startIndex <= text.length ? citation.startIndex : null,
-    endIndex: citation.endIndex != null && citation.endIndex <= text.length ? citation.endIndex : null
-  }))
-  const insertions = new Map<number, Citation[]>()
-  for (const citation of citations) {
-    if (citation.endIndex == null) continue
-    const atPosition = insertions.get(citation.endIndex) ?? []
-    if (!atPosition.some((item) => item.number === citation.number)) atPosition.push(citation)
-    insertions.set(citation.endIndex, atPosition)
-  }
-
-  let citedText = ''
-  for (let index = 0; index <= text.length; index++) {
-    if (index > 0) citedText += text[index - 1]
-    const atPosition = insertions.get(index)
-    if (atPosition) citedText += atPosition.map((citation) => ` [${citation.number}](${citation.url})`).join('')
-  }
-  return citedText
 }
 
 /** Adds numbered, clickable markers and a compact source list to model text. */

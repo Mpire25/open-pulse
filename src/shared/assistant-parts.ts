@@ -3,7 +3,6 @@ import type {
   AssistantAction,
   AssistantComparisonValue,
   AssistantDataView,
-  AssistantEvidenceSource,
   AssistantMetricRange,
   AssistantVisualPart,
   DataSource,
@@ -121,21 +120,6 @@ function comparisonValue(value: unknown): AssistantComparisonValue | null {
   }
 }
 
-function evidenceSource(value: unknown): AssistantEvidenceSource | null {
-  const item = record(value)
-  const title = text(item?.title, 180)
-  const domain = text(item?.domain, 120)
-  const url = text(item?.url, 2_000)
-  if (!item || !title || !domain || !url) return null
-  try {
-    const parsed = new URL(url)
-    if (parsed.protocol !== 'https:' || parsed.username || parsed.password) return null
-    return { title, domain, url: parsed.toString() }
-  } catch {
-    return null
-  }
-}
-
 export function normalizeAssistantParts(value: unknown): AssistantVisualPart[] {
   if (!Array.isArray(value)) return []
   return value.slice(0, 8).flatMap((candidate): AssistantVisualPart[] => {
@@ -196,10 +180,6 @@ export function normalizeAssistantParts(value: unknown): AssistantVisualPart[] {
         : []
     }
 
-    if (item.type === 'sources' && Array.isArray(item.sources)) {
-      const sources = item.sources.map(evidenceSource).filter((entry): entry is AssistantEvidenceSource => entry != null).slice(0, 8)
-      return sources.length ? [{ id, type: 'sources', sources }] : []
-    }
     return []
   })
 }
