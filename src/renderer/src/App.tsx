@@ -240,7 +240,24 @@ export default function App(): React.JSX.Element {
     setCodex(status)
   }, [])
 
+  const openAssistant = (preserveActiveChat: boolean): void => {
+    if (!preserveActiveChat) void chat.create()
+    setChatOpen(false)
+    setComposerFocusRequest((request) => request + 1)
+    navigate({
+      ...currentNavigationEntry(),
+      view: 'assistant',
+      detailMetric: null,
+      sleepStagesOpen: false,
+      selectedWorkout: null
+    })
+  }
+
   const selectView = (v: View): void => {
+    if (v === 'assistant' && view !== 'assistant') {
+      openAssistant(chatOpen)
+      return
+    }
     navigate({
       ...currentNavigationEntry(),
       view: v,
@@ -492,6 +509,7 @@ export default function App(): React.JSX.Element {
           <AssistantPanel
             open={chatOpen && view !== 'assistant'}
             onClose={() => setChatOpen(false)}
+            onOpenInAssistant={() => openAssistant(true)}
             chat={chat}
             codexConnected={codex.connected}
             composerFocusRequest={composerFocusRequest}
