@@ -272,6 +272,11 @@ export function ColumnChart({
                   setHovered(null)
                   setTip(null)
                 }}
+                onPointerDown={(event) => {
+                  // Keep pointer selection from leaving Chromium's focus outline
+                  // around the full SVG hit target. Keyboard focus still works.
+                  event.preventDefault()
+                }}
                 onClick={() => {
                   if (d.value != null) onSelect?.(d)
                 }}
@@ -545,6 +550,11 @@ export function TrendLine({
                   onPointerLeave={() => {
                     setCursor(null)
                     setTip(null)
+                  }}
+                  onPointerDown={(event) => {
+                    // Keep pointer selection from leaving Chromium's focus outline
+                    // around the full SVG hit target. Keyboard focus still works.
+                    event.preventDefault()
                   }}
                   onClick={() => {
                     if (selectable) onSelect(point)
