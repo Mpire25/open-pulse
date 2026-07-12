@@ -4,6 +4,7 @@ import { ClockCounterClockwise, Plus, Sparkle, X } from '@phosphor-icons/react'
 import { ChatPanel, type ChatState } from '@/components/ChatPanel'
 import { ChatHistory } from '@/components/ChatHistory'
 import { cn } from '@/lib/utils'
+import type { AssistantAction } from '@shared/types'
 
 interface AssistantPanelProps {
   open: boolean
@@ -12,6 +13,7 @@ interface AssistantPanelProps {
   codexConnected: boolean
   composerFocusRequest: number
   onOpenSettings: () => void
+  onAssistantAction: (action: AssistantAction) => void
 }
 
 const PANEL_WIDTH = 384
@@ -27,7 +29,8 @@ export function AssistantPanel({
   chat,
   codexConnected,
   composerFocusRequest,
-  onOpenSettings
+  onOpenSettings,
+  onAssistantAction
 }: AssistantPanelProps): React.JSX.Element {
   const [historyOpen, setHistoryOpen] = useState(false)
 
@@ -107,6 +110,7 @@ export function AssistantPanel({
                   chat={chat}
                   codexConnected={codexConnected}
                   onOpenSettings={onOpenSettings}
+                  onAssistantAction={onAssistantAction}
                   compact
                   autoFocus={open}
                   focusRequest={composerFocusRequest}

@@ -1,3 +1,5 @@
+import type { AssistantEvidenceSource } from '../shared/types'
+
 export interface UrlCitationAnnotation {
   type?: string
   start_index?: number
@@ -31,8 +33,7 @@ function safeTitle(value: unknown, fallback: string): string {
   return value.trim().replaceAll('[', '(').replaceAll(']', ')').replaceAll('\n', ' ')
 }
 
-/** Adds numbered, clickable markers and a compact source list to model text. */
-export function addUrlCitations(text: string, annotations: UrlCitationAnnotation[]): string {
+function citationsFromAnnotations(annotations: UrlCitationAnnotation[]): Citation[] {
   const numberByUrl = new Map<string, number>()
   const citations: Citation[] = []
 
@@ -47,7 +48,7 @@ export function addUrlCitations(text: string, annotations: UrlCitationAnnotation
       Number.isInteger(annotation.end_index) &&
       (annotation.start_index as number) >= 0 &&
       (annotation.end_index as number) >= (annotation.start_index as number) &&
-      (annotation.end_index as number) <= text.length
+      (annotation.end_index as number) <= Number.MAX_SAFE_INTEGER
     citations.push({
       startIndex: validRange ? (annotation.start_index as number) : null,
       endIndex: validRange ? (annotation.end_index as number) : null,
@@ -56,6 +57,49 @@ export function addUrlCitations(text: string, annotations: UrlCitationAnnotation
       number
     })
   }
+  return citations
+}
+
+export function citationSources(annotations: UrlCitationAnnotation[]): AssistantEvidenceSource[] {
+  const seen = new Set<string>()
+  return citationsFromAnnotations(annotations).flatMap((citation): AssistantEvidenceSource[] => {
+    if (seen.has(citation.url)) return []
+    seen.add(citation.url)
+    return [{ title: citation.title, url: citation.url, domain: new URL(citation.url).hostname.replace(/^www\./, '') }]
+  })
+}
+
+/** Adds inline citation markers while source cards are rendered separately. */
+export function addUrlCitationMarkers(text: string, annotations: UrlCitationAnnotation[]): string {
+  const citations = citationsFromAnnotations(annotations).map((citation) => ({
+    ...citation,
+    startIndex: citation.startIndex != null && citation.startIndex <= text.length ? citation.startIndex : null,
+    endIndex: citation.endIndex != null && citation.endIndex <= text.length ? citation.endIndex : null
+  }))
+  const insertions = new Map<number, Citation[]>()
+  for (const citation of citations) {
+    if (citation.endIndex == null) continue
+    const atPosition = insertions.get(citation.endIndex) ?? []
+    if (!atPosition.some((item) => item.number === citation.number)) atPosition.push(citation)
+    insertions.set(citation.endIndex, atPosition)
+  }
+
+  let citedText = ''
+  for (let index = 0; index <= text.length; index++) {
+    if (index > 0) citedText += text[index - 1]
+    const atPosition = insertions.get(index)
+    if (atPosition) citedText += atPosition.map((citation) => ` [${citation.number}](${citation.url})`).join('')
+  }
+  return citedText
+}
+
+/** Adds numbered, clickable markers and a compact source list to model text. */
+export function addUrlCitations(text: string, annotations: UrlCitationAnnotation[]): string {
+  const citations = citationsFromAnnotations(annotations).map((citation) => ({
+    ...citation,
+    startIndex: citation.startIndex != null && citation.startIndex <= text.length ? citation.startIndex : null,
+    endIndex: citation.endIndex != null && citation.endIndex <= text.length ? citation.endIndex : null
+  }))
 
   if (!citations.length) return text
 
@@ -76,8 +120,8 @@ export function addUrlCitations(text: string, annotations: UrlCitationAnnotation
     }
   }
 
-  const unique = [...numberByUrl.entries()]
-    .map(([url, number]) => citations.find((citation) => citation.url === url && citation.number === number)!)
+  const unique = citations
+    .filter((citation, index) => citations.findIndex((candidate) => candidate.url === citation.url) === index)
     .sort((left, right) => left.number - right.number)
   const sources = unique.map((citation) => `- [${citation.number} · ${citation.title}](${citation.url})`).join('\n')
   return `${citedText}\n\n**Sources**\n${sources}`

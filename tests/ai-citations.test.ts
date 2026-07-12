@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { addUrlCitations } from '../src/main/ai-citations'
+import { addUrlCitationMarkers, addUrlCitations, citationSources } from '../src/main/ai-citations'
 
 describe('AI web citations', () => {
   test('adds clickable inline markers and a deduplicated source list', () => {
@@ -59,5 +59,27 @@ describe('AI web citations', () => {
 
     expect(cited).toContain('Useful answer.')
     expect(cited).toContain('[1 · WHO fact sheets](https://www.who.int/news-room/fact-sheets)')
+  })
+
+  test('separates inline markers from trusted source-card data', () => {
+    const annotations = [
+      {
+        type: 'url_citation',
+        start_index: 0,
+        end_index: 7,
+        url: 'https://www.nhs.uk/live-well/exercise/',
+        title: 'Physical activity guidance'
+      }
+    ]
+    expect(addUrlCitationMarkers('Current guidance.', annotations)).toBe(
+      'Current [1](https://www.nhs.uk/live-well/exercise/) guidance.'
+    )
+    expect(citationSources(annotations)).toEqual([
+      {
+        title: 'Physical activity guidance',
+        url: 'https://www.nhs.uk/live-well/exercise/',
+        domain: 'nhs.uk'
+      }
+    ])
   })
 })

@@ -2,15 +2,21 @@
 // user's ChatGPT account. Runs an agentic tool loop: the model can query the
 // user's health data (live or demo) before answering.
 
+import { randomUUID } from 'node:crypto'
 import type { WebContents } from 'electron'
-import type { AiEvent, ChatMessage } from '../shared/types'
+import type { AiEvent, AssistantEvidenceSource, AssistantVisualPart, ChatMessage } from '../shared/types'
 import {
   getCodexAuthGeneration,
   getCodexTokens,
   isCodexAuthGenerationCurrent
 } from './codex-auth'
 import { AGENT_TOOLS, AGENT_TOOL_LABELS, runHealthAgentTool } from './health-agent-tools'
-import { addUrlCitations, type UrlCitationAnnotation } from './ai-citations'
+import { addUrlCitationMarkers, citationSources, type UrlCitationAnnotation } from './ai-citations'
+import {
+  PRESENTATION_TOOL,
+  resolvePresentation,
+  type AgentDataset
+} from './assistant-presentation'
 
 const CODEX_URL = 'https://chatgpt.com/backend-api/codex/responses'
 const MODEL = 'gpt-5.6-terra'
@@ -33,6 +39,8 @@ function buildInstructions(): string {
 Today is ${today}; the user's local timezone is ${timezone}. Use civil calendar dates in that timezone.
 
 For every claim about the user's data, call only the narrowest relevant tools and never invent a value. Use one day for an exact fact, 7-14 days for short comparisons, about 30 days for a trend, and 60-90 days for an exploratory relationship. If observations are sparse or the result warns that evidence is thin, request a larger useful range or explain the limitation. Prefer analyze_daily_metrics for arithmetic and correlation rather than calculating from a large table yourself. Distinguish missing data from zero. Correlation is not causation.
+
+When a visual would materially clarify the answer, call present_health_data after the relevant query tools have returned datasetId values. Use an exact-value card for one fact, a comparison for two periods, a chart for a trend, or a workout card for a specific workout. Normally show one or two blocks and never decorate a simple explanation unnecessarily. Only reference dataset IDs and records returned in this run; OpenPulse will compute and validate every displayed value. Still give a concise written answer after presenting data.
 
 Use web search when the user explicitly asks for research or when an answer depends on current medical guidance, current product information, or external facts that may have changed. Do not search for simple questions that can be answered from the user's health data. Prefer authoritative primary sources and current clinical guidance. Never include identifying information, private measurements, or the user's health-record dates in a search query; translate the question into a general research query. Clearly separate external evidence from what the user's own data shows, and cite web-supported claims.
 
@@ -59,13 +67,24 @@ interface ResponseOutputItem extends FunctionCallItem {
   content?: OutputTextItem[]
 }
 
-function citedMessageText(item: ResponseOutputItem): string | null {
+interface CitedMessage {
+  text: string
+  sources: AssistantEvidenceSource[]
+}
+
+function citedMessage(item: ResponseOutputItem): CitedMessage | null {
   if (item.type !== 'message' || !Array.isArray(item.content)) return null
   const output = item.content.filter((part) => part.type === 'output_text' && typeof part.text === 'string')
   if (!output.length) return null
-  return output
-    .map((part) => addUrlCitations(part.text ?? '', Array.isArray(part.annotations) ? part.annotations : []))
+  const sources = new Map<string, AssistantEvidenceSource>()
+  const text = output
+    .map((part) => {
+      const annotations = Array.isArray(part.annotations) ? part.annotations : []
+      for (const source of citationSources(annotations)) sources.set(source.url, source)
+      return addUrlCitationMarkers(part.text ?? '', annotations)
+    })
     .join('\n')
+  return { text, sources: [...sources.values()] }
 }
 
 function toInputItems(history: ChatMessage[]): InputItem[] {
@@ -139,6 +158,17 @@ export async function runChat(
     }
     const input: InputItem[] = toInputItems(history)
     let finalText = ''
+    const datasets = new Map<string, AgentDataset>()
+    const visualParts: AssistantVisualPart[] = []
+    const evidenceSources = new Map<string, AssistantEvidenceSource>()
+
+    const completedParts = (): AssistantVisualPart[] => {
+      const parts = [...visualParts]
+      if (evidenceSources.size) {
+        parts.push({ id: randomUUID(), type: 'sources', sources: [...evidenceSources.values()] })
+      }
+      return parts
+    }
 
     for (let turn = 0; turn < MAX_TOOL_TURNS; turn++) {
       signal.throwIfAborted()
@@ -159,7 +189,7 @@ export async function runChat(
           model: MODEL,
           instructions: buildInstructions(),
           input,
-          tools: [...AGENT_TOOLS, WEB_SEARCH_TOOL],
+          tools: [...AGENT_TOOLS, PRESENTATION_TOOL, WEB_SEARCH_TOOL],
           tool_choice: 'auto',
           parallel_tool_calls: false,
           store: false,
@@ -183,7 +213,7 @@ export async function runChat(
       const functionCalls: FunctionCallItem[] = []
       const continuationItems: InputItem[] = []
       let turnText = ''
-      const completedMessages: string[] = []
+      const completedMessages: CitedMessage[] = []
       let buffer = ''
       const reader = resp.body.getReader()
       const decoder = new TextDecoder()
@@ -239,8 +269,8 @@ export async function runChat(
                   continuationItems.push(event.item)
                 } else if (event.item?.type === 'message') {
                   continuationItems.push(event.item)
-                  const messageText = citedMessageText(event.item)
-                  if (messageText != null) completedMessages.push(messageText)
+                  const message = citedMessage(event.item)
+                  if (message != null) completedMessages.push(message)
                 }
                 break
               case 'response.failed':
@@ -250,12 +280,19 @@ export async function runChat(
         }
       }
 
-      finalText += completedMessages.length ? completedMessages.join('\n') : turnText
+      if (completedMessages.length) {
+        finalText += completedMessages.map((message) => message.text).join('\n')
+        for (const message of completedMessages) {
+          for (const source of message.sources) evidenceSources.set(source.url, source)
+        }
+      } else {
+        finalText += turnText
+      }
       signal.throwIfAborted()
       if (!isCodexAuthGenerationCurrent(authGeneration)) throw new Error('ChatGPT disconnected.')
 
       if (functionCalls.length === 0) {
-        emit({ type: 'done', chatId, runId, text: finalText })
+        emit({ type: 'done', chatId, runId, text: finalText, parts: completedParts() })
         return
       }
 
@@ -264,7 +301,13 @@ export async function runChat(
         const name = call.name ?? ''
         const callId = call.call_id
         if (!callId) throw new Error(`Tool call ${name || '(unknown)'} did not include a call ID.`)
-        emit({ type: 'tool', chatId, runId, name, label: AGENT_TOOL_LABELS[name] ?? `Running ${name}` })
+        emit({
+          type: 'tool',
+          chatId,
+          runId,
+          name,
+          label: name === PRESENTATION_TOOL.name ? 'Preparing visuals' : AGENT_TOOL_LABELS[name] ?? `Running ${name}`
+        })
         let args: Record<string, unknown> = {}
         try {
           args = call.arguments ? JSON.parse(call.arguments) : {}
@@ -273,7 +316,23 @@ export async function runChat(
         }
         let output: string
         try {
-          output = await runHealthAgentTool(name, args, signal)
+          if (name === PRESENTATION_TOOL.name) {
+            const available = Math.max(0, 4 - visualParts.length)
+            const resolved = resolvePresentation(args, datasets).slice(0, available)
+            visualParts.push(...resolved)
+            for (const part of resolved) emit({ type: 'part', chatId, runId, part })
+            output = JSON.stringify({ displayed: resolved.length })
+          } else {
+            output = await runHealthAgentTool(name, args, signal)
+            const parsed = JSON.parse(output) as unknown
+            const data = parsed != null && typeof parsed === 'object' && !Array.isArray(parsed)
+              ? (parsed as Record<string, unknown>)
+              : null
+            if (data && !('error' in data)) {
+              datasets.set(callId, { tool: name, data })
+              output = JSON.stringify({ ...data, datasetId: callId })
+            }
+          }
         } catch (error) {
           if (signal.aborted) throw cancellationError(signal)
           output = JSON.stringify({ error: error instanceof Error ? error.message : String(error) })
@@ -289,7 +348,8 @@ export async function runChat(
       type: 'done',
       chatId,
       runId,
-      text: finalText || 'I hit the tool-call limit before finishing — try a narrower question.'
+      text: finalText || 'I hit the tool-call limit before finishing — try a narrower question.',
+      parts: completedParts()
     })
   } catch (err) {
     const error = signal.aborted ? cancellationError(signal) : err

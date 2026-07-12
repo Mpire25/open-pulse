@@ -422,6 +422,97 @@ export interface PairedDevice {
 
 export type ChatRole = 'user' | 'assistant'
 
+export type AssistantDataView = 'activity' | 'heart' | 'sleep' | 'body' | 'nutrition'
+export type AssistantMetricRange = 'D' | 'W' | 'M' | '3M' | 'Y'
+
+export type AssistantAction =
+  | {
+      type: 'open-metric'
+      view: AssistantDataView
+      metric: MetricKey
+      date: string
+      range: AssistantMetricRange
+    }
+  | { type: 'open-workout'; workout: Workout; date: string }
+
+export interface AssistantMetricCardPart {
+  id: string
+  type: 'metric-card'
+  metric: MetricKey
+  date: string
+  value: number | null
+  source: DataSource
+  action: AssistantAction
+}
+
+export interface AssistantComparisonValue {
+  label: string
+  startDate: string
+  endDate: string
+  value: number | null
+  observations: number
+  days: number
+}
+
+export interface AssistantComparisonPart {
+  id: string
+  type: 'comparison'
+  title: string
+  metric: MetricKey
+  current: AssistantComparisonValue
+  previous: AssistantComparisonValue
+  absoluteChange: number | null
+  percentChange: number | null
+  source: DataSource
+  action: AssistantAction
+}
+
+export interface AssistantChartPoint {
+  date: string
+  value: number | null
+}
+
+export interface AssistantChartPart {
+  id: string
+  type: 'trend-chart'
+  title: string
+  metric: MetricKey
+  startDate: string
+  endDate: string
+  points: AssistantChartPoint[]
+  observations: number
+  source: DataSource
+  action: AssistantAction
+}
+
+export interface AssistantWorkoutPart {
+  id: string
+  type: 'workout-card'
+  workout: Workout
+  date: string
+  source: DataSource
+  action: AssistantAction
+}
+
+export interface AssistantEvidenceSource {
+  title: string
+  url: string
+  domain: string
+}
+
+export interface AssistantSourcesPart {
+  id: string
+  type: 'sources'
+  sources: AssistantEvidenceSource[]
+}
+
+export type AssistantVisualPart =
+  | AssistantMetricCardPart
+  | AssistantComparisonPart
+  | AssistantChartPart
+  | AssistantWorkoutPart
+  | AssistantSourcesPart
+
 export interface ChatMessage {
   role: ChatRole
   text: string
@@ -430,6 +521,9 @@ export interface ChatMessage {
 export interface ChatSessionMessage extends ChatMessage {
   id: string
   createdAt: string
+  /** Versioned, app-rendered response blocks. Legacy messages omit this. */
+  partsVersion?: 1
+  parts?: AssistantVisualPart[]
 }
 
 export interface ChatSession {
@@ -451,5 +545,6 @@ export type AiEvent =
   | { type: 'delta'; chatId: string; runId: string; text: string }
   | { type: 'reasoning'; chatId: string; runId: string }
   | { type: 'tool'; chatId: string; runId: string; name: string; label: string }
-  | { type: 'done'; chatId: string; runId: string; text: string }
+  | { type: 'part'; chatId: string; runId: string; part: AssistantVisualPart }
+  | { type: 'done'; chatId: string; runId: string; text: string; parts: AssistantVisualPart[] }
   | { type: 'error'; chatId: string; runId: string; message: string }

@@ -2,7 +2,7 @@
 // slide-over sheet. The chat state itself lives in App so both surfaces
 // show the same conversation.
 
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import {
   ArrowUp,
@@ -15,8 +15,10 @@ import {
 } from '@phosphor-icons/react'
 import { Button } from '@/components/ui/button'
 import { Markdownish } from '@/components/Markdownish'
+import { AssistantResponseParts } from '@/components/AssistantResponseParts'
 import type { ChatController, ChatTurn } from '@/hooks/useChat'
 import { cn } from '@/lib/utils'
+import type { AssistantAction } from '@shared/types'
 
 // Each starter question wears its metric family's hue — the same rule the
 // rest of the app follows: color identifies the metric, never the value.
@@ -53,6 +55,7 @@ interface ChatPanelProps {
   chat: ChatState
   codexConnected: boolean
   onOpenSettings: () => void
+  onAssistantAction: (action: AssistantAction) => void
   compact?: boolean
   autoFocus?: boolean
   focusRequest?: number
@@ -64,6 +67,7 @@ export function ChatPanel({
   chat,
   codexConnected,
   onOpenSettings,
+  onAssistantAction,
   compact,
   autoFocus = true,
   focusRequest = 0,
@@ -74,6 +78,14 @@ export function ChatPanel({
   const [draft, setDraft] = useState('')
   const scrollRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
+  const actionRef = useRef(onAssistantAction)
+  const handleAssistantAction = useCallback((action: AssistantAction): void => {
+    actionRef.current(action)
+  }, [])
+
+  useEffect(() => {
+    actionRef.current = onAssistantAction
+  }, [onAssistantAction])
 
   useLayoutEffect(() => {
     const frame = requestAnimationFrame(() => {
@@ -155,7 +167,7 @@ export function ChatPanel({
           >
             <AnimatePresence initial={false}>
               {turns.map((turn) => (
-                <Bubble key={turn.id} turn={turn} compact={compact} />
+                <Bubble key={turn.id} turn={turn} compact={compact} onAction={handleAssistantAction} />
               ))}
             </AnimatePresence>
           </div>
@@ -204,7 +216,15 @@ export function ChatPanel({
   )
 }
 
-function Bubble({ turn, compact }: { turn: ChatTurn; compact?: boolean }): React.JSX.Element {
+const Bubble = memo(function Bubble({
+  turn,
+  compact,
+  onAction
+}: {
+  turn: ChatTurn
+  compact?: boolean
+  onAction: (action: AssistantAction) => void
+}): React.JSX.Element {
   const isUser = turn.role === 'user'
   return (
     <motion.div
@@ -219,22 +239,28 @@ function Bubble({ turn, compact }: { turn: ChatTurn; compact?: boolean }): React
         </div>
       ) : (
         <div className={cn('w-full min-w-0 select-text', compact ? 'max-w-full' : 'max-w-[88%]')}>
-          {turn.toolLabel && !turn.text ? (
+          {turn.toolLabel && !turn.text && !turn.parts?.length ? (
             <ToolThinking label={turn.toolLabel} />
-          ) : turn.streaming && !turn.text ? (
+          ) : turn.streaming && !turn.text && !turn.parts?.length ? (
             <ToolThinking label="Thinking" />
           ) : turn.error ? (
             <div className="rounded-[16px] border border-danger/30 bg-danger/10 px-4 py-3 text-[13px] text-danger">
               {turn.text}
             </div>
           ) : (
-            <Markdownish text={turn.text} />
+            <>
+              {turn.text && <Markdownish text={turn.text} />}
+              <AssistantResponseParts parts={turn.parts ?? []} compact={compact} onAction={onAction} />
+              {turn.streaming && turn.toolLabel && (
+                <div className="mt-3"><ToolThinking label={turn.toolLabel} /></div>
+              )}
+            </>
           )}
         </div>
       )}
     </motion.div>
   )
-}
+})
 
 function ToolThinking({ label }: { label: string }): React.JSX.Element {
   return (

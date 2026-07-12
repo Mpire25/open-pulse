@@ -21,7 +21,7 @@ import { useChat } from '@/hooks/useChat'
 import { useTrackpadHistoryNavigation } from '@/hooks/useTrackpadHistoryNavigation'
 import { isoToday } from '@/lib/format'
 import type { MetricRange, OpenMetric } from '@/lib/metric-navigation'
-import type { AppSettings, CodexAuthStatus, GoogleAuthStatus, MetricKey, Workout } from '@shared/types'
+import type { AssistantAction, AppSettings, CodexAuthStatus, GoogleAuthStatus, MetricKey, Workout } from '@shared/types'
 
 const DATA_VIEWS: View[] = ['home', 'activity', 'heart', 'sleep', 'body', 'nutrition']
 const NAVIGATION_STATE_KEY = 'open-pulse-navigation-v4'
@@ -320,6 +320,29 @@ export default function App(): React.JSX.Element {
     })
   }
 
+  const handleAssistantAction = (action: AssistantAction): void => {
+    setChatOpen(false)
+    if (action.type === 'open-metric') {
+      navigate({
+        ...currentNavigationEntry(),
+        view: action.view,
+        selectedDate: action.date,
+        detailMetric: { metric: action.metric, range: action.range },
+        sleepStagesOpen: false,
+        selectedWorkout: null
+      })
+      return
+    }
+    navigate({
+      ...currentNavigationEntry(),
+      view: 'activity',
+      selectedDate: action.date,
+      detailMetric: null,
+      sleepStagesOpen: false,
+      selectedWorkout: action.workout
+    })
+  }
+
   if (!settings) {
     return <div className="h-full w-full bg-canvas" />
   }
@@ -448,6 +471,7 @@ export default function App(): React.JSX.Element {
                     chat={chat}
                     codex={codex}
                     composerFocusRequest={composerFocusRequest}
+                    onAssistantAction={handleAssistantAction}
                     onOpenSettings={() => selectView('settings')}
                   />
                 )}
@@ -471,6 +495,7 @@ export default function App(): React.JSX.Element {
             chat={chat}
             codexConnected={codex.connected}
             composerFocusRequest={composerFocusRequest}
+            onAssistantAction={handleAssistantAction}
             onOpenSettings={() => {
               setChatOpen(false)
               selectView('settings')
