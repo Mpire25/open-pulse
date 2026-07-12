@@ -218,12 +218,6 @@ export function useChat(): ChatController {
               return { ...turn, toolLabel: event.label }
             case 'reasoning':
               return turn.text ? turn : { ...turn, toolLabel: turn.toolLabel ?? 'Thinking' }
-            case 'part':
-              return {
-                ...turn,
-                parts: [...(turn.parts ?? []).filter((part) => part.id !== event.part.id), event.part],
-                toolLabel: undefined
-              }
             case 'done':
               return {
                 ...turn,

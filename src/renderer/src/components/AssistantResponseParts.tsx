@@ -1,5 +1,6 @@
-import { memo } from 'react'
+import { memo, useEffect, useState } from 'react'
 import { Minus, PersonSimpleRun, TrendDown, TrendUp } from '@phosphor-icons/react'
+import { motion } from 'framer-motion'
 import { ColumnChart, TrendLine } from '@/components/charts'
 import { MetricStat } from '@/components/MetricStat'
 import { DrillHeader, Panel } from '@/components/Panel'
@@ -19,19 +20,39 @@ interface AssistantResponsePartsProps {
   onAction: (action: AssistantAction) => void
 }
 
+const MotionPanel = motion.create(Panel)
+const CARD_ENTER = { opacity: 1, y: 0 }
+const CARD_HIDDEN = { opacity: 0, y: 10 }
+const CARD_EASE = [0.16, 1, 0.3, 1] as const
+
 function AssistantResponsePartsBase({
   parts,
   compact,
   onAction
 }: AssistantResponsePartsProps): React.JSX.Element | null {
+  const [entered, setEntered] = useState(false)
+  const visualKey = parts.map((part) => part.id).join(':')
+
+  useEffect(() => {
+    setEntered(false)
+    if (!visualKey) return
+    const frame = requestAnimationFrame(() => setEntered(true))
+    return () => cancelAnimationFrame(frame)
+  }, [visualKey])
+
   if (!parts.length) return null
   return (
     <div className="mt-3 flex flex-col gap-2.5" aria-label="Assistant visuals">
-      {parts.map((part) => {
+      {parts.map((part, index) => {
+        const entrance = {
+          initial: false as const,
+          animate: entered ? CARD_ENTER : CARD_HIDDEN,
+          transition: { delay: index * 0.04, duration: 0.45, ease: CARD_EASE }
+        }
         if (part.type === 'metric-card') {
           const def = METRICS[part.metric]
           return (
-            <Panel key={part.id} className="overflow-hidden">
+            <MotionPanel key={part.id} {...entrance} className="overflow-hidden">
               <MetricStat
                 icon={def.icon}
                 label={def.shortLabel ?? def.label}
@@ -41,7 +62,7 @@ function AssistantResponsePartsBase({
                 sub={`${shortDate(part.date)}${part.source === 'demo' ? ' · Sample data' : ''}`}
                 onOpen={() => onAction(part.action)}
               />
-            </Panel>
+            </MotionPanel>
           )
         }
 
@@ -52,7 +73,7 @@ function AssistantResponsePartsBase({
           const direction = comparisonDirection(part.current.value, part.previous.value)
           const tone = comparisonTone(direction, def.upIsGood)
           return (
-            <Panel key={part.id} className="overflow-hidden">
+            <MotionPanel key={part.id} {...entrance} className="overflow-hidden">
               <div className="border-b border-hairline px-5 pb-3 pt-4">
                 <DrillHeader
                   icon={<Icon size={18} weight="fill" style={{ color: def.color }} />}
@@ -89,7 +110,7 @@ function AssistantResponsePartsBase({
                   }
                 />
               </div>
-            </Panel>
+            </MotionPanel>
           )
         }
 
@@ -106,7 +127,7 @@ function AssistantResponsePartsBase({
             if (part.action.type === 'open-metric') onAction({ ...part.action, date, range: 'D' })
           }
           return (
-            <Panel key={part.id} className="flex flex-col gap-3 p-5">
+            <MotionPanel key={part.id} {...entrance} className="flex flex-col gap-3 p-5">
               <DrillHeader
                 icon={<Icon size={18} weight="fill" style={{ color: def.color }} />}
                 title={`${def.shortLabel ?? def.label} trend`}
@@ -134,14 +155,14 @@ function AssistantResponsePartsBase({
                   />
                 )}
               </div>
-            </Panel>
+            </MotionPanel>
           )
         }
 
         if (part.type === 'workout-card') {
           const workout = part.workout
           return (
-            <Panel key={part.id} className="p-5">
+            <MotionPanel key={part.id} {...entrance} className="p-5">
               <DrillHeader
                 icon={<PersonSimpleRun size={18} weight="fill" className="text-recovery" />}
                 title={workout.name}
@@ -154,7 +175,7 @@ function AssistantResponsePartsBase({
                 <WorkoutFact label="Average heart rate" value={workout.avgHeartRate == null ? null : `${formatInt(workout.avgHeartRate)} bpm`} />
                 <WorkoutFact label="Zone minutes" value={workout.activeZoneMinutes == null ? null : formatMinutes(workout.activeZoneMinutes)} />
               </div>
-            </Panel>
+            </MotionPanel>
           )
         }
 

@@ -341,7 +341,6 @@ export async function runChat(
             })
           }
           visualParts.push(...automaticParts)
-          for (const part of automaticParts) emit({ type: 'part', chatId, runId, part })
           if (automaticParts.length) {
             trace.emit({
               type: 'presentation_resolved',
@@ -401,7 +400,6 @@ export async function runChat(
             const available = Math.max(0, 2 - visualParts.length)
             const resolved = resolvePresentation(args, datasets).slice(0, available)
             visualParts.push(...resolved)
-            for (const part of resolved) emit({ type: 'part', chatId, runId, part })
             const requested = ['metricCards', 'comparisons', 'charts', 'workouts'].reduce(
               (total, key) => total + (Array.isArray(args[key]) ? args[key].length : 0),
               0

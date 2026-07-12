@@ -532,6 +532,5 @@ export type AiEvent =
   | { type: 'delta'; chatId: string; runId: string; text: string }
   | { type: 'reasoning'; chatId: string; runId: string }
   | { type: 'tool'; chatId: string; runId: string; name: string; label: string }
-  | { type: 'part'; chatId: string; runId: string; part: AssistantVisualPart }
   | { type: 'done'; chatId: string; runId: string; text: string; parts: AssistantVisualPart[] }
   | { type: 'error'; chatId: string; runId: string; message: string }
