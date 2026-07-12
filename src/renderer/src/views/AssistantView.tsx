@@ -9,10 +9,16 @@ import type { CodexAuthStatus } from '@shared/types'
 interface AssistantViewProps {
   chat: ChatState
   codex: CodexAuthStatus
+  composerFocusRequest: number
   onOpenSettings: () => void
 }
 
-export function AssistantView({ chat, codex, onOpenSettings }: AssistantViewProps): React.JSX.Element {
+export function AssistantView({
+  chat,
+  codex,
+  composerFocusRequest,
+  onOpenSettings
+}: AssistantViewProps): React.JSX.Element {
   // History is a transient sheet that slides in from the right — never
   // permanent chrome. Hovering the clock button summons it; it stays while
   // the pointer is over the button or the sheet, and a grace delay covers
@@ -38,6 +44,10 @@ export function AssistantView({ chat, codex, onOpenSettings }: AssistantViewProp
   }
 
   useEffect(() => cancelClose, [])
+
+  useEffect(() => {
+    setHistoryOpen(false)
+  }, [composerFocusRequest])
 
   useEffect(() => {
     if (!historyOpen) return
@@ -99,6 +109,7 @@ export function AssistantView({ chat, codex, onOpenSettings }: AssistantViewProp
           chat={chat}
           codexConnected={codex.connected}
           onOpenSettings={onOpenSettings}
+          focusRequest={composerFocusRequest}
           typeToFocus
           onTypeToFocus={() => setHistoryOpen(false)}
         />

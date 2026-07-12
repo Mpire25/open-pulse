@@ -1,4 +1,5 @@
-import { app, BrowserWindow, session, shell } from 'electron'
+import { app, BrowserWindow, Menu, session, shell } from 'electron'
+import type { MenuItemConstructorOptions } from 'electron'
 import { join } from 'node:path'
 import { registerIpc, registerTrustedRenderer } from './ipc'
 import { createRendererTarget, safeExternalUrl, type RendererTarget } from './renderer-security'
@@ -42,7 +43,7 @@ function applyContentSecurityPolicy(target: RendererTarget): void {
   })
 }
 
-function createWindow(target: RendererTarget): void {
+function createWindow(target: RendererTarget): BrowserWindow {
   const win = new BrowserWindow({
     width: 1280,
     height: 840,
@@ -91,12 +92,55 @@ function createWindow(target: RendererTarget): void {
   win.webContents.on('will-attach-webview', (event) => event.preventDefault())
 
   void win.loadURL(target.url.toString())
+  return win
+}
+
+function sendNewChatCommand(target: RendererTarget): void {
+  const win =
+    BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0] ?? createWindow(target)
+  const send = (): void => {
+    if (!win.webContents.isDestroyed()) win.webContents.send('app:new-chat')
+  }
+
+  if (win.webContents.isLoadingMainFrame()) {
+    win.webContents.once('did-finish-load', send)
+  } else {
+    send()
+  }
+  win.show()
+  win.focus()
+}
+
+function installApplicationMenu(target: RendererTarget): void {
+  const template: MenuItemConstructorOptions[] = [
+    ...(process.platform === 'darwin'
+      ? ([{ role: 'appMenu' }] satisfies MenuItemConstructorOptions[])
+      : []),
+    {
+      label: 'File',
+      submenu: [
+        {
+          label: 'New Chat',
+          accelerator: 'CmdOrCtrl+N',
+          click: () => sendNewChatCommand(target)
+        },
+        { type: 'separator' },
+        process.platform === 'darwin' ? { role: 'close' } : { role: 'quit' }
+      ]
+    },
+    { role: 'editMenu' },
+    { role: 'viewMenu' },
+    { role: 'windowMenu' }
+  ]
+
+  Menu.setApplicationMenu(Menu.buildFromTemplate(template))
 }
 
 app.whenReady().then(() => {
   const target = rendererTarget()
   applyContentSecurityPolicy(target)
   registerIpc()
+  installApplicationMenu(target)
   createWindow(target)
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow(target)
