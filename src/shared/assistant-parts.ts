@@ -4,6 +4,8 @@ import type {
   AssistantComparisonValue,
   AssistantDataView,
   AssistantMetricRange,
+  AssistantOverviewAggregation,
+  AssistantOverviewMetric,
   AssistantVisualPart,
   DataSource,
   MetricKey,
@@ -120,12 +122,69 @@ function comparisonValue(value: unknown): AssistantComparisonValue | null {
   }
 }
 
+const OVERVIEW_AGGREGATIONS = ['average', 'total', 'latest'] as const
+
+function chartPoints(value: unknown): Array<{ date: string; value: number | null }> {
+  if (!Array.isArray(value)) return []
+  return value.slice(0, 180).flatMap((point): Array<{ date: string; value: number | null }> => {
+    const pointRecord = record(point)
+    const pointDate = date(pointRecord?.date)
+    const pointValue = numberOrNull(pointRecord?.value)
+    return pointDate && pointValue !== undefined ? [{ date: pointDate, value: pointValue }] : []
+  })
+}
+
+function overviewMetric(value: unknown): AssistantOverviewMetric | null {
+  const item = record(value)
+  const selectedMetric = metric(item?.metric)
+  const selectedValue = numberOrNull(item?.value)
+  const selectedAction = action(item?.action)
+  const points = chartPoints(item?.points)
+  if (
+    !item ||
+    !selectedMetric ||
+    selectedValue === undefined ||
+    !selectedAction ||
+    !points.length ||
+    !OVERVIEW_AGGREGATIONS.includes(item.aggregation as AssistantOverviewAggregation) ||
+    typeof item.observations !== 'number' ||
+    typeof item.days !== 'number'
+  ) {
+    return null
+  }
+  return {
+    metric: selectedMetric,
+    value: selectedValue,
+    aggregation: item.aggregation as AssistantOverviewAggregation,
+    observations: Math.max(0, Math.floor(item.observations)),
+    days: Math.max(1, Math.floor(item.days)),
+    points,
+    action: selectedAction
+  }
+}
+
 export function normalizeAssistantParts(value: unknown): AssistantVisualPart[] {
   if (!Array.isArray(value)) return []
   return value.slice(0, 8).flatMap((candidate): AssistantVisualPart[] => {
     const item = record(candidate)
     const id = text(item?.id, 120)
     if (!item || !id) return []
+
+    if (item.type === 'overview') {
+      const title = text(item.title, 100)
+      const startDate = date(item.startDate)
+      const endDate = date(item.endDate)
+      const selectedSource = source(item.source)
+      const items = Array.isArray(item.items)
+        ? item.items.slice(0, 4).flatMap((candidate): AssistantOverviewMetric[] => {
+            const selected = overviewMetric(candidate)
+            return selected ? [selected] : []
+          })
+        : []
+      return title && startDate && endDate && selectedSource && items.length >= 2
+        ? [{ id, type: 'overview', title, startDate, endDate, items, source: selectedSource }]
+        : []
+    }
 
     if (item.type === 'metric-card') {
       const selectedMetric = metric(item.metric)
@@ -160,12 +219,7 @@ export function normalizeAssistantParts(value: unknown): AssistantVisualPart[] {
       const selectedAction = action(item.action)
       const title = text(item.title, 100)
       if (!selectedMetric || !startDate || !endDate || !selectedSource || !selectedAction || !title || !Array.isArray(item.points)) return []
-      const points = item.points.slice(0, 180).flatMap((point): Array<{ date: string; value: number | null }> => {
-        const pointRecord = record(point)
-        const pointDate = date(pointRecord?.date)
-        const pointValue = numberOrNull(pointRecord?.value)
-        return pointDate && pointValue !== undefined ? [{ date: pointDate, value: pointValue }] : []
-      })
+      const points = chartPoints(item.points)
       if (!points.length || typeof item.observations !== 'number') return []
       return [{ id, type: 'trend-chart', title, metric: selectedMetric, startDate, endDate, points, observations: Math.max(0, Math.floor(item.observations)), source: selectedSource, action: selectedAction }]
     }
@@ -187,6 +241,7 @@ export function normalizeAssistantParts(value: unknown): AssistantVisualPart[] {
 export function assistantPartsContext(parts: AssistantVisualPart[]): string {
   if (!parts.length) return ''
   const summaries = parts.flatMap((part): string[] => {
+    if (part.type === 'overview') return [`Displayed an overview of ${part.items.map((item) => item.metric).join(', ')} for ${part.startDate}–${part.endDate}.`]
     if (part.type === 'metric-card') return [`Displayed ${part.metric} for ${part.date}: ${part.value ?? 'missing'}.`]
     if (part.type === 'comparison') return [`Displayed a ${part.metric} comparison for ${part.current.startDate}–${part.current.endDate} versus ${part.previous.startDate}–${part.previous.endDate}.`]
     if (part.type === 'trend-chart') return [`Displayed a ${part.metric} trend for ${part.startDate}–${part.endDate}.`]

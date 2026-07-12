@@ -179,6 +179,7 @@ export class AgentTracer {
 export function summarizeToolArguments(name: string, args: Record<string, unknown>): Record<string, unknown> {
   if (name === 'present_health_data') {
     return {
+      overviews: Array.isArray(args.overviews) ? args.overviews.length : 0,
       metricCards: Array.isArray(args.metricCards) ? args.metricCards.length : 0,
       comparisons: Array.isArray(args.comparisons) ? args.comparisons.length : 0,
       charts: Array.isArray(args.charts) ? args.charts.length : 0,

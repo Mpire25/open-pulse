@@ -15,10 +15,10 @@ function dailyDatasets(): Map<string, AgentDataset> {
           source: 'live',
           requestedRange: { start: '2026-07-01', end: '2026-07-04' },
           days: {
-            '2026-07-01': { steps: 4_000, sleepMinutes: 420 },
-            '2026-07-02': { steps: 5_000, sleepMinutes: 450 },
-            '2026-07-03': { steps: 6_000, sleepMinutes: null },
-            '2026-07-04': { steps: 7_000, sleepMinutes: 480 }
+            '2026-07-01': { steps: 4_000, sleepMinutes: 420, activeZoneMinutes: 20, bmi: 23.4 },
+            '2026-07-02': { steps: 5_000, sleepMinutes: 450, activeZoneMinutes: 30, bmi: null },
+            '2026-07-03': { steps: 6_000, sleepMinutes: null, activeZoneMinutes: 40, bmi: 23.2 },
+            '2026-07-04': { steps: 7_000, sleepMinutes: 480, activeZoneMinutes: null, bmi: null }
           }
         }
       }
@@ -27,6 +27,47 @@ function dailyDatasets(): Map<string, AgentDataset> {
 }
 
 describe('assistant visual presentation', () => {
+  test('resolves a trusted multi-metric overview with appropriate aggregations', () => {
+    const parts = resolvePresentation(
+      {
+        overviews: [
+          {
+            datasetId: 'daily-1',
+            title: 'Recent health overview',
+            startDate: '2026-07-01',
+            endDate: '2026-07-04',
+            metrics: ['steps', 'activeZoneMinutes', 'sleepMinutes', 'bmi']
+          }
+        ],
+        metricCards: [{ datasetId: 'daily-1', metric: 'steps', date: '2026-07-04' }],
+        comparisons: [],
+        charts: [],
+        workouts: []
+      },
+      dailyDatasets()
+    )
+
+    expect(parts).toHaveLength(1)
+    expect(parts[0]).toMatchObject({
+      type: 'overview',
+      title: 'Recent health overview',
+      startDate: '2026-07-01',
+      endDate: '2026-07-04',
+      items: [
+        { metric: 'steps', aggregation: 'average', value: 5_500, observations: 4 },
+        { metric: 'activeZoneMinutes', aggregation: 'total', value: 90, observations: 3 },
+        { metric: 'sleepMinutes', aggregation: 'average', value: 450, observations: 3 },
+        {
+          metric: 'bmi',
+          aggregation: 'latest',
+          value: 23.2,
+          observations: 2,
+          action: { type: 'open-metric', date: '2026-07-03' }
+        }
+      ]
+    })
+  })
+
   test('resolves trusted metric cards, comparisons, and charts from one dataset', () => {
     const parts = resolvePresentation(
       {

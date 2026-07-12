@@ -119,6 +119,34 @@ describe('encrypted chat history store', () => {
             value: 7_000,
             source: 'live',
             action: { type: 'open-metric', view: 'activity', metric: 'steps', date: '2026-07-04', range: 'D' }
+          },
+          {
+            id: 'part-2',
+            type: 'overview',
+            title: 'Health overview',
+            startDate: '2026-07-01',
+            endDate: '2026-07-04',
+            source: 'live',
+            items: [
+              {
+                metric: 'steps',
+                value: 7_000,
+                aggregation: 'average',
+                observations: 4,
+                days: 4,
+                points: [{ date: '2026-07-04', value: 7_000 }],
+                action: { type: 'open-metric', view: 'activity', metric: 'steps', date: '2026-07-04', range: 'W' }
+              },
+              {
+                metric: 'sleepMinutes',
+                value: 450,
+                aggregation: 'average',
+                observations: 3,
+                days: 4,
+                points: [{ date: '2026-07-04', value: 480 }],
+                action: { type: 'open-metric', view: 'sleep', metric: 'sleepMinutes', date: '2026-07-04', range: 'W' }
+              }
+            ]
           }
         ]
       }
@@ -126,5 +154,9 @@ describe('encrypted chat history store', () => {
 
     const restored = new ChatHistoryStore(path, encryptedAdapter()).snapshot('account-a')
     expect(restored.sessions[0].messages[1].parts?.[0]).toMatchObject({ type: 'metric-card', value: 7_000 })
+    expect(restored.sessions[0].messages[1].parts?.[1]).toMatchObject({
+      type: 'overview',
+      items: [{ metric: 'steps' }, { metric: 'sleepMinutes' }]
+    })
   })
 })

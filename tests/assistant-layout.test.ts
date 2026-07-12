@@ -3,7 +3,11 @@ import {
   assistantVisualLayout,
   orderAssistantVisuals
 } from '../src/shared/assistant-layout'
-import type { AssistantChartPart, AssistantMetricCardPart } from '../src/shared/types'
+import type {
+  AssistantChartPart,
+  AssistantMetricCardPart,
+  AssistantOverviewPart
+} from '../src/shared/types'
 
 function metricCard(id: string): AssistantMetricCardPart {
   return {
@@ -44,6 +48,18 @@ function chart(id: string): AssistantChartPart {
   }
 }
 
+function overview(id: string): AssistantOverviewPart {
+  return {
+    id,
+    type: 'overview',
+    title: 'Health overview',
+    startDate: '2026-07-06',
+    endDate: '2026-07-12',
+    items: [],
+    source: 'live'
+  }
+}
+
 describe('assistant visual layouts', () => {
   test('keeps the compact assistant strictly single-column', () => {
     expect(assistantVisualLayout([metricCard('one'), metricCard('two')], true)).toBe('stack')
@@ -63,5 +79,9 @@ describe('assistant visual layouts', () => {
 
   test('does not squeeze two information-dense visuals beside each other', () => {
     expect(assistantVisualLayout([chart('one'), chart('two')], false)).toBe('stack')
+  })
+
+  test('keeps an overview full-width even when another visual is present', () => {
+    expect(assistantVisualLayout([overview('overview'), metricCard('support')], false)).toBe('stack')
   })
 })

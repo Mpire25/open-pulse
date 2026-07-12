@@ -494,11 +494,34 @@ export interface AssistantWorkoutPart {
   action: AssistantAction
 }
 
+export type AssistantOverviewAggregation = 'average' | 'total' | 'latest'
+
+export interface AssistantOverviewMetric {
+  metric: MetricKey
+  value: number | null
+  aggregation: AssistantOverviewAggregation
+  observations: number
+  days: number
+  points: AssistantChartPoint[]
+  action: AssistantAction
+}
+
+export interface AssistantOverviewPart {
+  id: string
+  type: 'overview'
+  title: string
+  startDate: string
+  endDate: string
+  items: AssistantOverviewMetric[]
+  source: DataSource
+}
+
 export type AssistantVisualPart =
   | AssistantMetricCardPart
   | AssistantComparisonPart
   | AssistantChartPart
   | AssistantWorkoutPart
+  | AssistantOverviewPart
 
 export interface ChatMessage {
   role: ChatRole
