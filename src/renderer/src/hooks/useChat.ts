@@ -158,20 +158,12 @@ export function useChat(): ChatController {
     try {
       const snapshot = await window.pulse.chats.list()
       if (epoch !== accountEpochRef.current) return
-      let sessions = snapshot.sessions
-      if (!sessions.length) {
-        const draft = createDraftChat()
-        publish([draft])
-        chooseActive(draft.id)
-        return
-      }
-      const next = sessions.map(toViewChat)
-      publish(next)
-      chooseActive(next[0]?.id ?? null)
+      applySnapshot(snapshot, false)
+      if (!chatsRef.current.length) await create()
     } finally {
       if (epoch === accountEpochRef.current) setLoading(false)
     }
-  }, [chooseActive, publish])
+  }, [applySnapshot, chooseActive, create, publish])
 
   const updateTurns = useCallback(
     (chatId: string, update: (turns: ChatTurn[]) => ChatTurn[]): void => {

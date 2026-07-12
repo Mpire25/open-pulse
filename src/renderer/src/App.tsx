@@ -253,6 +253,17 @@ export default function App(): React.JSX.Element {
     })
   }
 
+  const toggleAssistantPanel = (): void => {
+    if (chatOpen) {
+      setChatOpen(false)
+      return
+    }
+
+    void chat.create()
+    setChatOpen(true)
+    setComposerFocusRequest((request) => request + 1)
+  }
+
   const selectView = (v: View): void => {
     if (v === 'assistant' && view !== 'assistant') {
       openAssistant(chatOpen)
@@ -415,7 +426,7 @@ export default function App(): React.JSX.Element {
           onDateChange={selectDate}
           showAsk={view !== 'assistant'}
           chatOpen={chatOpen}
-          onToggleChat={() => setChatOpen((o) => !o)}
+          onToggleChat={toggleAssistantPanel}
           sidebarOpen={sidebarOpen}
           onToggleSidebar={() => setSidebarOpen((open) => !open)}
         />
