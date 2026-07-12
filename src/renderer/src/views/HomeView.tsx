@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion'
-import { Footprints, Heartbeat, Moon, PersonSimpleRun } from '@phosphor-icons/react'
+import { Barbell, Footprints, Heartbeat, Moon, PersonSimpleRun } from '@phosphor-icons/react'
 import { Panel, DrillHeader, InteractivePanel, SectionHeader } from '@/components/Panel'
 import { ColumnChart, ProgressRing } from '@/components/charts'
 import { MetricStat } from '@/components/MetricStat'
@@ -260,7 +260,20 @@ export function HomeView({ date, goals, onOpenMetric, onOpenWorkout, onNavigate 
       {/* Workouts */}
       {(workouts.isPending || (workouts.data && workouts.data.length > 0)) && (
         <motion.div custom={5} variants={fade} initial="hidden" animate="show">
-          <Panel className="min-h-[126px] p-3">
+          <Panel className="flex min-h-[126px] flex-col gap-2 px-3 py-5">
+            <div className="px-2">
+              <SectionHeader
+                title="Workouts"
+                hint={
+                  workouts.isPending ? (
+                    <SkeletonText className="w-20" />
+                  ) : (
+                    `${workouts.data?.length ?? 0} session${workouts.data?.length === 1 ? '' : 's'}`
+                  )
+                }
+                icon={<Barbell size={18} weight="fill" style={{ color: 'var(--color-recovery)' }} />}
+              />
+            </div>
             {workouts.isPending ? (
               <SkeletonRows />
             ) : (
