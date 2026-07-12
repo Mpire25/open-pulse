@@ -64,6 +64,12 @@ function sameNavigationEntry(a: NavigationEntry, b: NavigationEntry): boolean {
   )
 }
 
+function releasePointerButtonFocus(event: React.PointerEvent<HTMLDivElement>): void {
+  if (!(event.target instanceof Element)) return
+  const button = event.target.closest('button')
+  if (button instanceof HTMLButtonElement && button === document.activeElement) button.blur()
+}
+
 export default function App(): React.JSX.Element {
   const [view, setView] = useState<View>('home')
   // Non-null = a metric detail page is open on top of the current data view.
@@ -317,7 +323,10 @@ export default function App(): React.JSX.Element {
   const showWorkoutDetail = isDataView && selectedWorkout != null
 
   return (
-    <div className="flex h-full w-full overflow-hidden bg-canvas/60 text-ink">
+    <div
+      className="flex h-full w-full overflow-hidden bg-canvas/60 text-ink"
+      onPointerUpCapture={releasePointerButtonFocus}
+    >
       <AnimatePresence initial={false}>
         {sidebarOpen && (
           <Sidebar
