@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { ClockCounterClockwise, Plus, Sparkle } from '@phosphor-icons/react'
+import { ClockCounterClockwise, Plus, Sparkle, SquaresFour } from '@phosphor-icons/react'
+import { AssistantCardGallery } from '@/components/AssistantCardGallery'
 import { ChatPanel, type ChatState } from '@/components/ChatPanel'
 import { ChatHistory } from '@/components/ChatHistory'
 import { cn } from '@/lib/utils'
@@ -26,6 +27,7 @@ export function AssistantView({
   // the pointer is over the button or the sheet, and a grace delay covers
   // the travel between them.
   const [historyOpen, setHistoryOpen] = useState(false)
+  const [galleryOpen, setGalleryOpen] = useState(false)
   const closeTimer = useRef<number | null>(null)
 
   const cancelClose = (): void => {
@@ -49,6 +51,7 @@ export function AssistantView({
 
   useEffect(() => {
     setHistoryOpen(false)
+    setGalleryOpen(false)
   }, [composerFocusRequest])
 
   useEffect(() => {
@@ -78,8 +81,25 @@ export function AssistantView({
           <button
             type="button"
             onClick={() => {
+              setGalleryOpen((open) => !open)
+              setHistoryOpen(false)
+            }}
+            aria-label="Card gallery"
+            aria-pressed={galleryOpen}
+            title="Card gallery"
+            className={cn(
+              'grid h-7 w-7 place-items-center rounded-lg text-ink-dim transition-colors hover:bg-white/[0.06] hover:text-ink',
+              galleryOpen && 'bg-white/[0.07] text-ink'
+            )}
+          >
+            <SquaresFour size={15} />
+          </button>
+          <button
+            type="button"
+            onClick={() => {
               void chat.create()
               setHistoryOpen(false)
+              setGalleryOpen(false)
             }}
             disabled={chat.loading}
             aria-label="New chat"
@@ -107,15 +127,19 @@ export function AssistantView({
         </div>
       </div>
       <div className="min-h-0 flex-1">
-        <ChatPanel
-          chat={chat}
-          codexConnected={codex.connected}
-          onOpenSettings={onOpenSettings}
-          onAssistantAction={onAssistantAction}
-          focusRequest={composerFocusRequest}
-          typeToFocus
-          onTypeToFocus={() => setHistoryOpen(false)}
-        />
+        {galleryOpen ? (
+          <AssistantCardGallery />
+        ) : (
+          <ChatPanel
+            chat={chat}
+            codexConnected={codex.connected}
+            onOpenSettings={onOpenSettings}
+            onAssistantAction={onAssistantAction}
+            focusRequest={composerFocusRequest}
+            typeToFocus
+            onTypeToFocus={() => setHistoryOpen(false)}
+          />
+        )}
       </div>
 
       {/* A floating card, not an edge-flush sheet: inset from the edges with
@@ -141,6 +165,7 @@ export function AssistantView({
                 onClick={() => {
                   void chat.create()
                   setHistoryOpen(false)
+                  setGalleryOpen(false)
                 }}
                 disabled={chat.loading}
                 aria-label="New chat"
