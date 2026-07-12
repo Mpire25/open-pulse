@@ -327,10 +327,11 @@ export function useChat(): ChatController {
 
   const deleteChat = useCallback(
     async (id: string): Promise<void> => {
+      const deletingActiveChat = id === activeChatIdRef.current
       cancelRun(id)
       const snapshot = await window.pulse.chats.delete(id)
       applySnapshot(snapshot, true)
-      await create()
+      if (deletingActiveChat) await create()
     },
     [applySnapshot, cancelRun, create]
   )
