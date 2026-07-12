@@ -1,7 +1,6 @@
 import { memo } from 'react'
-import { ArrowSquareOut, PersonSimpleRun } from '@phosphor-icons/react'
+import { ArrowSquareOut, Minus, PersonSimpleRun, TrendDown, TrendUp } from '@phosphor-icons/react'
 import { ColumnChart, TrendLine } from '@/components/charts'
-import { DeltaChip } from '@/components/DeltaChip'
 import { MetricStat } from '@/components/MetricStat'
 import { DrillHeader, Panel, SectionHeader } from '@/components/Panel'
 import { METRICS } from '@/lib/metric-registry'
@@ -50,12 +49,14 @@ function AssistantResponsePartsBase({
           const def = METRICS[part.metric]
           const Icon = def.icon
           const delta = def.deltaMode === 'abs' ? part.absoluteChange : part.percentChange
+          const direction = comparisonDirection(part.current.value, part.previous.value)
+          const tone = comparisonTone(direction, def.upIsGood)
           return (
             <Panel key={part.id} className="overflow-hidden">
               <div className="border-b border-hairline px-5 pb-3 pt-4">
                 <DrillHeader
                   icon={<Icon size={18} weight="fill" style={{ color: def.color }} />}
-                  title={part.title}
+                  title={`${def.shortLabel ?? def.label} comparison`}
                   hint={def.label}
                   onOpen={() => onAction(part.action)}
                 />
@@ -66,16 +67,26 @@ function AssistantResponsePartsBase({
                   compact ? 'grid-cols-1 divide-y divide-hairline' : 'grid-cols-2 divide-x divide-hairline'
                 )}
               >
-                <ComparisonCell metric={part.metric} item={part.current} />
-                <ComparisonCell metric={part.metric} item={part.previous} />
+                <ComparisonCell
+                  metric={part.metric}
+                  item={part.current}
+                  period="Current period"
+                  direction={direction}
+                  tone={tone}
+                />
+                <ComparisonCell metric={part.metric} item={part.previous} period="Previous period" />
               </div>
               <div className="flex items-center justify-between gap-3 border-t border-hairline px-5 py-3">
-                <span className="text-[10.5px] text-ink-faint">Change from {part.previous.label.toLowerCase()}</span>
-                <DeltaChip
+                <span className="text-[10.5px] text-ink-faint">Compared with previous period</span>
+                <ComparisonChange
                   delta={delta}
-                  upIsGood={def.upIsGood}
-                  minMagnitude={def.deltaMode === 'abs' ? 0.05 : 0.5}
-                  format={def.deltaMode === 'abs' ? (value) => `${def.format(value)}${def.unit ? ` ${def.unit}` : ''}` : undefined}
+                  direction={direction}
+                  tone={tone}
+                  format={
+                    def.deltaMode === 'abs'
+                      ? (value) => `${def.format(value)}${def.unit ? ` ${def.unit}` : ''}`
+                      : (value) => `${value.toFixed(0)}%`
+                  }
                 />
               </div>
             </Panel>
@@ -98,7 +109,7 @@ function AssistantResponsePartsBase({
             <Panel key={part.id} className="flex flex-col gap-3 p-5">
               <DrillHeader
                 icon={<Icon size={18} weight="fill" style={{ color: def.color }} />}
-                title={part.title}
+                title={`${def.shortLabel ?? def.label} trend`}
                 hint={`${shortDate(part.startDate)}–${shortDate(part.endDate)} · ${part.observations} readings`}
                 onOpen={() => onAction(part.action)}
               />
@@ -181,11 +192,29 @@ function AssistantResponsePartsBase({
 
 export const AssistantResponseParts = memo(AssistantResponsePartsBase)
 
-function MetricValue({ metric, value }: { metric: MetricKey; value: number | null }): React.JSX.Element {
+type ComparisonDirection = 'higher' | 'lower' | 'same' | null
+type ComparisonTone = 'good' | 'bad' | 'neutral'
+
+function MetricValue({
+  metric,
+  value,
+  tone = 'neutral'
+}: {
+  metric: MetricKey
+  value: number | null
+  tone?: ComparisonTone
+}): React.JSX.Element {
   const def = METRICS[metric]
   return (
     <div className="flex min-w-0 items-baseline gap-1.5">
-      <span className="text-[22px] font-semibold leading-none tracking-tight text-ink">
+      <span
+        className={cn(
+          'text-[22px] font-semibold leading-none tracking-tight',
+          tone === 'neutral' && 'text-ink',
+          tone === 'good' && 'text-recovery',
+          tone === 'bad' && 'text-heart'
+        )}
+      >
         {value == null ? '—' : def.format(value)}
       </span>
       {value != null && def.unit && <span className="text-[11.5px] text-ink-dim">{def.unit}</span>}
@@ -195,22 +224,116 @@ function MetricValue({ metric, value }: { metric: MetricKey; value: number | nul
 
 function ComparisonCell({
   metric,
-  item
+  item,
+  period,
+  direction = null,
+  tone = 'neutral'
 }: {
   metric: MetricKey
   item: AssistantComparisonValue
+  period: 'Current period' | 'Previous period'
+  direction?: ComparisonDirection
+  tone?: ComparisonTone
 }): React.JSX.Element {
   const missing = item.days - item.observations
   return (
-    <div className="flex min-w-0 flex-col gap-1.5 px-5 py-4">
+    <div
+      className={cn(
+        'flex min-w-0 flex-col gap-2 px-5 py-4',
+        period === 'Current period' && tone === 'good' && 'bg-recovery-soft',
+        period === 'Current period' && tone === 'bad' && 'bg-heart-soft',
+        period === 'Current period' && tone === 'neutral' && 'bg-white/[0.025]'
+      )}
+    >
       <div className="flex items-center justify-between gap-2">
-        <span className="text-[10.5px] font-medium text-ink-dim">{item.label}</span>
-        {missing > 0 && <span className="text-[9.5px] text-ink-faint">{item.observations}/{item.days} days</span>}
+        <div>
+          <div className={cn('text-[11px] font-semibold', period === 'Current period' ? 'text-ink' : 'text-ink-dim')}>
+            {period}
+          </div>
+          <div className="mt-0.5 text-[10px] text-ink-faint">{periodLabel(item.startDate, item.endDate)}</div>
+        </div>
+        {period === 'Current period' && direction && direction !== 'same' ? (
+          <DirectionLabel direction={direction} tone={tone} />
+        ) : missing > 0 ? (
+          <span className="text-[9.5px] text-ink-faint">{item.observations}/{item.days} days</span>
+        ) : null}
       </div>
-      <MetricValue metric={metric} value={item.value} />
-      <div className="text-[9.5px] text-ink-faint">{periodLabel(item.startDate, item.endDate)}</div>
+      <MetricValue metric={metric} value={item.value} tone={period === 'Current period' ? tone : 'neutral'} />
+      {missing > 0 && period === 'Current period' && (
+        <div className="text-[9.5px] text-ink-faint">{item.observations} of {item.days} days recorded</div>
+      )}
     </div>
   )
+}
+
+function DirectionLabel({
+  direction,
+  tone
+}: {
+  direction: Exclude<ComparisonDirection, 'same' | null>
+  tone: ComparisonTone
+}): React.JSX.Element {
+  return (
+    <span
+      className={cn(
+        'inline-flex items-center gap-1 text-[10px] font-semibold capitalize',
+        tone === 'neutral' && 'text-ink-dim',
+        tone === 'good' && 'text-recovery',
+        tone === 'bad' && 'text-heart'
+      )}
+    >
+      <span
+        className={cn(
+          'size-1.5 rounded-full',
+          tone === 'neutral' && 'bg-ink-faint',
+          tone === 'good' && 'bg-recovery',
+          tone === 'bad' && 'bg-heart'
+        )}
+      />
+      {direction}
+    </span>
+  )
+}
+
+function ComparisonChange({
+  delta,
+  direction,
+  tone,
+  format
+}: {
+  delta: number | null
+  direction: ComparisonDirection
+  tone: ComparisonTone
+  format: (value: number) => string
+}): React.JSX.Element {
+  if (delta == null || direction == null) return <span className="text-[10.5px] text-ink-faint">Not enough data</span>
+  const Icon = direction === 'higher' ? TrendUp : direction === 'lower' ? TrendDown : Minus
+  return (
+    <span
+      className={cn(
+        'inline-flex items-center gap-1.5 rounded-full px-2 py-1 text-[10.5px] font-semibold leading-none',
+        tone === 'neutral' && 'bg-white/[0.06] text-ink-dim',
+        tone === 'good' && 'bg-recovery-soft text-recovery',
+        tone === 'bad' && 'bg-heart-soft text-heart'
+      )}
+    >
+      <Icon size={11} weight="bold" />
+      {direction === 'same' ? 'No change' : `${format(Math.abs(delta))} ${direction}`}
+    </span>
+  )
+}
+
+function comparisonDirection(current: number | null, previous: number | null): ComparisonDirection {
+  if (current == null || previous == null) return null
+  if (current > previous) return 'higher'
+  if (current < previous) return 'lower'
+  return 'same'
+}
+
+function comparisonTone(direction: ComparisonDirection, upIsGood: boolean | null): ComparisonTone {
+  if (direction == null || direction === 'same' || upIsGood == null) return 'neutral'
+  const improved = direction === 'higher' ? upIsGood : !upIsGood
+  return improved ? 'good' : 'bad'
 }
 
 function WorkoutFact({ label, value }: { label: string; value: string | null }): React.JSX.Element | null {
