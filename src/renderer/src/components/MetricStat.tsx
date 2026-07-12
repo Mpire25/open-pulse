@@ -10,11 +10,8 @@ interface MetricStatProps {
   value: string
   unit?: string
   accent: string
-  /** Signed difference vs the relevant baseline; colored by `upIsGood`. */
-  delta?: number | null
-  deltaFormat?: (magnitude: number) => string
-  deltaMinMagnitude?: number
-  showTypicalDelta?: boolean
+  /** Signed % vs the personal baseline; colored by `upIsGood`. */
+  deltaPct?: number | null
   upIsGood?: boolean | null
   /** Recent history for the corner sparkline. */
   spark?: Array<number | null>
@@ -31,10 +28,7 @@ export function MetricStat({
   value,
   unit,
   accent,
-  delta,
-  deltaFormat,
-  deltaMinMagnitude,
-  showTypicalDelta = false,
+  deltaPct,
   upIsGood = true,
   spark,
   sparkWidth = 72,
@@ -67,15 +61,9 @@ export function MetricStat({
           </div>
         )}
       </div>
-      {(delta != null || sub) && (
+      {(deltaPct != null || sub) && (
         <div className="flex min-w-0 items-center gap-1.5 text-[11px] leading-none">
-          <DeltaChip
-            delta={delta ?? null}
-            upIsGood={upIsGood}
-            format={deltaFormat}
-            minMagnitude={deltaMinMagnitude}
-            showTypical={showTypicalDelta}
-          />
+          <DeltaChip delta={deltaPct ?? null} upIsGood={upIsGood} />
           <span className="min-w-0 leading-tight text-ink-faint">{sub ?? 'vs 7-day baseline'}</span>
         </div>
       )}

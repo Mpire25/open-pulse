@@ -190,7 +190,7 @@ export function ActivityView({ date, goals, onOpenMetric, onOpenWorkout }: Activ
                       value={value != null ? def.format(value) : '—'}
                       unit={def.unit}
                       accent={def.color}
-                      delta={baselineDeltaPct(value, baseline(points, date))}
+                      deltaPct={baselineDeltaPct(value, baseline(points, date))}
                       upIsGood={def.upIsGood}
                       spark={pointValues(points)}
                       sparkWidth={180}

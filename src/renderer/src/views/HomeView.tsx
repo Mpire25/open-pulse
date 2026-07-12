@@ -314,6 +314,19 @@ function SignalsPanel({
           const points = pointsFor(key)
           const value = today(key)
           const base = baseline(points, date)
+          const deltaPct = def.deltaMode === 'abs' ? null : baselineDeltaPct(value, base)
+          const comparison =
+            def.deltaMode === 'abs'
+              ? value == null
+                ? undefined
+                : value > 0
+                  ? 'Above device baseline'
+                  : value < 0
+                    ? 'Below device baseline'
+                    : 'At device baseline'
+              : deltaPct != null && Math.abs(deltaPct) < 1
+                ? 'In line with 7-day baseline'
+                : undefined
           return isPending(key) ? (
             <SkeletonMetricStat key={key} />
           ) : (
@@ -324,13 +337,10 @@ function SignalsPanel({
               value={value != null ? def.format(value) : '—'}
               unit={def.unit}
               accent={def.color}
-              delta={def.deltaMode === 'abs' ? value : baselineDeltaPct(value, base)}
-              deltaFormat={def.deltaMode === 'abs' ? (magnitude) => `${magnitude.toFixed(1)}°C` : undefined}
-              deltaMinMagnitude={def.deltaMode === 'abs' ? 0.5 : undefined}
-              showTypicalDelta
+              deltaPct={deltaPct}
               upIsGood={def.upIsGood}
               spark={pointValues(points)}
-              sub={def.deltaMode === 'abs' && value != null ? 'vs device baseline' : undefined}
+              sub={comparison}
               onOpen={() => onOpenMetric(key, 'D')}
             />
           )
