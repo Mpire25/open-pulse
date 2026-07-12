@@ -197,24 +197,15 @@ type ComparisonTone = 'good' | 'bad' | 'neutral'
 
 function MetricValue({
   metric,
-  value,
-  tone = 'neutral'
+  value
 }: {
   metric: MetricKey
   value: number | null
-  tone?: ComparisonTone
 }): React.JSX.Element {
   const def = METRICS[metric]
   return (
     <div className="flex min-w-0 items-baseline gap-1.5">
-      <span
-        className={cn(
-          'text-[22px] font-semibold leading-none tracking-tight',
-          tone === 'neutral' && 'text-ink',
-          tone === 'good' && 'text-recovery',
-          tone === 'bad' && 'text-heart'
-        )}
-      >
+      <span className="text-[22px] font-semibold leading-none tracking-tight text-ink">
         {value == null ? '—' : def.format(value)}
       </span>
       {value != null && def.unit && <span className="text-[11.5px] text-ink-dim">{def.unit}</span>}
@@ -240,9 +231,7 @@ function ComparisonCell({
     <div
       className={cn(
         'flex min-w-0 flex-col gap-2 px-5 py-4',
-        period === 'Current period' && tone === 'good' && 'bg-recovery-soft',
-        period === 'Current period' && tone === 'bad' && 'bg-heart-soft',
-        period === 'Current period' && tone === 'neutral' && 'bg-white/[0.025]'
+        period === 'Current period' && 'bg-white/[0.025]'
       )}
     >
       <div className="flex items-center justify-between gap-2">
@@ -258,7 +247,7 @@ function ComparisonCell({
           <span className="text-[9.5px] text-ink-faint">{item.observations}/{item.days} days</span>
         ) : null}
       </div>
-      <MetricValue metric={metric} value={item.value} tone={period === 'Current period' ? tone : 'neutral'} />
+      <MetricValue metric={metric} value={item.value} />
       {missing > 0 && period === 'Current period' && (
         <div className="text-[9.5px] text-ink-faint">{item.observations} of {item.days} days recorded</div>
       )}
