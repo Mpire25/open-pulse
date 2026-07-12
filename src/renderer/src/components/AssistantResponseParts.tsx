@@ -27,6 +27,8 @@ import type {
 interface AssistantResponsePartsProps {
   parts: AssistantVisualPart[]
   compact?: boolean
+  /** Gallery-only override for previewing one metric in both chart styles. */
+  chartKindOverride?: 'bar' | 'line'
   onAction: (action: AssistantAction) => void
 }
 
@@ -71,6 +73,7 @@ function overviewMetricSub(item: AssistantOverviewMetric): string {
 function AssistantResponsePartsBase({
   parts,
   compact,
+  chartKindOverride,
   onAction
 }: AssistantResponsePartsProps): React.JSX.Element | null {
   const [entered, setEntered] = useState(false)
@@ -222,7 +225,7 @@ function AssistantResponsePartsBase({
                 onOpen={() => onAction(part.action)}
               />
               <div className="mt-auto">
-                {def.chart === 'bar' ? (
+                {(chartKindOverride ?? def.chart) === 'bar' ? (
                   <ColumnChart
                     data={chartData}
                     color={def.color}
