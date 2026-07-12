@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion'
-import { Footprints, Heartbeat, Moon, PersonSimpleRun } from '@phosphor-icons/react'
+import { Barbell, Footprints, Heartbeat, Moon, PersonSimpleRun } from '@phosphor-icons/react'
 import { Panel, DrillHeader, InteractivePanel, SectionHeader } from '@/components/Panel'
 import { ColumnChart, ProgressRing } from '@/components/charts'
 import { MetricStat } from '@/components/MetricStat'
@@ -142,7 +142,11 @@ export function HomeView({ date, goals, onOpenMetric, onOpenWorkout, onNavigate 
                 series.isMetricPending('restingHeartRate') ? (
                   <SkeletonText className="w-28" />
                 ) : today.restingHeartRate != null && rhrBase != null ? (
-                  `${today.restingHeartRate > Math.round(rhrBase) ? '+' : ''}${today.restingHeartRate - Math.round(rhrBase)} vs your average`
+                  today.restingHeartRate === Math.round(rhrBase) ? (
+                    'Same as your average'
+                  ) : (
+                    `${today.restingHeartRate > Math.round(rhrBase) ? '+' : ''}${today.restingHeartRate - Math.round(rhrBase)} vs your average`
+                  )
                 ) : undefined
               }
               onClick={() => onNavigate('heart')}
@@ -256,7 +260,20 @@ export function HomeView({ date, goals, onOpenMetric, onOpenWorkout, onNavigate 
       {/* Workouts */}
       {(workouts.isPending || (workouts.data && workouts.data.length > 0)) && (
         <motion.div custom={5} variants={fade} initial="hidden" animate="show">
-          <Panel className="min-h-[126px] p-3">
+          <Panel className="flex min-h-[126px] flex-col gap-2 px-3 py-5">
+            <div className="px-2">
+              <SectionHeader
+                title="Workouts"
+                hint={
+                  workouts.isPending ? (
+                    <SkeletonText className="w-20" />
+                  ) : (
+                    `${workouts.data?.length ?? 0} session${workouts.data?.length === 1 ? '' : 's'}`
+                  )
+                }
+                icon={<Barbell size={18} weight="fill" style={{ color: 'var(--color-recovery)' }} />}
+              />
+            </div>
             {workouts.isPending ? (
               <SkeletonRows />
             ) : (
@@ -297,6 +314,21 @@ function SignalsPanel({
           const points = pointsFor(key)
           const value = today(key)
           const base = baseline(points, date)
+          const deltaPct = def.deltaMode === 'abs' ? null : baselineDeltaPct(value, base)
+          const displayedAbsoluteDelta =
+            def.deltaMode === 'abs' && value != null ? Number(value.toFixed(1)) : null
+          const comparison =
+            def.deltaMode === 'abs'
+              ? displayedAbsoluteDelta == null
+                ? undefined
+                : displayedAbsoluteDelta > 0
+                  ? 'Above device baseline'
+                  : displayedAbsoluteDelta < 0
+                    ? 'Below device baseline'
+                    : 'At device baseline'
+              : deltaPct != null && Math.abs(deltaPct) < 1
+                ? 'In line with 7-day baseline'
+                : undefined
           return isPending(key) ? (
             <SkeletonMetricStat key={key} />
           ) : (
@@ -307,10 +339,10 @@ function SignalsPanel({
               value={value != null ? def.format(value) : '—'}
               unit={def.unit}
               accent={def.color}
-              deltaPct={def.deltaMode === 'abs' ? null : baselineDeltaPct(value, base)}
+              deltaPct={deltaPct}
               upIsGood={def.upIsGood}
               spark={pointValues(points)}
-              sub={def.deltaMode === 'abs' ? 'vs device baseline' : undefined}
+              sub={comparison}
               onOpen={() => onOpenMetric(key, 'D')}
             />
           )
