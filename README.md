@@ -33,9 +33,13 @@ Built with Electron + React 19, Radix primitives, Tailwind v4, and Framer Motion
   breakdowns where the API supplies them.
 - **Devices** — paired trackers with battery level and state, last sync time,
   and hardware features.
-- **Assistant** — a streaming chat agent that calls tools to read your real
-  metrics (any day's full snapshot, sleep history, devices) before answering.
-  Available as a full page and as a slide-over panel on every view.
+- **Assistant** — a streaming chat agent that uses focused tools to read and
+  analyze your real metrics across explicit date ranges, including trends and
+  relationships, sleep, workouts, intraday signals, nutrition, body readings,
+  and devices. Answers can include trusted, navigable cards and charts derived
+  from the returned data, plus cited web research when current external guidance
+  is needed. Available as a full page and as a slide-over panel on every view,
+  with account-scoped conversation history, pinning, and deletion.
 - **Demo mode** — realistic, deterministic sample data for any date, so the
   whole app is explorable before you connect anything.
 
@@ -135,8 +139,10 @@ Renderer (React)  ──IPC──▶  Main process  ──HTTPS──▶  health
 ## Security notes
 
 - OpenPulse uses Electron `safeStorage` to encrypt account secrets when OS
-  encryption is available. Synced health data is only persisted when that
-  encryption is available.
+  encryption is available. Synced health data and account-scoped assistant
+  history — including structured response cards — are only persisted when that
+  encryption is available; otherwise chat history remains in memory for the
+  current session.
 - The renderer is context-isolated with `nodeIntegration` off; all privileged
   work happens in the main process over a typed IPC surface.
 - Production builds run under a strict Content-Security-Policy.
