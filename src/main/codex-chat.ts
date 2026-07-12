@@ -16,6 +16,7 @@ import {
   resolvePresentation,
   type AgentDataset
 } from './assistant-presentation'
+import { AgentTracer, summarizeToolArguments, summarizeToolResult } from './agent-trace'
 
 const CODEX_URL = 'https://chatgpt.com/backend-api/codex/responses'
 const MODEL = 'gpt-5.6-terra'
@@ -129,6 +130,12 @@ export async function runChat(
   }
   const controller = new AbortController()
   const { signal } = controller
+  const trace = new AgentTracer(chatId, runId)
+  trace.emit({ type: 'run_started', model: MODEL, messages: history.length, maxTurns: MAX_TOOL_TURNS })
+  let turnsUsed = 0
+  let healthToolCalls = 0
+  let presentationCalls = 0
+  let webSearches = 0
   const run: ActiveRun = { sender, chatId, runId, controller }
   activeRuns.set(key, run)
   const onDestroyed = (): void => controller.abort(new Error('Window closed.'))
@@ -144,14 +151,25 @@ export async function runChat(
     if (!tokens || !isCodexAuthGenerationCurrent(authGeneration)) {
       throw new Error('Not signed in. Connect ChatGPT in Settings to use the assistant.')
     }
+    trace.emit({ type: 'auth_ready', accountScoped: Boolean(tokens.accountId) })
     const input: InputItem[] = toInputItems(history)
     let finalText = ''
     const datasets = new Map<string, AgentDataset>()
     const visualParts: AssistantVisualPart[] = []
 
     for (let turn = 0; turn < MAX_TOOL_TURNS; turn++) {
+      turnsUsed = turn + 1
       signal.throwIfAborted()
       if (!isCodexAuthGenerationCurrent(authGeneration)) throw new Error('ChatGPT disconnected.')
+      trace.emit({
+        type: 'turn_started',
+        turn: turnsUsed,
+        maxTurns: MAX_TOOL_TURNS,
+        inputItems: input.length,
+        datasets: datasets.size,
+        visuals: visualParts.length
+      })
+      const modelStartedAt = performance.now()
       const resp = await fetch(CODEX_URL, {
         method: 'POST',
         signal,
@@ -193,6 +211,8 @@ export async function runChat(
       const continuationItems: InputItem[] = []
       let turnText = ''
       const completedMessages: string[] = []
+      let citationCount = 0
+      let usage: { inputTokens?: number; outputTokens?: number; totalTokens?: number } | undefined
       let buffer = ''
       const reader = resp.body.getReader()
       const decoder = new TextDecoder()
@@ -212,7 +232,10 @@ export async function runChat(
               type?: string
               delta?: string
               item?: ResponseOutputItem
-              response?: { error?: { message?: string } }
+              response?: {
+                error?: { message?: string }
+                usage?: { input_tokens?: number; output_tokens?: number; total_tokens?: number }
+              }
             }
             try {
               event = JSON.parse(payload)
@@ -222,6 +245,8 @@ export async function runChat(
             switch (event.type) {
               case 'response.output_item.added':
                 if (event.item?.type === 'web_search_call') {
+                  webSearches++
+                  trace.emit({ type: 'web_search_started', turn: turnsUsed })
                   emit({
                     type: 'tool',
                     chatId,
@@ -246,10 +271,31 @@ export async function runChat(
                   continuationItems.push(event.item)
                 } else if (event.item?.type === 'reasoning' || event.item?.type === 'web_search_call') {
                   continuationItems.push(event.item)
+                  if (event.item.type === 'web_search_call') {
+                    trace.emit({ type: 'web_search_completed', turn: turnsUsed })
+                  }
                 } else if (event.item?.type === 'message') {
                   continuationItems.push(event.item)
+                  citationCount +=
+                    event.item.content?.reduce(
+                      (count, part) =>
+                        count +
+                        (Array.isArray(part.annotations)
+                          ? part.annotations.filter((annotation) => annotation.type === 'url_citation').length
+                          : 0),
+                      0
+                    ) ?? 0
                   const messageText = citedMessageText(event.item)
                   if (messageText != null) completedMessages.push(messageText)
+                }
+                break
+              case 'response.completed':
+                if (event.response?.usage) {
+                  usage = {
+                    inputTokens: event.response.usage.input_tokens,
+                    outputTokens: event.response.usage.output_tokens,
+                    totalTokens: event.response.usage.total_tokens
+                  }
                 }
                 break
               case 'response.failed':
@@ -259,11 +305,30 @@ export async function runChat(
         }
       }
 
+      trace.emit({
+        type: 'model_responded',
+        turn: turnsUsed,
+        durationMs: performance.now() - modelStartedAt,
+        functionCalls: functionCalls.length,
+        textChars: completedMessages.reduce((count, message) => count + message.length, 0) || turnText.length,
+        citations: citationCount,
+        ...(usage ? { usage } : {})
+      })
+
       finalText += completedMessages.length ? completedMessages.join('\n') : turnText
       signal.throwIfAborted()
       if (!isCodexAuthGenerationCurrent(authGeneration)) throw new Error('ChatGPT disconnected.')
 
       if (functionCalls.length === 0) {
+        trace.emit({
+          type: 'run_completed',
+          turns: turnsUsed,
+          healthTools: healthToolCalls,
+          presentationCalls,
+          webSearches,
+          textChars: finalText.length,
+          visuals: visualParts.length
+        })
         emit({ type: 'done', chatId, runId, text: finalText, parts: visualParts })
         return
       }
@@ -286,15 +351,38 @@ export async function runChat(
         } catch {
           // The tool returns a structured validation error for malformed input.
         }
+        trace.emit({
+          type: 'tool_started',
+          turn: turnsUsed,
+          name,
+          callId,
+          arguments: summarizeToolArguments(name, args)
+        })
+        const toolStartedAt = performance.now()
         let output: string
+        let failed = false
         try {
           if (name === PRESENTATION_TOOL.name) {
+            presentationCalls++
             const available = Math.max(0, 4 - visualParts.length)
             const resolved = resolvePresentation(args, datasets).slice(0, available)
             visualParts.push(...resolved)
             for (const part of resolved) emit({ type: 'part', chatId, runId, part })
+            const requested = ['metricCards', 'comparisons', 'charts', 'workouts'].reduce(
+              (total, key) => total + (Array.isArray(args[key]) ? args[key].length : 0),
+              0
+            )
+            trace.emit({
+              type: 'presentation_resolved',
+              turn: turnsUsed,
+              requested,
+              displayed: resolved.length,
+              totalVisuals: visualParts.length,
+              visualTypes: resolved.map((part) => part.type)
+            })
             output = JSON.stringify({ displayed: resolved.length })
           } else {
+            healthToolCalls++
             output = await runHealthAgentTool(name, args, signal)
             const parsed = JSON.parse(output) as unknown
             const data = parsed != null && typeof parsed === 'object' && !Array.isArray(parsed)
@@ -307,7 +395,42 @@ export async function runChat(
           }
         } catch (error) {
           if (signal.aborted) throw cancellationError(signal)
-          output = JSON.stringify({ error: error instanceof Error ? error.message : String(error) })
+          failed = true
+          const message = error instanceof Error ? error.message : String(error)
+          trace.emit({
+            type: 'tool_failed',
+            turn: turnsUsed,
+            name,
+            callId,
+            durationMs: performance.now() - toolStartedAt,
+            message
+          })
+          output = JSON.stringify({ error: message })
+        }
+        if (!failed) {
+          let parsedOutput: unknown = null
+          try {
+            parsedOutput = JSON.parse(output)
+          } catch {
+            // Tool results are expected to be JSON; the trace still records their size.
+          }
+          trace.emit({
+            type: 'tool_completed',
+            turn: turnsUsed,
+            name,
+            callId,
+            durationMs: performance.now() - toolStartedAt,
+            bytes: Buffer.byteLength(output, 'utf8'),
+            result:
+              name === PRESENTATION_TOOL.name
+                ? {
+                    displayed:
+                      parsedOutput != null && typeof parsedOutput === 'object' && !Array.isArray(parsedOutput)
+                        ? (parsedOutput as Record<string, unknown>).displayed
+                        : undefined
+                  }
+                : summarizeToolResult(name, parsedOutput)
+          })
         }
         input.push({
           type: 'function_call_output',
@@ -316,6 +439,16 @@ export async function runChat(
         })
       }
     }
+    trace.emit({
+      type: 'budget_exhausted',
+      turns: turnsUsed,
+      maxTurns: MAX_TOOL_TURNS,
+      healthTools: healthToolCalls,
+      presentationCalls,
+      webSearches,
+      textChars: finalText.length,
+      visuals: visualParts.length
+    })
     emit({
       type: 'done',
       chatId,
@@ -325,6 +458,7 @@ export async function runChat(
     })
   } catch (err) {
     const error = signal.aborted ? cancellationError(signal) : err
+    trace.failure(error, signal.aborted)
     emit({ type: 'error', chatId, runId, message: error instanceof Error ? error.message : String(error) })
   } finally {
     sender.removeListener('destroyed', onDestroyed)
