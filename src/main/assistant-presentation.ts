@@ -5,6 +5,8 @@ import type {
   AssistantComparisonValue,
   AssistantDataView,
   AssistantMetricRange,
+  AssistantOverviewAggregation,
+  AssistantOverviewMetric,
   AssistantVisualPart,
   DataSource,
   MetricKey,
@@ -26,11 +28,32 @@ export const PRESENTATION_TOOL: AgentToolSpec = {
   type: 'function',
   name: 'present_health_data',
   description:
-    'Display trusted OpenPulse cards and charts from datasets returned by query_daily_metrics, analyze_daily_metrics, query_sleep, or query_workouts. Analysis dataset IDs can be used directly; never repeat a health query merely to make a visual. Use this when a visual makes the answer easier to understand: a metric card for one exact value, a comparison for two periods, a chart for a trend, or a workout card for one workout. Keep the response focused: normally one block and never more than two unless the user explicitly asks for several. The app computes all values and navigation; never copy values into this call. All four arrays are required and may be empty.',
+    'Display trusted OpenPulse cards and charts from datasets returned by query_daily_metrics, analyze_daily_metrics, query_sleep, or query_workouts. Analysis dataset IDs can be used directly; never repeat a health query merely to make a visual. Use an overview for a broad multi-domain summary, a metric card for one exact value, a comparison for two periods, a chart for a trend, or a workout card for one workout. An overview is a standalone block: when requesting one, leave every other array empty. Otherwise normally show one block and never more than two unless the user explicitly asks for several. The app computes all values and navigation; never copy values into this call. All five arrays are required and may be empty.',
   strict: true,
   parameters: {
     type: 'object',
     properties: {
+      overviews: {
+        type: 'array',
+        maxItems: 1,
+        items: {
+          type: 'object',
+          properties: {
+            datasetId: DATASET_ID,
+            title: { type: 'string', minLength: 1, maxLength: 100 },
+            startDate: DATE_SCHEMA,
+            endDate: DATE_SCHEMA,
+            metrics: {
+              type: 'array',
+              items: METRIC,
+              minItems: 2,
+              maxItems: 4
+            }
+          },
+          required: ['datasetId', 'title', 'startDate', 'endDate', 'metrics'],
+          additionalProperties: false
+        }
+      },
       metricCards: {
         type: 'array',
         maxItems: 2,
@@ -92,7 +115,7 @@ export const PRESENTATION_TOOL: AgentToolSpec = {
         }
       }
     },
-    required: ['metricCards', 'comparisons', 'charts', 'workouts'],
+    required: ['overviews', 'metricCards', 'comparisons', 'charts', 'workouts'],
     additionalProperties: false
   }
 }
@@ -115,6 +138,7 @@ const SUM_METRICS = new Set<MetricKey>([
   'sugarG'
 ])
 const LAST_METRICS = new Set<MetricKey>(['weightKg', 'bodyFatPct', 'bmi'])
+const OVERVIEW_TOTAL_METRICS = new Set<MetricKey>(['activeMinutes', 'activeZoneMinutes'])
 
 const VIEW_BY_METRIC: Record<MetricKey, AssistantDataView> = {
   steps: 'activity',
@@ -437,6 +461,40 @@ function aggregate(metric: MetricKey, points: Array<{ value: number | null }>): 
   return SUM_METRICS.has(metric) ? total : total / values.length
 }
 
+function overviewAggregation(metric: MetricKey): AssistantOverviewAggregation {
+  if (LAST_METRICS.has(metric)) return 'latest'
+  if (OVERVIEW_TOTAL_METRICS.has(metric)) return 'total'
+  return 'average'
+}
+
+function overviewMetric(dataset: DailyDataset, metric: MetricKey): AssistantOverviewMetric {
+  const points = metricValues(dataset, metric, dataset.start, dataset.end)
+  const presentPoints = points.filter(
+    (point): point is { date: string; value: number } => point.value != null
+  )
+  const present = presentPoints.map((point) => point.value)
+  const aggregation = overviewAggregation(metric)
+  let value: number | null = null
+  if (present.length) {
+    if (aggregation === 'latest') value = present[present.length - 1]
+    else if (aggregation === 'total') value = present.reduce((sum, item) => sum + item, 0)
+    else value = present.reduce((sum, item) => sum + item, 0) / present.length
+  }
+  return {
+    metric,
+    value,
+    aggregation,
+    observations: present.length,
+    days: points.length,
+    points,
+    action: metricAction(
+      metric,
+      aggregation === 'latest' ? presentPoints.at(-1)?.date ?? dataset.end : dataset.end,
+      points.length
+    )
+  }
+}
+
 function comparisonValue(
   dataset: DailyDataset,
   metric: MetricKey,
@@ -471,6 +529,32 @@ export function resolvePresentation(
   datasets: Map<string, AgentDataset>
 ): AssistantVisualPart[] {
   const parts: AssistantVisualPart[] = []
+
+  const overviewRequest = list(args.overviews)[0]
+  if (overviewRequest) {
+    const item = record(overviewRequest)
+    const datasetId = requiredText(item?.datasetId, 'datasetId', 200)
+    const title = requiredText(item?.title, 'title', 100)
+    const start = requiredDate(item?.startDate, 'startDate')
+    const end = requiredDate(item?.endDate, 'endDate')
+    const requestedMetrics = list(item?.metrics).map(requiredMetric)
+    const metrics = [...new Set(requestedMetrics)].slice(0, 4)
+    if (metrics.length < 2) throw new Error('An overview requires at least two distinct metrics.')
+    const dataset = dailyDataset(datasetId, datasets)
+    ensureWithin(dataset, start, end)
+    const selectedDataset = { ...dataset, start, end }
+    return [
+      {
+        id: randomUUID(),
+        type: 'overview',
+        title,
+        startDate: start,
+        endDate: end,
+        items: metrics.map((metric) => overviewMetric(selectedDataset, metric)),
+        source: dataset.source
+      }
+    ]
+  }
 
   for (const raw of list(args.metricCards).slice(0, 2)) {
     const item = record(raw)

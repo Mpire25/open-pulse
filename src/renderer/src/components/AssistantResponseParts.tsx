@@ -1,9 +1,9 @@
 import { memo, useEffect, useState } from 'react'
-import { Minus, PersonSimpleRun, TrendDown, TrendUp } from '@phosphor-icons/react'
+import { Minus, PersonSimpleRun, Pulse, TrendDown, TrendUp } from '@phosphor-icons/react'
 import { motion } from 'framer-motion'
 import { ColumnChart, TrendLine } from '@/components/charts'
 import { MetricStat } from '@/components/MetricStat'
-import { DrillHeader, Panel } from '@/components/Panel'
+import { DrillHeader, Panel, SectionHeader } from '@/components/Panel'
 import { METRICS } from '@/lib/metric-registry'
 import { formatClock, formatInt, formatMinutes, shortDate } from '@/lib/format'
 import { cn } from '@/lib/utils'
@@ -16,6 +16,7 @@ import {
 import type {
   AssistantAction,
   AssistantComparisonValue,
+  AssistantOverviewMetric,
   AssistantVisualPart,
   MetricKey
 } from '@shared/types'
@@ -53,6 +54,15 @@ function visualCardClass(
   return 'w-full'
 }
 
+function overviewMetricSub(item: AssistantOverviewMetric): string {
+  const coverage = item.observations < item.days ? ` · ${item.observations}/${item.days} days` : ''
+  if (item.aggregation === 'latest') {
+    const latestDate = [...item.points].reverse().find((point) => point.value != null)?.date
+    return latestDate ? `Latest ${shortDate(latestDate)}` : 'No recent reading'
+  }
+  return `${item.aggregation === 'total' ? `${item.days}-day total` : 'Daily average'}${coverage}`
+}
+
 function AssistantResponsePartsBase({
   parts,
   compact,
@@ -80,6 +90,47 @@ function AssistantResponsePartsBase({
           transition: { delay: index * 0.04, duration: 0.45, ease: CARD_EASE }
         }
         const layoutClass = visualCardClass(part, layout, Boolean(compact))
+        if (part.type === 'overview') {
+          return (
+            <MotionPanel key={part.id} {...entrance} className={cn('overflow-hidden', layoutClass)}>
+              <div className="border-b border-hairline px-5 pb-3 pt-4">
+                <SectionHeader
+                  icon={<Pulse size={18} weight="fill" className="text-accent" />}
+                  title={part.title}
+                  hint={`${shortDate(part.startDate)}–${shortDate(part.endDate)} · ${part.items.length} signals${part.source === 'demo' ? ' · Sample data' : ''}`}
+                />
+              </div>
+              <div className={cn('grid', compact ? 'grid-cols-1 divide-y divide-hairline' : 'grid-cols-2')}>
+                {part.items.map((item, itemIndex) => {
+                  const def = METRICS[item.metric]
+                  return (
+                    <div
+                      key={item.metric}
+                      className={cn(
+                        !compact && part.items.length % 2 === 1 && itemIndex === part.items.length - 1 && 'col-span-2',
+                        !compact && itemIndex % 2 === 1 && 'border-l border-hairline',
+                        !compact && itemIndex >= 2 && 'border-t border-hairline'
+                      )}
+                    >
+                      <MetricStat
+                        icon={def.icon}
+                        label={def.shortLabel ?? def.label}
+                        value={item.value == null ? '—' : def.format(item.value)}
+                        unit={item.value == null ? undefined : def.unit}
+                        accent={def.color}
+                        spark={item.points.map((point) => point.value)}
+                        sparkWidth={compact ? 64 : 82}
+                        sub={overviewMetricSub(item)}
+                        onOpen={() => onAction(item.action)}
+                      />
+                    </div>
+                  )
+                })}
+              </div>
+            </MotionPanel>
+          )
+        }
+
         if (part.type === 'metric-card') {
           const def = METRICS[part.metric]
           return (

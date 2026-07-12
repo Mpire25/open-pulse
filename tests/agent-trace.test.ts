@@ -65,11 +65,12 @@ describe('agent execution tracing', () => {
   test('counts presentation requests without logging their generated copy', () => {
     expect(
       summarizeToolArguments('present_health_data', {
+        overviews: [{ title: 'Private overview title' }],
         metricCards: [{ title: 'Private generated title' }],
         comparisons: [{ title: 'Another private title' }],
         charts: [],
         workouts: []
       })
-    ).toEqual({ metricCards: 1, comparisons: 1, charts: 0, workouts: 0 })
+    ).toEqual({ overviews: 1, metricCards: 1, comparisons: 1, charts: 0, workouts: 0 })
   })
 })
