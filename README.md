@@ -52,6 +52,31 @@ bun run build:mac  # package a .dmg (needs the electron-builder toolchain)
 
 The app opens in demo mode. Connect your accounts in **Settings**.
 
+### Opt-in development tools
+
+The card gallery and AI agent trace are disabled during a normal development
+run. Start the app with the tool you need:
+
+```bash
+bun run dev:cards  # show the assistant response-card gallery
+bun run dev:trace  # print a summary of AI agent execution to the terminal
+bun run dev:debug  # enable both the card gallery and agent trace
+```
+
+The gallery is opened from the grid button in the Assistant header. It previews
+every structured response card and lets you render each metric as a value,
+period comparison, line chart, and bar chart. Gallery code is excluded from
+production builds.
+
+For more detailed tracing, set `OPENPULSE_AI_TRACE` directly when starting the
+app. Supported modes are `summary`, `json`, and `verbose`:
+
+```bash
+OPENPULSE_AI_TRACE=verbose bun run dev
+```
+
+Tracing is also disabled by default in development and production.
+
 ## Connecting Google Health (your Fitbit Air data)
 
 The Google Health API uses Google OAuth 2.0. OpenPulse runs the flow locally with a
