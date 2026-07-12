@@ -9,6 +9,7 @@ import { cn } from '@/lib/utils'
 interface ChatHistoryProps {
   chat: ChatController
   onNavigate?: () => void
+  onDeleteDialogClose?: () => void
 }
 
 function relativeTime(value: string): string {
@@ -52,8 +53,13 @@ function groupSessions(sessions: ChatSession[]): SessionGroup[] {
   return groups
 }
 
-export function ChatHistory({ chat, onNavigate }: ChatHistoryProps): React.JSX.Element {
+export function ChatHistory({ chat, onNavigate, onDeleteDialogClose }: ChatHistoryProps): React.JSX.Element {
   const [deleteTarget, setDeleteTarget] = useState<ChatSession | null>(null)
+
+  const closeDeleteDialog = (): void => {
+    setDeleteTarget(null)
+    onDeleteDialogClose?.()
+  }
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -94,7 +100,7 @@ export function ChatHistory({ chat, onNavigate }: ChatHistoryProps): React.JSX.E
         )}
       </div>
 
-      <Dialog.Root open={deleteTarget != null} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+      <Dialog.Root open={deleteTarget != null} onOpenChange={(open) => !open && closeDeleteDialog()}>
         <Dialog.Portal>
           <Dialog.Overlay className="fixed inset-0 z-40 bg-black/55 backdrop-blur-sm" />
           <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-[min(380px,calc(100vw-32px))] -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-hairline bg-panel p-5 shadow-2xl outline-none">
@@ -111,7 +117,7 @@ export function ChatHistory({ chat, onNavigate }: ChatHistoryProps): React.JSX.E
                 size="sm"
                 onClick={() => {
                   if (!deleteTarget) return
-                  void chat.delete(deleteTarget.id).then(() => setDeleteTarget(null))
+                  void chat.delete(deleteTarget.id).then(closeDeleteDialog)
                 }}
               >
                 <Trash size={13} /> Delete
