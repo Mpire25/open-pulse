@@ -142,7 +142,11 @@ export function HomeView({ date, goals, onOpenMetric, onOpenWorkout, onNavigate 
                 series.isMetricPending('restingHeartRate') ? (
                   <SkeletonText className="w-28" />
                 ) : today.restingHeartRate != null && rhrBase != null ? (
-                  `${today.restingHeartRate > Math.round(rhrBase) ? '+' : ''}${today.restingHeartRate - Math.round(rhrBase)} vs your average`
+                  today.restingHeartRate === Math.round(rhrBase) ? (
+                    'Same as your average'
+                  ) : (
+                    `${today.restingHeartRate > Math.round(rhrBase) ? '+' : ''}${today.restingHeartRate - Math.round(rhrBase)} vs your average`
+                  )
                 ) : undefined
               }
               onClick={() => onNavigate('heart')}
