@@ -55,6 +55,7 @@ interface ChatPanelProps {
   onOpenSettings: () => void
   compact?: boolean
   autoFocus?: boolean
+  focusRequest?: number
   typeToFocus?: boolean
   onTypeToFocus?: () => void
 }
@@ -65,6 +66,7 @@ export function ChatPanel({
   onOpenSettings,
   compact,
   autoFocus = true,
+  focusRequest = 0,
   typeToFocus = false,
   onTypeToFocus
 }: ChatPanelProps): React.JSX.Element {
@@ -86,7 +88,7 @@ export function ChatPanel({
 
   useEffect(() => {
     if (codexConnected && autoFocus) inputRef.current?.focus()
-  }, [activeChatId, autoFocus, codexConnected])
+  }, [activeChatId, autoFocus, codexConnected, focusRequest])
 
   useEffect(() => {
     setDraft('')

@@ -33,7 +33,28 @@ async function invokeHealth<T>(channel: string, args: unknown[], requestId: stri
   return result as T
 }
 
+const newChatCallbacks = new Set<() => void>()
+let newChatPending = false
+
+ipcRenderer.on('app:new-chat', () => {
+  if (!newChatCallbacks.size) {
+    newChatPending = true
+    return
+  }
+  for (const callback of newChatCallbacks) callback()
+})
+
 const api = {
+  app: {
+    onNewChat: (callback: () => void): (() => void) => {
+      newChatCallbacks.add(callback)
+      if (newChatPending) {
+        newChatPending = false
+        queueMicrotask(callback)
+      }
+      return () => newChatCallbacks.delete(callback)
+    }
+  },
   settings: {
     get: (): Promise<AppSettings> => ipcRenderer.invoke('settings:get'),
     update: (patch: Partial<AppSettings>): Promise<AppSettings> =>

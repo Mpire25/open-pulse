@@ -81,6 +81,7 @@ export default function App(): React.JSX.Element {
   const [codex, setCodex] = useState<CodexAuthStatus>({ connected: false })
   const [selectedDate, setSelectedDate] = useState(isoToday)
   const [chatOpen, setChatOpen] = useState(false)
+  const [composerFocusRequest, setComposerFocusRequest] = useState(0)
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const backNavigationPending = useRef(false)
   const accountEpochRef = useRef(0)
@@ -89,6 +90,14 @@ export default function App(): React.JSX.Element {
   const chat = useChat()
   const queryClient = useQueryClient()
   useTrackpadHistoryNavigation()
+
+  useEffect(() => {
+    return window.pulse.app.onNewChat(() => {
+      void chat.create()
+      if (view !== 'assistant') setChatOpen(true)
+      setComposerFocusRequest((request) => request + 1)
+    })
+  }, [chat.create, view])
 
   const clearAccountScopedState = useCallback((): void => {
     // Clear synchronously before publishing the new auth status. This also
@@ -435,7 +444,12 @@ export default function App(): React.JSX.Element {
                 )}
                 {view === 'devices' && <DevicesView connected={google.connected} />}
                 {view === 'assistant' && (
-                  <AssistantView chat={chat} codex={codex} onOpenSettings={() => selectView('settings')} />
+                  <AssistantView
+                    chat={chat}
+                    codex={codex}
+                    composerFocusRequest={composerFocusRequest}
+                    onOpenSettings={() => selectView('settings')}
+                  />
                 )}
                 {view === 'settings' && (
                   <SettingsView
@@ -456,6 +470,7 @@ export default function App(): React.JSX.Element {
             onClose={() => setChatOpen(false)}
             chat={chat}
             codexConnected={codex.connected}
+            composerFocusRequest={composerFocusRequest}
             onOpenSettings={() => {
               setChatOpen(false)
               selectView('settings')

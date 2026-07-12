@@ -10,6 +10,7 @@ interface AssistantPanelProps {
   onClose: () => void
   chat: ChatState
   codexConnected: boolean
+  composerFocusRequest: number
   onOpenSettings: () => void
 }
 
@@ -25,6 +26,7 @@ export function AssistantPanel({
   onClose,
   chat,
   codexConnected,
+  composerFocusRequest,
   onOpenSettings
 }: AssistantPanelProps): React.JSX.Element {
   const [historyOpen, setHistoryOpen] = useState(false)
@@ -32,6 +34,10 @@ export function AssistantPanel({
   useEffect(() => {
     if (!open) setHistoryOpen(false)
   }, [open])
+
+  useEffect(() => {
+    setHistoryOpen(false)
+  }, [composerFocusRequest])
 
   return (
     <motion.aside
@@ -103,6 +109,7 @@ export function AssistantPanel({
                   onOpenSettings={onOpenSettings}
                   compact
                   autoFocus={open}
+                  focusRequest={composerFocusRequest}
                 />
               )}
             </motion.div>
