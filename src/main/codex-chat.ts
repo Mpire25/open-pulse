@@ -10,9 +10,11 @@ import {
   isCodexAuthGenerationCurrent
 } from './codex-auth'
 import { AGENT_TOOLS, AGENT_TOOL_LABELS, runHealthAgentTool } from './health-agent-tools'
+import { healthAgentModelData } from './health-agent-analysis'
 import { addUrlCitations, type UrlCitationAnnotation } from './ai-citations'
 import {
   PRESENTATION_TOOL,
+  resolveAutomaticPresentation,
   resolvePresentation,
   type AgentDataset
 } from './assistant-presentation'
@@ -38,9 +40,9 @@ function buildInstructions(): string {
 
 Today is ${today}; the user's local timezone is ${timezone}. Use civil calendar dates in that timezone.
 
-For every claim about the user's data, call only the narrowest relevant tools and never invent a value. Use one day for an exact fact, 7-14 days for short comparisons, about 30 days for a trend, and 60-90 days for an exploratory relationship. If observations are sparse or the result warns that evidence is thin, request a larger useful range or explain the limitation. Prefer analyze_daily_metrics for arithmetic and correlation rather than calculating from a large table yourself. Distinguish missing data from zero. Correlation is not causation.
+For every claim about the user's data, call only the narrowest relevant tools and never invent a value. Use one day for an exact fact, 7-14 days for short comparisons, about 30 days for a trend, and 60-90 days for an exploratory relationship. If observations are sparse or the result warns that evidence is thin, request a larger useful range or explain the limitation. Prefer analyze_daily_metrics for arithmetic and correlation rather than calculating from a large table yourself. Its dataset can also be presented directly: do not request the same daily range again merely to draw it. Distinguish missing data from zero. Correlation is not causation.
 
-When a visual would materially clarify the answer, call present_health_data after the relevant query tools have returned datasetId values. Use an exact-value card for one fact, a comparison for two periods, a chart for a trend, or a workout card for a specific workout. Normally show one or two blocks and never decorate a simple explanation unnecessarily. Only reference dataset IDs and records returned in this run; OpenPulse will compute and validate every displayed value. Still give a concise written answer after presenting data.
+When a visual would materially clarify the answer, call present_health_data after the relevant tools have returned datasetId values. A direct comparison or trend question should normally get one appropriate visual. Use an exact-value card for one fact, a comparison for two periods, a chart for a trend, or a workout card for a specific workout. Normally show one block; only show two when both add distinct value, and never decorate a simple explanation unnecessarily. Only reference dataset IDs and records returned in this run; OpenPulse will compute and validate every displayed value. Still give a concise written answer after presenting data.
 
 Use web search when the user explicitly asks for research or when an answer depends on current medical guidance, current product information, or external facts that may have changed. Do not search for simple questions that can be answered from the user's health data. Prefer authoritative primary sources and current clinical guidance. Never include identifying information, private measurements, or the user's health-record dates in a search query; translate the question into a general research query. Clearly separate external evidence from what the user's own data shows, and cite web-supported claims.
 
@@ -144,6 +146,7 @@ export async function runChat(
   const emit = (event: AiEvent): void => {
     if (!sender.isDestroyed()) sender.send('ai:event', event)
   }
+  const latestUserText = [...history].reverse().find((message) => message.role === 'user')?.text ?? ''
 
   try {
     const authGeneration = getCodexAuthGeneration()
@@ -159,6 +162,7 @@ export async function runChat(
 
     for (let turn = 0; turn < MAX_TOOL_TURNS; turn++) {
       turnsUsed = turn + 1
+      const finalResponseTurn = turn === MAX_TOOL_TURNS - 1
       signal.throwIfAborted()
       if (!isCodexAuthGenerationCurrent(authGeneration)) throw new Error('ChatGPT disconnected.')
       trace.emit({
@@ -167,7 +171,8 @@ export async function runChat(
         maxTurns: MAX_TOOL_TURNS,
         inputItems: input.length,
         datasets: datasets.size,
-        visuals: visualParts.length
+        visuals: visualParts.length,
+        finalResponse: finalResponseTurn
       })
       const modelStartedAt = performance.now()
       const resp = await fetch(CODEX_URL, {
@@ -187,7 +192,7 @@ export async function runChat(
           instructions: buildInstructions(),
           input,
           tools: [...AGENT_TOOLS, PRESENTATION_TOOL, WEB_SEARCH_TOOL],
-          tool_choice: 'auto',
+          tool_choice: finalResponseTurn ? 'none' : 'auto',
           parallel_tool_calls: false,
           store: false,
           stream: true,
@@ -320,6 +325,35 @@ export async function runChat(
       if (!isCodexAuthGenerationCurrent(authGeneration)) throw new Error('ChatGPT disconnected.')
 
       if (functionCalls.length === 0) {
+        if (visualParts.length === 0) {
+          let automaticParts: AssistantVisualPart[] = []
+          const fallbackStartedAt = performance.now()
+          try {
+            automaticParts = resolveAutomaticPresentation(latestUserText, datasets)
+          } catch (error) {
+            trace.emit({
+              type: 'tool_failed',
+              turn: turnsUsed,
+              name: 'automatic_presentation',
+              callId: 'fallback',
+              durationMs: performance.now() - fallbackStartedAt,
+              message: error instanceof Error ? error.message : String(error)
+            })
+          }
+          visualParts.push(...automaticParts)
+          for (const part of automaticParts) emit({ type: 'part', chatId, runId, part })
+          if (automaticParts.length) {
+            trace.emit({
+              type: 'presentation_resolved',
+              turn: turnsUsed,
+              requested: 1,
+              displayed: automaticParts.length,
+              totalVisuals: visualParts.length,
+              visualTypes: automaticParts.map((part) => part.type),
+              source: 'fallback'
+            })
+          }
+        }
         trace.emit({
           type: 'run_completed',
           turns: turnsUsed,
@@ -364,7 +398,7 @@ export async function runChat(
         try {
           if (name === PRESENTATION_TOOL.name) {
             presentationCalls++
-            const available = Math.max(0, 4 - visualParts.length)
+            const available = Math.max(0, 2 - visualParts.length)
             const resolved = resolvePresentation(args, datasets).slice(0, available)
             visualParts.push(...resolved)
             for (const part of resolved) emit({ type: 'part', chatId, runId, part })
@@ -378,7 +412,8 @@ export async function runChat(
               requested,
               displayed: resolved.length,
               totalVisuals: visualParts.length,
-              visualTypes: resolved.map((part) => part.type)
+              visualTypes: resolved.map((part) => part.type),
+              source: 'model'
             })
             output = JSON.stringify({ displayed: resolved.length })
           } else {
@@ -390,7 +425,7 @@ export async function runChat(
               : null
             if (data && !('error' in data)) {
               datasets.set(callId, { tool: name, data })
-              output = JSON.stringify({ ...data, datasetId: callId })
+              output = JSON.stringify({ ...healthAgentModelData(name, data), datasetId: callId })
             }
           }
         } catch (error) {
