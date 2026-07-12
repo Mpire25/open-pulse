@@ -11,7 +11,15 @@ interface TraceUsage {
 export type AgentTracePayload =
   | { type: 'run_started'; model: string; messages: number; maxTurns: number }
   | { type: 'auth_ready'; accountScoped: boolean }
-  | { type: 'turn_started'; turn: number; maxTurns: number; inputItems: number; datasets: number; visuals: number }
+  | {
+      type: 'turn_started'
+      turn: number
+      maxTurns: number
+      inputItems: number
+      datasets: number
+      visuals: number
+      finalResponse: boolean
+    }
   | {
       type: 'model_responded'
       turn: number
@@ -41,6 +49,7 @@ export type AgentTracePayload =
       displayed: number
       totalVisuals: number
       visualTypes: AssistantVisualPart['type'][]
+      source: 'model' | 'fallback'
     }
   | {
       type: 'budget_exhausted'
@@ -102,7 +111,7 @@ export function formatAgentTraceEvent(event: AgentTraceEvent): string {
     case 'auth_ready':
       return `${prefix} Auth ready · ${event.accountScoped ? 'ChatGPT account scoped' : 'no account header'}`
     case 'turn_started':
-      return `${prefix} Turn ${event.turn}/${event.maxTurns} · ${event.inputItems} input items · ${event.datasets} datasets · ${event.visuals} visuals`
+      return `${prefix} Turn ${event.turn}/${event.maxTurns}${event.finalResponse ? ' · final response' : ''} · ${event.inputItems} input items · ${event.datasets} datasets · ${event.visuals} visuals`
     case 'model_responded': {
       const usage = event.usage?.totalTokens != null ? ` · ${event.usage.totalTokens} tokens` : ''
       return `${prefix} Model responded in ${formatDuration(event.durationMs)} · ${event.functionCalls} function calls · ${event.textChars} text chars · ${event.citations} citations${usage}`
@@ -118,7 +127,7 @@ export function formatAgentTraceEvent(event: AgentTraceEvent): string {
     case 'tool_failed':
       return `${prefix} Tool failed · ${event.name} · ${formatDuration(event.durationMs)} · ${event.message}`
     case 'presentation_resolved':
-      return `${prefix} Presentation · requested ${event.requested} · displayed ${event.displayed} · total ${event.totalVisuals} · ${event.visualTypes.join(', ') || 'none'}`
+      return `${prefix} Presentation (${event.source}) · requested ${event.requested} · displayed ${event.displayed} · total ${event.totalVisuals} · ${event.visualTypes.join(', ') || 'none'}`
     case 'budget_exhausted':
       return `${prefix} BUDGET EXHAUSTED · turns ${event.turns}/${event.maxTurns} · health ${event.healthTools} · presentation ${event.presentationCalls} · web ${event.webSearches} · text ${event.textChars} chars · visuals ${event.visuals}`
     case 'run_completed':

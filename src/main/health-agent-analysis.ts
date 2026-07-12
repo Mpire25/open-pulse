@@ -65,3 +65,15 @@ export function pearsonCorrelation(pairs: Array<[number, number]>): number | nul
   const denominator = Math.sqrt(xVariance * yVariance)
   return denominator === 0 ? null : numerator / denominator
 }
+
+export function healthAgentModelData(name: string, data: Record<string, unknown>): Record<string, unknown> {
+  if (name !== 'analyze_daily_metrics') return data
+  const {
+    days: _days,
+    requestedRange: _requestedRange,
+    units: _units,
+    observations: _observations,
+    ...compactData
+  } = data
+  return compactData
+}

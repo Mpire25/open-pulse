@@ -57,7 +57,7 @@ export const AGENT_TOOLS: AgentToolSpec[] = [
     type: 'function',
     name: 'analyze_daily_metrics',
     description:
-      'Calculate reproducible local statistics for one or two daily metrics. Use summary for trends and change; use correlation only for an exploratory relationship between exactly two metrics. The result reports sample size and warns when evidence is thin.',
+      'Calculate reproducible local statistics for one or two daily metrics. Use summary for trends and change; use correlation only for an exploratory relationship between exactly two metrics. The result reports sample size and warns when evidence is thin. Its datasetId is presentation-compatible, so do not repeat the same range with query_daily_metrics just to draw a chart.',
     strict: true,
     parameters: {
       type: 'object',
@@ -278,6 +278,15 @@ export async function runHealthAgentTool(
       )
       const output: Record<string, unknown> = {
         source: result.source,
+        requestedRange: { start, end },
+        units: Object.fromEntries(metrics.map((metric) => [metric, METRIC_UNITS[metric]])),
+        observations: Object.fromEntries(
+          metrics.map((metric) => [
+            metric,
+            Object.values(result.days).filter((day) => day[metric] != null).length
+          ])
+        ),
+        days: result.days,
         range: { start, end, days },
         summaries
       }

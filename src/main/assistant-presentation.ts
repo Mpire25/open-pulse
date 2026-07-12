@@ -26,7 +26,7 @@ export const PRESENTATION_TOOL: AgentToolSpec = {
   type: 'function',
   name: 'present_health_data',
   description:
-    'Display trusted OpenPulse cards and charts from datasets returned by query_daily_metrics or query_workouts. Use this after reading data when a visual makes the answer easier to understand: a metric card for one exact value, a comparison for two periods, a chart for a trend, or a workout card for one workout. Keep the response focused: normally 1-2 blocks, never more than 4. The app computes all values and navigation; never copy values into this call. All four arrays are required and may be empty.',
+    'Display trusted OpenPulse cards and charts from datasets returned by query_daily_metrics, analyze_daily_metrics, query_sleep, or query_workouts. Analysis dataset IDs can be used directly; never repeat a health query merely to make a visual. Use this when a visual makes the answer easier to understand: a metric card for one exact value, a comparison for two periods, a chart for a trend, or a workout card for one workout. Keep the response focused: normally one block and never more than two unless the user explicitly asks for several. The app computes all values and navigation; never copy values into this call. All four arrays are required and may be empty.',
   strict: true,
   parameters: {
     type: 'object',
@@ -206,7 +206,33 @@ function dailyDataset(datasetId: string, datasets: Map<string, AgentDataset>): D
   const dataset = datasets.get(datasetId)
   const data = record(dataset?.data)
   const requestedRange = record(data?.requestedRange)
-  if (dataset?.tool !== 'query_daily_metrics' || !data || !requestedRange || !record(data.days)) {
+  if (dataset?.tool === 'query_sleep' && data && requestedRange && Array.isArray(data.nights)) {
+    const source = data.source === 'demo' ? 'demo' : data.source === 'live' ? 'live' : null
+    const start = requiredDate(requestedRange.start, 'dataset start')
+    const end = requiredDate(requestedRange.end, 'dataset end')
+    if (!source) throw new Error(`Dataset ${datasetId} has no valid source.`)
+    const days: DailyDataset['days'] = {}
+    for (const rawNight of data.nights) {
+      const night = record(rawNight)
+      if (!night || typeof night.date !== 'string') continue
+      const date = requiredDate(night.date, 'sleep date')
+      days[date] = {
+        sleepMinutes:
+          typeof night.minutesAsleep === 'number' && Number.isFinite(night.minutesAsleep)
+            ? night.minutesAsleep
+            : null,
+        sleepEfficiency:
+          typeof night.efficiency === 'number' && Number.isFinite(night.efficiency) ? night.efficiency : null
+      }
+    }
+    return { source, start, end, days }
+  }
+  if (
+    (dataset?.tool !== 'query_daily_metrics' && dataset?.tool !== 'analyze_daily_metrics') ||
+    !data ||
+    !requestedRange ||
+    !record(data.days)
+  ) {
     throw new Error(`Dataset ${datasetId} is not daily metric data.`)
   }
   const source = data.source === 'demo' ? 'demo' : data.source === 'live' ? 'live' : null
@@ -214,6 +240,179 @@ function dailyDataset(datasetId: string, datasets: Map<string, AgentDataset>): D
   const end = requiredDate(requestedRange.end, 'dataset end')
   if (!source) throw new Error(`Dataset ${datasetId} has no valid source.`)
   return { source, start, end, days: data.days as DailyDataset['days'] }
+}
+
+const FALLBACK_METRIC_LABELS: Partial<Record<MetricKey, string>> = {
+  restingHeartRate: 'Resting heart rate',
+  activeMinutes: 'Active minutes',
+  activeZoneMinutes: 'Zone minutes',
+  sleepMinutes: 'Sleep duration',
+  sleepEfficiency: 'Sleep efficiency',
+  weightKg: 'Weight',
+  bodyFatPct: 'Body fat',
+  caloriesOut: 'Calories burned',
+  caloriesIn: 'Calories consumed'
+}
+
+function fallbackMetricLabel(metric: MetricKey): string {
+  const label = FALLBACK_METRIC_LABELS[metric]
+  if (label) return label
+  return metric.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/Km$/, '').replace(/Pct$/, '').replace(/Ml$/, '')
+}
+
+function datasetMetrics(dataset: AgentDataset): MetricKey[] {
+  if (dataset.tool === 'query_sleep') return ['sleepMinutes', 'sleepEfficiency']
+  const data = record(dataset.data)
+  const units = record(data?.units)
+  const days = record(data?.days)
+  const keys = Object.keys(units ?? {})
+  if (!keys.length && days) {
+    for (const day of Object.values(days)) keys.push(...Object.keys(record(day) ?? {}))
+  }
+  return [...new Set(keys)].filter((metric): metric is MetricKey => METRIC_KEYS.includes(metric as MetricKey))
+}
+
+const FALLBACK_METRIC_TERMS: Partial<Record<MetricKey, string[]>> = {
+  steps: ['step'],
+  distanceKm: ['distance'],
+  floors: ['floor'],
+  caloriesOut: ['calories burned', 'calorie burn'],
+  activeMinutes: ['active minute'],
+  activeZoneMinutes: ['zone minute'],
+  sedentaryMinutes: ['sedentary', 'sitting'],
+  restingHeartRate: ['resting heart', 'resting pulse'],
+  hrvMs: ['hrv', 'heart rate variability'],
+  spo2Pct: ['spo2', 'oxygen saturation'],
+  breathingRate: ['breathing rate', 'respiratory rate'],
+  skinTempDeltaC: ['skin temperature'],
+  sleepMinutes: ['sleep', 'time asleep'],
+  sleepEfficiency: ['sleep efficiency'],
+  weightKg: ['weight'],
+  bodyFatPct: ['body fat'],
+  bmi: ['bmi'],
+  waterMl: ['water', 'hydration'],
+  caloriesIn: ['calories consumed', 'calorie intake'],
+  proteinG: ['protein'],
+  carbsG: ['carb'],
+  fatG: ['dietary fat'],
+  fiberG: ['fiber', 'fibre'],
+  saturatedFatG: ['saturated fat'],
+  sodiumG: ['sodium', 'salt'],
+  sugarG: ['sugar']
+}
+
+function requestedMetric(metrics: MetricKey[], request: string): MetricKey {
+  const matches = metrics.flatMap((metric) =>
+    (FALLBACK_METRIC_TERMS[metric] ?? [])
+      .filter((term) => request.includes(term))
+      .map((term) => ({ metric, specificity: term.length }))
+  )
+  return matches.sort((left, right) => right.specificity - left.specificity)[0]?.metric ?? metrics[0]
+}
+
+function latestPresentDate(dataset: DailyDataset, metric: MetricKey): string | null {
+  const dates = Object.keys(dataset.days)
+    .filter((date) => typeof dataset.days[date]?.[metric] === 'number')
+    .sort()
+  return dates.at(-1) ?? null
+}
+
+/**
+ * A conservative safety net for obvious visual requests the model did not
+ * present itself. It deliberately returns at most one visual.
+ */
+export function resolveAutomaticPresentation(
+  userText: string,
+  datasets: Map<string, AgentDataset>
+): AssistantVisualPart[] {
+  const request = userText.toLowerCase()
+  const asksForTrend = /\b(trend|trending|chart|graph|over time|up or down|increas(?:e|ing)|decreas(?:e|ing))\b/.test(request)
+  const asksForComparison = /\b(compar(?:e|ed|ing|ison)|versus|vs\.?|difference|than last)\b/.test(request)
+  const comparesExternalStandard = /\b(nhs|guidelines?|recommend(?:ation|ed)|ideal|target|goal|baseline)\b/.test(request)
+  const asksForExactValue = /\b(how many|how much|what (?:was|is|were|are))\b/.test(request)
+  if (asksForComparison && comparesExternalStandard) return []
+  if (!asksForTrend && (!asksForComparison || comparesExternalStandard) && !asksForExactValue) return []
+
+  const candidates = [...datasets.entries()].reverse()
+  for (const [datasetId, source] of candidates) {
+    const metrics = datasetMetrics(source)
+    if (!metrics.length) continue
+    let dataset: DailyDataset
+    try {
+      dataset = dailyDataset(datasetId, datasets)
+    } catch {
+      continue
+    }
+    const metric = requestedMetric(metrics, request)
+    const label = fallbackMetricLabel(metric)
+
+    if (asksForTrend) {
+      return resolvePresentation(
+        { metricCards: [], comparisons: [], charts: [{ datasetId, metric, title: `${label} trend` }], workouts: [] },
+        datasets
+      ).slice(0, 1)
+    }
+
+    if (asksForComparison) {
+      const latest = latestPresentDate(dataset, metric)
+      if (!latest || dataset.start >= latest) continue
+      const lastNightComparison = /\blast night\b/.test(request)
+      let currentStart: string
+      let currentEnd: string
+      let previousStart: string
+      let previousEnd: string
+      let currentLabel: string
+      let previousLabel: string
+      if (lastNightComparison) {
+        currentStart = latest
+        currentEnd = latest
+        previousStart = dataset.start
+        previousEnd = shiftIsoDate(latest, -1)
+        currentLabel = 'Last night'
+        previousLabel = 'Earlier period'
+      } else {
+        const days = rangeDays(dataset.start, dataset.end)
+        if (days < 2) continue
+        const currentDays = Math.floor(days / 2)
+        currentStart = shiftIsoDate(dataset.end, -(currentDays - 1))
+        currentEnd = dataset.end
+        previousStart = dataset.start
+        previousEnd = shiftIsoDate(currentStart, -1)
+        currentLabel = 'Current period'
+        previousLabel = 'Previous period'
+      }
+      return resolvePresentation(
+        {
+          metricCards: [],
+          comparisons: [
+            {
+              datasetId,
+              metric,
+              title: `${label} comparison`,
+              currentLabel,
+              currentStartDate: currentStart,
+              currentEndDate: currentEnd,
+              previousLabel,
+              previousStartDate: previousStart,
+              previousEndDate: previousEnd
+            }
+          ],
+          charts: [],
+          workouts: []
+        },
+        datasets
+      ).slice(0, 1)
+    }
+
+    const latest = latestPresentDate(dataset, metric)
+    if (asksForExactValue && latest && dataset.start === dataset.end) {
+      return resolvePresentation(
+        { metricCards: [{ datasetId, metric, date: latest }], comparisons: [], charts: [], workouts: [] },
+        datasets
+      ).slice(0, 1)
+    }
+  }
+  return []
 }
 
 function ensureWithin(dataset: DailyDataset, start: string, end: string): void {

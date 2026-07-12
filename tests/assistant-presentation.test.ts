@@ -1,5 +1,9 @@
 import { describe, expect, test } from 'bun:test'
-import { resolvePresentation, type AgentDataset } from '../src/main/assistant-presentation'
+import {
+  resolveAutomaticPresentation,
+  resolvePresentation,
+  type AgentDataset
+} from '../src/main/assistant-presentation'
 
 function dailyDatasets(): Map<string, AgentDataset> {
   return new Map([
@@ -103,5 +107,75 @@ describe('assistant visual presentation', () => {
         datasets
       )
     ).toThrow('is not in dataset')
+  })
+
+  test('draws a trend directly from an analysis dataset', () => {
+    const datasets = new Map<string, AgentDataset>([
+      [
+        'analysis-1',
+        {
+          tool: 'analyze_daily_metrics',
+          data: {
+            source: 'live',
+            requestedRange: { start: '2026-07-01', end: '2026-07-04' },
+            units: { restingHeartRate: 'bpm' },
+            days: {
+              '2026-07-01': { restingHeartRate: 61 },
+              '2026-07-02': { restingHeartRate: 62 },
+              '2026-07-03': { restingHeartRate: 64 },
+              '2026-07-04': { restingHeartRate: 65 }
+            }
+          }
+        }
+      ]
+    ])
+
+    expect(
+      resolvePresentation(
+        {
+          metricCards: [],
+          comparisons: [],
+          charts: [{ datasetId: 'analysis-1', metric: 'restingHeartRate', title: 'Resting heart rate trend' }],
+          workouts: []
+        },
+        datasets
+      )[0]
+    ).toMatchObject({ type: 'trend-chart', metric: 'restingHeartRate', observations: 4 })
+  })
+
+  test('builds a restrained sleep comparison fallback from sleep sessions', () => {
+    const datasets = new Map<string, AgentDataset>([
+      [
+        'sleep-1',
+        {
+          tool: 'query_sleep',
+          data: {
+            source: 'live',
+            requestedRange: { start: '2026-07-06', end: '2026-07-12' },
+            nights: [
+              { date: '2026-07-06', minutesAsleep: 420, efficiency: 95 },
+              { date: '2026-07-07', minutesAsleep: 450, efficiency: 96 },
+              { date: '2026-07-11', minutesAsleep: 498, efficiency: 97 }
+            ]
+          }
+        }
+      ]
+    ])
+
+    const parts = resolveAutomaticPresentation('How did I sleep this week compared to last night?', datasets)
+    expect(parts).toHaveLength(1)
+    expect(parts[0]).toMatchObject({
+      type: 'comparison',
+      metric: 'sleepMinutes',
+      current: { label: 'Last night', startDate: '2026-07-11', endDate: '2026-07-11', value: 498 },
+      previous: { label: 'Earlier period', startDate: '2026-07-06', endDate: '2026-07-10', value: 435 }
+    })
+  })
+
+  test('adds a trend fallback but does not visualize an external guideline comparison', () => {
+    const datasets = dailyDatasets()
+    expect(resolveAutomaticPresentation('Is my sleep trending up or down?', datasets)).toHaveLength(1)
+    expect(resolveAutomaticPresentation('How do my steps compare with NHS recommendations?', datasets)).toEqual([])
+    expect(resolveAutomaticPresentation('What is my current health compared with NHS ideals?', datasets)).toEqual([])
   })
 })

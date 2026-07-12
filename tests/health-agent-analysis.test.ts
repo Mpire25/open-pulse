@@ -1,5 +1,9 @@
 import { describe, expect, test } from 'bun:test'
-import { pearsonCorrelation, summarizeMetricPoints } from '../src/main/health-agent-analysis'
+import {
+  healthAgentModelData,
+  pearsonCorrelation,
+  summarizeMetricPoints
+} from '../src/main/health-agent-analysis'
 
 describe('health agent analysis', () => {
   test('reports coverage and a reproducible daily trend', () => {
@@ -38,5 +42,24 @@ describe('health agent analysis', () => {
   test('calculates correlation locally and rejects tiny samples', () => {
     expect(pearsonCorrelation([[1, 2], [2, 4], [3, 6]])).toBeCloseTo(1)
     expect(pearsonCorrelation([[1, 2], [2, 4]])).toBeNull()
+  })
+
+  test('keeps presentation points local when returning analysis to the model', () => {
+    const compact = healthAgentModelData('analyze_daily_metrics', {
+      source: 'live',
+      requestedRange: { start: '2026-07-01', end: '2026-07-03' },
+      units: { restingHeartRate: 'bpm' },
+      observations: { restingHeartRate: 3 },
+      days: { '2026-07-01': { restingHeartRate: 61 } },
+      range: { start: '2026-07-01', end: '2026-07-03', days: 3 },
+      summaries: { restingHeartRate: { mean: 62 } }
+    })
+
+    expect(compact).toEqual({
+      source: 'live',
+      range: { start: '2026-07-01', end: '2026-07-03', days: 3 },
+      summaries: { restingHeartRate: { mean: 62 } }
+    })
+    expect(JSON.stringify(compact)).not.toContain('restingHeartRate":61')
   })
 })
