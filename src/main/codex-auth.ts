@@ -5,6 +5,7 @@
 import { shell } from 'electron'
 import { createServer } from 'node:http'
 import { createPkcePair, randomState, decodeJwtPayload } from './pkce'
+import { createSharedOperation, waitForSharedOperation, type SharedOperation } from './shared-operation'
 import { deleteSecret, getSecret, setSecret } from './store'
 import type { CodexAuthStatus } from '../shared/types'
 
@@ -38,6 +39,12 @@ const LANDING_HTML = `<!doctype html><meta charset="utf-8"><title>OpenPulse</tit
 
 let activeConnectReject: ((err: Error) => void) | null = null
 let authGeneration = 0
+let refreshRequest: { generation: number; operation: SharedOperation<CodexTokens | null> } | null = null
+
+function cancelRefresh(): void {
+  refreshRequest?.operation.controller.abort()
+  refreshRequest = null
+}
 
 export function getCodexAuthGeneration(): number {
   return authGeneration
@@ -55,12 +62,14 @@ export function getCodexStatus(): CodexAuthStatus {
 }
 
 export function disconnectCodex(): void {
+  cancelRefresh()
   authGeneration += 1
   activeConnectReject?.(new Error('ChatGPT sign-in was cancelled.'))
   deleteSecret(SECRET_KEY)
 }
 
 export async function connectCodex(): Promise<CodexAuthStatus> {
+  cancelRefresh()
   const generation = ++authGeneration
   const { verifier, challenge } = createPkcePair()
   const state = randomState()
@@ -196,6 +205,30 @@ export async function getCodexTokens(signal?: AbortSignal): Promise<CodexTokens 
   if (Date.now() < tokens.expiresAt - 5 * 60_000) return tokens
   if (!tokens.refreshToken) return tokens // let the API call surface expiry
 
+  if (refreshRequest?.generation === generation) {
+    return waitForSharedOperation(refreshRequest.operation, signal)
+  }
+
+  const operation = createSharedOperation<CodexTokens | null>(
+    (refreshSignal) => refreshCodexTokens(tokens, generation, refreshSignal)
+  )
+  refreshRequest = { generation, operation }
+  operation.promise.then(
+    () => {
+      if (refreshRequest?.operation === operation) refreshRequest = null
+    },
+    () => {
+      if (refreshRequest?.operation === operation) refreshRequest = null
+    }
+  )
+  return waitForSharedOperation(operation, signal)
+}
+
+async function refreshCodexTokens(
+  tokens: CodexTokens,
+  generation: number,
+  signal: AbortSignal
+): Promise<CodexTokens | null> {
   const resp = await fetch(`${ISSUER}/oauth/token`, {
     method: 'POST',
     signal,
