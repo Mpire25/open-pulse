@@ -28,6 +28,7 @@ import {
   webResearchAvailable,
   type ResearchPolicy
 } from './agent-research'
+import { SLEEP_DATE_INSTRUCTION } from './health-agent-date-semantics'
 
 const CODEX_URL = 'https://chatgpt.com/backend-api/codex/responses'
 const MODEL = 'gpt-5.6-terra'
@@ -51,6 +52,8 @@ function buildInstructions(researchPolicy: ResearchPolicy): string {
   return `You are OpenPulse, the built-in health assistant for Google Fitbit health data.
 
 Today is ${today}; the user's local timezone is ${timezone}. Use civil calendar dates in that timezone.
+
+${SLEEP_DATE_INSTRUCTION}
 
 For every claim about the user's data, call only the narrowest relevant tools and never invent a value. Use one day for an exact fact, 7-14 days for short comparisons, about 30 days for a trend, and 60-90 days for an exploratory relationship. If observations are sparse or the result warns that evidence is thin, request a larger useful range or explain the limitation. Prefer analyze_daily_metrics for arithmetic and correlation rather than calculating from a large table yourself. Its dataset can also be presented directly: do not request the same daily range again merely to draw it. Distinguish missing data from zero. Correlation is not causation.
 

@@ -10,6 +10,7 @@ import {
 } from './health-service'
 import { shiftIsoDate } from './health-api'
 import { pearsonCorrelation, summarizeMetricPoints } from './health-agent-analysis'
+import { DAILY_METRICS_TOOL_DESCRIPTION, SLEEP_TOOL_DESCRIPTION } from './health-agent-date-semantics'
 
 export interface AgentToolSpec {
   type: 'function'
@@ -34,8 +35,7 @@ export const AGENT_TOOLS: AgentToolSpec[] = [
   {
     type: 'function',
     name: 'query_daily_metrics',
-    description:
-      'Read only the requested daily health metrics over an explicit range. Use one day for exact-value questions, 7-14 days for short comparisons, about 30 days for trends, and 60-90 days for exploratory relationships. Does not include intraday samples, workouts, or detailed sleep sessions.',
+    description: DAILY_METRICS_TOOL_DESCRIPTION,
     strict: true,
     parameters: {
       type: 'object',
@@ -79,8 +79,7 @@ export const AGENT_TOOLS: AgentToolSpec[] = [
   {
     type: 'function',
     name: 'query_sleep',
-    description:
-      'Read sleep sessions for an explicit date range. Summary mode returns timing, duration, efficiency and stage totals without raw stage segments. Use detailed mode only when interruption or stage detail is central to the question.',
+    description: SLEEP_TOOL_DESCRIPTION,
     strict: true,
     parameters: {
       type: 'object',
