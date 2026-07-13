@@ -1,7 +1,7 @@
 import { shell } from 'electron'
 import { createServer } from 'node:http'
-import { createHash } from 'node:crypto'
 import { createPkcePair, randomState, decodeJwtPayload } from './pkce'
+import { googleAccountScope } from './google-account-scope'
 import { getSecret, setSecret, deleteSecret, getSettings, getGoogleClientSecret } from './store'
 import type { GoogleAuthStatus } from '../shared/types'
 
@@ -59,11 +59,7 @@ export function getGoogleStatus(): GoogleAuthStatus {
 }
 
 export function getGoogleAccountScope(): string {
-  const tokens = getSecret<GoogleTokens>(SECRET_KEY)
-  if (!tokens) return 'demo'
-  const identity = tokens.subject ?? tokens.email?.trim().toLowerCase() ?? tokens.refreshToken
-  if (!identity) return 'connected-unknown'
-  return `google-${createHash('sha256').update(identity).digest('hex')}`
+  return googleAccountScope(getSecret<GoogleTokens>(SECRET_KEY))
 }
 
 export function disconnectGoogle(): void {
