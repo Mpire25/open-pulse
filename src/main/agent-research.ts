@@ -6,9 +6,10 @@ export interface ResearchPolicy {
   reason: ResearchReason
 }
 
-const EXPLICIT_RESEARCH = /\b(search(?: the)? web|web search|research|look (?:it |this )?up|browse|online|sources?|citations?|cite|evidence|stud(?:y|ies)|literature|latest|up-to-date|current (?:guidance|recommendations?|evidence|research|version|information))\b/i
+const EXPLICIT_RESEARCH = /\b(search(?: the)? web|web search|research|look (?:it |this )?up|browse|online|sources?|citations?|cite|evidence|stud(?:y|ies)|literature|latest|up-to-date|reddit|forums?|user reports?|community discussions?|current (?:guidance|recommendations?|evidence|research|version|information))\b/i
 const EXTERNAL_GUIDANCE = /\b(nhs|nice|who|cdc|guidelines?|recommendations?|recommended|ideal(?:s)?|healthy|normal|clinical guidance|public health)\b/i
 const MEDICAL_GUIDANCE = /\b(medications?|treatments?|diagnos(?:is|e)|symptoms?|diseases?|medical conditions?|clinician|doctor|safe|unsafe|concerning|should (?:i )?worry)\b/i
+const NICHE_HEALTH_GUIDANCE = /\b(calorie deficits?|energy restriction|retatrutide|semaglutide|tirzepatide|liraglutide|ozempic|wegovy|mounjaro|zepbound|glp-?1|creatine|caffeine|pre-?workout|melatonin|magnesium|electrolytes?|supplements?|testosterone|trt|anabolic steroids?)\b/i
 const PRODUCT_INFORMATION = /\b(product information|product specs?|device compatibility|fitbit feature|chatgpt feature|software version|release notes?)\b/i
 const BROAD_RESEARCH = /\b(overall|current health|health overview|across|multiple|in general|deep research|thorough(?:ly)?|comprehensive)\b/i
 
@@ -16,15 +17,16 @@ export function researchPolicyForRequest(userText: string): ResearchPolicy {
   const explicit = EXPLICIT_RESEARCH.test(userText)
   const externalGuidance = EXTERNAL_GUIDANCE.test(userText)
   const medicalGuidance = MEDICAL_GUIDANCE.test(userText)
+  const nicheHealthGuidance = NICHE_HEALTH_GUIDANCE.test(userText)
   const productInformation = PRODUCT_INFORMATION.test(userText)
-  const enabled = explicit || externalGuidance || medicalGuidance || productInformation
+  const enabled = explicit || externalGuidance || medicalGuidance || nicheHealthGuidance || productInformation
   if (!enabled) return { enabled: false, maxSearchTurns: 0, reason: 'none' }
 
   const reason: ResearchReason = explicit
     ? 'explicit'
     : externalGuidance
       ? 'external-guidance'
-      : medicalGuidance
+      : medicalGuidance || nicheHealthGuidance
         ? 'medical-guidance'
         : 'product-information'
   const maxSearchTurns = BROAD_RESEARCH.test(userText) || (explicit && /\b(compare|several|multiple|sources)\b/i.test(userText))
@@ -44,8 +46,22 @@ const SAFE_RESEARCH_TOPICS: Array<{ pattern: RegExp; label: string }> = [
   { pattern: /\b(workouts?|training|recovery)\b/i, label: 'exercise recovery' },
   { pattern: /\b(weight|bmi|body mass index|body fat)\b/i, label: 'body composition' },
   { pattern: /\b(nutrition|diet|calories?|protein|carbs?|carbohydrates?|fat|fiber|fibre|sodium|sugar)\b/i, label: 'nutrition' },
+  { pattern: /\b(calorie deficits?|cutting|energy restriction|dieting)\b/i, label: 'calorie deficits' },
   { pattern: /\b(water|hydration)\b/i, label: 'hydration' },
   { pattern: /\b(medications?|treatments?|drug safety)\b/i, label: 'medication and treatment safety' },
+  { pattern: /\bretatrutide\b/i, label: 'retatrutide' },
+  { pattern: /\bsemaglutide|ozempic|wegovy\b/i, label: 'semaglutide' },
+  { pattern: /\btirzepatide|mounjaro|zepbound\b/i, label: 'tirzepatide' },
+  { pattern: /\bliraglutide|saxenda|victoza\b/i, label: 'liraglutide' },
+  { pattern: /\bglp-?1\b/i, label: 'GLP-1 medicines' },
+  { pattern: /\bcreatine\b/i, label: 'creatine supplementation' },
+  { pattern: /\bcaffeine\b/i, label: 'caffeine' },
+  { pattern: /\bpre-?workout\b/i, label: 'pre-workout supplements' },
+  { pattern: /\bmelatonin\b/i, label: 'melatonin' },
+  { pattern: /\bmagnesium\b/i, label: 'magnesium supplementation' },
+  { pattern: /\belectrolytes?\b/i, label: 'electrolyte supplementation' },
+  { pattern: /\b(testosterone|trt|anabolic steroids?)\b/i, label: 'testosterone and anabolic drugs' },
+  { pattern: /\b(reddit|forums?|communities|community discussions?|user reports?|people report|experiences?|anecdot(?:e|al))\b/i, label: 'first-person community reports' },
   { pattern: /\b(symptoms?|concerning|worry|safe|unsafe)\b/i, label: 'general medical safety guidance' },
   { pattern: /\b(fitbit|tracker|device compatibility)\b/i, label: 'Fitbit product information' },
   { pattern: /\b(chatgpt|openai|codex)\b/i, label: 'ChatGPT product information' },
@@ -61,26 +77,14 @@ export function isolatedResearchPrompt(userText: string, policy: ResearchPolicy)
   const topics = SAFE_RESEARCH_TOPICS
     .filter((topic) => topic.pattern.test(userText))
     .map((topic) => topic.label)
-  const selected = [...new Set(topics)].slice(0, 4)
+  const selected = [...new Set(topics)].slice(0, 6)
   const fallback = policy.reason === 'product-information'
     ? 'current product information'
     : policy.reason === 'medical-guidance'
       ? 'general medical safety guidance'
       : 'general health guidance'
   const subject = selected.length ? selected.join(', ') : fallback
-  return `Research current authoritative guidance about ${subject}. Use primary sources and current clinical or official product guidance. Keep the result concise and include clickable inline citations for every externally supported claim.`
-}
-
-export type ResearchCompletionAction = 'complete' | 'repair-citations' | 'refuse-uncited'
-
-export function researchCompletionAction(
-  webSearches: number,
-  citations: number,
-  repairAttempted: boolean,
-  canRepair: boolean
-): ResearchCompletionAction {
-  if (webSearches === 0 || citations > 0) return 'complete'
-  return !repairAttempted && canRepair ? 'repair-citations' : 'refuse-uncited'
+  return `Research current information about ${subject}. Search broadly across primary research, clinical and official sources, specialist sites, and first-person community discussions when useful. Keep the result concise. Include relevant source links when available, but do not discard useful findings solely because citation annotations are unavailable. Clearly label anecdotal reports and uncertainty rather than presenting them as established medical evidence.`
 }
 
 function redactSearchText(value: string): string {
@@ -112,8 +116,3 @@ export function sanitizeWebSearchAction(value: unknown): SanitizedWebSearchActio
   const query = redactSearchText(rawQueries.join(' | '))
   return query ? { action, query } : { action }
 }
-
-export const CITATION_REPAIR_INSTRUCTION = `Rewrite the answer using only the health data and web research already present in this conversation. Every factual claim derived from web research must carry a clickable inline source citation from the existing web-search results. Do not call any tools or add unsupported facts. If source annotations are unavailable, say that you could not verify the external guidance instead of presenting it as sourced advice.`
-
-export const UNCITED_RESEARCH_MESSAGE =
-  'I found potentially relevant external information, but I could not attach verifiable source citations. I have not presented it as health guidance. Please try the question again.'

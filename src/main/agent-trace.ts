@@ -46,7 +46,6 @@ export type AgentTracePayload =
       action: string
       query?: string
     }
-  | { type: 'citation_repair'; turn: number; outcome: 'started' | 'failed' }
   | { type: 'tool_started'; turn: number; name: string; callId: string; arguments: Record<string, unknown> }
   | {
       type: 'tool_completed'
@@ -138,8 +137,6 @@ export function formatAgentTraceEvent(event: AgentTraceEvent): string {
       return `${prefix} Web research ${event.researchTurn}/${event.maxSearchTurns} · turn ${event.turn} · ${event.action}${event.query ? ` · ${event.query}` : ''}`
     case 'web_search_completed':
       return `${prefix} Web research ${event.researchTurn}/${event.maxSearchTurns} completed · turn ${event.turn} · ${event.action}${event.query ? ` · ${event.query}` : ''}`
-    case 'citation_repair':
-      return `${prefix} Citation repair ${event.outcome} · turn ${event.turn}`
     case 'tool_started':
       return `${prefix} Tool started · ${event.name} · ${shortId(event.callId)} · ${detail(event.arguments)}`
     case 'tool_completed':

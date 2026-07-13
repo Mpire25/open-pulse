@@ -26,12 +26,9 @@ import {
 } from './assistant-presentation'
 import { AgentTracer, summarizeToolArguments, summarizeToolResult } from './agent-trace'
 import {
-  CITATION_REPAIR_INSTRUCTION,
   isolatedResearchPrompt,
-  researchCompletionAction,
   researchPolicyForRequest,
   sanitizeWebSearchAction,
-  UNCITED_RESEARCH_MESSAGE,
   type ResearchPolicy
 } from './agent-research'
 import { SLEEP_DATE_INSTRUCTION } from './health-agent-date-semantics'
@@ -53,9 +50,9 @@ function buildInstructions(researchPolicy: ResearchPolicy, isolatedResearch: str
   const today = `${part('year')}-${part('month')}-${part('day')}`
   const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone
   const researchInstructions = researchPolicy.enabled && isolatedResearch
-    ? `OpenPulse completed web research in a separate privacy-isolated request before this health-data run. You cannot search the web yourself. Use only the evidence below for current external claims, preserve its HTTPS citations in the final answer, and clearly separate that evidence from the user's own data.\n\n<isolated_web_research>\n${isolatedResearch}\n</isolated_web_research>`
+    ? `OpenPulse completed web research in a separate privacy-isolated request before this health-data run. You cannot search the web yourself. Use the information below where relevant and clearly separate it from the user's own data. Keep source links that are already present visible and clickable; when none are present, answer without them. Never invent or require citations. Treat first-person or community reports as anecdotal, describe uncertainty plainly, and do not present them as established medical evidence.\n\n<isolated_web_research>\n${isolatedResearch}\n</isolated_web_research>`
     : researchPolicy.enabled
-      ? `The privacy-isolated research request returned no usable cited evidence. You cannot search the web in this health-data run, so do not present unverified current external guidance.`
+      ? `The privacy-isolated research request returned no usable information. You cannot search the web in this health-data run, but you may still answer from the user's data and stable general knowledge while being honest about uncertainty.`
     : `Web research is intentionally unavailable for this personal-data-only request. Answer from the user's health data and stable general knowledge without claiming that you checked current external guidance.`
   return `You are OpenPulse, the built-in health assistant for Google Fitbit health data.
 
@@ -112,7 +109,6 @@ function toInputItems(history: ChatMessage[]): InputItem[] {
 
 interface IsolatedResearchResult {
   text: string
-  citations: number
   webSearches: number
 }
 
@@ -138,7 +134,7 @@ async function runIsolatedResearch(
     },
     body: JSON.stringify({
       model: MODEL,
-      instructions: `You are OpenPulse's privacy-isolated research specialist. You receive only an allowlisted general topic and never receive the user's conversation or health records. Search authoritative primary sources, use no more than ${maxSearchTurns} consolidated research turn${maxSearchTurns === 1 ? '' : 's'}, and return a concise evidence summary with clickable inline citations. Do not infer or invent any personal context.`,
+      instructions: `You are OpenPulse's privacy-isolated research specialist. You receive only an allowlisted general topic and never receive the user's conversation or health records. Search broadly across primary research, clinical and official sources, specialist sites, and first-person community discussions when they add useful niche context. Use no more than ${maxSearchTurns} consolidated research turn${maxSearchTurns === 1 ? '' : 's'}. Return a concise summary, preserve relevant source links when available, and clearly label anecdotal reports and uncertainty. Useful findings remain usable when citation annotations are unavailable. Do not infer or invent any personal context.`,
       input: [{
         type: 'message',
         role: 'user',
@@ -161,7 +157,6 @@ async function runIsolatedResearch(
   }
 
   let webSearches = 0
-  let citations = 0
   let turnText = ''
   const completedMessages: string[] = []
   let buffer = ''
@@ -199,11 +194,6 @@ async function runIsolatedResearch(
           if (event.item?.type === 'web_search_call') {
             onSearch('completed', event.item.action, Math.max(1, webSearches))
           } else if (event.item?.type === 'message') {
-            citations +=
-              event.item.content?.reduce(
-                (count, part) => count + (Array.isArray(part.annotations) ? countValidUrlCitations(part.annotations) : 0),
-                0
-              ) ?? 0
             const messageText = citedMessageText(event.item)
             if (messageText != null) completedMessages.push(messageText)
           }
@@ -216,7 +206,6 @@ async function runIsolatedResearch(
 
   return {
     text: completedMessages.length ? completedMessages.join('\n') : turnText,
-    citations,
     webSearches
   }
 }
@@ -281,7 +270,6 @@ export async function runChat(
   let healthToolCalls = 0
   let presentationCalls = 0
   let webSearches = 0
-  let citationRepairAttempted = false
   const run: ActiveRun = { sender, chatId, runId, controller }
   activeRuns.set(key, run)
   const onDestroyed = (): void => controller.abort(new Error('Window closed.'))
@@ -319,7 +307,7 @@ export async function runChat(
         }
       )
       webSearches = research.webSearches
-      if (research.citations > 0) isolatedResearch = research.text
+      isolatedResearch = research.text.trim()
     }
     signal.throwIfAborted()
     if (!isCodexAuthGenerationCurrent(authGeneration)) throw new Error('ChatGPT disconnected.')
@@ -331,7 +319,7 @@ export async function runChat(
     for (let turn = 0; turn < MAX_TOOL_TURNS; turn++) {
       turnsUsed = turn + 1
       const finalResponseTurn = turn === MAX_TOOL_TURNS - 1
-      const forceNoTools = finalResponseTurn || citationRepairAttempted
+      const forceNoTools = finalResponseTurn
       signal.throwIfAborted()
       if (!isCodexAuthGenerationCurrent(authGeneration)) throw new Error('ChatGPT disconnected.')
       trace.emit({
@@ -420,11 +408,7 @@ export async function runChat(
               case 'response.output_text.delta':
                 if (event.delta) {
                   turnText += event.delta
-                  // Researched text is buffered until its citations can be
-                  // validated. `done` still delivers the complete answer.
-                  if (webSearches === 0 && !citationRepairAttempted) {
-                    emit({ type: 'delta', chatId, runId, text: event.delta })
-                  }
+                  emit({ type: 'delta', chatId, runId, text: event.delta })
                 }
                 break
               case 'response.reasoning_summary_text.delta':
@@ -483,29 +467,7 @@ export async function runChat(
       if (!isCodexAuthGenerationCurrent(authGeneration)) throw new Error('ChatGPT disconnected.')
 
       if (functionCalls.length === 0) {
-        const researchAction = researchCompletionAction(
-          webSearches,
-          resolvedCitationCount,
-          citationRepairAttempted,
-          !finalResponseTurn
-        )
-        if (researchAction === 'repair-citations') {
-          citationRepairAttempted = true
-          trace.emit({ type: 'citation_repair', turn: turnsUsed, outcome: 'started' })
-          input.push(...continuationItems, {
-            type: 'message',
-            role: 'user',
-            content: [{ type: 'input_text', text: CITATION_REPAIR_INSTRUCTION }]
-          })
-          finalText = ''
-          continue
-        }
-        if (researchAction === 'refuse-uncited') {
-          trace.emit({ type: 'citation_repair', turn: turnsUsed, outcome: 'failed' })
-          finalText = UNCITED_RESEARCH_MESSAGE
-        } else {
-          finalText += resolvedTurnText
-        }
+        finalText += resolvedTurnText
         if (visualParts.length === 0) {
           let automaticParts: AssistantVisualPart[] = []
           const fallbackStartedAt = performance.now()
@@ -547,10 +509,7 @@ export async function runChat(
         return
       }
 
-      // Tool-call turns are planning steps. Once research has started, keep
-      // any prose from those intermediate turns out of the final answer so
-      // only the citation-validated synthesis is shown.
-      if (webSearches === 0) finalText += resolvedTurnText
+      finalText += resolvedTurnText
       input.push(...continuationItems)
       for (const call of functionCalls) {
         const name = call.name ?? ''

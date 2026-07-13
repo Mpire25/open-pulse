@@ -1,7 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import {
   isolatedResearchPrompt,
-  researchCompletionAction,
   researchPolicyForRequest,
   sanitizeWebSearchAction
 } from '../src/main/agent-research'
@@ -39,14 +38,18 @@ describe('assistant web research policy', () => {
       enabled: true,
       reason: 'explicit'
     })
-  })
-
-  test('requires one repair pass for searched answers without citations', () => {
-    expect(researchCompletionAction(0, 0, false, true)).toBe('complete')
-    expect(researchCompletionAction(1, 2, false, true)).toBe('complete')
-    expect(researchCompletionAction(1, 0, false, true)).toBe('repair-citations')
-    expect(researchCompletionAction(1, 0, true, true)).toBe('refuse-uncited')
-    expect(researchCompletionAction(1, 0, false, false)).toBe('refuse-uncited')
+    expect(researchPolicyForRequest('Can a calorie deficit affect sleep?')).toMatchObject({
+      enabled: true,
+      reason: 'medical-guidance'
+    })
+    expect(researchPolicyForRequest('Could retatrutide make sleep worse?')).toMatchObject({
+      enabled: true,
+      reason: 'medical-guidance'
+    })
+    expect(researchPolicyForRequest('Could creatine affect my sleep?')).toMatchObject({
+      enabled: true,
+      reason: 'medical-guidance'
+    })
   })
 
   test('builds an allowlisted isolated research prompt without private input', () => {
@@ -58,6 +61,20 @@ describe('assistant web research policy', () => {
     expect(prompt).not.toContain('matt@example.com')
     expect(prompt).not.toContain('68')
     expect(prompt).not.toContain('2026-07-11')
+  })
+
+  test('supports niche and anecdotal research without requiring citations', () => {
+    const request = 'Search Reddit for whether retatrutide users report worse sleep during a 900 calorie deficit'
+    const policy = researchPolicyForRequest(request)
+    const prompt = isolatedResearchPrompt(request, policy)
+
+    expect(policy).toMatchObject({ enabled: true, reason: 'explicit' })
+    expect(prompt).toContain('retatrutide')
+    expect(prompt).toContain('sleep')
+    expect(prompt).toContain('calorie deficits')
+    expect(prompt).toContain('first-person community reports')
+    expect(prompt).toContain('citation annotations are unavailable')
+    expect(prompt).not.toContain('900')
   })
 
   test('redacts measurements and identifiers from traced search queries', () => {
