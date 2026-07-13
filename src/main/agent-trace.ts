@@ -126,7 +126,7 @@ export function formatAgentTraceEvent(event: AgentTraceEvent): string {
     case 'auth_ready':
       return `${prefix} Auth ready · ${event.accountScoped ? 'ChatGPT account scoped' : 'no account header'}`
     case 'research_policy':
-      return `${prefix} Web research ${event.enabled ? `enabled · budget ${event.maxSearchTurns} turns · ${event.reason}` : 'disabled · personal data only'}`
+      return `${prefix} Web research ${event.enabled ? `available · budget ${event.maxSearchTurns} turns · ${event.reason}` : 'unavailable'}`
     case 'turn_started':
       return `${prefix} Turn ${event.turn}/${event.maxTurns}${event.finalResponse ? ' · final response' : ''} · ${event.inputItems} input items · ${event.datasets} datasets · ${event.visuals} visuals`
     case 'model_responded': {

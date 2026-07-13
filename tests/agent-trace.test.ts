@@ -20,7 +20,7 @@ describe('agent execution tracing', () => {
       reason: 'external-guidance'
     }
     expect(formatAgentTraceEvent(event)).toBe(
-      '[AI trace123 +2ms] Web research enabled · budget 2 turns · external-guidance'
+      '[AI trace123 +2ms] Web research available · budget 2 turns · external-guidance'
     )
   })
 
@@ -59,6 +59,11 @@ describe('agent execution tracing', () => {
       startDate: '2026-07-01',
       endDate: '2026-07-07'
     })
+    expect(
+      summarizeToolArguments('research_web', {
+        query: 'Do people with HRV around 32 ms report short sleep?'
+      })
+    ).toEqual({})
   })
 
   test('summarizes result shape without exposing health measurements', () => {

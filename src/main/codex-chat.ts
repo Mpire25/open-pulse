@@ -10,7 +10,11 @@ import {
   isCodexAuthGenerationCurrent,
   type CodexTokens
 } from './codex-auth'
-import { AGENT_TOOLS, AGENT_TOOL_LABELS, runHealthAgentTool } from './health-agent-tools'
+import {
+  AGENT_TOOLS,
+  AGENT_TOOL_LABELS,
+  runHealthAgentTool
+} from './health-agent-tools'
 import { healthAgentModelData } from './health-agent-analysis'
 import {
   addUrlCitations,
@@ -27,9 +31,9 @@ import {
 import { AgentTracer, summarizeToolArguments, summarizeToolResult } from './agent-trace'
 import {
   isolatedResearchPrompt,
+  RESEARCH_TOOL,
   researchPolicyForRequest,
-  sanitizeWebSearchAction,
-  type ResearchPolicy
+  sanitizeWebSearchAction
 } from './agent-research'
 import { SLEEP_DATE_INSTRUCTION } from './health-agent-date-semantics'
 
@@ -38,7 +42,7 @@ const MODEL = 'gpt-5.6-terra'
 const MAX_TOOL_TURNS = 8
 const WEB_SEARCH_TOOL = { type: 'web_search', search_context_size: 'medium' } as const
 
-function buildInstructions(researchPolicy: ResearchPolicy, isolatedResearch: string): string {
+function buildInstructions(): string {
   const now = new Date()
   const dateParts = new Intl.DateTimeFormat('en-GB', {
     year: 'numeric',
@@ -49,11 +53,6 @@ function buildInstructions(researchPolicy: ResearchPolicy, isolatedResearch: str
     dateParts.find((item) => item.type === type)?.value ?? ''
   const today = `${part('year')}-${part('month')}-${part('day')}`
   const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone
-  const researchInstructions = researchPolicy.enabled && isolatedResearch
-    ? `OpenPulse completed web research in a separate privacy-isolated request before this health-data run. You cannot search the web yourself. Use the information below where relevant and clearly separate it from the user's own data. Keep source links that are already present visible and clickable; when none are present, answer without them. Never invent or require citations. Treat first-person or community reports as anecdotal, describe uncertainty plainly, and do not present them as established medical evidence.\n\n<isolated_web_research>\n${isolatedResearch}\n</isolated_web_research>`
-    : researchPolicy.enabled
-      ? `The privacy-isolated research request returned no usable information. You cannot search the web in this health-data run, but you may still answer from the user's data and stable general knowledge while being honest about uncertainty.`
-    : `Web research is intentionally unavailable for this personal-data-only request. Answer from the user's health data and stable general knowledge without claiming that you checked current external guidance.`
   return `You are OpenPulse, the built-in health assistant for Google Fitbit health data.
 
 Today is ${today}; the user's local timezone is ${timezone}. Use civil calendar dates in that timezone.
@@ -64,7 +63,7 @@ For every claim about the user's data, call only the narrowest relevant tools an
 
 When a visual would materially clarify the answer, call present_health_data after the relevant tools have returned datasetId values. For a broad multi-domain health summary, weekly review, focus-area question, or comparison with external guidance, use one overview containing 2-4 relevant metrics and no other visual; do not substitute an arbitrary single-metric chart. A direct comparison or trend question should normally get one appropriate visual. Use an exact-value card for one fact, a comparison for two periods, a chart for a trend, a sleep card for one specific night when stages or the night's structure are central, a nutrition card for the composition of one day, meal, or logged food item, or a workout card for a specific workout. For comparisons, preserve explicit user wording by selecting total, average, latest, or value independently for each side; use auto when the user did not specify. Auto compares one day with a multi-day daily/nightly average, equal-length additive periods as totals, rates as averages, and state measurements as latest readings. Never total rates, percentages, weight, body fat, or BMI. Unequal totals may be displayed when explicitly requested, but they are descriptive and will not receive a change judgement. Use query_daily_metrics for a day nutrition card and query_nutrition_logs for meal or item cards. Do not use a domain card for a trend, period comparison, or broad health assessment. Normally show one block; only show two when both add distinct value, and never decorate a simple explanation unnecessarily. Only reference dataset IDs and records returned in this run; OpenPulse will compute and validate every displayed value. Still give a concise written answer after presenting data.
 
-${researchInstructions}
+You do not have direct web access. The research_web tool is an intent-scoped privacy broker for external research. Use it when current guidance, evidence, specialist information, product details, or first-person reports would materially improve the answer; do not use it for a question that can be answered entirely from the user's own data. Research is not restricted to official sources: specialist sites, forums, Reddit, and other community reports can add useful niche context when clearly labelled as anecdotal. If the question refers to a tracked value such as "my HRV" or "the sleep I am getting", call the relevant health tool first, then put only the explicitly requested value or compact range into the research query. Preserve useful numbers such as doses, durations, measurements, timing, and combinations. Never put the user's name, contact details, account identifiers, record identifiers, raw datasets, unrelated health values, or conversation history into a research query. Use research_web at most once and make the query specific enough to answer the actual question. When research returns source links, keep them visible and clickable; when it does not, answer without citations. Never invent or require citations. Clearly distinguish studies or clinical guidance from anecdotal reports and uncertainty.
 
 If a tool reports source "demo", mention once that the values are sample data because no health account is connected. Be warm, precise and concise. Use plain language, concrete dates and numbers, and at most one practical suggestion when relevant. Separate what the data shows from possible interpretation. Do not diagnose; recommend professional care for concerning symptoms or persistently abnormal readings without being alarmist.`
 }
@@ -134,7 +133,7 @@ async function runIsolatedResearch(
     },
     body: JSON.stringify({
       model: MODEL,
-      instructions: `You are OpenPulse's privacy-isolated research specialist. You receive only an allowlisted general topic and never receive the user's conversation or health records. Search broadly across primary research, clinical and official sources, specialist sites, and first-person community discussions when they add useful niche context. Use no more than ${maxSearchTurns} consolidated research turn${maxSearchTurns === 1 ? '' : 's'}. Return a concise summary, preserve relevant source links when available, and clearly label anecdotal reports and uncertainty. Useful findings remain usable when citation annotations are unavailable. Do not infer or invent any personal context.`,
+      instructions: `You are OpenPulse's privacy-isolated research specialist. You receive one standalone, intent-scoped research question and must treat it as your only context. It may contain specific doses, durations, measurements, dates, combinations, or tracked health values that the user deliberately asked to research; preserve those details when they materially affect the answer. You do not receive conversation history or raw health datasets. Search broadly across primary research, clinical and official sources, specialist sites, and first-person community discussions when they add useful niche context. Use no more than ${maxSearchTurns} consolidated research turn${maxSearchTurns === 1 ? '' : 's'}. Return a concise summary, preserve relevant source links when available, and clearly label anecdotal reports and uncertainty. Useful findings remain usable when citation annotations are unavailable. Do not infer an identity or any additional personal context beyond the research question.`,
       input: [{
         type: 'message',
         role: 'user',
@@ -269,6 +268,7 @@ export async function runChat(
   let turnsUsed = 0
   let healthToolCalls = 0
   let presentationCalls = 0
+  let researchCalls = 0
   let webSearches = 0
   const run: ActiveRun = { sender, chatId, runId, controller }
   activeRuns.set(key, run)
@@ -285,30 +285,6 @@ export async function runChat(
       throw new Error('Not signed in. Connect ChatGPT in Settings to use the assistant.')
     }
     trace.emit({ type: 'auth_ready', accountScoped: Boolean(tokens.accountId) })
-    let isolatedResearch = ''
-    if (researchPolicy.enabled) {
-      emit({ type: 'tool', chatId, runId, name: 'web_search', label: 'Researching the web' })
-      const research = await runIsolatedResearch(
-        tokens,
-        chatId,
-        isolatedResearchPrompt(latestUserText, researchPolicy),
-        researchPolicy.maxSearchTurns,
-        signal,
-        (phase, rawAction, searchNumber) => {
-          const action = sanitizeWebSearchAction(rawAction)
-          trace.emit({
-            type: phase === 'started' ? 'web_search_started' : 'web_search_completed',
-            turn: 0,
-            researchTurn: searchNumber,
-            maxSearchTurns: researchPolicy.maxSearchTurns,
-            action: action.action,
-            ...(action.query ? { query: action.query } : {})
-          })
-        }
-      )
-      webSearches = research.webSearches
-      isolatedResearch = research.text.trim()
-    }
     signal.throwIfAborted()
     if (!isCodexAuthGenerationCurrent(authGeneration)) throw new Error('ChatGPT disconnected.')
     const input: InputItem[] = toInputItems(history)
@@ -346,9 +322,9 @@ export async function runChat(
         },
         body: JSON.stringify({
           model: MODEL,
-          instructions: buildInstructions(researchPolicy, isolatedResearch),
+          instructions: buildInstructions(),
           input,
-          tools: [...AGENT_TOOLS, PRESENTATION_TOOL],
+          tools: [...AGENT_TOOLS, PRESENTATION_TOOL, RESEARCH_TOOL],
           tool_choice: forceNoTools ? 'none' : 'auto',
           parallel_tool_calls: false,
           store: false,
@@ -520,7 +496,12 @@ export async function runChat(
           chatId,
           runId,
           name,
-          label: name === PRESENTATION_TOOL.name ? 'Preparing visuals' : AGENT_TOOL_LABELS[name] ?? `Running ${name}`
+          label:
+            name === PRESENTATION_TOOL.name
+              ? 'Preparing visuals'
+              : name === RESEARCH_TOOL.name
+                ? 'Researching the web'
+                : AGENT_TOOL_LABELS[name] ?? `Running ${name}`
         })
         let args: Record<string, unknown> = {}
         try {
@@ -539,7 +520,36 @@ export async function runChat(
         let output: string
         let failed = false
         try {
-          if (name === PRESENTATION_TOOL.name) {
+          if (name === RESEARCH_TOOL.name) {
+            if (researchCalls >= 1) throw new Error('Web research has already been completed for this answer.')
+            const researchPrompt = isolatedResearchPrompt(args.query)
+            researchCalls++
+            const research = await runIsolatedResearch(
+              tokens,
+              chatId,
+              researchPrompt,
+              researchPolicy.maxSearchTurns,
+              signal,
+              (phase, rawAction, searchNumber) => {
+                const action = sanitizeWebSearchAction(rawAction)
+                trace.emit({
+                  type: phase === 'started' ? 'web_search_started' : 'web_search_completed',
+                  turn: turnsUsed,
+                  researchTurn: searchNumber,
+                  maxSearchTurns: researchPolicy.maxSearchTurns,
+                  action: action.action,
+                  ...(action.query ? { query: action.query } : {})
+                })
+              }
+            )
+            webSearches += research.webSearches
+            output = JSON.stringify({
+              searched: research.webSearches > 0,
+              research: research.text.trim() || null,
+              guidance:
+                'Use this research when relevant. Keep any supplied links visible, but citations are not required. Label community reports as anecdotal.'
+            })
+          } else if (name === PRESENTATION_TOOL.name) {
             presentationCalls++
             const available = Math.max(0, 2 - visualParts.length)
             const resolved = resolvePresentation(args, datasets).slice(0, available)
@@ -599,14 +609,26 @@ export async function runChat(
             durationMs: performance.now() - toolStartedAt,
             bytes: Buffer.byteLength(output, 'utf8'),
             result:
-              name === PRESENTATION_TOOL.name
+              name === RESEARCH_TOOL.name
                 ? {
-                    displayed:
+                    searched:
                       parsedOutput != null && typeof parsedOutput === 'object' && !Array.isArray(parsedOutput)
-                        ? (parsedOutput as Record<string, unknown>).displayed
-                        : undefined
+                        ? (parsedOutput as Record<string, unknown>).searched
+                        : undefined,
+                    textChars:
+                      parsedOutput != null && typeof parsedOutput === 'object' && !Array.isArray(parsedOutput) &&
+                      typeof (parsedOutput as Record<string, unknown>).research === 'string'
+                        ? ((parsedOutput as Record<string, unknown>).research as string).length
+                        : 0
                   }
-                : summarizeToolResult(name, parsedOutput)
+                : name === PRESENTATION_TOOL.name
+                  ? {
+                      displayed:
+                        parsedOutput != null && typeof parsedOutput === 'object' && !Array.isArray(parsedOutput)
+                          ? (parsedOutput as Record<string, unknown>).displayed
+                          : undefined
+                    }
+                  : summarizeToolResult(name, parsedOutput)
           })
         }
         input.push({
