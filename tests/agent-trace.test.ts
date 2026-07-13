@@ -7,6 +7,23 @@ import {
 } from '../src/main/agent-trace'
 
 describe('agent execution tracing', () => {
+  test('shows whether hosted research is available for a run', () => {
+    const event: AgentTraceEvent = {
+      type: 'research_policy',
+      traceId: 'trace123',
+      chatId: 'chat1234',
+      runId: 'run12345',
+      sequence: 1,
+      elapsedMs: 2,
+      enabled: true,
+      maxSearchTurns: 2,
+      reason: 'external-guidance'
+    }
+    expect(formatAgentTraceEvent(event)).toBe(
+      '[AI trace123 +2ms] Web research enabled · budget 2 turns · external-guidance'
+    )
+  })
+
   test('formats a concise timeline entry', () => {
     const event: AgentTraceEvent = {
       type: 'tool_completed',

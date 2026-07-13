@@ -58,6 +58,10 @@ function citationsFromAnnotations(annotations: UrlCitationAnnotation[]): Citatio
   return citations
 }
 
+export function countValidUrlCitations(annotations: UrlCitationAnnotation[]): number {
+  return citationsFromAnnotations(annotations).length
+}
+
 /** Adds numbered, clickable markers and a compact source list to model text. */
 export function addUrlCitations(text: string, annotations: UrlCitationAnnotation[]): string {
   const citations = citationsFromAnnotations(annotations).map((citation) => ({

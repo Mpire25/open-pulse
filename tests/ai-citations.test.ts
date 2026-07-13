@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { addUrlCitations } from '../src/main/ai-citations'
+import { addUrlCitations, countValidUrlCitations } from '../src/main/ai-citations'
 
 describe('AI web citations', () => {
   test('adds clickable inline markers and a deduplicated source list', () => {
@@ -26,8 +26,7 @@ describe('AI web citations', () => {
   })
 
   test('rejects unsafe citation URLs', () => {
-    expect(
-      addUrlCitations('Ignore this.', [
+    const annotations = [
         {
           type: 'url_citation',
           start_index: 0,
@@ -42,8 +41,9 @@ describe('AI web citations', () => {
           url: 'http://example.com',
           title: 'Insecure'
         }
-      ])
-    ).toBe('Ignore this.')
+      ]
+    expect(addUrlCitations('Ignore this.', annotations)).toBe('Ignore this.')
+    expect(countValidUrlCitations(annotations)).toBe(0)
   })
 
   test('still exposes a source when annotation offsets are invalid', () => {

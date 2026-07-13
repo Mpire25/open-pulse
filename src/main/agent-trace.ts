@@ -11,6 +11,7 @@ interface TraceUsage {
 export type AgentTracePayload =
   | { type: 'run_started'; model: string; messages: number; maxTurns: number }
   | { type: 'auth_ready'; accountScoped: boolean }
+  | { type: 'research_policy'; enabled: boolean; maxSearchTurns: number; reason: string }
   | {
       type: 'turn_started'
       turn: number
@@ -29,8 +30,23 @@ export type AgentTracePayload =
       citations: number
       usage?: TraceUsage
     }
-  | { type: 'web_search_started'; turn: number }
-  | { type: 'web_search_completed'; turn: number }
+  | {
+      type: 'web_search_started'
+      turn: number
+      researchTurn: number
+      maxSearchTurns: number
+      action: string
+      query?: string
+    }
+  | {
+      type: 'web_search_completed'
+      turn: number
+      researchTurn: number
+      maxSearchTurns: number
+      action: string
+      query?: string
+    }
+  | { type: 'citation_repair'; turn: number; outcome: 'started' | 'failed' }
   | { type: 'tool_started'; turn: number; name: string; callId: string; arguments: Record<string, unknown> }
   | {
       type: 'tool_completed'
@@ -110,6 +126,8 @@ export function formatAgentTraceEvent(event: AgentTraceEvent): string {
       return `${prefix} Run started · ${event.model} · ${event.messages} messages · budget ${event.maxTurns} turns`
     case 'auth_ready':
       return `${prefix} Auth ready · ${event.accountScoped ? 'ChatGPT account scoped' : 'no account header'}`
+    case 'research_policy':
+      return `${prefix} Web research ${event.enabled ? `enabled · budget ${event.maxSearchTurns} turns · ${event.reason}` : 'disabled · personal data only'}`
     case 'turn_started':
       return `${prefix} Turn ${event.turn}/${event.maxTurns}${event.finalResponse ? ' · final response' : ''} · ${event.inputItems} input items · ${event.datasets} datasets · ${event.visuals} visuals`
     case 'model_responded': {
@@ -117,9 +135,11 @@ export function formatAgentTraceEvent(event: AgentTraceEvent): string {
       return `${prefix} Model responded in ${formatDuration(event.durationMs)} · ${event.functionCalls} function calls · ${event.textChars} text chars · ${event.citations} citations${usage}`
     }
     case 'web_search_started':
-      return `${prefix} Web search started · turn ${event.turn}`
+      return `${prefix} Web research ${event.researchTurn}/${event.maxSearchTurns} · turn ${event.turn} · ${event.action}${event.query ? ` · ${event.query}` : ''}`
     case 'web_search_completed':
-      return `${prefix} Web search completed · turn ${event.turn}`
+      return `${prefix} Web research ${event.researchTurn}/${event.maxSearchTurns} completed · turn ${event.turn} · ${event.action}${event.query ? ` · ${event.query}` : ''}`
+    case 'citation_repair':
+      return `${prefix} Citation repair ${event.outcome} · turn ${event.turn}`
     case 'tool_started':
       return `${prefix} Tool started · ${event.name} · ${shortId(event.callId)} · ${detail(event.arguments)}`
     case 'tool_completed':

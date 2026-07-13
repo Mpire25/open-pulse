@@ -11,7 +11,7 @@ import {
 } from './codex-auth'
 import { AGENT_TOOLS, AGENT_TOOL_LABELS, runHealthAgentTool } from './health-agent-tools'
 import { healthAgentModelData } from './health-agent-analysis'
-import { addUrlCitations, type UrlCitationAnnotation } from './ai-citations'
+import { addUrlCitations, countValidUrlCitations, type UrlCitationAnnotation } from './ai-citations'
 import {
   PRESENTATION_TOOL,
   resolveAutomaticPresentation,
@@ -19,13 +19,22 @@ import {
   type AgentDataset
 } from './assistant-presentation'
 import { AgentTracer, summarizeToolArguments, summarizeToolResult } from './agent-trace'
+import {
+  CITATION_REPAIR_INSTRUCTION,
+  researchCompletionAction,
+  researchPolicyForRequest,
+  sanitizeWebSearchAction,
+  UNCITED_RESEARCH_MESSAGE,
+  webResearchAvailable,
+  type ResearchPolicy
+} from './agent-research'
 
 const CODEX_URL = 'https://chatgpt.com/backend-api/codex/responses'
 const MODEL = 'gpt-5.6-terra'
 const MAX_TOOL_TURNS = 8
 const WEB_SEARCH_TOOL = { type: 'web_search', search_context_size: 'medium' } as const
 
-function buildInstructions(): string {
+function buildInstructions(researchPolicy: ResearchPolicy): string {
   const now = new Date()
   const dateParts = new Intl.DateTimeFormat('en-GB', {
     year: 'numeric',
@@ -36,6 +45,9 @@ function buildInstructions(): string {
     dateParts.find((item) => item.type === type)?.value ?? ''
   const today = `${part('year')}-${part('month')}-${part('day')}`
   const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone
+  const researchInstructions = researchPolicy.enabled
+    ? `Web research is available for this request with a budget of ${researchPolicy.maxSearchTurns} research turn${researchPolicy.maxSearchTurns === 1 ? '' : 's'}. Consolidate related external questions into as few searches as possible, reuse results already present in the conversation, and do not search again merely because a health-data tool returned. Every externally supported claim in the final answer must include a clickable inline citation.`
+    : `Web research is intentionally unavailable for this personal-data-only request. Answer from the user's health data and stable general knowledge without claiming that you checked current external guidance.`
   return `You are OpenPulse, the built-in health assistant for Google Fitbit health data.
 
 Today is ${today}; the user's local timezone is ${timezone}. Use civil calendar dates in that timezone.
@@ -44,7 +56,7 @@ For every claim about the user's data, call only the narrowest relevant tools an
 
 When a visual would materially clarify the answer, call present_health_data after the relevant tools have returned datasetId values. For a broad multi-domain health summary, weekly review, focus-area question, or comparison with external guidance, use one overview containing 2-4 relevant metrics and no other visual; do not substitute an arbitrary single-metric chart. A direct comparison or trend question should normally get one appropriate visual. Use an exact-value card for one fact, a comparison for two periods, a chart for a trend, a sleep card for one specific night when stages or the night's structure are central, a nutrition card for the composition of one day, meal, or logged food item, or a workout card for a specific workout. For comparisons, preserve explicit user wording by selecting total, average, latest, or value independently for each side; use auto when the user did not specify. Auto compares one day with a multi-day daily/nightly average, equal-length additive periods as totals, rates as averages, and state measurements as latest readings. Never total rates, percentages, weight, body fat, or BMI. Unequal totals may be displayed when explicitly requested, but they are descriptive and will not receive a change judgement. Use query_daily_metrics for a day nutrition card and query_nutrition_logs for meal or item cards. Do not use a domain card for a trend, period comparison, or broad health assessment. Normally show one block; only show two when both add distinct value, and never decorate a simple explanation unnecessarily. Only reference dataset IDs and records returned in this run; OpenPulse will compute and validate every displayed value. Still give a concise written answer after presenting data.
 
-Use web search when the user explicitly asks for research or when an answer depends on current medical guidance, current product information, or external facts that may have changed. Do not search for simple questions that can be answered from the user's health data. Prefer authoritative primary sources and current clinical guidance. Never include identifying information, private measurements, or the user's health-record dates in a search query; translate the question into a general research query. Clearly separate external evidence from what the user's own data shows, and cite web-supported claims.
+${researchInstructions} Prefer authoritative primary sources and current clinical guidance. Never include identifying information, private measurements, or the user's health-record dates in a search query; translate the question into a general research query. Clearly separate external evidence from what the user's own data shows.
 
 If a tool reports source "demo", mention once that the values are sample data because no health account is connected. Be warm, precise and concise. Use plain language, concrete dates and numbers, and at most one practical suggestion when relevant. Separate what the data shows from possible interpretation. Do not diagnose; recommend professional care for concerning symptoms or persistently abnormal readings without being alarmist.`
 }
@@ -67,6 +79,7 @@ interface OutputTextItem {
 
 interface ResponseOutputItem extends FunctionCallItem {
   content?: OutputTextItem[]
+  action?: unknown
 }
 
 function citedMessageText(item: ResponseOutputItem): string | null {
@@ -132,12 +145,23 @@ export async function runChat(
   }
   const controller = new AbortController()
   const { signal } = controller
+  const latestUserText = [...history].reverse().find((message) => message.role === 'user')?.text ?? ''
+  const researchPolicy = researchPolicyForRequest(latestUserText)
   const trace = new AgentTracer(chatId, runId)
   trace.emit({ type: 'run_started', model: MODEL, messages: history.length, maxTurns: MAX_TOOL_TURNS })
+  trace.emit({
+    type: 'research_policy',
+    enabled: researchPolicy.enabled,
+    maxSearchTurns: researchPolicy.maxSearchTurns,
+    reason: researchPolicy.reason
+  })
   let turnsUsed = 0
   let healthToolCalls = 0
   let presentationCalls = 0
   let webSearches = 0
+  let researchTurnsUsed = 0
+  let lastResearchModelTurn = 0
+  let citationRepairAttempted = false
   const run: ActiveRun = { sender, chatId, runId, controller }
   activeRuns.set(key, run)
   const onDestroyed = (): void => controller.abort(new Error('Window closed.'))
@@ -146,8 +170,6 @@ export async function runChat(
   const emit = (event: AiEvent): void => {
     if (!sender.isDestroyed()) sender.send('ai:event', event)
   }
-  const latestUserText = [...history].reverse().find((message) => message.role === 'user')?.text ?? ''
-
   try {
     const authGeneration = getCodexAuthGeneration()
     const tokens = await getCodexTokens(signal)
@@ -163,6 +185,8 @@ export async function runChat(
     for (let turn = 0; turn < MAX_TOOL_TURNS; turn++) {
       turnsUsed = turn + 1
       const finalResponseTurn = turn === MAX_TOOL_TURNS - 1
+      const forceNoTools = finalResponseTurn || citationRepairAttempted
+      const canUseWebResearch = webResearchAvailable(researchPolicy, researchTurnsUsed, forceNoTools)
       signal.throwIfAborted()
       if (!isCodexAuthGenerationCurrent(authGeneration)) throw new Error('ChatGPT disconnected.')
       trace.emit({
@@ -172,7 +196,7 @@ export async function runChat(
         inputItems: input.length,
         datasets: datasets.size,
         visuals: visualParts.length,
-        finalResponse: finalResponseTurn
+        finalResponse: forceNoTools
       })
       const modelStartedAt = performance.now()
       const resp = await fetch(CODEX_URL, {
@@ -189,10 +213,14 @@ export async function runChat(
         },
         body: JSON.stringify({
           model: MODEL,
-          instructions: buildInstructions(),
+          instructions: buildInstructions(researchPolicy),
           input,
-          tools: [...AGENT_TOOLS, PRESENTATION_TOOL, WEB_SEARCH_TOOL],
-          tool_choice: finalResponseTurn ? 'none' : 'auto',
+          tools: [
+            ...AGENT_TOOLS,
+            PRESENTATION_TOOL,
+            ...(canUseWebResearch ? [WEB_SEARCH_TOOL] : [])
+          ],
+          tool_choice: forceNoTools ? 'none' : 'auto',
           parallel_tool_calls: false,
           store: false,
           stream: true,
@@ -251,7 +279,20 @@ export async function runChat(
               case 'response.output_item.added':
                 if (event.item?.type === 'web_search_call') {
                   webSearches++
-                  trace.emit({ type: 'web_search_started', turn: turnsUsed })
+                  if (webSearches === 1) finalText = ''
+                  if (lastResearchModelTurn !== turnsUsed) {
+                    researchTurnsUsed++
+                    lastResearchModelTurn = turnsUsed
+                  }
+                  const action = sanitizeWebSearchAction(event.item.action)
+                  trace.emit({
+                    type: 'web_search_started',
+                    turn: turnsUsed,
+                    researchTurn: researchTurnsUsed,
+                    maxSearchTurns: researchPolicy.maxSearchTurns,
+                    action: action.action,
+                    ...(action.query ? { query: action.query } : {})
+                  })
                   emit({
                     type: 'tool',
                     chatId,
@@ -264,7 +305,11 @@ export async function runChat(
               case 'response.output_text.delta':
                 if (event.delta) {
                   turnText += event.delta
-                  emit({ type: 'delta', chatId, runId, text: event.delta })
+                  // Researched text is buffered until its citations can be
+                  // validated. `done` still delivers the complete answer.
+                  if (webSearches === 0 && !citationRepairAttempted) {
+                    emit({ type: 'delta', chatId, runId, text: event.delta })
+                  }
                 }
                 break
               case 'response.reasoning_summary_text.delta':
@@ -277,7 +322,15 @@ export async function runChat(
                 } else if (event.item?.type === 'reasoning' || event.item?.type === 'web_search_call') {
                   continuationItems.push(event.item)
                   if (event.item.type === 'web_search_call') {
-                    trace.emit({ type: 'web_search_completed', turn: turnsUsed })
+                    const action = sanitizeWebSearchAction(event.item.action)
+                    trace.emit({
+                      type: 'web_search_completed',
+                      turn: turnsUsed,
+                      researchTurn: researchTurnsUsed,
+                      maxSearchTurns: researchPolicy.maxSearchTurns,
+                      action: action.action,
+                      ...(action.query ? { query: action.query } : {})
+                    })
                   }
                 } else if (event.item?.type === 'message') {
                   continuationItems.push(event.item)
@@ -286,7 +339,7 @@ export async function runChat(
                       (count, part) =>
                         count +
                         (Array.isArray(part.annotations)
-                          ? part.annotations.filter((annotation) => annotation.type === 'url_citation').length
+                          ? countValidUrlCitations(part.annotations)
                           : 0),
                       0
                     ) ?? 0
@@ -320,11 +373,34 @@ export async function runChat(
         ...(usage ? { usage } : {})
       })
 
-      finalText += completedMessages.length ? completedMessages.join('\n') : turnText
+      const resolvedTurnText = completedMessages.length ? completedMessages.join('\n') : turnText
       signal.throwIfAborted()
       if (!isCodexAuthGenerationCurrent(authGeneration)) throw new Error('ChatGPT disconnected.')
 
       if (functionCalls.length === 0) {
+        const researchAction = researchCompletionAction(
+          webSearches,
+          citationCount,
+          citationRepairAttempted,
+          !finalResponseTurn
+        )
+        if (researchAction === 'repair-citations') {
+          citationRepairAttempted = true
+          trace.emit({ type: 'citation_repair', turn: turnsUsed, outcome: 'started' })
+          input.push(...continuationItems, {
+            type: 'message',
+            role: 'user',
+            content: [{ type: 'input_text', text: CITATION_REPAIR_INSTRUCTION }]
+          })
+          finalText = ''
+          continue
+        }
+        if (researchAction === 'refuse-uncited') {
+          trace.emit({ type: 'citation_repair', turn: turnsUsed, outcome: 'failed' })
+          finalText = UNCITED_RESEARCH_MESSAGE
+        } else {
+          finalText += resolvedTurnText
+        }
         if (visualParts.length === 0) {
           let automaticParts: AssistantVisualPart[] = []
           const fallbackStartedAt = performance.now()
@@ -366,6 +442,10 @@ export async function runChat(
         return
       }
 
+      // Tool-call turns are planning steps. Once research has started, keep
+      // any prose from those intermediate turns out of the final answer so
+      // only the citation-validated synthesis is shown.
+      if (webSearches === 0) finalText += resolvedTurnText
       input.push(...continuationItems)
       for (const call of functionCalls) {
         const name = call.name ?? ''
