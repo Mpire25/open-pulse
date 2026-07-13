@@ -62,6 +62,15 @@ export function countValidUrlCitations(annotations: UrlCitationAnnotation[]): nu
   return citationsFromAnnotations(annotations).length
 }
 
+export function countValidMarkdownCitations(text: string): number {
+  const urls = new Set<string>()
+  for (const match of text.matchAll(/\[[^\]]+\]\(([^)\s]+)\)/g)) {
+    const url = safeCitationUrl(match[1])
+    if (url) urls.add(url)
+  }
+  return urls.size
+}
+
 /** Adds numbered, clickable markers and a compact source list to model text. */
 export function addUrlCitations(text: string, annotations: UrlCitationAnnotation[]): string {
   const citations = citationsFromAnnotations(annotations).map((citation) => ({

@@ -33,12 +33,42 @@ export function researchPolicyForRequest(userText: string): ResearchPolicy {
   return { enabled: true, maxSearchTurns, reason }
 }
 
-export function webResearchAvailable(
-  policy: ResearchPolicy,
-  researchTurnsUsed: number,
-  forceNoTools: boolean
-): boolean {
-  return policy.enabled && researchTurnsUsed < policy.maxSearchTurns && !forceNoTools
+const SAFE_RESEARCH_TOPICS: Array<{ pattern: RegExp; label: string }> = [
+  { pattern: /\b(steps?|walking|activity|active minutes?|exercise)\b/i, label: 'physical activity' },
+  { pattern: /\b(resting heart rate|heart rate|pulse)\b/i, label: 'resting heart rate' },
+  { pattern: /\b(hrv|heart rate variability)\b/i, label: 'heart rate variability' },
+  { pattern: /\b(spo2|oxygen saturation|blood oxygen)\b/i, label: 'blood oxygen saturation' },
+  { pattern: /\b(breathing|respiratory rate)\b/i, label: 'respiratory rate' },
+  { pattern: /\b(skin temperature|temperature deviation)\b/i, label: 'skin temperature' },
+  { pattern: /\b(sleep|insomnia|sleep stages?|sleep efficiency)\b/i, label: 'sleep' },
+  { pattern: /\b(workouts?|training|recovery)\b/i, label: 'exercise recovery' },
+  { pattern: /\b(weight|bmi|body mass index|body fat)\b/i, label: 'body composition' },
+  { pattern: /\b(nutrition|diet|calories?|protein|carbs?|carbohydrates?|fat|fiber|fibre|sodium|sugar)\b/i, label: 'nutrition' },
+  { pattern: /\b(water|hydration)\b/i, label: 'hydration' },
+  { pattern: /\b(medications?|treatments?|drug safety)\b/i, label: 'medication and treatment safety' },
+  { pattern: /\b(symptoms?|concerning|worry|safe|unsafe)\b/i, label: 'general medical safety guidance' },
+  { pattern: /\b(fitbit|tracker|device compatibility)\b/i, label: 'Fitbit product information' },
+  { pattern: /\b(chatgpt|openai|codex)\b/i, label: 'ChatGPT product information' },
+  { pattern: /\b(software version|release notes?|product specs?|product information)\b/i, label: 'current product information' }
+]
+
+/**
+ * Builds an allowlisted research prompt without copying any user text. Hosted
+ * search therefore never receives health records, measurements, dates, names,
+ * or arbitrary identifiers from the conversation.
+ */
+export function isolatedResearchPrompt(userText: string, policy: ResearchPolicy): string {
+  const topics = SAFE_RESEARCH_TOPICS
+    .filter((topic) => topic.pattern.test(userText))
+    .map((topic) => topic.label)
+  const selected = [...new Set(topics)].slice(0, 4)
+  const fallback = policy.reason === 'product-information'
+    ? 'current product information'
+    : policy.reason === 'medical-guidance'
+      ? 'general medical safety guidance'
+      : 'general health guidance'
+  const subject = selected.length ? selected.join(', ') : fallback
+  return `Research current authoritative guidance about ${subject}. Use primary sources and current clinical or official product guidance. Keep the result concise and include clickable inline citations for every externally supported claim.`
 }
 
 export type ResearchCompletionAction = 'complete' | 'repair-citations' | 'refuse-uncited'

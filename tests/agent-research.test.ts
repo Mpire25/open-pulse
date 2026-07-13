@@ -1,9 +1,9 @@
 import { describe, expect, test } from 'bun:test'
 import {
+  isolatedResearchPrompt,
   researchCompletionAction,
   researchPolicyForRequest,
-  sanitizeWebSearchAction,
-  webResearchAvailable
+  sanitizeWebSearchAction
 } from '../src/main/agent-research'
 
 describe('assistant web research policy', () => {
@@ -49,12 +49,15 @@ describe('assistant web research policy', () => {
     expect(researchCompletionAction(1, 0, false, false)).toBe('refuse-uncited')
   })
 
-  test('removes web access when disabled, exhausted, or synthesizing', () => {
-    const enabled = researchPolicyForRequest('Look up the latest NHS recommendation')
-    expect(webResearchAvailable(enabled, 0, false)).toBe(true)
-    expect(webResearchAvailable(enabled, enabled.maxSearchTurns, false)).toBe(false)
-    expect(webResearchAvailable(enabled, 0, true)).toBe(false)
-    expect(webResearchAvailable(researchPolicyForRequest('How many steps yesterday?'), 0, false)).toBe(false)
+  test('builds an allowlisted isolated research prompt without private input', () => {
+    const request = 'Matthew Williams matt@example.com: search whether my resting heart rate of 68 bpm on 2026-07-11 is normal'
+    const prompt = isolatedResearchPrompt(request, researchPolicyForRequest(request))
+
+    expect(prompt).toContain('resting heart rate')
+    expect(prompt).not.toContain('Matthew')
+    expect(prompt).not.toContain('matt@example.com')
+    expect(prompt).not.toContain('68')
+    expect(prompt).not.toContain('2026-07-11')
   })
 
   test('redacts measurements and identifiers from traced search queries', () => {
