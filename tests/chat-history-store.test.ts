@@ -71,6 +71,23 @@ describe('encrypted chat history store', () => {
     expect(new ChatHistoryStore(path, encryptedAdapter(false)).snapshot('account-a').sessions).toEqual([])
   })
 
+  test('preserves existing encrypted history when it cannot be decrypted', () => {
+    const path = temporaryPath()
+    const store = new ChatHistoryStore(path, encryptedAdapter())
+    const chat = store.create('account-a')
+    store.update('account-a', chat.id, [userMessage('Do not overwrite this history')])
+    const originalContents = readFileSync(path, 'utf8')
+
+    const unreadable = new ChatHistoryStore(path, {
+      ...encryptedAdapter(),
+      decrypt: () => { throw new Error('Keychain is locked') }
+    })
+
+    expect(unreadable.snapshot('account-a').sessions).toEqual([])
+    expect(() => unreadable.create('account-a')).toThrow('existing encrypted file was preserved')
+    expect(readFileSync(path, 'utf8')).toBe(originalContents)
+  })
+
   test('pins survive restarts and unpinning removes the flag', () => {
     const path = temporaryPath()
     const store = new ChatHistoryStore(path, encryptedAdapter())

@@ -80,6 +80,7 @@ function sortSessions(sessions: ChatSession[]): ChatSession[] {
 
 export class ChatHistoryStore {
   private cache: PersistedChatHistory | null = null
+  private persistenceFailure: Error | null = null
 
   constructor(
     private readonly path: string,
@@ -97,6 +98,7 @@ export class ChatHistoryStore {
 
   create(accountScope: string, requestedId?: string): ChatSession {
     const history = this.load()
+    this.assertWritable()
     const existing = requestedId
       ? (history.accounts[accountScope] ?? []).find((session) => session.id === requestedId)
       : null
@@ -137,6 +139,7 @@ export class ChatHistoryStore {
 
   delete(accountScope: string, id: string): ChatHistorySnapshot {
     const history = this.load()
+    this.assertWritable()
     const sessions = history.accounts[accountScope] ?? []
     if (!sessions.some((session) => session.id === id)) throw new Error('Chat not found.')
     history.accounts[accountScope] = sessions.filter((session) => session.id !== id)
@@ -145,7 +148,9 @@ export class ChatHistoryStore {
   }
 
   private find(accountScope: string, id: string): ChatSession {
-    const session = (this.load().accounts[accountScope] ?? []).find((candidate) => candidate.id === id)
+    const history = this.load()
+    this.assertWritable()
+    const session = (history.accounts[accountScope] ?? []).find((candidate) => candidate.id === id)
     if (!session) throw new Error('Chat not found.')
     return session
   }
@@ -156,8 +161,11 @@ export class ChatHistoryStore {
       this.cache = structuredClone(EMPTY_HISTORY)
       return this.cache
     }
+    if (!existsSync(this.path)) {
+      this.cache = structuredClone(EMPTY_HISTORY)
+      return this.cache
+    }
     try {
-      if (!existsSync(this.path)) throw new Error('No history yet.')
       const envelope = JSON.parse(readFileSync(this.path, 'utf8')) as Partial<EncryptedEnvelope>
       if (envelope.version !== 1 || typeof envelope.cipherText !== 'string') throw new Error('Invalid history envelope.')
       const decrypted = this.encryption.decrypt(Buffer.from(envelope.cipherText, 'base64'))
@@ -170,13 +178,21 @@ export class ChatHistoryStore {
       )
       this.cache = { version: 1, accounts }
     } catch {
+      this.persistenceFailure = new Error(
+        'Chat history could not be read or decrypted. The existing encrypted file was preserved; restart after restoring access before saving changes.'
+      )
       this.cache = structuredClone(EMPTY_HISTORY)
     }
     return this.cache
   }
 
+  private assertWritable(): void {
+    if (this.persistenceFailure) throw this.persistenceFailure
+  }
+
   private persist(): void {
     if (!this.encryption.available()) return
+    this.assertWritable()
     const encrypted = this.encryption.encrypt(JSON.stringify(this.load())).toString('base64')
     const temporaryPath = `${this.path}.tmp`
     writeFileSync(temporaryPath, JSON.stringify({ version: 1, cipherText: encrypted } satisfies EncryptedEnvelope), {
