@@ -1,13 +1,21 @@
 import { describe, expect, test } from 'bun:test'
 import { mapSleep, mapSleepRespiratory } from '../src/main/sleep-detail'
+import { minuteFromCivil } from '../src/main/health-api'
 
 describe('sleep detail normalization', () => {
+  test('treats omitted zero-valued civil hours as midnight', () => {
+    expect(minuteFromCivil({ time: { minutes: 23 } })).toBe(23)
+    expect(minuteFromCivil({ time: {} })).toBe(0)
+    expect(minuteFromCivil({})).toBeNull()
+  })
+
   test('retains latency, awake time, stage counts, metadata, and out-of-bed periods', () => {
     const night = mapSleep({
       sleep: {
         interval: {
           startTime: '2026-07-09T22:30:00Z',
           endTime: '2026-07-10T06:30:00Z',
+          civilStartTime: { date: { year: 2026, month: 7, day: 9 }, time: { hours: 23, minutes: 30 } },
           civilEndTime: { date: { year: 2026, month: 7, day: 10 }, time: { hours: 7, minutes: 30 } }
         },
         type: 'STAGES',
@@ -33,6 +41,9 @@ describe('sleep detail normalization', () => {
       }
     })
     expect(night).not.toBeNull()
+    expect(night?.startCivilDate).toBe('2026-07-09')
+    expect(night?.startCivilMinute).toBe(23 * 60 + 30)
+    expect(night?.endCivilMinute).toBe(7 * 60 + 30)
     expect(night?.minutesToFallAsleep).toBe(12)
     expect(night?.minutesAwake).toBe(40)
     expect(night?.minutesToFirstDeepOrRem).toBe(30)

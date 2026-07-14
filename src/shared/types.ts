@@ -91,6 +91,10 @@ export interface SleepNight {
   date: string // YYYY-MM-DD the night ended on
   startTime: string
   endTime: string
+  /** Tracker-recorded civil date and minute of day. Optional for archived records. */
+  startCivilDate?: string | null
+  startCivilMinute?: number | null
+  endCivilMinute?: number | null
   minutesAsleep: number
   minutesInSleepPeriod: number
   efficiency: number | null // asleep / in-bed, 0-100

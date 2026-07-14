@@ -15,5 +15,6 @@ describe('health assistant date semantics', () => {
     expect(DAILY_METRICS_TOOL_DESCRIPTION).toContain('"last night" is today, not yesterday')
     expect(SLEEP_TOOL_DESCRIPTION).toContain('"Last night" means the sleep session ending today')
     expect(SLEEP_TOOL_DESCRIPTION).toContain('"The night before last" means the session ending yesterday')
+    expect(SLEEP_TOOL_DESCRIPTION).toContain('localStartTime and localEndTime are already converted')
   })
 })

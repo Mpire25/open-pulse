@@ -697,7 +697,7 @@ function ensureGroupOnce(
 // Sleep summaries and sessions
 
 const SLEEP_SUMMARY_GROUP = 'sleep-summary-v1'
-const SLEEP_DETAIL_GROUP = 'sleep-detail-v4'
+const SLEEP_DETAIL_GROUP = 'sleep-detail-v5'
 
 function sleepByDate(points: RawDataPoint[]): Map<string, SleepNight> {
   const byDate = new Map<string, SleepNight>()

@@ -192,8 +192,8 @@ export function dateFromCivil(value?: CivilDateTime | ApiDate | null): string | 
 
 export function minuteFromCivil(value?: CivilDateTime | null): number | null {
   const time = value?.time
-  if (typeof time?.hours !== 'number') return null
-  return time.hours * 60 + (time.minutes ?? 0) + (time.seconds ?? 0) / 60
+  if (!time) return null
+  return (time.hours ?? 0) * 60 + (time.minutes ?? 0) + (time.seconds ?? 0) / 60
 }
 
 // ---------------------------------------------------------------------------
