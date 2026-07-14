@@ -228,7 +228,7 @@ export function ChatPanel({
         ) : (
           <div
             className={cn(
-              'flex flex-col gap-5 py-3',
+              'flex flex-col gap-6 py-3',
               compact ? 'px-4' : 'mx-auto w-full max-w-[820px] px-6'
             )}
           >
