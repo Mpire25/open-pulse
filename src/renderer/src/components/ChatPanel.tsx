@@ -2,55 +2,205 @@
 // slide-over sheet. The chat state itself lives in App so both surfaces
 // show the same conversation.
 
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { ArrowUp, Sparkle, Heartbeat } from '@phosphor-icons/react'
+import {
+  ArrowUp,
+  Stop as StopIcon,
+  Sparkle,
+  Heartbeat,
+  Moon,
+  PersonSimpleRun,
+  Pulse,
+  type Icon
+} from '@phosphor-icons/react'
 import { Button } from '@/components/ui/button'
 import { Markdownish } from '@/components/Markdownish'
-import type { ChatTurn } from '@/hooks/useChat'
+import { AssistantResponseParts } from '@/components/AssistantResponseParts'
+import type { ChatController, ChatTurn } from '@/hooks/useChat'
+import {
+  CHAT_TURN_TOP_INSET,
+  chatResponseSpacerHeight,
+  latestChatExchange
+} from '@/lib/chat-scroll'
 import { cn } from '@/lib/utils'
+import type { AssistantAction } from '@shared/types'
 
-const SUGGESTIONS = [
-  'How did I sleep this week compared to last night?',
-  'Is my resting heart rate trending up or down?',
-  'How active have I been the last two weeks?',
-  'Any anomalies in my HRV I should watch?'
+// Each starter question wears its metric family's hue — the same rule the
+// rest of the app follows: color identifies the metric, never the value.
+const SUGGESTIONS: Array<{ text: string; icon: Icon; iconClass: string; tintClass: string }> = [
+  {
+    text: 'How did I sleep this week compared to last night?',
+    icon: Moon,
+    iconClass: 'text-sleep',
+    tintClass: 'bg-sleep-soft'
+  },
+  {
+    text: 'Is my resting heart rate trending up or down?',
+    icon: Heartbeat,
+    iconClass: 'text-heart',
+    tintClass: 'bg-heart-soft'
+  },
+  {
+    text: 'How active have I been the last two weeks?',
+    icon: PersonSimpleRun,
+    iconClass: 'text-activity',
+    tintClass: 'bg-activity-soft'
+  },
+  {
+    text: 'Any anomalies in my HRV I should watch?',
+    icon: Pulse,
+    iconClass: 'text-recovery',
+    tintClass: 'bg-recovery-soft'
+  }
 ]
 
-export interface ChatState {
-  turns: ChatTurn[]
-  busy: boolean
-  send: (text: string) => void
-  reset: () => void
-}
+export type ChatState = ChatController
 
 interface ChatPanelProps {
   chat: ChatState
   codexConnected: boolean
   onOpenSettings: () => void
+  onAssistantAction: (action: AssistantAction) => void
   compact?: boolean
+  autoFocus?: boolean
+  focusRequest?: number
+  typeToFocus?: boolean
+  onTypeToFocus?: () => void
 }
 
-export function ChatPanel({ chat, codexConnected, onOpenSettings, compact }: ChatPanelProps): React.JSX.Element {
-  const { turns, busy, send } = chat
+export function ChatPanel({
+  chat,
+  codexConnected,
+  onOpenSettings,
+  onAssistantAction,
+  compact,
+  autoFocus = true,
+  focusRequest = 0,
+  typeToFocus = false,
+  onTypeToFocus
+}: ChatPanelProps): React.JSX.Element {
+  const { turns, busy, loading, activeChatId, send, stop } = chat
   const [draft, setDraft] = useState('')
   const scrollRef = useRef<HTMLDivElement>(null)
+  const responseSpaceRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
-
-  useLayoutEffect(() => {
-    const frame = requestAnimationFrame(() => {
-      scrollRef.current?.scrollTo({
-        top: scrollRef.current.scrollHeight,
-        // Repeated smooth-scroll animations fight each other on every token.
-        behavior: busy ? 'auto' : 'smooth'
-      })
-    })
-    return () => cancelAnimationFrame(frame)
-  }, [turns, busy])
+  const actionRef = useRef(onAssistantAction)
+  const anchoredChatRef = useRef<string | null>(null)
+  const anchoredAssistantRef = useRef<string | null>(null)
+  const followStreamRef = useRef(true)
+  const programmaticScrollUntilRef = useRef(0)
+  const handleAssistantAction = useCallback((action: AssistantAction): void => {
+    actionRef.current(action)
+  }, [])
 
   useEffect(() => {
-    if (codexConnected && !compact) inputRef.current?.focus()
-  }, [codexConnected, compact])
+    actionRef.current = onAssistantAction
+  }, [onAssistantAction])
+
+  useLayoutEffect(() => {
+    const container = scrollRef.current
+    const spacer = responseSpaceRef.current
+    if (!container || !spacer || !activeChatId) return
+
+    const chatChanged = anchoredChatRef.current !== activeChatId
+    if (chatChanged) {
+      anchoredChatRef.current = activeChatId
+      anchoredAssistantRef.current = null
+      followStreamRef.current = true
+      spacer.style.height = '0px'
+    }
+
+    const exchange = latestChatExchange(turns)
+    if (!exchange) return
+    const newTurn = exchange.assistant.streaming && anchoredAssistantRef.current !== exchange.assistant.id
+    if (newTurn) {
+      anchoredAssistantRef.current = exchange.assistant.id
+      followStreamRef.current = true
+    }
+
+    if (anchoredAssistantRef.current !== exchange.assistant.id) {
+      if (chatChanged) container.scrollTop = container.scrollHeight
+      return
+    }
+
+    const userElement = container.querySelector<HTMLElement>(`[data-turn-id="${exchange.user.id}"]`)
+    const assistantElement = container.querySelector<HTMLElement>(`[data-turn-id="${exchange.assistant.id}"]`)
+    if (!userElement || !assistantElement) return
+
+    const containerBounds = container.getBoundingClientRect()
+    const userBounds = userElement.getBoundingClientRect()
+    const assistantBounds = assistantElement.getBoundingClientRect()
+    const userTop = userBounds.top - containerBounds.top + container.scrollTop
+    const assistantBottom = assistantBounds.bottom - containerBounds.top + container.scrollTop
+    const exchangeHeight = assistantBottom - userTop
+    const spacerHeight = chatResponseSpacerHeight(container.clientHeight, exchangeHeight)
+    spacer.style.height = `${spacerHeight}px`
+
+    if (newTurn) {
+      programmaticScrollUntilRef.current = performance.now() + 600
+      container.scrollTo({
+        top: Math.max(0, userTop - CHAT_TURN_TOP_INSET),
+        behavior: 'smooth'
+      })
+      return
+    }
+
+    if (spacerHeight === 0 && followStreamRef.current && performance.now() >= programmaticScrollUntilRef.current) {
+      const target = assistantBottom - container.clientHeight + 20
+      if (target > container.scrollTop) container.scrollTop = target
+    }
+  }, [activeChatId, busy, turns])
+
+  const handleConversationScroll = useCallback((): void => {
+    if (performance.now() < programmaticScrollUntilRef.current) return
+    const container = scrollRef.current
+    const assistantId = anchoredAssistantRef.current
+    if (!container || !assistantId) return
+    const assistantElement = container.querySelector<HTMLElement>(`[data-turn-id="${assistantId}"]`)
+    if (!assistantElement) return
+    const visibleBottom = container.scrollTop + container.clientHeight
+    const assistantBottom =
+      assistantElement.getBoundingClientRect().bottom - container.getBoundingClientRect().top + container.scrollTop
+    followStreamRef.current = visibleBottom >= assistantBottom - 80
+  }, [])
+
+  useEffect(() => {
+    if (codexConnected && autoFocus) inputRef.current?.focus()
+  }, [activeChatId, autoFocus, codexConnected, focusRequest])
+
+  useEffect(() => {
+    setDraft('')
+  }, [activeChatId])
+
+  useEffect(() => {
+    if (!typeToFocus || !codexConnected || loading || !activeChatId) return
+
+    const focusComposer = (event: KeyboardEvent): void => {
+      if (
+        event.defaultPrevented ||
+        event.isComposing ||
+        event.metaKey ||
+        event.ctrlKey ||
+        event.altKey ||
+        event.key.length !== 1
+      ) {
+        return
+      }
+
+      const target = event.target instanceof Element ? event.target : null
+      if (target?.closest('input, textarea, select, [contenteditable="true"], [role="textbox"]')) return
+      if (document.querySelector('[role="dialog"]')) return
+
+      event.preventDefault()
+      onTypeToFocus?.()
+      inputRef.current?.focus()
+      setDraft((current) => current + event.key)
+    }
+
+    window.addEventListener('keydown', focusComposer)
+    return () => window.removeEventListener('keydown', focusComposer)
+  }, [activeChatId, codexConnected, loading, onTypeToFocus, typeToFocus])
 
   const submit = (): void => {
     if (!draft.trim() || busy) return
@@ -62,25 +212,37 @@ export function ChatPanel({ chat, codexConnected, onOpenSettings, compact }: Cha
     return <SignInPrompt onOpenSettings={onOpenSettings} compact={compact} />
   }
 
+  if (loading || !activeChatId) {
+    return <div className="grid h-full place-items-center"><ToolThinking label="Loading conversations" /></div>
+  }
+
   const empty = turns.length === 0
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div ref={scrollRef} className={cn('flex-1 overflow-y-auto pb-4', compact && 'px-4')}>
+      <div ref={scrollRef} onScroll={handleConversationScroll} className="flex-1 overflow-y-auto pb-4">
         {empty ? (
-          <EmptyState compact={compact} onPick={(s) => send(s)} />
+          <div className={cn('h-full', compact ? 'px-4' : 'mx-auto w-full max-w-[820px] px-6')}>
+            <EmptyState compact={compact} onPick={(s) => send(s)} />
+          </div>
         ) : (
-          <div className="flex flex-col gap-5 py-3">
+          <div
+            className={cn(
+              'flex flex-col gap-5 py-3',
+              compact ? 'px-4' : 'mx-auto w-full max-w-[820px] px-6'
+            )}
+          >
             <AnimatePresence initial={false}>
               {turns.map((turn) => (
-                <Bubble key={turn.id} turn={turn} compact={compact} />
+                <Bubble key={turn.id} turn={turn} compact={compact} onAction={handleAssistantAction} />
               ))}
             </AnimatePresence>
+            <div ref={responseSpaceRef} aria-hidden="true" className="shrink-0" />
           </div>
         )}
       </div>
 
-      <div className={cn('pb-4 pt-1', compact && 'px-3')}>
+      <div className={cn('pb-4 pt-1', compact ? 'px-3' : 'mx-auto w-full max-w-[820px] px-6')}>
         <div className="flex items-end gap-2 rounded-[18px] border border-hairline bg-panel/80 p-2 pl-4 shadow-[0_12px_40px_-24px_rgb(0_0_0/0.9)] backdrop-blur-xl transition-colors focus-within:border-hairline-strong">
           <textarea
             ref={inputRef}
@@ -104,12 +266,14 @@ export function ChatPanel({ chat, codexConnected, onOpenSettings, compact }: Cha
           />
           <Button
             size="sm"
-            onClick={submit}
-            disabled={!draft.trim() || busy}
+            variant={busy ? 'secondary' : 'primary'}
+            onClick={busy ? stop : submit}
+            disabled={busy ? false : !draft.trim() || loading}
             className="h-8 w-8 shrink-0 rounded-full px-0"
-            aria-label="Send"
+            aria-label={busy ? 'Stop response' : 'Send'}
+            title={busy ? 'Stop response' : 'Send'}
           >
-            <ArrowUp size={16} weight="bold" />
+            {busy ? <StopIcon size={14} weight="fill" /> : <ArrowUp size={16} weight="bold" />}
           </Button>
         </div>
         {!compact && (
@@ -122,10 +286,19 @@ export function ChatPanel({ chat, codexConnected, onOpenSettings, compact }: Cha
   )
 }
 
-function Bubble({ turn, compact }: { turn: ChatTurn; compact?: boolean }): React.JSX.Element {
+const Bubble = memo(function Bubble({
+  turn,
+  compact,
+  onAction
+}: {
+  turn: ChatTurn
+  compact?: boolean
+  onAction: (action: AssistantAction) => void
+}): React.JSX.Element {
   const isUser = turn.role === 'user'
   return (
     <motion.div
+      data-turn-id={turn.id}
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ type: 'spring', stiffness: 220, damping: 26 }}
@@ -136,33 +309,57 @@ function Bubble({ turn, compact }: { turn: ChatTurn; compact?: boolean }): React
           {turn.text}
         </div>
       ) : (
-        <div className={cn('w-full min-w-0 select-text', compact ? 'max-w-full' : 'max-w-[88%]')}>
-          {turn.toolLabel && !turn.text ? (
-            <ToolThinking label={turn.toolLabel} />
+        <div className="w-full min-w-0 select-text">
+          {turn.toolLabel && !turn.text && !turn.parts?.length ? (
+            <div className={cn(!compact && 'max-w-[720px]')}>
+              <ToolThinking label={turn.toolLabel} />
+            </div>
+          ) : turn.streaming && !turn.text && !turn.parts?.length ? (
+            <div className={cn(!compact && 'max-w-[720px]')}>
+              <ToolThinking label="Thinking" />
+            </div>
           ) : turn.error ? (
-            <div className="rounded-[16px] border border-danger/30 bg-danger/10 px-4 py-3 text-[13px] text-danger">
-              {turn.text}
+            <div className={cn(!compact && 'max-w-[720px]')}>
+              <div className="rounded-[16px] border border-danger/30 bg-danger/10 px-4 py-3 text-[13px] text-danger">
+                {turn.text}
+              </div>
             </div>
           ) : (
             <>
-              <Markdownish text={turn.text} />
-              {turn.streaming && <span className="ml-0.5 inline-block h-4 w-[2px] translate-y-1 animate-pulse bg-accent" />}
+              <div className={cn(!compact && 'max-w-[720px]')}>
+                {turn.text && <Markdownish text={turn.text} />}
+                {turn.streaming && turn.toolLabel && (
+                  <div className="mt-3"><ToolThinking label={turn.toolLabel} /></div>
+                )}
+              </div>
+              <AssistantResponseParts parts={turn.parts ?? []} compact={compact} onAction={onAction} />
             </>
           )}
         </div>
       )}
     </motion.div>
   )
-}
+})
 
 function ToolThinking({ label }: { label: string }): React.JSX.Element {
   return (
-    <div className="flex items-center gap-2 text-[13px] text-ink-dim">
-      <span className="relative flex h-2 w-2">
-        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-accent opacity-60" />
-        <span className="relative inline-flex h-2 w-2 rounded-full bg-accent" />
+    <div className="flex items-center gap-2.5 text-[13px]">
+      <span className="relative flex size-2 shrink-0">
+        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-accent opacity-50" />
+        <span className="relative inline-flex size-2 rounded-full bg-accent/90" />
       </span>
-      {label}…
+      <AnimatePresence mode="wait" initial={false}>
+        <motion.span
+          key={label}
+          initial={{ opacity: 0, y: 3 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -3 }}
+          transition={{ duration: 0.18 }}
+          className="thinking-shimmer font-medium"
+        >
+          {label}…
+        </motion.span>
+      </AnimatePresence>
     </div>
   )
 }
@@ -184,18 +381,29 @@ function EmptyState({ compact, onPick }: { compact?: boolean; onPick: (s: string
         questions.
       </p>
       <div className={cn('mt-6 grid w-full gap-2', compact ? 'grid-cols-1' : 'max-w-lg grid-cols-1 sm:grid-cols-2')}>
-        {SUGGESTIONS.map((s, i) => (
-          <motion.button
-            key={s}
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.1 + i * 0.06, duration: 0.4 }}
-            onClick={() => onPick(s)}
-            className="rounded-2xl border border-hairline bg-white/[0.03] px-4 py-3 text-left text-[12.5px] leading-snug text-ink-dim transition-all duration-200 hover:-translate-y-px hover:border-hairline-strong hover:bg-white/[0.06] hover:text-ink"
-          >
-            {s}
-          </motion.button>
-        ))}
+        {SUGGESTIONS.map((suggestion, i) => {
+          const SuggestionIcon = suggestion.icon
+          return (
+            <motion.button
+              key={suggestion.text}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.1 + i * 0.06, duration: 0.4 }}
+              onClick={() => onPick(suggestion.text)}
+              className="group flex items-start gap-3 rounded-2xl border border-hairline bg-white/[0.03] px-3.5 py-3 text-left text-[12.5px] leading-snug text-ink-dim transition-all duration-200 hover:-translate-y-px hover:border-hairline-strong hover:bg-white/[0.06] hover:text-ink"
+            >
+              <span
+                className={cn(
+                  'mt-px grid size-6 shrink-0 place-items-center rounded-lg transition-transform duration-200 group-hover:scale-110',
+                  suggestion.tintClass
+                )}
+              >
+                <SuggestionIcon size={13} weight="fill" className={suggestion.iconClass} />
+              </span>
+              {suggestion.text}
+            </motion.button>
+          )
+        })}
       </div>
     </div>
   )

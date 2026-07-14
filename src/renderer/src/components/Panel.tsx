@@ -100,8 +100,9 @@ export function DrillHeader({ title, hint, icon, action, onOpen }: DrillHeaderPr
 
   return onOpen ? (
     <button
+      type="button"
       onClick={onOpen}
-      className="group/drill -mx-2 -my-1 flex items-center justify-between gap-3 rounded-xl px-2 py-1 text-left transition-colors hover:bg-white/[0.04]"
+      className="group/drill -mx-2 -my-1 flex w-[calc(100%+1rem)] items-center justify-between gap-3 rounded-xl px-2 py-1 text-left transition-colors hover:bg-white/[0.04]"
     >
       {content}
     </button>

@@ -6,7 +6,10 @@ import type {
   AiEvent,
   AppSettings,
   BodyMeasurementsResult,
+  ChatHistorySnapshot,
   ChatMessage,
+  ChatSession,
+  ChatSessionMessage,
   CodexAuthStatus,
   GoogleAuthStatus,
   HeartDetailMetric,
@@ -30,7 +33,28 @@ async function invokeHealth<T>(channel: string, args: unknown[], requestId: stri
   return result as T
 }
 
+const newChatCallbacks = new Set<() => void>()
+let newChatPending = false
+
+ipcRenderer.on('app:new-chat', () => {
+  if (!newChatCallbacks.size) {
+    newChatPending = true
+    return
+  }
+  for (const callback of newChatCallbacks) callback()
+})
+
 const api = {
+  app: {
+    onNewChat: (callback: () => void): (() => void) => {
+      newChatCallbacks.add(callback)
+      if (newChatPending) {
+        newChatPending = false
+        queueMicrotask(callback)
+      }
+      return () => newChatCallbacks.delete(callback)
+    }
+  },
   settings: {
     get: (): Promise<AppSettings> => ipcRenderer.invoke('settings:get'),
     update: (patch: Partial<AppSettings>): Promise<AppSettings> =>
@@ -45,6 +69,20 @@ const api = {
     status: (): Promise<CodexAuthStatus> => ipcRenderer.invoke('codex:status'),
     connect: (): Promise<CodexAuthStatus> => ipcRenderer.invoke('codex:connect'),
     disconnect: (): Promise<void> => ipcRenderer.invoke('codex:disconnect')
+  },
+  chats: {
+    list: (): Promise<ChatHistorySnapshot> => ipcRenderer.invoke('chats:list'),
+    create: (id?: string): Promise<ChatSession> => ipcRenderer.invoke('chats:create', id),
+    update: (id: string, messages: ChatSessionMessage[]): Promise<ChatSession> =>
+      ipcRenderer.invoke('chats:update', id, messages),
+    setPinned: (id: string, pinned: boolean): Promise<ChatSession> =>
+      ipcRenderer.invoke('chats:set-pinned', id, pinned),
+    delete: (id: string): Promise<ChatHistorySnapshot> => ipcRenderer.invoke('chats:delete', id),
+    onAccountChanged: (callback: () => void): (() => void) => {
+      const listener = (): void => callback()
+      ipcRenderer.on('chats:account-changed', listener)
+      return () => ipcRenderer.removeListener('chats:account-changed', listener)
+    }
   },
   health: {
     series: (requestId: string, metrics: MetricKey[], start: string, end: string, force?: boolean): Promise<SeriesResult> =>
@@ -86,8 +124,10 @@ const api = {
     }
   },
   ai: {
-    send: (chatId: string, history: ChatMessage[]): Promise<void> =>
-      ipcRenderer.invoke('ai:send', chatId, history),
+    send: (chatId: string, runId: string, history: ChatMessage[]): Promise<void> =>
+      ipcRenderer.invoke('ai:send', chatId, runId, history),
+    cancel: (chatId: string, runId: string): Promise<void> =>
+      ipcRenderer.invoke('ai:cancel', chatId, runId),
     onEvent: (callback: (event: AiEvent) => void): (() => void) => {
       const listener = (_: unknown, event: AiEvent): void => callback(event)
       ipcRenderer.on('ai:event', listener)

@@ -25,6 +25,7 @@ const {
   resetHealthAccount
 } = await import('../src/main/health-service')
 const { disconnectGoogle, getGoogleAccessToken } = await import('../src/main/google-auth')
+const { disconnectCodex, getCodexTokens } = await import('../src/main/codex-auth')
 const { shiftIsoDate } = await import('../src/main/health-api')
 const { setSecret, updateSettings } = await import('../src/main/store')
 
@@ -66,6 +67,7 @@ async function loadHome(date: string): Promise<void> {
 
 beforeEach(() => {
   disconnectGoogle()
+  disconnectCodex()
   resetHealthAccount()
   liveToken()
   requests = []
@@ -78,6 +80,7 @@ afterEach(() => {
 
 afterAll(() => {
   disconnectGoogle()
+  disconnectCodex()
   rmSync(userData, { recursive: true, force: true })
 })
 
@@ -112,6 +115,44 @@ describe('health request budgets', () => {
 
     expect(requests).toHaveLength(1)
     expect(tokens).toEqual(new Array(10).fill('new-token'))
+  })
+
+  test('shares one Codex refresh while allowing one caller to cancel', async () => {
+    setSecret('codex-tokens', {
+      accessToken: 'expired-codex-token',
+      refreshToken: 'codex-refresh-token',
+      expiresAt: Date.now() - 1
+    })
+    let finishRefresh!: () => void
+    globalThis.fetch = (async (input, init) => {
+      requests.push(String(input))
+      return new Promise<Response>((resolve, reject) => {
+        finishRefresh = () => resolve(new Response(JSON.stringify({
+          access_token: 'new-codex-token',
+          refresh_token: 'rotated-codex-refresh-token',
+          expires_in: 3600
+        }), { status: 200 }))
+        init?.signal?.addEventListener(
+          'abort',
+          () => reject(new DOMException('aborted', 'AbortError')),
+          { once: true }
+        )
+      })
+    }) as typeof fetch
+    const firstController = new AbortController()
+    const secondController = new AbortController()
+
+    const first = getCodexTokens(firstController.signal)
+    const second = getCodexTokens(secondController.signal)
+    firstController.abort()
+    finishRefresh()
+
+    await expect(first).rejects.toHaveProperty('name', 'AbortError')
+    await expect(second).resolves.toMatchObject({
+      accessToken: 'new-codex-token',
+      refreshToken: 'rotated-codex-refresh-token'
+    })
+    expect(requests).toHaveLength(1)
   })
 
   test('keeps shared health work alive while another consumer is active', async () => {

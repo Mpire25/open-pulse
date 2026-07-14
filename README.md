@@ -33,9 +33,13 @@ Built with Electron + React 19, Radix primitives, Tailwind v4, and Framer Motion
   breakdowns where the API supplies them.
 - **Devices** — paired trackers with battery level and state, last sync time,
   and hardware features.
-- **Assistant** — a streaming chat agent that calls tools to read your real
-  metrics (any day's full snapshot, sleep history, devices) before answering.
-  Available as a full page and as a slide-over panel on every view.
+- **Assistant** — a streaming chat agent that uses focused tools to read and
+  analyze your real metrics across explicit date ranges, including trends and
+  relationships, sleep, workouts, intraday signals, nutrition, body readings,
+  and devices. Answers can include trusted, navigable cards and charts derived
+  from the returned data, plus web research when current external guidance
+  is needed. Available as a full page and as a slide-over panel on every view,
+  with account-scoped conversation history, pinning, and deletion.
 - **Demo mode** — realistic, deterministic sample data for any date, so the
   whole app is explorable before you connect anything.
 
@@ -51,6 +55,31 @@ bun run build:mac  # package a .dmg (needs the electron-builder toolchain)
 ```
 
 The app opens in demo mode. Connect your accounts in **Settings**.
+
+### Opt-in development tools
+
+The card gallery and AI agent trace are disabled during a normal development
+run. Start the app with the tool you need:
+
+```bash
+bun run dev:cards  # show the assistant response-card gallery
+bun run dev:trace  # print a summary of AI agent execution to the terminal
+bun run dev:debug  # enable both the card gallery and agent trace
+```
+
+The gallery is opened from the grid button in the Assistant header. It previews
+every structured response card and lets you render each metric as a value,
+period comparison, line chart, and bar chart. Gallery code is excluded from
+production builds.
+
+For more detailed tracing, set `OPENPULSE_AI_TRACE` directly when starting the
+app. Supported modes are `summary`, `json`, and `verbose`:
+
+```bash
+OPENPULSE_AI_TRACE=verbose bun run dev
+```
+
+Tracing is also disabled by default in development and production.
 
 ## Connecting Google Health (your Fitbit Air data)
 
@@ -110,8 +139,10 @@ Renderer (React)  ──IPC──▶  Main process  ──HTTPS──▶  health
 ## Security notes
 
 - OpenPulse uses Electron `safeStorage` to encrypt account secrets when OS
-  encryption is available. Synced health data is only persisted when that
-  encryption is available.
+  encryption is available. Synced health data and account-scoped assistant
+  history — including structured response cards — are only persisted when that
+  encryption is available; otherwise chat history remains in memory for the
+  current session.
 - The renderer is context-isolated with `nodeIntegration` off; all privileged
   work happens in the main process over a typed IPC surface.
 - Production builds run under a strict Content-Security-Policy.

@@ -21,7 +21,7 @@ import { useChat } from '@/hooks/useChat'
 import { useTrackpadHistoryNavigation } from '@/hooks/useTrackpadHistoryNavigation'
 import { isoToday } from '@/lib/format'
 import type { MetricRange, OpenMetric } from '@/lib/metric-navigation'
-import type { AppSettings, CodexAuthStatus, GoogleAuthStatus, MetricKey, Workout } from '@shared/types'
+import type { AssistantAction, AppSettings, CodexAuthStatus, GoogleAuthStatus, MetricKey, Workout } from '@shared/types'
 
 const DATA_VIEWS: View[] = ['home', 'activity', 'heart', 'sleep', 'body', 'nutrition']
 const NAVIGATION_STATE_KEY = 'open-pulse-navigation-v4'
@@ -81,21 +81,29 @@ export default function App(): React.JSX.Element {
   const [codex, setCodex] = useState<CodexAuthStatus>({ connected: false })
   const [selectedDate, setSelectedDate] = useState(isoToday)
   const [chatOpen, setChatOpen] = useState(false)
+  const [composerFocusRequest, setComposerFocusRequest] = useState(0)
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const backNavigationPending = useRef(false)
   const accountEpochRef = useRef(0)
 
-  // One conversation shared by the Assistant page and the side panel.
+  // One multi-chat controller shared by the Assistant page and side panel.
   const chat = useChat()
   const queryClient = useQueryClient()
   useTrackpadHistoryNavigation()
+
+  useEffect(() => {
+    return window.pulse.app.onNewChat(() => {
+      void chat.create()
+      if (view !== 'assistant') setChatOpen(true)
+      setComposerFocusRequest((request) => request + 1)
+    })
+  }, [chat.create, view])
 
   const clearAccountScopedState = useCallback((): void => {
     // Clear synchronously before publishing the new auth status. This also
     // cancels active query retries so the previous account cannot repopulate
     // the renderer cache after the boundary.
     queryClient.clear()
-    chat.reset()
     const accountEpoch = accountEpochRef.current + 1
     accountEpochRef.current = accountEpoch
     setDetailMetric(null)
@@ -115,7 +123,7 @@ export default function App(): React.JSX.Element {
         ''
       )
     }
-  }, [chat.reset, queryClient])
+  }, [queryClient])
 
   const forCurrentAccount = (entry: NavigationEntry): NavigationEntry => {
     if (entry.accountEpoch === accountEpochRef.current) return entry
@@ -229,11 +237,38 @@ export default function App(): React.JSX.Element {
   }, [clearAccountScopedState, queryClient])
 
   const handleCodexChange = useCallback((status: CodexAuthStatus): void => {
-    clearAccountScopedState()
     setCodex(status)
-  }, [clearAccountScopedState])
+  }, [])
+
+  const openAssistant = (preserveActiveChat: boolean): void => {
+    if (!preserveActiveChat) void chat.create()
+    setChatOpen(false)
+    setComposerFocusRequest((request) => request + 1)
+    navigate({
+      ...currentNavigationEntry(),
+      view: 'assistant',
+      detailMetric: null,
+      sleepStagesOpen: false,
+      selectedWorkout: null
+    })
+  }
+
+  const toggleAssistantPanel = (): void => {
+    if (chatOpen) {
+      setChatOpen(false)
+      return
+    }
+
+    void chat.create()
+    setChatOpen(true)
+    setComposerFocusRequest((request) => request + 1)
+  }
 
   const selectView = (v: View): void => {
+    if (v === 'assistant' && view !== 'assistant') {
+      openAssistant(chatOpen)
+      return
+    }
     navigate({
       ...currentNavigationEntry(),
       view: v,
@@ -313,6 +348,51 @@ export default function App(): React.JSX.Element {
     })
   }
 
+  const handleAssistantAction = (action: AssistantAction): void => {
+    setChatOpen(false)
+    if (action.type === 'open-nutrition') {
+      navigate({
+        ...currentNavigationEntry(),
+        view: 'nutrition',
+        selectedDate: action.date,
+        detailMetric: null,
+        sleepStagesOpen: false,
+        selectedWorkout: null
+      })
+      return
+    }
+    if (action.type === 'open-sleep-stages') {
+      navigate({
+        ...currentNavigationEntry(),
+        view: 'sleep',
+        selectedDate: action.date,
+        detailMetric: null,
+        sleepStagesOpen: true,
+        selectedWorkout: null
+      })
+      return
+    }
+    if (action.type === 'open-metric') {
+      navigate({
+        ...currentNavigationEntry(),
+        view: action.view,
+        selectedDate: action.date,
+        detailMetric: { metric: action.metric, range: action.range },
+        sleepStagesOpen: false,
+        selectedWorkout: null
+      })
+      return
+    }
+    navigate({
+      ...currentNavigationEntry(),
+      view: 'activity',
+      selectedDate: action.date,
+      detailMetric: null,
+      sleepStagesOpen: false,
+      selectedWorkout: action.workout
+    })
+  }
+
   if (!settings) {
     return <div className="h-full w-full bg-canvas" />
   }
@@ -346,7 +426,7 @@ export default function App(): React.JSX.Element {
           onDateChange={selectDate}
           showAsk={view !== 'assistant'}
           chatOpen={chatOpen}
-          onToggleChat={() => setChatOpen((o) => !o)}
+          onToggleChat={toggleAssistantPanel}
           sidebarOpen={sidebarOpen}
           onToggleSidebar={() => setSidebarOpen((open) => !open)}
         />
@@ -437,7 +517,13 @@ export default function App(): React.JSX.Element {
                 )}
                 {view === 'devices' && <DevicesView connected={google.connected} />}
                 {view === 'assistant' && (
-                  <AssistantView chat={chat} codex={codex} onOpenSettings={() => selectView('settings')} />
+                  <AssistantView
+                    chat={chat}
+                    codex={codex}
+                    composerFocusRequest={composerFocusRequest}
+                    onAssistantAction={handleAssistantAction}
+                    onOpenSettings={() => selectView('settings')}
+                  />
                 )}
                 {view === 'settings' && (
                   <SettingsView
@@ -456,8 +542,11 @@ export default function App(): React.JSX.Element {
           <AssistantPanel
             open={chatOpen && view !== 'assistant'}
             onClose={() => setChatOpen(false)}
+            onOpenInAssistant={() => openAssistant(true)}
             chat={chat}
             codexConnected={codex.connected}
+            composerFocusRequest={composerFocusRequest}
+            onAssistantAction={handleAssistantAction}
             onOpenSettings={() => {
               setChatOpen(false)
               selectView('settings')

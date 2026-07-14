@@ -1,13 +1,20 @@
-import { motion } from 'framer-motion'
-import { Broom, Sparkle, X } from '@phosphor-icons/react'
+import { useEffect, useState } from 'react'
+import { AnimatePresence, motion } from 'framer-motion'
+import { ArrowSquareOut, ClockCounterClockwise, Plus, Sparkle, X } from '@phosphor-icons/react'
 import { ChatPanel, type ChatState } from '@/components/ChatPanel'
+import { ChatHistory } from '@/components/ChatHistory'
+import { cn } from '@/lib/utils'
+import type { AssistantAction } from '@shared/types'
 
 interface AssistantPanelProps {
   open: boolean
   onClose: () => void
+  onOpenInAssistant: () => void
   chat: ChatState
   codexConnected: boolean
+  composerFocusRequest: number
   onOpenSettings: () => void
+  onAssistantAction: (action: AssistantAction) => void
 }
 
 const PANEL_WIDTH = 384
@@ -20,10 +27,23 @@ const PANEL_WIDTH = 384
 export function AssistantPanel({
   open,
   onClose,
+  onOpenInAssistant,
   chat,
   codexConnected,
-  onOpenSettings
+  composerFocusRequest,
+  onOpenSettings,
+  onAssistantAction
 }: AssistantPanelProps): React.JSX.Element {
+  const [historyOpen, setHistoryOpen] = useState(false)
+
+  useEffect(() => {
+    if (!open) setHistoryOpen(false)
+  }, [open])
+
+  useEffect(() => {
+    setHistoryOpen(false)
+  }, [composerFocusRequest])
+
   return (
     <motion.aside
       initial={false}
@@ -41,18 +61,39 @@ export function AssistantPanel({
             <div className="grid h-6 w-6 place-items-center rounded-lg bg-accent-soft">
               <Sparkle size={13} weight="fill" className="text-accent" />
             </div>
-            <span className="text-[13.5px] font-semibold">Assistant</span>
+            <span className="text-[13.5px] font-semibold">{historyOpen ? 'Chats' : 'Assistant'}</span>
           </div>
           <div className="flex items-center gap-1">
-            {chat.turns.length > 0 && (
-              <button
-                onClick={chat.reset}
-                aria-label="New chat"
-                className="grid h-7 w-7 place-items-center rounded-lg text-ink-dim transition-colors hover:bg-white/[0.06] hover:text-ink"
-              >
-                <Broom size={15} />
-              </button>
-            )}
+            <button
+              onClick={onOpenInAssistant}
+              aria-label="Open in Assistant"
+              title="Open in Assistant"
+              className="grid h-7 w-7 place-items-center rounded-lg text-ink-dim transition-colors hover:bg-white/[0.06] hover:text-ink"
+            >
+              <ArrowSquareOut size={15} />
+            </button>
+            <button
+              onClick={() => {
+                void chat.create()
+                setHistoryOpen(false)
+              }}
+              disabled={chat.loading}
+              aria-label="New chat"
+              className="grid h-7 w-7 place-items-center rounded-lg text-ink-dim transition-colors hover:bg-white/[0.06] hover:text-ink disabled:opacity-40"
+            >
+              <Plus size={15} />
+            </button>
+            <button
+              onClick={() => setHistoryOpen((value) => !value)}
+              aria-label="Conversation history"
+              aria-pressed={historyOpen}
+              className={cn(
+                'grid h-7 w-7 place-items-center rounded-lg text-ink-dim transition-colors hover:bg-white/[0.06] hover:text-ink',
+                historyOpen && 'bg-white/[0.07] text-ink'
+              )}
+            >
+              <ClockCounterClockwise size={15} />
+            </button>
             <button
               onClick={onClose}
               aria-label="Close assistant"
@@ -63,7 +104,30 @@ export function AssistantPanel({
           </div>
         </div>
         <div className="min-h-0 flex-1">
-          <ChatPanel chat={chat} codexConnected={codexConnected} onOpenSettings={onOpenSettings} compact />
+          <AnimatePresence initial={false} mode="wait">
+            <motion.div
+              key={historyOpen ? 'history' : 'chat'}
+              initial={{ opacity: 0, y: 4 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -4 }}
+              transition={{ duration: 0.12 }}
+              className="h-full"
+            >
+              {historyOpen ? (
+                <ChatHistory chat={chat} onNavigate={() => setHistoryOpen(false)} />
+              ) : (
+                <ChatPanel
+                  chat={chat}
+                  codexConnected={codexConnected}
+                  onOpenSettings={onOpenSettings}
+                  onAssistantAction={onAssistantAction}
+                  compact
+                  autoFocus={open}
+                  focusRequest={composerFocusRequest}
+                />
+              )}
+            </motion.div>
+          </AnimatePresence>
         </div>
       </div>
     </motion.aside>

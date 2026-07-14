@@ -422,14 +422,195 @@ export interface PairedDevice {
 
 export type ChatRole = 'user' | 'assistant'
 
+export type AssistantDataView = 'activity' | 'heart' | 'sleep' | 'body' | 'nutrition'
+export type AssistantMetricRange = 'D' | 'W' | 'M' | '3M' | 'Y'
+
+export type AssistantAction =
+  | {
+      type: 'open-metric'
+      view: AssistantDataView
+      metric: MetricKey
+      date: string
+      range: AssistantMetricRange
+    }
+  | { type: 'open-workout'; workout: Workout; date: string }
+  | { type: 'open-sleep-stages'; date: string }
+  | { type: 'open-nutrition'; date: string }
+
+export interface AssistantMetricCardPart {
+  id: string
+  type: 'metric-card'
+  metric: MetricKey
+  date: string
+  value: number | null
+  source: DataSource
+  action: AssistantAction
+}
+
+export type AssistantComparisonAggregation = 'value' | 'total' | 'average' | 'latest'
+
+export interface AssistantComparisonValue {
+  label: string
+  startDate: string
+  endDate: string
+  value: number | null
+  aggregation: AssistantComparisonAggregation
+  observations: number
+  days: number
+}
+
+export interface AssistantComparisonPart {
+  id: string
+  type: 'comparison'
+  title: string
+  metric: MetricKey
+  current: AssistantComparisonValue
+  previous: AssistantComparisonValue
+  comparable: boolean
+  absoluteChange: number | null
+  percentChange: number | null
+  source: DataSource
+  action: AssistantAction
+}
+
+export interface AssistantChartPoint {
+  date: string
+  value: number | null
+}
+
+export interface AssistantChartPart {
+  id: string
+  type: 'trend-chart'
+  title: string
+  metric: MetricKey
+  startDate: string
+  endDate: string
+  points: AssistantChartPoint[]
+  observations: number
+  source: DataSource
+  action: AssistantAction
+}
+
+export interface AssistantWorkoutPart {
+  id: string
+  type: 'workout-card'
+  workout: Workout
+  date: string
+  source: DataSource
+  action: AssistantAction
+}
+
+export type AssistantSleepNight = Pick<
+  SleepNight,
+  | 'date'
+  | 'startTime'
+  | 'endTime'
+  | 'minutesAsleep'
+  | 'minutesInSleepPeriod'
+  | 'efficiency'
+  | 'stages'
+  | 'stageMinutes'
+>
+
+export interface AssistantSleepPart {
+  id: string
+  type: 'sleep-card'
+  night: AssistantSleepNight
+  source: DataSource
+  action: AssistantAction
+}
+
+export type AssistantNutritionScope = 'day' | 'meal' | 'item'
+
+export interface AssistantNutritionValues {
+  calories: number | null
+  proteinG: number | null
+  carbsG: number | null
+  fatG: number | null
+  fiberG: number | null
+  saturatedFatG: number | null
+  sodiumG: number | null
+  sugarG: number | null
+}
+
+export interface AssistantNutritionPart {
+  id: string
+  type: 'nutrition-card'
+  scope: AssistantNutritionScope
+  title: string
+  date: string
+  time: string | null
+  servingLabel: string | null
+  itemCount: number | null
+  itemNames: string[]
+  values: AssistantNutritionValues
+  source: DataSource
+  action: AssistantAction
+}
+
+export type AssistantOverviewAggregation = 'average' | 'total' | 'latest'
+
+export interface AssistantOverviewMetric {
+  metric: MetricKey
+  value: number | null
+  aggregation: AssistantOverviewAggregation
+  observations: number
+  days: number
+  points: AssistantChartPoint[]
+  action: AssistantAction
+}
+
+export interface AssistantOverviewPart {
+  id: string
+  type: 'overview'
+  title: string
+  startDate: string
+  endDate: string
+  items: AssistantOverviewMetric[]
+  source: DataSource
+}
+
+export type AssistantVisualPart =
+  | AssistantMetricCardPart
+  | AssistantComparisonPart
+  | AssistantChartPart
+  | AssistantWorkoutPart
+  | AssistantSleepPart
+  | AssistantNutritionPart
+  | AssistantOverviewPart
+
 export interface ChatMessage {
   role: ChatRole
   text: string
 }
 
+export interface ChatSessionMessage extends ChatMessage {
+  id: string
+  createdAt: string
+  /** Versioned, app-rendered response blocks. Legacy messages omit this. */
+  partsVersion?: 1
+  parts?: AssistantVisualPart[]
+}
+
+export interface ChatSession {
+  id: string
+  title: string
+  createdAt: string
+  updatedAt: string
+  /** Pinned chats surface in their own group at the top of the history list. */
+  pinned?: boolean
+  messages: ChatSessionMessage[]
+}
+
+export interface ChatHistorySnapshot {
+  sessions: ChatSession[]
+  persistence: 'encrypted' | 'memory'
+}
+
 export type AiEvent =
-  | { type: 'delta'; chatId: string; text: string }
-  | { type: 'reasoning'; chatId: string }
-  | { type: 'tool'; chatId: string; name: string; label: string }
-  | { type: 'done'; chatId: string; text: string }
-  | { type: 'error'; chatId: string; message: string }
+  | { type: 'delta'; chatId: string; runId: string; text: string }
+  | { type: 'reasoning'; chatId: string; runId: string }
+  | { type: 'tool'; chatId: string; runId: string; name: string; label: string }
+  | { type: 'done'; chatId: string; runId: string; text: string; parts: AssistantVisualPart[] }
+  | { type: 'interrupted'; chatId: string; runId: string; message: string }
+  | { type: 'error'; chatId: string; runId: string; message: string }
