@@ -196,6 +196,24 @@ body {
   padding-left: 0;
 }
 
+@container display (min-width: 56.625rem) {
+  .display-lg-pair-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .display-lg-pair-grid--weighted-135 {
+    grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+  }
+
+  .display-lg-pair-grid--weighted-110 {
+    grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+  }
+
+  .display-lg-span-2 {
+    grid-column: span 2 / span 2;
+  }
+}
+
 @container display (min-width: 36rem) {
   .activity-goal-ring {
     width: 172px !important;
@@ -279,18 +297,6 @@ body {
 }
 
 @container display (min-width: 64rem) {
-  .display-lg-pair-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .display-lg-pair-grid--weighted-135 {
-    grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
-  }
-
-  .display-lg-pair-grid--weighted-110 {
-    grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
-  }
-
   .activity-hero {
     grid-template-columns: auto minmax(0, 1fr);
     gap: 1rem;
@@ -305,8 +311,7 @@ body {
     grid-template-columns: 250px minmax(0, 1fr);
   }
 
-  .sleep-summary,
-  .display-lg-span-2 {
+  .sleep-summary {
     grid-column: span 2 / span 2;
   }
 
