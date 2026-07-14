@@ -15,7 +15,7 @@
     "test": "bun test",
     "typecheck": "tsc --noEmit -p tsconfig.web.json && tsc --noEmit -p tsconfig.node.json",
     "start": "electron-vite preview",
-    "build:mac": "electron-vite build && electron-builder --mac"
+    "build:mac": "electron-vite build && electron-builder --mac && bun scripts/cleanup-mac-build.ts"
   },
   "dependencies": {
     "@fontsource-variable/archivo": "^5.2.8",
@@ -66,6 +66,9 @@
     },
     "mac": {
       "category": "public.app-category.healthcare-fitness",
+      "hardenedRuntime": false,
+      "icon": "build/icon.icns",
+      "identity": "-",
       "target": "dmg"
     }
   }

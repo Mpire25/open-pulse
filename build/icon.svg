@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="background" x1="170" y1="145" x2="830" y2="875" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ff4d68" />
+      <stop offset="0.54" stop-color="#e11d48" />
+      <stop offset="1" stop-color="#be123c" />
+    </linearGradient>
+    <filter id="tile-shadow" x="0" y="0" width="1024" height="1024" filterUnits="userSpaceOnUse">
+      <feDropShadow dx="0" dy="20" stdDeviation="20" flood-color="#881021" flood-opacity="0.3" />
+    </filter>
+    <filter id="heart-shadow" x="80" y="80" width="864" height="864" filterUnits="userSpaceOnUse">
+      <feDropShadow dx="0" dy="10" stdDeviation="8" flood-color="#880821" flood-opacity="0.4" />
+    </filter>
+    <mask id="heart-mask" maskUnits="userSpaceOnUse" x="0" y="0" width="1024" height="1024">
+      <rect width="1024" height="1024" fill="black" />
+      <path
+        d="M512 807.9C306.4 631.6 159.5 512 159.5 369.3C159.5 272.8 235 203.6 325.2 203.6C400.7 203.6 465.8 253.9 512 327.3C558.2 253.9 623.3 203.6 698.8 203.6C789 203.6 864.5 272.8 864.5 369.3C864.5 512 717.6 631.6 512 807.9Z"
+        fill="white"
+      />
+      <path
+        d="M184.7 486.8H373.5L432.2 486.8L482.5 335.7L547.6 642L598 426L635.7 486.8H839.3"
+        fill="none"
+        stroke="black"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        stroke-width="67.1"
+      />
+    </mask>
+  </defs>
+
+  <g filter="url(#tile-shadow)">
+    <rect x="52" y="52" width="920" height="920" rx="276" fill="url(#background)" />
+    <rect x="53" y="53" width="918" height="918" rx="275" fill="none" stroke="white" stroke-opacity="0.18" stroke-width="2" />
+  </g>
+  <rect width="1024" height="1024" fill="white" filter="url(#heart-shadow)" mask="url(#heart-mask)" />
+</svg>
