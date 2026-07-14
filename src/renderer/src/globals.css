@@ -86,35 +86,19 @@ body {
   scrollbar-gutter: stable;
 }
 
-/* Page-level card compositions respond to the width left for the display
-   pane, so opening navigation or the assistant behaves like resizing it. */
-.display-pair-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 1.25rem;
-}
-
 .display-four-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 @container display (min-width: 56.625rem) {
-  .display-pair-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .display-pair-grid--weighted {
-    grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
-  }
-
   .display-four-grid {
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 }
 
-/* Remaining views keep their existing breakpoint intent, but measure the
-   display pane instead of the window. Home's tuned 906px grids stay above. */
+/* Page-level compositions measure the display pane instead of the window, so
+   opening navigation or the assistant behaves like resizing it. */
 .display-lg-pair-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr);

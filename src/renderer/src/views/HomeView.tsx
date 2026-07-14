@@ -175,7 +175,7 @@ export function HomeView({ date, goals, onOpenMetric, onOpenWorkout, onNavigate 
         </Panel>
       </motion.div>
 
-      <div className="display-pair-grid display-pair-grid--weighted">
+      <div className="display-lg-pair-grid display-lg-pair-grid--weighted-135">
         {/* Daily movement */}
         <motion.div custom={2} variants={fade} initial="hidden" animate="show" className="min-w-0">
           <InteractivePanel
