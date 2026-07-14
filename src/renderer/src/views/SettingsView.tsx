@@ -89,7 +89,7 @@ function GoalsCard({
         hint="Used for the rings and the goal lines on charts"
         icon={<Target size={18} weight="fill" className="text-recovery" />}
       />
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+      <div className="display-sm-four-grid gap-4">
         {field('steps', 'Steps', 'count')}
         {field('activeZoneMinutes', 'Zone minutes', 'min')}
         {field('caloriesOut', 'Calories burned', 'kcal')}

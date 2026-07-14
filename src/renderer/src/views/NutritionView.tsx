@@ -137,7 +137,7 @@ export function NutritionView({ date, goals, onOpenMetric, onSelectDate }: Nutri
       <>
           {/* Today: intake goal + macro split */}
           <motion.div custom={1} variants={fade} initial="hidden" animate="show">
-            <Panel className={`grid grid-cols-1 gap-6 p-6 lg:grid-cols-[auto_1fr] lg:gap-4 ${CARD_HEIGHT.hero}`}>
+            <Panel className={`nutrition-hero ${CARD_HEIGHT.hero}`}>
               <div className="flex min-w-[180px] items-center justify-center">
                 {intakePending ? (
                   <div className="flex flex-col items-center gap-2" aria-hidden>
@@ -176,7 +176,7 @@ export function NutritionView({ date, goals, onOpenMetric, onSelectDate }: Nutri
                 )}
               </div>
 
-              <div className="lg:border-l lg:border-hairline lg:pl-6">
+              <div className="nutrition-hero-macros">
                 {macrosPending ? (
                   <MacroBreakdownSkeleton />
                 ) : hasMacrosToday ? (
@@ -367,7 +367,7 @@ function MealGroupSection({ label, entries }: { label: NutritionMealGroup; entri
 
 function NutritionItemRow({ entry }: { entry: NutritionLogEntry }): React.JSX.Element {
   return (
-    <div className="grid grid-cols-1 gap-2 px-5 py-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:gap-4">
+    <div className="nutrition-item-row grid grid-cols-1 gap-2 px-5 py-3">
       <div className="min-w-0">
         <div className="truncate text-[12.5px] font-medium text-ink">{entry.foodName}</div>
         <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-[10.5px] text-ink-faint">
@@ -376,7 +376,7 @@ function NutritionItemRow({ entry }: { entry: NutritionLogEntry }): React.JSX.El
         </div>
         <NutritionMacroBar values={nutritionTotals([entry])} className="mt-2 max-w-[230px]" compact />
       </div>
-      <div className="flex flex-wrap items-center justify-start gap-x-4 gap-y-1 whitespace-nowrap sm:justify-end sm:text-right">
+      <div className="nutrition-item-totals flex flex-wrap items-center justify-start gap-x-4 gap-y-1 whitespace-nowrap">
         <div className="flex items-center gap-3">
           <NutritionMacroTotal label="Protein" value={entry.proteinG} color="var(--color-recovery)" />
           <NutritionMacroTotal label="Carbs" value={entry.carbsG} color="var(--color-activity)" />
@@ -493,7 +493,7 @@ function MacroBreakdownSkeleton(): React.JSX.Element {
           </div>
         ))}
       </div>
-      <div className="grid grid-cols-2 gap-3 border-t border-hairline pt-3 sm:grid-cols-4">
+      <div className="display-sm-four-grid gap-3 border-t border-hairline pt-3">
         {SECONDARY_NUTRIENTS.map((nutrient) => (
           <div key={nutrient.key} className="flex flex-col gap-1.5 px-2">
             <SkeletonText className="w-16" />

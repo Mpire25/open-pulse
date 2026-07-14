@@ -380,7 +380,7 @@ function EmptyState({ compact, onPick }: { compact?: boolean; onPick: (s: string
         I can read your activity, vitals, sleep, and body data — for any day — to spot trends and answer
         questions.
       </p>
-      <div className={cn('mt-6 grid w-full gap-2', compact ? 'grid-cols-1' : 'max-w-lg grid-cols-1 sm:grid-cols-2')}>
+      <div className={cn('mt-6 grid w-full gap-2', compact ? 'grid-cols-1' : 'chat-suggestion-grid max-w-lg')}>
         {SUGGESTIONS.map((suggestion, i) => {
           const SuggestionIcon = suggestion.icon
           return (

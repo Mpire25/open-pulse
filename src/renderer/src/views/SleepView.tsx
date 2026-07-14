@@ -45,7 +45,7 @@ export function SleepView({ date, goals, onOpenMetric, onOpenStages, onSelectDat
       {/* Selected night */}
       <motion.div custom={1} variants={fade} initial="hidden" animate="show">
         {nights.isPending ? (
-          <Panel className="grid min-h-[340px] grid-cols-1 gap-2 p-3 lg:grid-cols-[250px_1fr]">
+          <Panel className="sleep-hero">
             <div className="flex flex-col items-center justify-center gap-3 rounded-[18px] p-4" aria-hidden>
               <SkeletonRing size={172} stroke={16} />
               <div className="flex flex-col items-center gap-1.5">
@@ -66,7 +66,7 @@ export function SleepView({ date, goals, onOpenMetric, onOpenStages, onSelectDat
             <SleepNightSummarySkeleton />
           </Panel>
         ) : (
-          <Panel className="grid min-h-[340px] grid-cols-1 gap-2 p-3 lg:grid-cols-[250px_1fr]">
+          <Panel className="sleep-hero">
             <button
               type="button"
               onClick={() => onOpenMetric('sleepMinutes', 'D')}
@@ -118,7 +118,7 @@ export function SleepView({ date, goals, onOpenMetric, onOpenStages, onSelectDat
         )}
       </motion.div>
 
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+      <div className="display-lg-pair-grid">
           {/* Duration trend */}
           <motion.div custom={2} variants={fade} initial="hidden" animate="show">
             <InteractivePanel
@@ -207,7 +207,7 @@ export function SleepView({ date, goals, onOpenMetric, onOpenStages, onSelectDat
 
 function SleepNightSummarySkeleton(): React.JSX.Element {
   return (
-    <div className="mx-4 mb-2 flex flex-wrap gap-x-8 gap-y-3 border-t border-hairline pt-4 lg:col-span-2" aria-hidden>
+    <div className="sleep-summary mx-4 mb-2 flex flex-wrap gap-x-8 gap-y-3 border-t border-hairline pt-4" aria-hidden>
       {Array.from({ length: 3 }, (_, index) => (
         <div key={index} className="flex items-center gap-2">
           <SkeletonText className="w-16" />
@@ -229,7 +229,7 @@ function SleepNightSummary({ night }: { night: SleepNight | null }): React.JSX.E
   ]
 
   return (
-    <div className="mx-4 mb-2 flex flex-wrap items-center gap-x-8 gap-y-2 border-t border-hairline pt-4 lg:col-span-2">
+    <div className="sleep-summary mx-4 mb-2 flex flex-wrap items-center gap-x-8 gap-y-2 border-t border-hairline pt-4">
       {items.map((item) => (
         <div key={item.label} className="flex items-baseline gap-2">
           <span className="text-[10.5px] font-medium text-ink-faint">{item.label}</span>

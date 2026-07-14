@@ -63,7 +63,7 @@ function ActivityGoalRing({
   if (pending) {
     return (
       <div className="flex flex-col items-center gap-2" aria-hidden>
-        <SkeletonRing size={172} stroke={18} />
+        <SkeletonRing size={172} stroke={18} className="activity-goal-ring" />
         <SkeletonText className="w-28" />
       </div>
     )
@@ -76,7 +76,7 @@ function ActivityGoalRing({
       className="group -m-2 flex min-w-0 flex-col items-center gap-2.5 rounded-2xl p-4 outline-none transition-[background-color,box-shadow,transform] duration-200 hover:bg-white/[0.05] hover:shadow-[inset_0_0_0_1px_rgb(255_255_255/0.07)] focus-visible:bg-white/[0.05] focus-visible:ring-2 focus-visible:ring-accent/60 active:scale-[0.98]"
       aria-label={`Open ${def.label} details`}
     >
-      <ProgressRing value={value ?? 0} goal={goal} color={def.color} size={172} stroke={18}>
+      <ProgressRing value={value ?? 0} goal={goal} color={def.color} size={172} stroke={18} className="activity-goal-ring">
         <div className="text-center">
           <div className="text-[30px] font-semibold leading-none tracking-tight text-ink">
             {value != null ? def.format(value) : '—'}
@@ -156,8 +156,8 @@ export function ActivityView({ date, goals, onOpenMetric, onOpenWorkout }: Activ
 
       {/* Day totals: primary goals + supporting activity metrics */}
       <motion.div custom={1} variants={fade} initial="hidden" animate="show">
-        <Panel className="grid min-h-[300px] grid-cols-1 gap-6 p-6 lg:grid-cols-[auto_1fr] lg:gap-4">
-          <div className="grid min-w-0 grid-cols-2 place-items-center gap-2 sm:min-w-[400px]">
+        <Panel className="activity-hero">
+          <div className="activity-goals">
             <ActivityGoalRing
               metricKey="steps"
               value={today.steps ?? null}
@@ -174,7 +174,7 @@ export function ActivityView({ date, goals, onOpenMetric, onOpenWorkout }: Activ
             />
           </div>
 
-          <div className="grid min-w-0 w-full grid-cols-2 self-center lg:border-l lg:border-hairline">
+          <div className="activity-summary">
             {ACTIVITY_SUMMARY_METRICS.map((key, index) => {
               const def = METRICS[key]
               const points = pointsFor(key)
@@ -204,7 +204,7 @@ export function ActivityView({ date, goals, onOpenMetric, onOpenWorkout }: Activ
         </Panel>
       </motion.div>
 
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
+      <div className="display-lg-pair-grid display-lg-pair-grid--weighted-135">
         {/* Hourly movement */}
         <motion.div custom={2} variants={fade} initial="hidden" animate="show" className="min-w-0">
           <InteractivePanel
@@ -271,7 +271,7 @@ export function ActivityView({ date, goals, onOpenMetric, onOpenWorkout }: Activ
       </div>
 
       {/* 7-day trends */}
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+      <div className="display-lg-pair-grid">
         {trendCard('steps', 4, goals.steps)}
         {trendCard('activeZoneMinutes', 5, goals.activeZoneMinutes)}
         {trendCard('caloriesOut', 6, goals.caloriesOut)}

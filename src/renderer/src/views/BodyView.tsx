@@ -46,7 +46,7 @@ export function BodyView({ date, onOpenMetric }: BodyViewProps): React.JSX.Eleme
         <p className="mt-1 text-[13px] text-ink-dim">{longDate(date)} · last 30 days of measurements</p>
       </motion.header>
 
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+      <div className="display-lg-pair-grid">
         {BODY_KEYS.map((key, i) => {
           const def = METRICS[key]
           const points = pointsFor(key)
@@ -119,13 +119,13 @@ export function BodyView({ date, onOpenMetric }: BodyViewProps): React.JSX.Eleme
               {[...measurements.data.measurements].reverse().slice(0, 10).map((measurement) => (
                 <div
                   key={measurement.id}
-                  className="grid grid-cols-1 gap-2 px-5 py-3.5 sm:grid-cols-[140px_minmax(0,1fr)] sm:items-center sm:gap-5"
+                  className="body-measurement-row grid grid-cols-1 gap-2 px-5 py-3.5"
                 >
                   <div>
                     <div className="text-[12px] font-medium text-ink-dim">{measurementDate(measurement.time)}</div>
                     <div className="mt-0.5 font-mono text-[10.5px] text-ink-faint">{formatClock(measurement.time)}</div>
                   </div>
-                  <div className="flex flex-wrap items-baseline gap-x-8 gap-y-1 sm:justify-end sm:text-right">
+                  <div className="body-measurement-values flex flex-wrap items-baseline gap-x-8 gap-y-1">
                     {measurement.weightKg != null && (
                       <MeasurementValue label="Weight" value={measurement.weightKg.toFixed(2)} unit="kg" />
                     )}
@@ -171,12 +171,12 @@ function BodyMeasurementsSkeleton(): React.JSX.Element {
         <SkeletonText className="mt-2 w-28" />
       </div>
       {Array.from({ length: 3 }, (_, index) => (
-        <div key={index} className="grid grid-cols-1 gap-3 border-b border-hairline px-5 py-3.5 last:border-b-0 sm:grid-cols-[140px_1fr] sm:gap-5">
+        <div key={index} className="body-measurement-skeleton-row grid grid-cols-1 gap-3 border-b border-hairline px-5 py-3.5 last:border-b-0">
           <div className="flex flex-col gap-2">
             <SkeletonText className="w-16" />
             <SkeletonText className="h-2.5 w-12" />
           </div>
-          <div className="flex flex-wrap items-center gap-8 sm:justify-end">
+          <div className="body-measurement-skeleton-values flex flex-wrap items-center gap-8">
             <SkeletonText className="h-4 w-24" />
             <SkeletonText className="h-4 w-24" />
           </div>

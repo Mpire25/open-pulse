@@ -63,7 +63,7 @@ export function DevicesView({ connected }: DevicesViewProps): React.JSX.Element 
         </div>
       </motion.header>
 
-      <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-[1.1fr_1fr]">
+      <div className="display-lg-pair-grid display-lg-pair-grid--weighted-110 items-start">
         {/* Product hero */}
         <motion.div custom={1} variants={fade} initial="hidden" animate="show" className="w-full">
           {devices.isPending ? (

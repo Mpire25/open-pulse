@@ -263,7 +263,7 @@ export function AssistantCardGallery(): React.JSX.Element {
             <MetricSelect label="Preview metric" value={selectedMetric} metrics={METRIC_KEYS} onChange={setSelectedMetric} />
           </div>
         </div>
-        <div className="mt-6 grid grid-cols-1 gap-5 lg:grid-cols-2">
+        <div className="display-lg-pair-grid mt-6">
           <GallerySection label="Health overview" note="Multiple signals at a glance" wide>
             <AssistantResponseParts parts={[overviewCard]} onAction={noop} />
           </GallerySection>
@@ -321,7 +321,7 @@ function GallerySection({
   children: React.ReactNode
 }): React.JSX.Element {
   return (
-    <section className={wide ? 'lg:col-span-2' : undefined}>
+    <section className={wide ? 'display-lg-span-2' : undefined}>
       <div className="mb-2 min-h-9 px-1">
         <h2 className="text-[12px] font-semibold text-ink">{label}</h2>
         <p className="mt-0.5 text-[10.5px] text-ink-faint">{note}</p>
