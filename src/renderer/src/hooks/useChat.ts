@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { generateChatTitle } from '@shared/chat'
+import { generateChatTitle, interruptedTurnText } from '@shared/chat'
 import { assistantPartsContext } from '@shared/assistant-parts'
 import type {
   AiEvent,
@@ -24,6 +24,7 @@ interface ViewChat extends Omit<ChatSession, 'messages'> {
 interface ActiveRun {
   runId: string
   assistantId: string
+  preparation: Promise<void>
 }
 
 export interface ChatController {
@@ -34,6 +35,7 @@ export interface ChatController {
   loading: boolean
   streamingChatIds: string[]
   send: (text: string) => void
+  stop: () => void
   create: () => Promise<void>
   select: (id: string) => void
   pin: (id: string, pinned: boolean) => Promise<void>
@@ -218,15 +220,22 @@ export function useChat(): ChatController {
                 streaming: false,
                 toolLabel: undefined
               }
+            case 'interrupted':
+              return {
+                ...turn,
+                text: interruptedTurnText(turn.text, event.message),
+                streaming: false,
+                toolLabel: undefined
+              }
             case 'error':
               return { ...turn, text: event.message, streaming: false, error: true, toolLabel: undefined }
           }
         })
       )
 
-      if (event.type === 'done' || event.type === 'error') {
+      if (event.type === 'done' || event.type === 'interrupted' || event.type === 'error') {
         runsRef.current.delete(event.chatId)
-        if (event.type === 'done') void saveCompletedChat(event.chatId)
+        if (event.type === 'done' || event.type === 'interrupted') void saveCompletedChat(event.chatId)
       }
     })
   }, [saveCompletedChat, updateTurns])
@@ -251,7 +260,8 @@ export function useChat(): ChatController {
       const nextTurns = [...chat.turns, userTurn, assistantTurn]
       const title = chat.title === 'New chat' ? generateChatTitle(trimmed) : chat.title
       const updatedAt = new Date().toISOString()
-      runsRef.current.set(chat.id, { runId, assistantId: assistantTurn.id })
+      const run: ActiveRun = { runId, assistantId: assistantTurn.id, preparation: Promise.resolve() }
+      runsRef.current.set(chat.id, run)
       publish(
         chatsRef.current.map((candidate) =>
           candidate.id === chat.id ? { ...candidate, title, updatedAt, turns: nextTurns } : candidate
@@ -268,7 +278,7 @@ export function useChat(): ChatController {
       const createIfNeeded = chat.persisted
         ? Promise.resolve<ChatSession | null>(null)
         : window.pulse.chats.create(chat.id)
-      void createIfNeeded
+      run.preparation = createIfNeeded
         .then((session) => {
           if (session && epoch === accountEpochRef.current) mergeSession(session)
           return window.pulse.chats.update(chat.id, persistedMessages(nextTurns))
@@ -277,6 +287,7 @@ export function useChat(): ChatController {
           if (epoch === accountEpochRef.current) mergeSession(session)
         })
         .catch(() => undefined)
+      void run.preparation
         .finally(() => {
           if (epoch === accountEpochRef.current && runsRef.current.get(chat.id)?.runId === runId) {
             void window.pulse.ai.send(chat.id, runId, history)
@@ -285,6 +296,28 @@ export function useChat(): ChatController {
     },
     [mergeSession, publish]
   )
+
+  const stop = useCallback((): void => {
+    const chatId = activeChatIdRef.current
+    if (!chatId) return
+    const run = runsRef.current.get(chatId)
+    if (!run) return
+    runsRef.current.delete(chatId)
+    void window.pulse.ai.cancel(chatId, run.runId)
+    updateTurns(chatId, (turns) =>
+      turns.map((turn) =>
+        turn.id === run.assistantId
+          ? {
+              ...turn,
+              text: interruptedTurnText(turn.text, 'Response stopped.'),
+              streaming: false,
+              toolLabel: undefined
+            }
+          : turn
+      )
+    )
+    void run.preparation.finally(() => saveCompletedChat(chatId))
+  }, [saveCompletedChat, updateTurns])
 
   const select = useCallback(
     (id: string): void => {
@@ -339,6 +372,7 @@ export function useChat(): ChatController {
     loading,
     streamingChatIds,
     send,
+    stop,
     create,
     select,
     pin,

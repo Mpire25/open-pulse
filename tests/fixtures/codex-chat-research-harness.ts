@@ -3,6 +3,7 @@ import { afterEach, describe, expect, mock, test } from 'bun:test'
 import { EventEmitter } from 'node:events'
 import type { WebContents } from 'electron'
 import type { AiEvent, ChatMessage } from '../../src/shared/types'
+import { StreamTimeoutError } from '../../src/main/stream-timeout'
 
 const HEALTH_DATA_SENTINEL = 'UNRELATED_RAW_HEALTH_DATA'
 const HISTORY_SENTINEL = 'UNRELATED_CONVERSATION_HISTORY'
@@ -62,7 +63,7 @@ mock.module('../../src/main/assistant-presentation', () => ({
   resolvePresentation: () => []
 }))
 
-const { runChat } = await import('../../src/main/codex-chat')
+const { cancelChat, runChat } = await import('../../src/main/codex-chat')
 const originalFetch = globalThis.fetch
 
 class FakeSender extends EventEmitter {
@@ -150,6 +151,67 @@ afterEach(() => {
 })
 
 describe('brokered Codex research orchestration', () => {
+  test('emits an interruption when the user stops a stalled response', async () => {
+    const sender = new FakeSender()
+    let fetchStarted: (() => void) | undefined
+    const started = new Promise<void>((resolve) => {
+      fetchStarted = resolve
+    })
+    globalThis.fetch = (async (_input, init) => {
+      const signal = init?.signal
+      if (!signal) throw new Error('Expected an abort signal')
+      const body = new ReadableStream<Uint8Array>({
+        start(controller) {
+          const onAbort = (): void => controller.error(signal.reason)
+          if (signal.aborted) onAbort()
+          else signal.addEventListener('abort', onAbort, { once: true })
+        }
+      })
+      fetchStarted?.()
+      return new Response(body, { status: 200, headers: { 'content-type': 'text/event-stream' } })
+    }) as typeof fetch
+
+    const running = runChat(
+      sender as unknown as WebContents,
+      'stalled-chat',
+      'stalled-run',
+      [{ role: 'user', text: 'How did I sleep?' }]
+    )
+    await started
+    cancelChat(sender as unknown as WebContents, 'stalled-chat', 'stalled-run')
+    await running
+
+    expect(sender.events.find((event) => event.type === 'interrupted')).toEqual({
+      type: 'interrupted',
+      chatId: 'stalled-chat',
+      runId: 'stalled-run',
+      message: 'Response stopped.'
+    })
+    expect(sender.events.some((event) => event.type === 'error')).toBe(false)
+  })
+
+  test('reports a main response timeout as an interruption', async () => {
+    const sender = new FakeSender()
+    globalThis.fetch = (async () => {
+      throw new StreamTimeoutError('idle', 'The assistant stopped responding for 120 seconds.')
+    }) as typeof fetch
+
+    await runChat(
+      sender as unknown as WebContents,
+      'timeout-chat',
+      'timeout-run',
+      [{ role: 'user', text: 'How did I sleep?' }]
+    )
+
+    expect(sender.events.find((event) => event.type === 'interrupted')).toEqual({
+      type: 'interrupted',
+      chatId: 'timeout-chat',
+      runId: 'timeout-run',
+      message: 'The assistant stopped responding for 120 seconds. Try again.'
+    })
+    expect(sender.events.some((event) => event.type === 'error')).toBe(false)
+  })
+
   test('searches after a health lookup without forwarding history or raw datasets', async () => {
     const sender = new FakeSender()
     const calls: Array<{ body: Record<string, unknown>; sessionId: string | null }> = []

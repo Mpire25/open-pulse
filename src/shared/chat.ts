@@ -12,4 +12,9 @@ export function generateChatTitle(text: string): string {
   return `${clipped || sentence.slice(0, 48).trim()}…`
 }
 
+export function interruptedTurnText(text: string, message: string): string {
+  const partial = text.trimEnd()
+  return partial ? `${partial}\n\n_${message}_` : message
+}
+
 export { DEFAULT_CHAT_TITLE }

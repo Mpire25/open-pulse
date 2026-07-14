@@ -6,6 +6,7 @@ import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from 
 import { AnimatePresence, motion } from 'framer-motion'
 import {
   ArrowUp,
+  Stop as StopIcon,
   Sparkle,
   Heartbeat,
   Moon,
@@ -79,7 +80,7 @@ export function ChatPanel({
   typeToFocus = false,
   onTypeToFocus
 }: ChatPanelProps): React.JSX.Element {
-  const { turns, busy, loading, activeChatId, send } = chat
+  const { turns, busy, loading, activeChatId, send, stop } = chat
   const [draft, setDraft] = useState('')
   const scrollRef = useRef<HTMLDivElement>(null)
   const responseSpaceRef = useRef<HTMLDivElement>(null)
@@ -265,12 +266,14 @@ export function ChatPanel({
           />
           <Button
             size="sm"
-            onClick={submit}
-            disabled={!draft.trim() || busy || loading}
+            variant={busy ? 'secondary' : 'primary'}
+            onClick={busy ? stop : submit}
+            disabled={busy ? false : !draft.trim() || loading}
             className="h-8 w-8 shrink-0 rounded-full px-0"
-            aria-label="Send"
+            aria-label={busy ? 'Stop response' : 'Send'}
+            title={busy ? 'Stop response' : 'Send'}
           >
-            <ArrowUp size={16} weight="bold" />
+            {busy ? <StopIcon size={14} weight="fill" /> : <ArrowUp size={16} weight="bold" />}
           </Button>
         </div>
         {!compact && (
