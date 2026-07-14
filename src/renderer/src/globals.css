@@ -86,6 +86,199 @@ body {
   scrollbar-gutter: stable;
 }
 
+/* The Home hero follows the display pane, not the Electron window. Goal
+   rings retain a single row until the pane can no longer give them useful
+   breathing room; supporting facts move below before the rings collapse. */
+.home-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1.25rem;
+  padding: 1rem;
+}
+
+.home-goal-rings {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  place-items: center;
+  column-gap: 0.75rem;
+  row-gap: 1rem;
+}
+
+.home-goal-rings > :last-child {
+  grid-column: 1 / -1;
+}
+
+.home-goal-ring {
+  width: 120px !important;
+  height: 120px !important;
+}
+
+.home-goal-value {
+  font-size: 20px;
+}
+
+.home-goal-label {
+  font-size: 9.5px;
+}
+
+.home-goal-caption {
+  font-size: 10.5px;
+}
+
+.home-goal-skeleton-label {
+  width: 5rem;
+}
+
+.home-hero-stats {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.375rem;
+  border-top: 1px solid var(--color-hairline);
+  padding-top: 1rem;
+}
+
+.home-hero-stat {
+  width: 100%;
+  min-width: 0;
+}
+
+@container display (min-width: 32rem) {
+  .home-hero {
+    gap: 1.5rem;
+    padding: 1.5rem;
+  }
+
+  .home-goal-rings {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .home-goal-rings > :last-child {
+    grid-column: auto;
+  }
+
+  .home-hero-stats {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    column-gap: 1rem;
+  }
+}
+
+@container display (min-width: 36rem) {
+  .home-goal-ring {
+    width: 132px !important;
+    height: 132px !important;
+  }
+
+  .home-goal-skeleton-content {
+    scale: 1.05;
+  }
+}
+
+@container display (min-width: 42rem) {
+  .home-goal-ring {
+    width: 148px !important;
+    height: 148px !important;
+  }
+
+  .home-goal-value {
+    font-size: 22px;
+  }
+
+  .home-goal-label {
+    font-size: 10px;
+  }
+
+  .home-goal-caption {
+    font-size: 11px;
+  }
+
+  .home-goal-skeleton-content {
+    scale: 1.1;
+  }
+}
+
+@container display (min-width: 56rem) {
+  .home-hero {
+    grid-template-columns: minmax(0, 1fr) 230px;
+  }
+
+  .home-hero-stats {
+    grid-template-columns: minmax(0, 1fr);
+    align-content: center;
+    gap: 0.75rem;
+    border-top: 0;
+    border-left: 1px solid var(--color-hairline);
+    padding-top: 0;
+    padding-left: 1.5rem;
+  }
+}
+
+@container display (min-width: 64rem) {
+  .home-goal-ring {
+    width: 172px !important;
+    height: 172px !important;
+  }
+
+  .home-goal-value {
+    font-size: 25px;
+  }
+
+  .home-goal-label {
+    font-size: 11px;
+  }
+
+  .home-goal-caption {
+    font-size: 12px;
+  }
+}
+
+@container display (min-width: 72rem) {
+  .home-goal-ring {
+    width: 188px !important;
+    height: 188px !important;
+  }
+
+  .home-goal-value {
+    font-size: 28px;
+  }
+
+  .home-goal-label {
+    font-size: 12px;
+  }
+
+  .home-goal-caption {
+    font-size: 13px;
+  }
+
+  .home-goal-skeleton-content {
+    scale: 1.25;
+  }
+}
+
+@container display (min-width: 80rem) {
+  .home-goal-ring {
+    width: 200px !important;
+    height: 200px !important;
+  }
+
+  .home-goal-value {
+    font-size: 30px;
+  }
+
+  .home-goal-label {
+    font-size: 12.5px;
+  }
+
+  .home-goal-caption {
+    font-size: 13.5px;
+  }
+
+  .home-goal-skeleton-content {
+    scale: 1.35;
+  }
+}
+
 /* Workout facts step away in priority order based on the card's available
    width, rather than overflowing when the card shares a narrow grid row. */
 .workout-list {

@@ -432,7 +432,7 @@ export default function App(): React.JSX.Element {
         />
 
         <div className="flex min-h-0 flex-1">
-          <div className="scroll-stable min-h-0 flex-1 overflow-y-auto">
+          <div className="scroll-stable min-h-0 min-w-0 flex-1 overflow-y-auto [container-name:display] [container-type:inline-size]">
             <AnimatePresence mode="wait">
               <motion.div
                 key={`${view}-${detailMetric ? detailMetric.metric : sleepStagesOpen ? 'sleep-stages' : selectedWorkout?.id ?? 'root'}-${google.connected}`}
