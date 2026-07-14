@@ -159,3 +159,9 @@ for WHOOP and also took ideas from
 
 > OpenPulse is an independent project and is not affiliated with or endorsed by
 > Google or OpenAI. It is not a medical device; do not use it for diagnosis.
+
+## License
+
+OpenPulse is available under the [MIT License](LICENSE). Third-party names,
+trademarks, and product imagery are excluded; see
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

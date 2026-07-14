@@ -3,6 +3,7 @@
   "productName": "OpenPulse",
   "version": "0.1.0",
   "description": "A macOS companion for Google Fitbit Air — health dashboard, activity rings, and an AI assistant for your data.",
+  "license": "MIT",
   "main": "./out/main/index.js",
   "type": "module",
   "private": true,
