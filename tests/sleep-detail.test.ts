@@ -8,6 +8,7 @@ describe('sleep detail normalization', () => {
         interval: {
           startTime: '2026-07-09T22:30:00Z',
           endTime: '2026-07-10T06:30:00Z',
+          civilStartTime: { date: { year: 2026, month: 7, day: 9 }, time: { hours: 23, minutes: 30 } },
           civilEndTime: { date: { year: 2026, month: 7, day: 10 }, time: { hours: 7, minutes: 30 } }
         },
         type: 'STAGES',
@@ -33,6 +34,9 @@ describe('sleep detail normalization', () => {
       }
     })
     expect(night).not.toBeNull()
+    expect(night?.startCivilDate).toBe('2026-07-09')
+    expect(night?.startCivilMinute).toBe(23 * 60 + 30)
+    expect(night?.endCivilMinute).toBe(7 * 60 + 30)
     expect(night?.minutesToFallAsleep).toBe(12)
     expect(night?.minutesAwake).toBe(40)
     expect(night?.minutesToFirstDeepOrRem).toBe(30)

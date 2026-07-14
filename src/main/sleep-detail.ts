@@ -5,7 +5,7 @@ import type {
   SleepStageSegment,
   SleepStageType
 } from '../shared/types'
-import { dateFromCivil, type CivilDateTime, type RawDataPoint } from './health-api'
+import { dateFromCivil, minuteFromCivil, type CivilDateTime, type RawDataPoint } from './health-api'
 
 const STAGE_MAP: Record<string, SleepStageType> = {
   AWAKE: 'AWAKE',
@@ -17,7 +17,12 @@ const STAGE_MAP: Record<string, SleepStageType> = {
 }
 
 interface RawSleep {
-  interval?: { startTime?: string; endTime?: string; civilEndTime?: CivilDateTime }
+  interval?: {
+    startTime?: string
+    endTime?: string
+    civilStartTime?: CivilDateTime
+    civilEndTime?: CivilDateTime
+  }
   stages?: Array<{ type?: string; startTime?: string; endTime?: string }>
   outOfBedSegments?: Array<{ startTime?: string; endTime?: string }>
   type?: string
@@ -132,6 +137,9 @@ export function mapSleep(point: RawDataPoint): SleepNight | null {
     date,
     startTime: sleep.interval.startTime,
     endTime: sleep.interval.endTime,
+    startCivilDate: dateFromCivil(sleep.interval.civilStartTime),
+    startCivilMinute: minuteFromCivil(sleep.interval.civilStartTime),
+    endCivilMinute: minuteFromCivil(sleep.interval.civilEndTime),
     minutesAsleep,
     minutesInSleepPeriod: period,
     efficiency: period > 0 ? Math.round((minutesAsleep / period) * 100) : null,

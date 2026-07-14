@@ -85,4 +85,112 @@ describe('health agent analysis', () => {
     })
     expect(JSON.stringify(compact)).not.toContain('2026-07-10T23:00:00Z')
   })
+
+  test('converts fallback sleep timestamps using seasonal timezone rules', () => {
+    const compact = healthAgentModelData(
+      'query_sleep',
+      {
+        source: 'live',
+        detail: 'summary',
+        nights: [
+          {
+            date: '2026-07-14',
+            startTime: '2026-07-14T00:23:00Z',
+            endTime: '2026-07-14T10:12:00Z',
+            stages: [],
+            outOfBedSegments: []
+          },
+          {
+            date: '2026-12-14',
+            startTime: '2026-12-14T00:23:00Z',
+            endTime: '2026-12-14T10:12:00Z',
+            stages: [],
+            outOfBedSegments: []
+          }
+        ]
+      },
+      'Europe/London'
+    )
+
+    expect(compact).toMatchObject({
+      nights: [
+        {
+          localStartTime: '2026-07-14 01:23',
+          localEndTime: '2026-07-14 11:12',
+          timeZone: 'Europe/London'
+        },
+        {
+          localStartTime: '2026-12-14 00:23',
+          localEndTime: '2026-12-14 10:12',
+          timeZone: 'Europe/London'
+        }
+      ]
+    })
+    expect(JSON.stringify(compact)).not.toContain('T00:23:00Z')
+  })
+
+  test('prefers tracker civil sleep times over timezone reconstruction', () => {
+    const compact = healthAgentModelData(
+      'query_sleep',
+      {
+        source: 'live',
+        detail: 'summary',
+        nights: [
+          {
+            date: '2026-07-14',
+            startTime: '2026-07-14T00:23:00Z',
+            endTime: '2026-07-14T10:12:00Z',
+            startCivilDate: '2026-07-13',
+            startCivilMinute: 23 * 60 + 23,
+            endCivilMinute: 11 * 60 + 12,
+            stages: [],
+            outOfBedSegments: []
+          }
+        ]
+      },
+      'Europe/London'
+    )
+
+    expect(compact).toMatchObject({
+      nights: [
+        {
+          localStartTime: '2026-07-13 23:23',
+          localEndTime: '2026-07-14 11:12'
+        }
+      ]
+    })
+  })
+
+  test('converts detailed out-of-bed periods without exposing UTC clock values', () => {
+    const compact = healthAgentModelData(
+      'query_sleep',
+      {
+        source: 'live',
+        detail: 'detailed',
+        nights: [
+          {
+            date: '2026-07-14',
+            startTime: '2026-07-14T00:23:00Z',
+            endTime: '2026-07-14T10:12:00Z',
+            stages: [],
+            outOfBedSegments: [
+              { startTime: '2026-07-14T03:00:00Z', endTime: '2026-07-14T03:05:00Z' }
+            ]
+          }
+        ]
+      },
+      'Europe/London'
+    )
+
+    expect(compact).toMatchObject({
+      nights: [
+        {
+          outOfBedSegments: [
+            { localStartTime: '2026-07-14 04:00', localEndTime: '2026-07-14 04:05' }
+          ]
+        }
+      ]
+    })
+    expect(JSON.stringify(compact)).not.toContain('T03:00:00Z')
+  })
 })

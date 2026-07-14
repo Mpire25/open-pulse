@@ -66,7 +66,44 @@ export function pearsonCorrelation(pairs: Array<[number, number]>): number | nul
   return denominator === 0 ? null : numerator / denominator
 }
 
-export function healthAgentModelData(name: string, data: Record<string, unknown>): Record<string, unknown> {
+function civilClockTime(date: unknown, minute: unknown): string | null {
+  if (
+    typeof date !== 'string' ||
+    !/^\d{4}-\d{2}-\d{2}$/.test(date) ||
+    typeof minute !== 'number' ||
+    !Number.isFinite(minute)
+  ) {
+    return null
+  }
+  const normalizedSeconds = ((Math.round(minute * 60) % 86_400) + 86_400) % 86_400
+  const hours = Math.floor(normalizedSeconds / 3_600)
+  const minutes = Math.floor((normalizedSeconds % 3_600) / 60)
+  return `${date} ${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`
+}
+
+function zonedClockTime(value: unknown, timeZone: string): string | null {
+  if (typeof value !== 'string') return null
+  const timestamp = new Date(value)
+  if (Number.isNaN(timestamp.getTime())) return null
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23'
+  }).formatToParts(timestamp)
+  const part = (type: Intl.DateTimeFormatPartTypes): string =>
+    parts.find((candidate) => candidate.type === type)?.value ?? ''
+  return `${part('year')}-${part('month')}-${part('day')} ${part('hour')}:${part('minute')}`
+}
+
+export function healthAgentModelData(
+  name: string,
+  data: Record<string, unknown>,
+  timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone
+): Record<string, unknown> {
   if (name === 'query_sleep') {
     const { detail, nights, ...rest } = data
     return {
@@ -79,13 +116,33 @@ export function healthAgentModelData(name: string, data: Record<string, unknown>
             const {
               stages: _stages,
               outOfBedSegments: _outOfBedSegments,
+              startTime,
+              endTime,
+              startCivilDate,
+              startCivilMinute,
+              endCivilMinute,
               ...summary
             } = night
+            const localStartTime =
+              civilClockTime(startCivilDate, startCivilMinute) ?? zonedClockTime(startTime, timeZone)
+            const localEndTime =
+              civilClockTime(night.date, endCivilMinute) ?? zonedClockTime(endTime, timeZone)
+            const localOutOfBedSegments = outOfBedSegments.flatMap((candidate) => {
+              const segment = candidate as Record<string, unknown>
+              const localSegmentStart = zonedClockTime(segment.startTime, timeZone)
+              const localSegmentEnd = zonedClockTime(segment.endTime, timeZone)
+              return localSegmentStart && localSegmentEnd
+                ? [{ localStartTime: localSegmentStart, localEndTime: localSegmentEnd }]
+                : []
+            })
             return {
               ...summary,
+              ...(localStartTime ? { localStartTime } : {}),
+              ...(localEndTime ? { localEndTime } : {}),
+              timeZone,
               stageSegmentCount: stages.length,
               ...(detail === 'detailed'
-                ? { outOfBedSegments }
+                ? { outOfBedSegments: localOutOfBedSegments }
                 : { outOfBedSegmentCount: outOfBedSegments.length })
             }
           })
