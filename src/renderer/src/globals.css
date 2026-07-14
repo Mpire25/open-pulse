@@ -142,6 +142,7 @@ body {
 .home-hero-stat {
   width: 100%;
   min-width: 0;
+  justify-content: center;
 }
 
 @container display (min-width: 32rem) {
@@ -161,6 +162,10 @@ body {
   .home-hero-stats {
     grid-template-columns: repeat(3, minmax(0, 1fr));
     column-gap: 1rem;
+  }
+
+  .home-hero-stat {
+    justify-content: flex-start;
   }
 }
 
@@ -214,7 +219,7 @@ body {
   }
 }
 
-@container display (min-width: 64rem) {
+@container display (min-width: 60rem) {
   .home-goal-ring {
     width: 172px !important;
     height: 172px !important;
@@ -233,7 +238,7 @@ body {
   }
 }
 
-@container display (min-width: 72rem) {
+@container display (min-width: 64rem) {
   .home-goal-ring {
     width: 188px !important;
     height: 188px !important;
@@ -256,7 +261,7 @@ body {
   }
 }
 
-@container display (min-width: 80rem) {
+@container display (min-width: 72rem) {
   .home-goal-ring {
     width: 200px !important;
     height: 200px !important;
