@@ -294,18 +294,6 @@ body {
   .assistant-visual-pair {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
-}
-
-@container display (min-width: 64rem) {
-  .activity-hero {
-    grid-template-columns: auto minmax(0, 1fr);
-    gap: 1rem;
-  }
-
-  .activity-summary,
-  .nutrition-hero-macros {
-    border-left: 1px solid var(--color-hairline);
-  }
 
   .sleep-hero {
     grid-template-columns: 250px minmax(0, 1fr);
@@ -321,7 +309,19 @@ body {
   }
 
   .nutrition-hero-macros {
+    border-left: 1px solid var(--color-hairline);
     padding-left: 1.5rem;
+  }
+}
+
+@container display (min-width: 64rem) {
+  .activity-hero {
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 1rem;
+  }
+
+  .activity-summary {
+    border-left: 1px solid var(--color-hairline);
   }
 
   .display-stage-card-grid {
