@@ -215,7 +215,7 @@ function MetricDetailSkeleton({
 
   return (
     <>
-      <Panel className={`grid grid-cols-2 divide-x divide-hairline overflow-hidden sm:grid-cols-4 ${CARD_HEIGHT.periodStats}`}>
+      <Panel className={`display-sm-four-grid divide-x divide-hairline overflow-hidden ${CARD_HEIGHT.periodStats}`}>
         {Array.from({ length: 4 }, (_, index) => (
           <div key={index} className="flex flex-col gap-2 px-5 py-4" aria-hidden>
             <SkeletonText className="w-16" />
@@ -551,7 +551,7 @@ function HeartZonesPanel({
       <Panel className={`flex flex-col gap-3 p-5 ${CARD_HEIGHT.summary}`}>
         <SectionHeader title="Heart-rate zones" hint="Thresholds, time and energy by zone" />
         {pending ? (
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-4" aria-hidden>
+          <div className="display-md-four-grid gap-3" aria-hidden>
             {Array.from({ length: 4 }, (_, index) => (
               <div key={index} className="flex flex-col gap-2 border-l border-hairline px-4 first:border-l-0 first:pl-0">
                 <SkeletonText className="w-16" />
@@ -565,11 +565,11 @@ function HeartZonesPanel({
         ) : data?.zones.some(
             (zone) => zone.minBpm != null || zone.maxBpm != null || zone.durationMin != null || zone.calories != null
           ) ? (
-          <div className="grid grid-cols-2 gap-y-4 md:grid-cols-4">
+          <div className="display-md-four-grid gap-y-4">
             {data.zones.map((zone, index) => (
               <div
                 key={zone.zone}
-                className="border-l border-hairline px-4 first:border-l-0 first:pl-0 max-md:[&:nth-child(odd)]:border-l-0 max-md:[&:nth-child(odd)]:pl-0"
+                className="metric-zone-cell border-l border-hairline px-4 first:border-l-0 first:pl-0"
               >
                 <div className="flex items-center gap-2 text-[11px] font-medium text-ink-faint">
                   <span className="h-1.5 w-1.5 rounded-full bg-[var(--color-heart)]" style={{ opacity: 0.4 + index * 0.18 }} />
@@ -649,7 +649,7 @@ function PeriodDetail({
   return (
     <>
       <motion.div custom={1} variants={fade} initial="hidden" animate="show">
-        <Panel className={`grid grid-cols-2 divide-x divide-hairline overflow-hidden sm:grid-cols-4 ${CARD_HEIGHT.periodStats}`}>
+        <Panel className={`display-sm-four-grid divide-x divide-hairline overflow-hidden ${CARD_HEIGHT.periodStats}`}>
           {stats.map((s) => (
             <div key={s.label} className="flex flex-col gap-1.5 px-5 py-4">
               <span className="text-[11px] font-medium tracking-wide text-ink-faint">{s.label}</span>

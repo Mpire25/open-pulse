@@ -124,7 +124,7 @@ export function WorkoutDetailView({ workout, date, onBack }: WorkoutDetailViewPr
       </motion.header>
 
       <motion.div custom={1} variants={fade} initial="hidden" animate="show">
-        <Panel className="grid grid-cols-2 gap-2 p-2 sm:grid-cols-3 xl:grid-cols-6">
+        <Panel className="workout-summary-grid grid grid-cols-2 gap-2 p-2">
           {summary.map((item) => (
             <DetailStat key={item.label} item={item} />
           ))}
@@ -141,7 +141,7 @@ export function WorkoutDetailView({ workout, date, onBack }: WorkoutDetailViewPr
               heartValues.length > 0 || heartRateChartZones.length > 0 ? (
                 <div className="flex items-center gap-3">
                   {heartValues.length > 0 && (
-                    <div className="hidden gap-4 text-right sm:flex">
+                    <div className="workout-heart-values gap-4 text-right">
                       <SmallValue label="Low" value={`${heartMin} bpm`} />
                       <SmallValue label="Average" value={`${heartAvg} bpm`} />
                       <SmallValue label="High" value={`${heartMax} bpm`} />
@@ -149,7 +149,7 @@ export function WorkoutDetailView({ workout, date, onBack }: WorkoutDetailViewPr
                   )}
                   {heartRateChartZones.length > 0 && (
                     <>
-                      {heartValues.length > 0 && <span className="hidden h-8 w-px bg-hairline sm:block" />}
+                      {heartValues.length > 0 && <span className="workout-heart-divider h-8 w-px bg-hairline" />}
                       <motion.button
                         type="button"
                         aria-pressed={showHeartRateZones}
@@ -178,7 +178,7 @@ export function WorkoutDetailView({ workout, date, onBack }: WorkoutDetailViewPr
             }
           />
           {heartValues.length > 0 && (
-            <div className="grid grid-cols-3 gap-4 border-t border-hairline pt-3 sm:hidden">
+            <div className="workout-heart-compact grid grid-cols-3 gap-4 border-t border-hairline pt-3">
               <SmallValue label="Low" value={`${heartMin} bpm`} />
               <SmallValue label="Average" value={`${heartAvg} bpm`} />
               <SmallValue label="High" value={`${heartMax} bpm`} />
@@ -205,14 +205,14 @@ export function WorkoutDetailView({ workout, date, onBack }: WorkoutDetailViewPr
       </motion.div>
 
       {(zones.length > 0 || showRoute) && (
-        <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+        <div className="display-lg-pair-grid">
           {zones.length > 0 && (
             <motion.div
               custom={3}
               variants={fade}
               initial="hidden"
               animate="show"
-              className="min-w-0 lg:col-span-2"
+              className="display-lg-span-2 min-w-0"
             >
               <HeartRateZones zones={zones} />
             </motion.div>
@@ -223,7 +223,7 @@ export function WorkoutDetailView({ workout, date, onBack }: WorkoutDetailViewPr
               variants={fade}
               initial="hidden"
               animate="show"
-              className="min-w-0 lg:col-span-2"
+              className="display-lg-span-2 min-w-0"
             >
               <Panel className="h-full min-h-[258px] p-5">
                 <SectionHeader
@@ -248,7 +248,7 @@ export function WorkoutDetailView({ workout, date, onBack }: WorkoutDetailViewPr
         </div>
       )}
 
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
+      <div className="display-lg-pair-grid display-lg-pair-grid--weighted-110">
         <motion.div custom={5} variants={fade} initial="hidden" animate="show" className="min-w-0">
           <Panel className="h-full p-6">
             <SectionHeader
@@ -264,7 +264,7 @@ export function WorkoutDetailView({ workout, date, onBack }: WorkoutDetailViewPr
               </div>
               <TimePoint label="Finished" value={endLabel} align="right" />
             </div>
-            <div className="mt-7 grid grid-cols-2 gap-4 border-t border-hairline pt-4 sm:grid-cols-3">
+            <div className="workout-three-grid mt-7 grid grid-cols-2 gap-4 border-t border-hairline pt-4">
               <SmallValue label="Active" value={formatMinutes(workout.durationMin)} />
               <SmallValue label="Elapsed" value={formatMinutes(elapsedMinutes)} />
               {elapsedMinutes > workout.durationMin && (
@@ -319,7 +319,7 @@ export function WorkoutDetailView({ workout, date, onBack }: WorkoutDetailViewPr
               hint="Sport-specific measurements supplied by the tracker"
               icon={<Mountains size={18} weight="fill" className="text-recovery" />}
             />
-            <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
+            <div className="workout-advanced-grid mt-4 grid grid-cols-2 gap-2">
               {specialized.map((item) => (
                 <DetailStat key={item.label} item={item} />
               ))}
@@ -381,7 +381,7 @@ function HeartRateZones({ zones }: { zones: ReturnType<typeof zoneItems> }): Rea
           <span key={zone.label} style={{ width: `${(zone.minutes / total) * 100}%`, background: zone.color }} />
         ))}
       </div>
-      <div className="mt-4 grid grid-cols-2 gap-x-5 gap-y-4 sm:grid-cols-3">
+      <div className="workout-zone-grid mt-4 grid grid-cols-2 gap-x-5 gap-y-4">
         {zones.map((zone) => (
           <div key={zone.label} className="flex items-center justify-between gap-3 border-t border-hairline pt-3">
             <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-[11.5px] text-ink-dim">

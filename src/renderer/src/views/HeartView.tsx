@@ -77,7 +77,7 @@ export function HeartView({ date, onOpenMetric }: HeartViewProps): React.JSX.Ele
         </InteractivePanel>
       </motion.div>
 
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+      <div className="display-lg-pair-grid">
         {VITAL_KEYS.map((key, i) => (
           <VitalCard
             key={key}

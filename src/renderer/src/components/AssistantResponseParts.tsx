@@ -38,8 +38,8 @@ const CARD_HIDDEN = { opacity: 0, y: 10 }
 const CARD_EASE = [0.16, 1, 0.3, 1] as const
 
 function visualGridClass(layout: AssistantVisualLayout): string {
-  if (layout === 'pair') return 'grid grid-cols-1 gap-3 md:grid-cols-2'
-  if (layout === 'primary-supporting') return 'grid grid-cols-1 items-start gap-3 lg:grid-cols-3'
+  if (layout === 'pair') return 'assistant-visual-pair grid gap-3'
+  if (layout === 'primary-supporting') return 'assistant-visual-primary grid items-start gap-3'
   return 'grid grid-cols-1 gap-3'
 }
 
@@ -50,7 +50,7 @@ function visualCardClass(
 ): string {
   if (compact) return 'w-full'
   if (layout === 'primary-supporting') {
-    return isPrimaryAssistantVisual(part) ? 'w-full lg:col-span-2' : 'w-full lg:col-span-1'
+    return isPrimaryAssistantVisual(part) ? 'assistant-visual-primary-card w-full' : 'w-full'
   }
   if (layout === 'pair') return 'h-full w-full'
   if (part.type === 'metric-card') return 'w-full max-w-[380px]'

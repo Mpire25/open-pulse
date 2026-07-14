@@ -86,6 +86,458 @@ body {
   scrollbar-gutter: stable;
 }
 
+.display-four-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+@container display (min-width: 56.625rem) {
+  .display-four-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+/* Page-level compositions measure the display pane instead of the window, so
+   opening navigation or the assistant behaves like resizing it. */
+.display-lg-pair-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1.25rem;
+}
+
+.display-sm-four-grid,
+.display-md-four-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.display-stage-card-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.75rem;
+}
+
+.activity-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1.5rem;
+  min-height: 300px;
+  padding: 1.5rem;
+}
+
+.activity-goals {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  place-items: center;
+  gap: 0.5rem;
+}
+
+.activity-goal-ring {
+  width: 148px !important;
+  height: 148px !important;
+}
+
+.activity-summary {
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-self: center;
+}
+
+.sleep-hero {
+  display: grid;
+  min-height: 340px;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.5rem;
+  padding: 0.75rem;
+}
+
+.nutrition-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1.5rem;
+  padding: 1.5rem;
+}
+
+.nutrition-secondary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(105px, 1fr));
+}
+
+.workout-heart-values,
+.workout-heart-divider {
+  display: none;
+}
+
+.assistant-visual-pair,
+.assistant-visual-primary {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.chat-suggestion-grid {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.metric-zone-cell:nth-child(odd) {
+  border-left-width: 0;
+  padding-left: 0;
+}
+
+@container display (min-width: 56.625rem) {
+  .display-lg-pair-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .display-lg-pair-grid--weighted-135 {
+    grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+  }
+
+  .display-lg-pair-grid--weighted-110 {
+    grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+  }
+
+  .display-lg-span-2 {
+    grid-column: span 2 / span 2;
+  }
+}
+
+@container display (min-width: 36rem) {
+  .activity-goal-ring {
+    width: 172px !important;
+    height: 172px !important;
+  }
+}
+
+@container display (min-width: 40rem) {
+  .display-sm-four-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .display-stage-card-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .body-measurement-row,
+  .body-measurement-skeleton-row {
+    grid-template-columns: 140px minmax(0, 1fr);
+    align-items: center;
+    gap: 1.25rem;
+  }
+
+  .body-measurement-values,
+  .body-measurement-skeleton-values,
+  .nutrition-item-totals {
+    justify-content: flex-end;
+    text-align: right;
+  }
+
+  .nutrition-item-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 1rem;
+  }
+
+  .workout-summary-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .workout-heart-values {
+    display: flex;
+  }
+
+  .workout-heart-divider {
+    display: block;
+  }
+
+  .workout-heart-compact {
+    display: none;
+  }
+
+  .workout-three-grid,
+  .workout-advanced-grid,
+  .workout-zone-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .chat-suggestion-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@container display (min-width: 48rem) {
+  .display-md-four-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .display-md-three-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .metric-zone-cell:nth-child(odd):not(:first-child) {
+    border-left-width: 1px;
+    padding-left: 1rem;
+  }
+
+  .assistant-visual-pair {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .sleep-hero {
+    grid-template-columns: 250px minmax(0, 1fr);
+  }
+
+  .sleep-summary {
+    grid-column: span 2 / span 2;
+  }
+
+  .nutrition-hero {
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 1rem;
+  }
+
+  .nutrition-hero-macros {
+    border-left: 1px solid var(--color-hairline);
+    padding-left: 1.5rem;
+  }
+
+  .nutrition-secondary-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+@container display (min-width: 64rem) {
+  .activity-hero {
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 1rem;
+  }
+
+  .activity-summary {
+    border-left: 1px solid var(--color-hairline);
+  }
+
+  .display-stage-card-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .workout-advanced-grid {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+
+  .assistant-visual-primary {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .assistant-visual-primary-card {
+    grid-column: span 2 / span 2;
+  }
+}
+
+@container display (min-width: 80rem) {
+  .workout-summary-grid {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+}
+
+/* The Home hero follows the display pane, not the Electron window. Goal
+   rings retain a single row until the pane can no longer give them useful
+   breathing room; supporting facts move below before the rings collapse. */
+.home-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1.25rem;
+  padding: 1rem;
+}
+
+.home-goal-rings {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  place-items: center;
+  column-gap: 0.75rem;
+  row-gap: 1rem;
+}
+
+.home-goal-rings > :last-child {
+  grid-column: 1 / -1;
+}
+
+.home-goal-ring {
+  width: 120px !important;
+  height: 120px !important;
+}
+
+.home-goal-value {
+  font-size: 20px;
+}
+
+.home-goal-label {
+  font-size: 9.5px;
+}
+
+.home-goal-caption {
+  font-size: 10.5px;
+}
+
+.home-goal-skeleton-label {
+  width: 5rem;
+}
+
+.home-hero-stats {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.375rem;
+  border-top: 1px solid var(--color-hairline);
+  padding-top: 1rem;
+}
+
+.home-hero-stat {
+  width: 100%;
+  min-width: 0;
+  justify-content: center;
+}
+
+@container display (min-width: 32rem) {
+  .home-hero {
+    gap: 1.5rem;
+    padding: 1.5rem;
+  }
+
+  .home-goal-rings {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .home-goal-rings > :last-child {
+    grid-column: auto;
+  }
+
+  .home-hero-stats {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    column-gap: 1rem;
+  }
+
+  .home-hero-stat {
+    justify-content: flex-start;
+  }
+}
+
+@container display (min-width: 36rem) {
+  .home-goal-ring {
+    width: 132px !important;
+    height: 132px !important;
+  }
+
+  .home-goal-skeleton-content {
+    scale: 1.05;
+  }
+}
+
+@container display (min-width: 42rem) {
+  .home-goal-ring {
+    width: 148px !important;
+    height: 148px !important;
+  }
+
+  .home-goal-value {
+    font-size: 22px;
+  }
+
+  .home-goal-label {
+    font-size: 10px;
+  }
+
+  .home-goal-caption {
+    font-size: 11px;
+  }
+
+  .home-goal-skeleton-content {
+    scale: 1.1;
+  }
+}
+
+@container display (min-width: 56rem) {
+  .home-hero {
+    grid-template-columns: minmax(0, 1fr) 230px;
+  }
+
+  .home-hero-stats {
+    grid-template-columns: minmax(0, 1fr);
+    align-content: center;
+    gap: 0.75rem;
+    border-top: 0;
+    border-left: 1px solid var(--color-hairline);
+    padding-top: 0;
+    padding-left: 1.5rem;
+  }
+}
+
+@container display (min-width: 60rem) {
+  .home-goal-ring {
+    width: 172px !important;
+    height: 172px !important;
+  }
+
+  .home-goal-value {
+    font-size: 25px;
+  }
+
+  .home-goal-label {
+    font-size: 11px;
+  }
+
+  .home-goal-caption {
+    font-size: 12px;
+  }
+}
+
+@container display (min-width: 64rem) {
+  .home-goal-ring {
+    width: 188px !important;
+    height: 188px !important;
+  }
+
+  .home-goal-value {
+    font-size: 28px;
+  }
+
+  .home-goal-label {
+    font-size: 12px;
+  }
+
+  .home-goal-caption {
+    font-size: 13px;
+  }
+
+  .home-goal-skeleton-content {
+    scale: 1.25;
+  }
+}
+
+@container display (min-width: 72rem) {
+  .home-goal-ring {
+    width: 200px !important;
+    height: 200px !important;
+  }
+
+  .home-goal-value {
+    font-size: 30px;
+  }
+
+  .home-goal-label {
+    font-size: 12.5px;
+  }
+
+  .home-goal-caption {
+    font-size: 13.5px;
+  }
+
+  .home-goal-skeleton-content {
+    scale: 1.35;
+  }
+}
+
 /* Workout facts step away in priority order based on the card's available
    width, rather than overflowing when the card shares a narrow grid row. */
 .workout-list {

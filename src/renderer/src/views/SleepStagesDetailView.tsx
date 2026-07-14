@@ -80,7 +80,7 @@ export function SleepStagesDetailView({ date, onBack }: SleepStagesDetailViewPro
             variants={fade}
             initial="hidden"
             animate="show"
-            className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4"
+            className="display-stage-card-grid"
           >
             {STAGE_ORDER.map((stage) => (
               <StageCard key={stage} stage={stage} night={night} />
@@ -93,7 +93,7 @@ export function SleepStagesDetailView({ date, onBack }: SleepStagesDetailViewPro
                 title="Sleep architecture"
                 hint="Timing and continuity details for this night"
               />
-              <div className="mt-5 grid grid-cols-2 gap-x-6 gap-y-5 border-t border-hairline pt-5 md:grid-cols-3">
+              <div className="display-md-three-grid mt-5 grid grid-cols-2 gap-x-6 gap-y-5 border-t border-hairline pt-5">
                 <ArchitectureMetric
                   label="To first deep or REM"
                   value={formatOptionalMinutes(night.minutesToFirstDeepOrRem)}
@@ -182,7 +182,7 @@ function SleepStagesDetailSkeleton(): React.JSX.Element {
           <SkeletonSleepStages />
         </div>
       </Panel>
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4" aria-hidden>
+      <div className="display-stage-card-grid" aria-hidden>
         {Array.from({ length: 4 }, (_, index) => (
           <Panel key={index} className="flex flex-col gap-3 p-5">
             <SkeletonText className="w-16" />

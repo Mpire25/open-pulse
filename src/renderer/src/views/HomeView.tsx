@@ -36,7 +36,6 @@ const HOME_METRICS: MetricKey[] = [
 ]
 
 const SIGNAL_KEYS: MetricKey[] = ['hrvMs', 'spo2Pct', 'breathingRate', 'skinTempDeltaC']
-const HOME_RING_SIZE = 'lg:!h-[172px] lg:!w-[172px] xl:!h-[188px] xl:!w-[188px] 2xl:!h-[200px] 2xl:!w-[200px]'
 
 interface HomeViewProps {
   date: string
@@ -73,8 +72,8 @@ export function HomeView({ date, goals, onOpenMetric, onOpenWorkout, onNavigate 
 
       {/* Hero: goal rings + how the night set the day up */}
       <motion.div custom={1} variants={fade} initial="hidden" animate="show">
-        <Panel className={`grid grid-cols-1 gap-6 p-6 lg:grid-cols-[1fr_auto] ${CARD_HEIGHT.hero}`}>
-          <div className="flex flex-wrap items-center justify-around gap-6">
+        <Panel className={`home-hero ${CARD_HEIGHT.hero}`}>
+          <div className="home-goal-rings">
             {series.isMetricPending('steps') ? (
               <GoalRingSkeleton />
             ) : (
@@ -104,7 +103,7 @@ export function HomeView({ date, goals, onOpenMetric, onOpenWorkout, onNavigate 
             )}
           </div>
 
-          <div className="flex min-w-[230px] flex-col justify-center gap-3 lg:border-l lg:border-hairline lg:pl-6">
+          <div className="home-hero-stats">
             <HeroRow
               icon={<Moon size={15} weight="fill" style={{ color: 'var(--color-sleep)' }} />}
               label="Sleep"
@@ -176,7 +175,7 @@ export function HomeView({ date, goals, onOpenMetric, onOpenWorkout, onNavigate 
         </Panel>
       </motion.div>
 
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
+      <div className="display-lg-pair-grid display-lg-pair-grid--weighted-135">
         {/* Daily movement */}
         <motion.div custom={2} variants={fade} initial="hidden" animate="show" className="min-w-0">
           <InteractivePanel
@@ -308,7 +307,7 @@ function SignalsPanel({
       <div className="border-b border-hairline px-5 pb-3 pt-4">
         <SectionHeader title="Night signals" hint="Compared with your own recent baseline" />
       </div>
-      <div className="grid grid-cols-2 divide-x divide-hairline lg:grid-cols-4">
+      <div className="display-four-grid divide-x divide-hairline">
         {SIGNAL_KEYS.map((key) => {
           const def = METRICS[key]
           const points = pointsFor(key)
@@ -356,12 +355,12 @@ function GoalRingSkeleton(): React.JSX.Element {
   return (
     <div className="flex flex-col items-center gap-2" aria-hidden>
       <SkeletonRing
-        size={148}
-        stroke={17}
-        className={HOME_RING_SIZE}
-        contentClassName="lg:scale-110 xl:scale-125 2xl:scale-[1.35]"
+        size={120}
+        stroke={14}
+        className="home-goal-ring"
+        contentClassName="home-goal-skeleton-content"
       />
-      <SkeletonText className="w-20 lg:h-3.5 lg:w-24 xl:w-28 2xl:h-4 2xl:w-32" />
+      <SkeletonText className="home-goal-skeleton-label" />
     </div>
   )
 }
@@ -392,20 +391,20 @@ function GoalRing({
         value={value ?? 0}
         goal={goal}
         color={def.color}
-        size={148}
-        stroke={17}
-        className={HOME_RING_SIZE}
+        size={120}
+        stroke={14}
+        className="home-goal-ring"
       >
         <div className="text-center">
-          <div className="text-[22px] font-semibold leading-none tracking-tight text-ink lg:text-[25px] xl:text-[28px] 2xl:text-[30px]">
+          <div className="home-goal-value font-semibold leading-none tracking-tight text-ink">
             {value != null ? def.format(value) : '—'}
           </div>
-          <div className="mt-1 text-[10px] uppercase tracking-wide text-ink-faint lg:text-[11px] xl:text-[12px] 2xl:text-[12.5px]">
+          <div className="home-goal-label mt-1 uppercase tracking-wide text-ink-faint">
             {label ?? def.shortLabel ?? def.label}
           </div>
         </div>
       </ProgressRing>
-      <span className="font-mono text-[11px] text-ink-dim transition-colors group-hover:text-ink lg:text-[12px] xl:text-[13px] 2xl:text-[13.5px]">
+      <span className="home-goal-caption font-mono text-ink-dim transition-colors group-hover:text-ink">
         {pct != null ? `${pct}% of ${formatInt(goal)}` : 'no goal data'}
       </span>
     </button>
@@ -428,10 +427,10 @@ function HeroRow({
   return (
     <button
       onClick={onClick}
-      className="-mx-2 flex items-start gap-2.5 rounded-xl px-2 py-1.5 text-left transition-colors hover:bg-white/[0.04]"
+      className="home-hero-stat -mx-2 flex items-start gap-2.5 rounded-xl px-2 py-1.5 text-left transition-colors hover:bg-white/[0.04]"
     >
       <span className="mt-0.5">{icon}</span>
-      <span className="flex flex-col">
+      <span className="min-w-0 flex flex-col">
         <span className="text-[11px] font-medium text-ink-faint">{label}</span>
         <span className="text-[14.5px] font-semibold text-ink">{value}</span>
         {sub && <span className="mt-0.5 text-[11px] text-ink-dim">{sub}</span>}
