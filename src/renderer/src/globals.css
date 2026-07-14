@@ -177,6 +177,11 @@ body {
   padding: 1.5rem;
 }
 
+.nutrition-secondary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(105px, 1fr));
+}
+
 .workout-heart-values,
 .workout-heart-divider {
   display: none;
@@ -311,6 +316,10 @@ body {
   .nutrition-hero-macros {
     border-left: 1px solid var(--color-hairline);
     padding-left: 1.5rem;
+  }
+
+  .nutrition-secondary-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 }
 

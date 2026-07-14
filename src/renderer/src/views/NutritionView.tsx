@@ -577,7 +577,7 @@ function MacroBreakdown({
         ))}
       </div>
       {secondary.length > 0 && (
-        <div className="grid grid-cols-[repeat(auto-fit,minmax(105px,1fr))] gap-3 border-t border-hairline pt-3">
+        <div className="nutrition-secondary-grid gap-3 border-t border-hairline pt-3">
           {secondary.map((nutrient) => (
             <button
               key={nutrient.key}
