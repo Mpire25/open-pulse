@@ -12,9 +12,16 @@ export function generateChatTitle(text: string): string {
   return `${clipped || sentence.slice(0, 48).trim()}…`
 }
 
-export function interruptedTurnText(text: string, message: string): string {
+export interface InterruptedTurnState {
+  text: string
+  transient: boolean
+}
+
+export function interruptedTurnState(text: string, message: string): InterruptedTurnState {
   const partial = text.trimEnd()
-  return partial ? `${partial}\n\n_${message}_` : message
+  return partial
+    ? { text: `${partial}\n\n_${message}_`, transient: false }
+    : { text: message, transient: true }
 }
 
 export { DEFAULT_CHAT_TITLE }

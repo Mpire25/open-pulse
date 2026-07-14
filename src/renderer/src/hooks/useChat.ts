@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { generateChatTitle, interruptedTurnText } from '@shared/chat'
+import { generateChatTitle, interruptedTurnState } from '@shared/chat'
 import { assistantPartsContext } from '@shared/assistant-parts'
 import type {
   AiEvent,
@@ -14,6 +14,7 @@ export interface ChatTurn extends ChatSessionMessage {
   streaming?: boolean
   toolLabel?: string
   error?: boolean
+  transient?: boolean
 }
 
 interface ViewChat extends Omit<ChatSession, 'messages'> {
@@ -63,7 +64,9 @@ function createDraftChat(): ViewChat {
 
 function persistedMessages(turns: ChatTurn[]): ChatSessionMessage[] {
   return turns
-    .filter((turn) => !turn.error && !turn.streaming && (turn.text.trim() || turn.parts?.length))
+    .filter(
+      (turn) => !turn.error && !turn.transient && !turn.streaming && (turn.text.trim() || turn.parts?.length)
+    )
     .map(({ id, role, text, createdAt, parts }) => ({
       id,
       role,
@@ -221,9 +224,10 @@ export function useChat(): ChatController {
                 toolLabel: undefined
               }
             case 'interrupted':
+              const interruption = interruptedTurnState(turn.text, event.message)
               return {
                 ...turn,
-                text: interruptedTurnText(turn.text, event.message),
+                ...interruption,
                 streaming: false,
                 toolLabel: undefined
               }
@@ -269,7 +273,7 @@ export function useChat(): ChatController {
       )
 
       const history: ChatMessage[] = nextTurns
-        .filter((turn) => turn.id !== assistantTurn.id && !turn.error)
+        .filter((turn) => turn.id !== assistantTurn.id && !turn.error && !turn.transient)
         .map(({ role, text: messageText, parts }) => ({
           role,
           text: withDisplayContext(role, messageText, parts)
@@ -305,16 +309,16 @@ export function useChat(): ChatController {
     runsRef.current.delete(chatId)
     void window.pulse.ai.cancel(chatId, run.runId)
     updateTurns(chatId, (turns) =>
-      turns.map((turn) =>
-        turn.id === run.assistantId
-          ? {
-              ...turn,
-              text: interruptedTurnText(turn.text, 'Response stopped.'),
-              streaming: false,
-              toolLabel: undefined
-            }
-          : turn
-      )
+      turns.map((turn) => {
+        if (turn.id !== run.assistantId) return turn
+        const interruption = interruptedTurnState(turn.text, 'Response stopped.')
+        return {
+          ...turn,
+          ...interruption,
+          streaming: false,
+          toolLabel: undefined
+        }
+      })
     )
     void run.preparation.finally(() => saveCompletedChat(chatId))
   }, [saveCompletedChat, updateTurns])
