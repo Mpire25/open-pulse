@@ -15,12 +15,13 @@ describe('agent execution tracing', () => {
       runId: 'run12345',
       sequence: 1,
       elapsedMs: 2,
-      enabled: true,
-      maxSearchTurns: 2,
+      maxCalls: 3,
+      maxAttempts: 4,
+      suggestedSearchTurns: 2,
       reason: 'external-guidance'
     }
     expect(formatAgentTraceEvent(event)).toBe(
-      '[AI trace123 +2ms] Web research available · budget 2 turns · external-guidance'
+      '[AI trace123 +2ms] Web research available · up to 3 successful calls / 4 attempts · suggested depth 2 · external-guidance'
     )
   })
 
@@ -63,7 +64,7 @@ describe('agent execution tracing', () => {
       summarizeToolArguments('research_web', {
         query: 'Do people with HRV around 32 ms report short sleep?'
       })
-    ).toEqual({})
+    ).toEqual({ query: 'Do people with HRV around 32 ms report short sleep?' })
   })
 
   test('summarizes result shape without exposing health measurements', () => {

@@ -1,4 +1,5 @@
 import type { AssistantVisualPart } from '../shared/types'
+import { sanitizeResearchQuery } from './agent-research'
 
 export type AgentTraceMode = 'off' | 'summary' | 'json' | 'verbose'
 
@@ -11,7 +12,13 @@ interface TraceUsage {
 export type AgentTracePayload =
   | { type: 'run_started'; model: string; messages: number; maxTurns: number }
   | { type: 'auth_ready'; accountScoped: boolean }
-  | { type: 'research_policy'; enabled: boolean; maxSearchTurns: number; reason: string }
+  | {
+      type: 'research_policy'
+      maxCalls: number
+      maxAttempts: number
+      suggestedSearchTurns: number
+      reason: string
+    }
   | {
       type: 'turn_started'
       turn: number
@@ -34,7 +41,7 @@ export type AgentTracePayload =
       type: 'web_search_started'
       turn: number
       researchTurn: number
-      maxSearchTurns: number
+      suggestedSearchTurns: number
       action: string
       query?: string
     }
@@ -42,7 +49,7 @@ export type AgentTracePayload =
       type: 'web_search_completed'
       turn: number
       researchTurn: number
-      maxSearchTurns: number
+      suggestedSearchTurns: number
       action: string
       query?: string
     }
@@ -126,7 +133,7 @@ export function formatAgentTraceEvent(event: AgentTraceEvent): string {
     case 'auth_ready':
       return `${prefix} Auth ready · ${event.accountScoped ? 'ChatGPT account scoped' : 'no account header'}`
     case 'research_policy':
-      return `${prefix} Web research ${event.enabled ? `available · budget ${event.maxSearchTurns} turns · ${event.reason}` : 'unavailable'}`
+      return `${prefix} Web research available · up to ${event.maxCalls} successful calls / ${event.maxAttempts} attempts · suggested depth ${event.suggestedSearchTurns} · ${event.reason}`
     case 'turn_started':
       return `${prefix} Turn ${event.turn}/${event.maxTurns}${event.finalResponse ? ' · final response' : ''} · ${event.inputItems} input items · ${event.datasets} datasets · ${event.visuals} visuals`
     case 'model_responded': {
@@ -134,9 +141,9 @@ export function formatAgentTraceEvent(event: AgentTraceEvent): string {
       return `${prefix} Model responded in ${formatDuration(event.durationMs)} · ${event.functionCalls} function calls · ${event.textChars} text chars · ${event.citations} citations${usage}`
     }
     case 'web_search_started':
-      return `${prefix} Web research ${event.researchTurn}/${event.maxSearchTurns} · turn ${event.turn} · ${event.action}${event.query ? ` · ${event.query}` : ''}`
+      return `${prefix} Web research action ${event.researchTurn} · suggested depth ${event.suggestedSearchTurns} · turn ${event.turn} · ${event.action}${event.query ? ` · ${event.query}` : ''}`
     case 'web_search_completed':
-      return `${prefix} Web research ${event.researchTurn}/${event.maxSearchTurns} completed · turn ${event.turn} · ${event.action}${event.query ? ` · ${event.query}` : ''}`
+      return `${prefix} Web research action ${event.researchTurn} completed · suggested depth ${event.suggestedSearchTurns} · turn ${event.turn} · ${event.action}${event.query ? ` · ${event.query}` : ''}`
     case 'tool_started':
       return `${prefix} Tool started · ${event.name} · ${shortId(event.callId)} · ${detail(event.arguments)}`
     case 'tool_completed':
@@ -194,6 +201,10 @@ export class AgentTracer {
 }
 
 export function summarizeToolArguments(name: string, args: Record<string, unknown>): Record<string, unknown> {
+  if (name === 'research_web') {
+    const query = sanitizeResearchQuery(args.query)
+    return query ? { query } : {}
+  }
   if (name === 'present_health_data') {
     return {
       overviews: Array.isArray(args.overviews) ? args.overviews.length : 0,

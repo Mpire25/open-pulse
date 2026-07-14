@@ -37,7 +37,7 @@ Built with Electron + React 19, Radix primitives, Tailwind v4, and Framer Motion
   analyze your real metrics across explicit date ranges, including trends and
   relationships, sleep, workouts, intraday signals, nutrition, body readings,
   and devices. Answers can include trusted, navigable cards and charts derived
-  from the returned data, plus cited web research when current external guidance
+  from the returned data, plus web research when current external guidance
   is needed. Available as a full page and as a slide-over panel on every view,
   with account-scoped conversation history, pinning, and deletion.
 - **Demo mode** — realistic, deterministic sample data for any date, so the
