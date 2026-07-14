@@ -1,7 +1,14 @@
 import { describe, expect, test } from 'bun:test'
 import { mapSleep, mapSleepRespiratory } from '../src/main/sleep-detail'
+import { minuteFromCivil } from '../src/main/health-api'
 
 describe('sleep detail normalization', () => {
+  test('treats omitted zero-valued civil hours as midnight', () => {
+    expect(minuteFromCivil({ time: { minutes: 23 } })).toBe(23)
+    expect(minuteFromCivil({ time: {} })).toBe(0)
+    expect(minuteFromCivil({})).toBeNull()
+  })
+
   test('retains latency, awake time, stage counts, metadata, and out-of-bed periods', () => {
     const night = mapSleep({
       sleep: {
