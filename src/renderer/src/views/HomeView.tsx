@@ -175,7 +175,7 @@ export function HomeView({ date, goals, onOpenMetric, onOpenWorkout, onNavigate 
         </Panel>
       </motion.div>
 
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
+      <div className="display-pair-grid display-pair-grid--weighted">
         {/* Daily movement */}
         <motion.div custom={2} variants={fade} initial="hidden" animate="show" className="min-w-0">
           <InteractivePanel
@@ -307,7 +307,7 @@ function SignalsPanel({
       <div className="border-b border-hairline px-5 pb-3 pt-4">
         <SectionHeader title="Night signals" hint="Compared with your own recent baseline" />
       </div>
-      <div className="grid grid-cols-2 divide-x divide-hairline lg:grid-cols-4">
+      <div className="display-four-grid divide-x divide-hairline">
         {SIGNAL_KEYS.map((key) => {
           const def = METRICS[key]
           const points = pointsFor(key)
