@@ -2,6 +2,10 @@ import { describe, expect, test } from 'bun:test'
 import { googleAccountScope } from '../src/main/google-account-scope'
 
 describe('Google chat-history account scope', () => {
+  test('keeps disconnected chats separate from legacy generated-data conversations', () => {
+    expect(googleAccountScope(null)).toBe('disconnected')
+  })
+
   test('stays stable when a reconnect adds the Google subject claim', () => {
     const beforeReconnect = googleAccountScope({
       email: ' Person@Example.com ',

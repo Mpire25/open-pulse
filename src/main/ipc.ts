@@ -10,9 +10,14 @@ import type {
   IntradayScope,
   MetricKey
 } from '../shared/types'
-import { HEALTH_CANCELLED, splitHealthWireArgs } from '../shared/health-ipc'
+import { HEALTH_CANCELLED, healthError, splitHealthWireArgs } from '../shared/health-ipc'
 import { isActivityIntradayMetric, isHeartDetailMetric } from '../shared/types'
-import { connectGoogle, disconnectGoogle, getGoogleStatus } from './google-auth'
+import {
+  connectGoogle,
+  disconnectGoogle,
+  getGoogleStatus,
+  GoogleAuthUnavailableError
+} from './google-auth'
 import { connectCodex, disconnectCodex, getCodexStatus } from './codex-auth'
 import {
   clearHealthCache,
@@ -87,6 +92,7 @@ function handle<Args extends unknown[], Result>(
 
 const healthControllers = new Map<string, AbortController>()
 let legacyHealthRequestSequence = 0
+let googleDisconnectedNotified = false
 
 function abortAllHealthRequests(): void {
   for (const controller of healthControllers.values()) controller.abort()
@@ -95,6 +101,16 @@ function abortAllHealthRequests(): void {
 
 function healthRequestKey(event: IpcMainInvokeEvent, requestId: string): string {
   return `${event.sender.id}:${requestId}`
+}
+
+function notifyGoogleDisconnected(): void {
+  if (googleDisconnectedNotified) return
+  googleDisconnectedNotified = true
+  abortAllHealthRequests()
+  cancelAllChats('Health account disconnected.')
+  resetHealthAccount()
+  sendToTrustedRenderers('google:status-changed', { connected: false })
+  sendToTrustedRenderers('chats:account-changed')
 }
 
 function healthHandle<Args extends unknown[], Result>(
@@ -113,7 +129,11 @@ function healthHandle<Args extends unknown[], Result>(
     return Promise.resolve(listener(event, controller.signal, ...args))
       .catch((error: unknown) => {
         if (error instanceof DOMException && error.name === 'AbortError') return HEALTH_CANCELLED
-        throw error
+        if (error instanceof GoogleAuthUnavailableError && error.disconnected) notifyGoogleDisconnected()
+        const message = error instanceof Error && error.message.trim()
+          ? error.message
+          : 'Google Health could not complete the request.'
+        return healthError(message)
       })
       .finally(() => {
         if (healthControllers.get(key) === controller) healthControllers.delete(key)
@@ -142,6 +162,7 @@ export function registerIpc(): void {
     cancelAllChats('Health account changed.')
     resetHealthAccount()
     const status = await connectGoogle()
+    googleDisconnectedNotified = false
     abortAllHealthRequests()
     cancelAllChats('Health account changed.')
     resetHealthAccount()
@@ -149,6 +170,7 @@ export function registerIpc(): void {
     return status
   })
   handle('google:disconnect', () => {
+    googleDisconnectedNotified = true
     abortAllHealthRequests()
     cancelAllChats('Health account disconnected.')
     disconnectGoogle()

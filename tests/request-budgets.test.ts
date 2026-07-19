@@ -24,7 +24,7 @@ const {
   getWorkoutsRange,
   resetHealthAccount
 } = await import('../src/main/health-service')
-const { disconnectGoogle, getGoogleAccessToken } = await import('../src/main/google-auth')
+const { disconnectGoogle, getGoogleAccessToken, getGoogleStatus } = await import('../src/main/google-auth')
 const { disconnectCodex, getCodexTokens } = await import('../src/main/codex-auth')
 const { shiftIsoDate } = await import('../src/main/health-api')
 const { setSecret, updateSettings } = await import('../src/main/store')
@@ -118,6 +118,23 @@ describe('health request budgets', () => {
       'Google Health could not refresh its session'
     )
     expect(requests).toHaveLength(1)
+  })
+
+  test('marks an invalid Google grant as a disconnected session', async () => {
+    updateSettings({ googleClientId: 'client-id', googleClientSecret: 'client-secret' })
+    setSecret('google-tokens', {
+      accessToken: 'expired-token',
+      refreshToken: 'revoked-refresh-token',
+      expiresAt: Date.now() - 1
+    })
+    globalThis.fetch = (async () =>
+      new Response(JSON.stringify({ error: 'invalid_grant' }), { status: 400 })) as typeof fetch
+
+    await expect(getGoogleAccessToken()).rejects.toMatchObject({
+      disconnected: true,
+      message: 'Google Health access expired. Reconnect your account in Settings.'
+    })
+    expect(getGoogleStatus()).toEqual({ connected: false })
   })
 
   test('keeps cold and overlapping Home navigation within budget without refetching covered dates', async () => {

@@ -7,6 +7,8 @@ interface GoogleAccountIdentity {
 }
 
 export function googleAccountScope(tokens: GoogleAccountIdentity | null): string {
+  // Deliberately do not reopen the legacy "demo" scope: those conversations
+  // can contain generated health values that the product no longer presents.
   if (!tokens) return 'disconnected'
   // Email was available on tokens created before subject IDs were persisted. Keep it
   // canonical so reconnecting the same account does not move its chat history.

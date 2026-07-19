@@ -237,6 +237,11 @@ export default function App(): React.JSX.Element {
     void window.pulse.health.refresh().then(() => queryClient.invalidateQueries())
   }, [clearAccountScopedState, queryClient])
 
+  useEffect(
+    () => window.pulse.google.onStatusChanged(handleGoogleChange),
+    [handleGoogleChange]
+  )
+
   const handleCodexChange = useCallback((status: CodexAuthStatus): void => {
     setCodex(status)
   }, [])

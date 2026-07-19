@@ -43,7 +43,7 @@ let refreshRetryAfter = 0
 const REFRESH_FAILURE_COOLDOWN_MS = 30_000
 
 export class GoogleAuthUnavailableError extends Error {
-  constructor(message: string) {
+  constructor(message: string, readonly disconnected = false) {
     super(message)
     this.name = 'GoogleAuthUnavailableError'
   }
@@ -278,7 +278,10 @@ export async function getGoogleAccessToken(): Promise<string | null> {
         const payload = (await resp.json().catch(() => null)) as GoogleTokenError | null
         if (payload?.error === 'invalid_grant') {
           deleteSecret(SECRET_KEY)
-          throw new GoogleAuthUnavailableError('Google Health access expired. Reconnect your account in Settings.')
+          throw new GoogleAuthUnavailableError(
+            'Google Health access expired. Reconnect your account in Settings.',
+            true
+          )
         }
         refreshRetryAfter = Date.now() + REFRESH_FAILURE_COOLDOWN_MS
         throw new GoogleAuthUnavailableError('Google Health could not refresh its session. Try syncing again shortly.')
