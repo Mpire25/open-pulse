@@ -16,7 +16,8 @@ import {
   connectGoogle,
   disconnectGoogle,
   getGoogleStatus,
-  GoogleAuthUnavailableError
+  GoogleAuthUnavailableError,
+  onGoogleAuthInvalidated
 } from './google-auth'
 import { connectCodex, disconnectCodex, getCodexStatus } from './codex-auth'
 import {
@@ -129,7 +130,9 @@ function healthHandle<Args extends unknown[], Result>(
     return Promise.resolve(listener(event, controller.signal, ...args))
       .catch((error: unknown) => {
         if (error instanceof DOMException && error.name === 'AbortError') return HEALTH_CANCELLED
-        if (error instanceof GoogleAuthUnavailableError && error.disconnected) notifyGoogleDisconnected()
+        if (!(error instanceof GoogleAuthUnavailableError)) {
+          console.error(`[health] ${channel} failed:`, error)
+        }
         const message = error instanceof Error && error.message.trim()
           ? error.message
           : 'Google Health could not complete the request.'
@@ -151,6 +154,7 @@ function sendToTrustedRenderers(channel: string, ...args: unknown[]): void {
 }
 
 export function registerIpc(): void {
+  onGoogleAuthInvalidated(notifyGoogleDisconnected)
   handle('settings:get', () => getSettings())
   handle('settings:update', (_e, patch: Partial<AppSettings>) => updateSettings(patch))
 

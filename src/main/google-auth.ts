@@ -41,11 +41,27 @@ let authGeneration = 0
 let refreshRequest: { generation: number; controller: AbortController; promise: Promise<string> } | null = null
 let refreshRetryAfter = 0
 const REFRESH_FAILURE_COOLDOWN_MS = 30_000
+const authInvalidatedListeners = new Set<() => void>()
 
 export class GoogleAuthUnavailableError extends Error {
-  constructor(message: string, readonly disconnected = false) {
+  constructor(message: string) {
     super(message)
     this.name = 'GoogleAuthUnavailableError'
+  }
+}
+
+export function onGoogleAuthInvalidated(listener: () => void): () => void {
+  authInvalidatedListeners.add(listener)
+  return () => authInvalidatedListeners.delete(listener)
+}
+
+function emitGoogleAuthInvalidated(): void {
+  for (const listener of authInvalidatedListeners) {
+    try {
+      listener()
+    } catch (error) {
+      console.error('[google-auth] failed to handle invalidated credentials:', error)
+    }
   }
 }
 
@@ -278,10 +294,8 @@ export async function getGoogleAccessToken(): Promise<string | null> {
         const payload = (await resp.json().catch(() => null)) as GoogleTokenError | null
         if (payload?.error === 'invalid_grant') {
           deleteSecret(SECRET_KEY)
-          throw new GoogleAuthUnavailableError(
-            'Google Health access expired. Reconnect your account in Settings.',
-            true
-          )
+          emitGoogleAuthInvalidated()
+          throw new GoogleAuthUnavailableError('Google Health access expired. Reconnect your account in Settings.')
         }
         refreshRetryAfter = Date.now() + REFRESH_FAILURE_COOLDOWN_MS
         throw new GoogleAuthUnavailableError('Google Health could not refresh its session. Try syncing again shortly.')

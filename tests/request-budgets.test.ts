@@ -24,8 +24,14 @@ const {
   getWorkoutsRange,
   resetHealthAccount
 } = await import('../src/main/health-service')
-const { disconnectGoogle, getGoogleAccessToken, getGoogleStatus } = await import('../src/main/google-auth')
+const {
+  disconnectGoogle,
+  getGoogleAccessToken,
+  getGoogleStatus,
+  onGoogleAuthInvalidated
+} = await import('../src/main/google-auth')
 const { disconnectCodex, getCodexTokens } = await import('../src/main/codex-auth')
+const { runHealthAgentTool } = await import('../src/main/health-agent-tools')
 const { shiftIsoDate } = await import('../src/main/health-api')
 const { setSecret, updateSettings } = await import('../src/main/store')
 
@@ -120,7 +126,7 @@ describe('health request budgets', () => {
     expect(requests).toHaveLength(1)
   })
 
-  test('marks an invalid Google grant as a disconnected session', async () => {
+  test('notifies account coordination when an assistant tool discovers an invalid Google grant', async () => {
     updateSettings({ googleClientId: 'client-id', googleClientSecret: 'client-secret' })
     setSecret('google-tokens', {
       accessToken: 'expired-token',
@@ -129,11 +135,24 @@ describe('health request budgets', () => {
     })
     globalThis.fetch = (async () =>
       new Response(JSON.stringify({ error: 'invalid_grant' }), { status: 400 })) as typeof fetch
-
-    await expect(getGoogleAccessToken()).rejects.toMatchObject({
-      disconnected: true,
-      message: 'Google Health access expired. Reconnect your account in Settings.'
+    let invalidations = 0
+    const stopListening = onGoogleAuthInvalidated(() => {
+      invalidations += 1
     })
+
+    try {
+      await expect(
+        runHealthAgentTool(
+          'query_daily_metrics',
+          { metrics: ['steps'], startDate: '2026-07-01', endDate: '2026-07-01' },
+          new AbortController().signal
+        )
+      ).rejects.toThrow('Google Health access expired. Reconnect your account in Settings.')
+    } finally {
+      stopListening()
+    }
+
+    expect(invalidations).toBe(1)
     expect(getGoogleStatus()).toEqual({ connected: false })
   })
 
