@@ -6,6 +6,8 @@ import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from 
 import { AnimatePresence, motion } from 'framer-motion'
 import {
   ArrowUp,
+  Check,
+  Copy,
   Stop as StopIcon,
   Sparkle,
   Heartbeat,
@@ -228,7 +230,7 @@ export function ChatPanel({
         ) : (
           <div
             className={cn(
-              'flex flex-col gap-6 py-3',
+              'flex flex-col gap-8 py-3',
               compact ? 'px-4' : 'mx-auto w-full max-w-[820px] px-6'
             )}
           >
@@ -296,13 +298,14 @@ const Bubble = memo(function Bubble({
   onAction: (action: AssistantAction) => void
 }): React.JSX.Element {
   const isUser = turn.role === 'user'
+  const canCopy = Boolean(turn.text.trim()) && !turn.streaming && !turn.error && !turn.transient
   return (
     <motion.div
       data-turn-id={turn.id}
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ type: 'spring', stiffness: 220, damping: 26 }}
-      className={cn('flex', isUser ? 'justify-end' : 'justify-start')}
+      className={cn('group/turn relative flex w-full flex-col', isUser ? 'items-end' : 'items-start')}
     >
       {isUser ? (
         <div className="max-w-[80%] rounded-[16px] rounded-br-md bg-accent px-4 py-2.5 text-[13px] leading-relaxed text-white shadow-[inset_0_1px_0_rgb(255_255_255/0.15)] select-text">
@@ -337,9 +340,61 @@ const Bubble = memo(function Bubble({
           )}
         </div>
       )}
+      {canCopy && (
+        <div
+          className={cn(
+            'absolute inset-x-0 top-full z-10 flex h-8 items-end opacity-0 transition-opacity duration-150',
+            'group-hover/turn:opacity-100 group-focus-within/turn:opacity-100',
+            isUser ? 'justify-end' : 'justify-start'
+          )}
+        >
+          <CopyMessageButton text={turn.text} />
+        </div>
+      )}
     </motion.div>
   )
 })
+
+function CopyMessageButton({ text }: { text: string }): React.JSX.Element {
+  const [copied, setCopied] = useState(false)
+  const resetTimerRef = useRef<number | null>(null)
+
+  useEffect(() => {
+    return () => {
+      if (resetTimerRef.current !== null) window.clearTimeout(resetTimerRef.current)
+    }
+  }, [])
+
+  const copy = async (): Promise<void> => {
+    try {
+      await navigator.clipboard.writeText(text)
+      setCopied(true)
+      if (resetTimerRef.current !== null) window.clearTimeout(resetTimerRef.current)
+      resetTimerRef.current = window.setTimeout(() => {
+        setCopied(false)
+        resetTimerRef.current = null
+      }, 1600)
+    } catch {
+      setCopied(false)
+    }
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={() => void copy()}
+      className={cn(
+        'grid size-7 place-items-center rounded-lg transition-colors',
+        'hover:bg-white/[0.06] hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50',
+        copied ? 'text-accent' : 'text-ink-faint'
+      )}
+      aria-label={copied ? 'Message copied' : 'Copy message'}
+      title={copied ? 'Copied' : 'Copy message'}
+    >
+      {copied ? <Check size={14} weight="bold" /> : <Copy size={14} />}
+    </button>
+  )
+}
 
 function ToolThinking({ label }: { label: string }): React.JSX.Element {
   return (
