@@ -222,13 +222,14 @@ export function useBodyMeasurements(start: string, end: string): UseQueryResult<
   })
 }
 
-export function useDevices(): UseQueryResult<PairedDevice[]> {
+export function useDevices(enabled = true): UseQueryResult<PairedDevice[]> {
   return useQuery({
     queryKey: ['devices'],
     queryFn: ({ signal }) => healthRequest(signal, (requestId) =>
       window.pulse.health.devices(requestId)
     ),
-    staleTime: 5 * 60_000
+    staleTime: 5 * 60_000,
+    enabled
   })
 }
 

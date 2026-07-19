@@ -70,18 +70,6 @@ import {
   partialFetchGroupId,
   valuesToMerge
 } from './group-cache'
-import {
-  demoActivityIntraday,
-  demoBodyMeasurements,
-  demoDevices,
-  demoHeartDetail,
-  demoIntraday,
-  demoNutritionLogs,
-  demoSeries,
-  demoSleepRange,
-  demoWorkoutTrack,
-  demoWorkoutsRange
-} from './sample-data'
 import { activityRollupBreakdown, activityRollupPoints, calorieEnergyBreakdown } from './activity-intraday'
 import {
   bmiFrom,
@@ -119,6 +107,12 @@ function rethrowIfAborted(error: unknown): void {
 
 function assertCurrentAccount(generation: number): void {
   if (generation !== healthAccountGeneration) throw new HealthAccountChangedError()
+}
+
+async function requireGoogleAccessToken(): Promise<string> {
+  const token = await getGoogleAccessToken()
+  if (!token) throw new Error('Google Health is not connected. Connect an account in Settings to view health data.')
+  return token
 }
 
 // ---------------------------------------------------------------------------
@@ -1039,9 +1033,8 @@ export async function getWorkoutTrack(workoutId: string, signal?: AbortSignal): 
   const generation = healthAccountGeneration
   const cached = workoutTrackCache.get(workoutId)
   if (cached) return cached
-  const token = await getGoogleAccessToken()
+  const token = await requireGoogleAccessToken()
   assertCurrentAccount(generation)
-  if (!token) return demoWorkoutTrack(workoutId)
   try {
     const track = parseExerciseTcx(await exportExerciseTcx(token, workoutId, signal))
     assertCurrentAccount(generation)
@@ -1164,9 +1157,8 @@ export async function getSeries(
 ): Promise<SeriesResult> {
   const generation = healthAccountGeneration
   const [s, e] = normalizeRange(start, end)
-  const token = await getGoogleAccessToken()
+  const token = await requireGoogleAccessToken()
   assertCurrentAccount(generation)
-  if (!token) return { source: 'demo', start: s, end: e, days: demoSeries(metrics, s, e) }
 
   const groups = [...new Set(metrics.map((m) => GROUP_BY_METRIC.get(m)).filter((g): g is FetchGroup => g != null))]
   const jobs: Array<Promise<unknown>> = groups.map((group) =>
@@ -1211,9 +1203,8 @@ export async function getSleepRange(
 ): Promise<SleepRangeResult> {
   const generation = healthAccountGeneration
   const [s, e] = normalizeRange(start, end)
-  const token = await getGoogleAccessToken()
+  const token = await requireGoogleAccessToken()
   assertCurrentAccount(generation)
-  if (!token) return { source: 'demo', nights: demoSleepRange(s, e) }
   try {
     await ensureSleepOnce(token, s, e, force, generation, signal)
   } catch (err) {
@@ -1235,9 +1226,8 @@ export async function getWorkoutsRange(
 ): Promise<WorkoutsResult> {
   const generation = healthAccountGeneration
   const [s, e] = normalizeRange(start, end)
-  const token = await getGoogleAccessToken()
+  const token = await requireGoogleAccessToken()
   assertCurrentAccount(generation)
-  if (!token) return { source: 'demo', workouts: demoWorkoutsRange(s, e) }
   try {
     await ensureWorkoutsRange(token, s, e, force, generation, signal)
   } catch (err) {
@@ -1257,9 +1247,8 @@ export async function getIntraday(
 ): Promise<IntradaySnapshot> {
   const generation = healthAccountGeneration
   const [d] = normalizeRange(date, date)
-  const token = await getGoogleAccessToken()
+  const token = await requireGoogleAccessToken()
   assertCurrentAccount(generation)
-  if (!token) return demoIntraday(d)
   const jobs: Array<Promise<void>> = []
   if (scope === 'steps' || scope === 'both') {
     jobs.push(ensureIntradaySteps(token, d, force, generation, signal).catch((err) => {
@@ -1294,9 +1283,8 @@ export async function getActivityIntraday(
 ): Promise<ActivityIntradayResult> {
   const generation = healthAccountGeneration
   const [d] = normalizeRange(date, date)
-  const token = await getGoogleAccessToken()
+  const token = await requireGoogleAccessToken()
   assertCurrentAccount(generation)
-  if (!token) return demoActivityIntraday(d, metric)
 
   // v2 normalizes omitted elapsed windows to zero, so older sparse cached
   // series are refetched once instead of retaining compressed chart spacing.
@@ -1366,9 +1354,8 @@ export async function getHeartDetail(
 ): Promise<HeartDetailResult> {
   const generation = healthAccountGeneration
   const [d] = normalizeRange(date, date)
-  const token = await getGoogleAccessToken()
+  const token = await requireGoogleAccessToken()
   assertCurrentAccount(generation)
-  if (!token) return demoHeartDetail(d, metric)
 
   const group = `heart-detail-v1-${metric}`
   const cached = peekDay(d)?.heartDetails?.[metric]
@@ -1411,9 +1398,8 @@ export async function getHeartDetail(
 export async function getNutritionLogs(date: string, signal?: AbortSignal): Promise<NutritionLogsResult> {
   const generation = healthAccountGeneration
   const [d] = normalizeRange(date, date)
-  const token = await getGoogleAccessToken()
+  const token = await requireGoogleAccessToken()
   assertCurrentAccount(generation)
-  if (!token) return demoNutritionLogs(d)
   const points = await nutritionRawRange(token, d, shiftIsoDate(d, 1), 0, signal)
   assertCurrentAccount(generation)
   return { date: d, source: 'live', entries: parseNutritionLogs(points) }
@@ -1426,9 +1412,8 @@ export async function getBodyMeasurements(
 ): Promise<BodyMeasurementsResult> {
   const generation = healthAccountGeneration
   const [s, e] = normalizeRange(start, end)
-  const token = await getGoogleAccessToken()
+  const token = await requireGoogleAccessToken()
   assertCurrentAccount(generation)
-  if (!token) return demoBodyMeasurements(s, e)
   const [weightResult, heightResult] = await Promise.allSettled([
     weightRawRange(token, s, shiftIsoDate(e, 1), spanPriority(listDates(s, e).length), signal),
     // Height is a profile-like input and may have been recorded years before
@@ -1466,9 +1451,8 @@ export async function getDevices(force = false, signal?: AbortSignal): Promise<P
   ) {
     return devicesCache.devices
   }
-  const token = await getGoogleAccessToken()
+  const token = await requireGoogleAccessToken()
   assertCurrentAccount(generation)
-  if (!token) return demoDevices()
   try {
     const devices = (await listPairedDevices(token, signal)).map((d) => ({
       name: d.displayName ?? d.model ?? d.deviceVersion ?? 'Tracker',

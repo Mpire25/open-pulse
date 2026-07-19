@@ -15,6 +15,7 @@ interface TopBarProps {
   onToggleChat: () => void
   sidebarOpen: boolean
   onToggleSidebar: () => void
+  connected: boolean
 }
 
 export function TopBar({
@@ -25,7 +26,8 @@ export function TopBar({
   chatOpen,
   onToggleChat,
   sidebarOpen,
-  onToggleSidebar
+  onToggleSidebar,
+  connected
 }: TopBarProps): React.JSX.Element {
   return (
     <div className="drag-region relative z-30 flex h-11 shrink-0 items-center justify-end gap-2 px-3">
@@ -40,7 +42,7 @@ export function TopBar({
 
       {showDateNav && <DateNav date={date} onChange={onDateChange} />}
 
-      <BatteryPill />
+      <BatteryPill enabled={connected} />
 
       {showAsk && (
         <button
@@ -61,8 +63,8 @@ export function TopBar({
   )
 }
 
-function BatteryPill(): React.JSX.Element | null {
-  const { data: devices } = useDevices()
+function BatteryPill({ enabled }: { enabled: boolean }): React.JSX.Element | null {
+  const { data: devices } = useDevices(enabled)
   const device = devices?.find((d) => d.batteryPct != null)
   if (!device || device.batteryPct == null) return null
   const pct = Math.max(0, Math.min(100, Math.round(device.batteryPct)))

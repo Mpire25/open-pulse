@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import { healthWireArgs, isHealthCancelled } from '../shared/health-ipc'
+import { healthWireArgs, unwrapHealthResult } from '../shared/health-ipc'
 import type {
   ActivityIntradayMetric,
   ActivityIntradayResult,
@@ -29,12 +29,16 @@ import type {
 
 async function invokeHealth<T>(channel: string, args: unknown[], requestId: string): Promise<T> {
   const result: unknown = await ipcRenderer.invoke(channel, ...healthWireArgs(args, requestId))
-  if (isHealthCancelled(result)) throw new DOMException('The request was cancelled.', 'AbortError')
-  return result as T
+  return unwrapHealthResult<T>(result)
 }
 
 const newChatCallbacks = new Set<() => void>()
+const googleStatusCallbacks = new Set<(status: GoogleAuthStatus) => void>()
 let newChatPending = false
+
+ipcRenderer.on('google:status-changed', (_event, status: GoogleAuthStatus) => {
+  for (const callback of googleStatusCallbacks) callback(status)
+})
 
 ipcRenderer.on('app:new-chat', () => {
   if (!newChatCallbacks.size) {
@@ -63,7 +67,11 @@ const api = {
   google: {
     status: (): Promise<GoogleAuthStatus> => ipcRenderer.invoke('google:status'),
     connect: (): Promise<GoogleAuthStatus> => ipcRenderer.invoke('google:connect'),
-    disconnect: (): Promise<void> => ipcRenderer.invoke('google:disconnect')
+    disconnect: (): Promise<void> => ipcRenderer.invoke('google:disconnect'),
+    onStatusChanged: (callback: (status: GoogleAuthStatus) => void): (() => void) => {
+      googleStatusCallbacks.add(callback)
+      return () => googleStatusCallbacks.delete(callback)
+    }
   },
   codex: {
     status: (): Promise<CodexAuthStatus> => ipcRenderer.invoke('codex:status'),

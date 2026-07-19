@@ -4,6 +4,7 @@ import { Panel, DrillHeader, InteractivePanel } from '@/components/Panel'
 import { ColumnChart, ProgressRing, TrendLine } from '@/components/charts'
 import { SleepStages, STAGE_COLOR } from '@/components/SleepStages'
 import { CARD_HEIGHT, SkeletonChart, SkeletonRing, SkeletonSleepStages, SkeletonText } from '@/components/Skeleton'
+import { ErrorState } from '@/components/ErrorState'
 import { useSleepRange } from '@/hooks/useHealth'
 import { listDates, rangeEnding } from '@/lib/metrics'
 import { formatMinutes, longDate, shortDate, weekdayShort } from '@/lib/format'
@@ -22,6 +23,15 @@ interface SleepViewProps {
 export function SleepView({ date, goals, onOpenMetric, onOpenStages, onSelectDate }: SleepViewProps): React.JSX.Element {
   const week = rangeEnding(date, 7)
   const nights = useSleepRange(week.start, week.end)
+
+  if (nights.isError) {
+    return (
+      <ErrorState
+        message={nights.error instanceof Error ? nights.error.message : undefined}
+        onRetry={() => void nights.refetch()}
+      />
+    )
+  }
 
   const byDate = new Map((nights.data ?? []).map((n) => [n.date, n]))
   const night = byDate.get(date) ?? null

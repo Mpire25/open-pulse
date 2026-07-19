@@ -24,8 +24,14 @@ const {
   getWorkoutsRange,
   resetHealthAccount
 } = await import('../src/main/health-service')
-const { disconnectGoogle, getGoogleAccessToken } = await import('../src/main/google-auth')
+const {
+  disconnectGoogle,
+  getGoogleAccessToken,
+  getGoogleStatus,
+  onGoogleAuthInvalidated
+} = await import('../src/main/google-auth')
 const { disconnectCodex, getCodexTokens } = await import('../src/main/codex-auth')
+const { runHealthAgentTool } = await import('../src/main/health-agent-tools')
 const { shiftIsoDate } = await import('../src/main/health-api')
 const { setSecret, updateSettings } = await import('../src/main/store')
 
@@ -85,6 +91,71 @@ afterAll(() => {
 })
 
 describe('health request budgets', () => {
+  test('rejects health reads while Google is disconnected instead of substituting generated data', async () => {
+    disconnectGoogle()
+    resetHealthAccount()
+
+    await expect(getSeries(['steps'], '2026-07-01', '2026-07-01')).rejects.toThrow(
+      'Google Health is not connected'
+    )
+    await expect(getSleepRange('2026-07-01', '2026-07-01')).rejects.toThrow(
+      'Google Health is not connected'
+    )
+    await expect(getWorkoutsRange('2026-07-01', '2026-07-01')).rejects.toThrow(
+      'Google Health is not connected'
+    )
+    await expect(getIntraday('2026-07-01')).rejects.toThrow('Google Health is not connected')
+    expect(requests).toHaveLength(0)
+  })
+
+  test('surfaces Google refresh failures instead of substituting generated data', async () => {
+    updateSettings({ googleClientId: 'client-id', googleClientSecret: 'client-secret' })
+    setSecret('google-tokens', {
+      accessToken: 'expired-token',
+      refreshToken: 'refresh-token',
+      expiresAt: Date.now() - 1
+    })
+    globalThis.fetch = (async (input) => {
+      requests.push(String(input))
+      return new Response(JSON.stringify({ error: 'temporarily_unavailable' }), { status: 503 })
+    }) as typeof fetch
+
+    await expect(getSeries(['steps'], '2026-07-01', '2026-07-01')).rejects.toThrow(
+      'Google Health could not refresh its session'
+    )
+    expect(requests).toHaveLength(1)
+  })
+
+  test('notifies account coordination when an assistant tool discovers an invalid Google grant', async () => {
+    updateSettings({ googleClientId: 'client-id', googleClientSecret: 'client-secret' })
+    setSecret('google-tokens', {
+      accessToken: 'expired-token',
+      refreshToken: 'revoked-refresh-token',
+      expiresAt: Date.now() - 1
+    })
+    globalThis.fetch = (async () =>
+      new Response(JSON.stringify({ error: 'invalid_grant' }), { status: 400 })) as typeof fetch
+    let invalidations = 0
+    const stopListening = onGoogleAuthInvalidated(() => {
+      invalidations += 1
+    })
+
+    try {
+      await expect(
+        runHealthAgentTool(
+          'query_daily_metrics',
+          { metrics: ['steps'], startDate: '2026-07-01', endDate: '2026-07-01' },
+          new AbortController().signal
+        )
+      ).rejects.toThrow('Google Health access expired. Reconnect your account in Settings.')
+    } finally {
+      stopListening()
+    }
+
+    expect(invalidations).toBe(1)
+    expect(getGoogleStatus()).toEqual({ connected: false })
+  })
+
   test('keeps cold and overlapping Home navigation within budget without refetching covered dates', async () => {
     await loadHome('2026-07-01')
     expect(requests.length).toBeLessThanOrEqual(11)

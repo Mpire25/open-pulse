@@ -126,7 +126,7 @@ export function GoogleSetup({
           <AppLogo size={34} />
           <div>
             <h2 className="text-[16px] font-semibold tracking-tight text-ink">Connect your Fitbit Air</h2>
-            <p className="text-[12.5px] text-ink-dim">Showing sample data until you link Google Health.</p>
+            <p className="text-[12.5px] text-ink-dim">Link Google Health to view your health data.</p>
           </div>
         </div>
       )}

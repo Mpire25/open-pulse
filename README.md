@@ -40,8 +40,6 @@ Built with Electron + React 19, Radix primitives, Tailwind v4, and Framer Motion
   from the returned data, plus web research when current external guidance
   is needed. Available as a full page and as a slide-over panel on every view,
   with account-scoped conversation history, pinning, and deletion.
-- **Demo mode** — realistic, deterministic sample data for any date, so the
-  whole app is explorable before you connect anything.
 
 ## Running
 
@@ -54,7 +52,9 @@ bun run build      # create a production build in out/
 bun run build:mac  # package a .dmg (needs the electron-builder toolchain)
 ```
 
-The app opens in demo mode. Connect your accounts in **Settings**.
+Connect Google Health in **Settings** before opening health dashboards. The app
+never substitutes generated values when an account is disconnected or a sync
+cannot complete.
 
 ### Opt-in development tools
 
@@ -122,14 +122,14 @@ opens on `auth.openai.com`; after you authorize, the app receives tokens on its
 
 ```
 Renderer (React)  ──IPC──▶  Main process  ──HTTPS──▶  health.googleapis.com/v4
-   rings, charts,            OAuth + PKCE,             (or demo generator)
+   rings, charts,            OAuth + PKCE,
    chat UI                   token storage,
         ▲                    tool loop
         └────── ai:event stream ◀── chatgpt.com/backend-api/codex/responses
 ```
 
 - **`src/main`** — Electron main: OAuth flows (`google-auth.ts`, `codex-auth.ts`),
-  the Health API client (`health-api.ts`), the live/demo service layer
+  the Health API client (`health-api.ts`), the live health service layer
   (`health-service.ts`), the streaming AI agent (`codex-chat.ts`), and account
   storage (`store.ts`, using Electron `safeStorage` when available).
 - **`src/preload`** — the `window.pulse` bridge (context-isolated).

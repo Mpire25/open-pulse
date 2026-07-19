@@ -275,7 +275,7 @@ function dailyDataset(datasetId: string, datasets: Map<string, AgentDataset>): D
   const data = record(dataset?.data)
   const requestedRange = record(data?.requestedRange)
   if (dataset?.tool === 'query_sleep' && data && requestedRange && Array.isArray(data.nights)) {
-    const source = data.source === 'demo' ? 'demo' : data.source === 'live' ? 'live' : null
+    const source = data.source === 'live' ? 'live' : null
     const start = requiredDate(requestedRange.start, 'dataset start')
     const end = requiredDate(requestedRange.end, 'dataset end')
     if (!source) throw new Error(`Dataset ${datasetId} has no valid source.`)
@@ -303,7 +303,7 @@ function dailyDataset(datasetId: string, datasets: Map<string, AgentDataset>): D
   ) {
     throw new Error(`Dataset ${datasetId} is not daily metric data.`)
   }
-  const source = data.source === 'demo' ? 'demo' : data.source === 'live' ? 'live' : null
+  const source = data.source === 'live' ? 'live' : null
   const start = requiredDate(requestedRange.start, 'dataset start')
   const end = requiredDate(requestedRange.end, 'dataset end')
   if (!source) throw new Error(`Dataset ${datasetId} has no valid source.`)
@@ -680,7 +680,7 @@ function workoutDataset(datasetId: string, datasets: Map<string, AgentDataset>):
   if (dataset?.tool !== 'query_workouts' || !data || !Array.isArray(data.workouts)) {
     throw new Error(`Dataset ${datasetId} is not workout data.`)
   }
-  const source = data.source === 'demo' ? 'demo' : data.source === 'live' ? 'live' : null
+  const source = data.source === 'live' ? 'live' : null
   if (!source) throw new Error(`Dataset ${datasetId} has no valid source.`)
   return { source, workouts: data.workouts as Workout[] }
 }
@@ -697,7 +697,7 @@ function sleepDataset(
   if (dataset?.tool !== 'query_sleep' || !data || !requestedRange || !Array.isArray(data.nights)) {
     throw new Error(`Dataset ${datasetId} is not sleep data.`)
   }
-  const source = data.source === 'demo' ? 'demo' : data.source === 'live' ? 'live' : null
+  const source = data.source === 'live' ? 'live' : null
   const start = requiredDate(requestedRange.start, 'dataset start')
   const end = requiredDate(requestedRange.end, 'dataset end')
   if (!source) throw new Error(`Dataset ${datasetId} has no valid source.`)
@@ -776,7 +776,7 @@ function nutritionLogDataset(
   if (dataset?.tool !== 'query_nutrition_logs' || !data || !Array.isArray(data.entries)) {
     throw new Error(`Dataset ${datasetId} is not nutrition log data.`)
   }
-  const source = data.source === 'demo' ? 'demo' : data.source === 'live' ? 'live' : null
+  const source = data.source === 'live' ? 'live' : null
   const date = requiredDate(data.date, 'nutrition date')
   if (!source) throw new Error(`Dataset ${datasetId} has no valid source.`)
   return { source, date, entries: data.entries as NutritionLogEntry[] }
