@@ -236,7 +236,7 @@ export function summarizeToolResult(name: string, value: unknown): Record<string
   const data = record(value)
   if (!data) return { shape: Array.isArray(value) ? 'array' : typeof value }
   if ('error' in data) return { error: String(data.error).slice(0, 200) }
-  const source = data.source === 'live' || data.source === 'demo' ? data.source : undefined
+  const source = data.source === 'live' ? data.source : undefined
   if (name === 'query_daily_metrics') {
     return {
       source,

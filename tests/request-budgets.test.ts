@@ -85,6 +85,41 @@ afterAll(() => {
 })
 
 describe('health request budgets', () => {
+  test('rejects health reads while Google is disconnected instead of substituting generated data', async () => {
+    disconnectGoogle()
+    resetHealthAccount()
+
+    await expect(getSeries(['steps'], '2026-07-01', '2026-07-01')).rejects.toThrow(
+      'Google Health is not connected'
+    )
+    await expect(getSleepRange('2026-07-01', '2026-07-01')).rejects.toThrow(
+      'Google Health is not connected'
+    )
+    await expect(getWorkoutsRange('2026-07-01', '2026-07-01')).rejects.toThrow(
+      'Google Health is not connected'
+    )
+    await expect(getIntraday('2026-07-01')).rejects.toThrow('Google Health is not connected')
+    expect(requests).toHaveLength(0)
+  })
+
+  test('surfaces Google refresh failures instead of substituting generated data', async () => {
+    updateSettings({ googleClientId: 'client-id', googleClientSecret: 'client-secret' })
+    setSecret('google-tokens', {
+      accessToken: 'expired-token',
+      refreshToken: 'refresh-token',
+      expiresAt: Date.now() - 1
+    })
+    globalThis.fetch = (async (input) => {
+      requests.push(String(input))
+      return new Response(JSON.stringify({ error: 'temporarily_unavailable' }), { status: 503 })
+    }) as typeof fetch
+
+    await expect(getSeries(['steps'], '2026-07-01', '2026-07-01')).rejects.toThrow(
+      'Google Health could not refresh its session'
+    )
+    expect(requests).toHaveLength(1)
+  })
+
   test('keeps cold and overlapping Home navigation within budget without refetching covered dates', async () => {
     await loadHome('2026-07-01')
     expect(requests.length).toBeLessThanOrEqual(11)

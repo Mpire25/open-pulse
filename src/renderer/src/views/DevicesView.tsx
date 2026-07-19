@@ -16,6 +16,7 @@ import {
 } from '@phosphor-icons/react'
 import { Panel, SectionHeader } from '@/components/Panel'
 import { CARD_HEIGHT, SkeletonBlock, SkeletonText } from '@/components/Skeleton'
+import { ErrorState } from '@/components/ErrorState'
 import { useDevices, useSeries } from '@/hooks/useHealth'
 import { METRICS } from '@/lib/metric-registry'
 import { metricAbsent, rangeEnding, seriesPoints } from '@/lib/metrics'
@@ -45,6 +46,16 @@ export function DevicesView({ connected }: DevicesViewProps): React.JSX.Element 
   const today = isoToday()
   const { start, end } = rangeEnding(today, 7)
   const series = useSeries(COVERAGE_KEYS, start, end)
+
+  if (devices.isError || series.isError) {
+    const error = devices.error ?? series.error
+    return (
+      <ErrorState
+        message={error instanceof Error ? error.message : undefined}
+        onRetry={() => void Promise.all([devices.refetch(), series.refetch()])}
+      />
+    )
+  }
 
   const device = devices.data?.[0] ?? null
 

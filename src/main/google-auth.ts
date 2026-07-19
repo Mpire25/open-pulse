@@ -38,9 +38,16 @@ const LANDING_HTML = `<!doctype html><meta charset="utf-8"><title>OpenPulse</tit
 
 let activeConnectReject: ((err: Error) => void) | null = null
 let authGeneration = 0
-let refreshRequest: { generation: number; controller: AbortController; promise: Promise<string | null> } | null = null
+let refreshRequest: { generation: number; controller: AbortController; promise: Promise<string> } | null = null
 let refreshRetryAfter = 0
 const REFRESH_FAILURE_COOLDOWN_MS = 30_000
+
+export class GoogleAuthUnavailableError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'GoogleAuthUnavailableError'
+  }
+}
 
 function cancelRefresh(): void {
   refreshRequest?.controller.abort()
@@ -231,18 +238,24 @@ async function formatGoogleTokenError(resp: Response): Promise<string> {
   return `Google token exchange failed (${resp.status}): ${detail}`
 }
 
-/** Returns a valid access token, refreshing it if needed, or null when not connected. */
+/** Returns a valid access token, null when disconnected, or throws when a connected session is unavailable. */
 export async function getGoogleAccessToken(): Promise<string | null> {
   const generation = authGeneration
   const tokens = getSecret<GoogleTokens>(SECRET_KEY)
   if (!tokens) return null
   if (Date.now() < tokens.expiresAt - 60_000) return tokens.accessToken
-  if (!tokens.refreshToken) return null
+  if (!tokens.refreshToken) {
+    throw new GoogleAuthUnavailableError('Google Health needs to be reconnected before data can sync.')
+  }
   if (refreshRequest?.generation === generation) return refreshRequest.promise
-  if (Date.now() < refreshRetryAfter) return null
+  if (Date.now() < refreshRetryAfter) {
+    throw new GoogleAuthUnavailableError('Google Health could not refresh its session. Try syncing again shortly.')
+  }
 
   const clientSecret = getGoogleClientSecret()
-  if (!clientSecret) return null
+  if (!clientSecret) {
+    throw new GoogleAuthUnavailableError('The Google OAuth client secret is missing. Add it in Settings, then reconnect.')
+  }
   const body = new URLSearchParams({
     client_id: getSettings().googleClientId.trim(),
     client_secret: clientSecret,
@@ -250,7 +263,7 @@ export async function getGoogleAccessToken(): Promise<string | null> {
     refresh_token: tokens.refreshToken
   })
   const controller = new AbortController()
-  let promise!: Promise<string | null>
+  let promise!: Promise<string>
   promise = fetch('https://oauth2.googleapis.com/token', {
     method: 'POST',
     headers: { 'content-type': 'application/x-www-form-urlencoded' },
@@ -258,17 +271,26 @@ export async function getGoogleAccessToken(): Promise<string | null> {
     signal: controller.signal
   })
     .then(async (resp) => {
-      if (generation !== authGeneration) return null
+      if (generation !== authGeneration) {
+        throw new GoogleAuthUnavailableError('Google Health sign-in changed while the session was refreshing.')
+      }
       if (!resp.ok) {
         const payload = (await resp.json().catch(() => null)) as GoogleTokenError | null
-        if (payload?.error === 'invalid_grant') deleteSecret(SECRET_KEY)
-        else refreshRetryAfter = Date.now() + REFRESH_FAILURE_COOLDOWN_MS
-        return null
+        if (payload?.error === 'invalid_grant') {
+          deleteSecret(SECRET_KEY)
+          throw new GoogleAuthUnavailableError('Google Health access expired. Reconnect your account in Settings.')
+        }
+        refreshRetryAfter = Date.now() + REFRESH_FAILURE_COOLDOWN_MS
+        throw new GoogleAuthUnavailableError('Google Health could not refresh its session. Try syncing again shortly.')
       }
       const json = (await resp.json()) as { access_token: string; expires_in: number }
-      if (generation !== authGeneration) return null
+      if (generation !== authGeneration) {
+        throw new GoogleAuthUnavailableError('Google Health sign-in changed while the session was refreshing.')
+      }
       const current = getSecret<GoogleTokens>(SECRET_KEY)
-      if (!current) return null
+      if (!current) {
+        throw new GoogleAuthUnavailableError('Google Health was disconnected while the session was refreshing.')
+      }
       if (
         current.accessToken !== tokens.accessToken ||
         current.refreshToken !== tokens.refreshToken ||
@@ -286,9 +308,12 @@ export async function getGoogleAccessToken(): Promise<string | null> {
       return updated.accessToken
     })
     .catch((error) => {
-      if (error instanceof Error && error.name === 'AbortError') return null
+      if (error instanceof GoogleAuthUnavailableError) throw error
+      if (error instanceof Error && error.name === 'AbortError') {
+        throw new GoogleAuthUnavailableError('Google Health session refresh was cancelled.')
+      }
       refreshRetryAfter = Date.now() + REFRESH_FAILURE_COOLDOWN_MS
-      return null
+      throw new GoogleAuthUnavailableError('Google Health could not refresh its session. Check your connection and try again.')
     })
     .finally(() => {
       if (refreshRequest?.promise === promise) refreshRequest = null

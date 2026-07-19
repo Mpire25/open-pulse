@@ -24,6 +24,7 @@ import type { MetricRange, OpenMetric } from '@/lib/metric-navigation'
 import type { AssistantAction, AppSettings, CodexAuthStatus, GoogleAuthStatus, MetricKey, Workout } from '@shared/types'
 
 const DATA_VIEWS: View[] = ['home', 'activity', 'heart', 'sleep', 'body', 'nutrition']
+const HEALTH_VIEWS: View[] = [...DATA_VIEWS, 'devices']
 const NAVIGATION_STATE_KEY = 'open-pulse-navigation-v4'
 
 interface MetricDetailSelection {
@@ -398,6 +399,7 @@ export default function App(): React.JSX.Element {
   }
 
   const isDataView = DATA_VIEWS.includes(view)
+  const isHealthView = HEALTH_VIEWS.includes(view)
   const showDetail = isDataView && detailMetric != null
   const showSleepStagesDetail = isDataView && view === 'sleep' && sleepStagesOpen
   const showWorkoutDetail = isDataView && selectedWorkout != null
@@ -429,6 +431,7 @@ export default function App(): React.JSX.Element {
           onToggleChat={toggleAssistantPanel}
           sidebarOpen={sidebarOpen}
           onToggleSidebar={() => setSidebarOpen((open) => !open)}
+          connected={google.connected}
         />
 
         <div className="flex min-h-0 flex-1">
@@ -442,7 +445,7 @@ export default function App(): React.JSX.Element {
                 transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
                 className="h-full"
               >
-                {isDataView && (
+                {isHealthView && (
                   <ConnectGate
                     connected={google.connected}
                     clientId={settings.googleClientId}
@@ -511,11 +514,11 @@ export default function App(): React.JSX.Element {
                             onSelectDate={selectDate}
                           />
                         )}
+                        {view === 'devices' && <DevicesView connected={google.connected} />}
                       </>
                     )}
                   </ConnectGate>
                 )}
-                {view === 'devices' && <DevicesView connected={google.connected} />}
                 {view === 'assistant' && (
                   <AssistantView
                     chat={chat}

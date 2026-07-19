@@ -45,7 +45,7 @@ function metric(value: unknown): MetricKey | null {
 }
 
 function source(value: unknown): DataSource | null {
-  return value === 'live' || value === 'demo' ? value : null
+  return value === 'live' ? value : null
 }
 
 function workout(value: unknown): Workout | null {

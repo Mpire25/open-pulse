@@ -1,6 +1,6 @@
 // Types shared between the Electron main process and the renderer.
 
-export type DataSource = 'demo' | 'live'
+export type DataSource = 'live'
 
 // ---------------------------------------------------------------------------
 // Daily metrics

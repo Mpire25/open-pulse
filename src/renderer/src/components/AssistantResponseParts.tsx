@@ -105,7 +105,7 @@ function AssistantResponsePartsBase({
                 <SectionHeader
                   icon={<Pulse size={18} weight="fill" className="text-accent" />}
                   title={part.title}
-                  hint={`${shortDate(part.startDate)}–${shortDate(part.endDate)} · ${part.items.length} signals${part.source === 'demo' ? ' · Sample data' : ''}`}
+                  hint={`${shortDate(part.startDate)}–${shortDate(part.endDate)} · ${part.items.length} signals`}
                 />
               </div>
               <div className={cn('grid', compact ? 'grid-cols-1 divide-y divide-hairline' : 'grid-cols-2')}>
@@ -149,7 +149,7 @@ function AssistantResponsePartsBase({
                 value={part.value == null ? '—' : def.format(part.value)}
                 unit={part.value == null ? undefined : def.unit}
                 accent={def.color}
-                sub={`${shortDate(part.date)}${part.source === 'demo' ? ' · Sample data' : ''}`}
+                sub={shortDate(part.date)}
                 onOpen={() => onAction(part.action)}
               />
             </MotionPanel>
@@ -280,7 +280,7 @@ function AssistantResponsePartsBase({
                 <DrillHeader
                   icon={<Moon size={18} weight="fill" className="text-sleep" />}
                   title="Sleep stages"
-                  hint={`${shortDate(night.date)} · ${formatMinutes(night.minutesAsleep)} asleep${night.efficiency == null ? '' : ` · ${formatInt(night.efficiency)}% efficiency`}${part.source === 'demo' ? ' · Sample data' : ''}`}
+                  hint={`${shortDate(night.date)} · ${formatMinutes(night.minutesAsleep)} asleep${night.efficiency == null ? '' : ` · ${formatInt(night.efficiency)}% efficiency`}`}
                   onOpen={() => onAction(part.action)}
                 />
               </div>
@@ -340,8 +340,7 @@ function NutritionCard({
     shortDate(part.date),
     part.time ? formatClock(part.time) : null,
     part.servingLabel,
-    part.itemCount == null ? null : `${part.itemCount} ${part.itemCount === 1 ? 'item' : 'items'}`,
-    part.source === 'demo' ? 'Sample data' : null
+    part.itemCount == null ? null : `${part.itemCount} ${part.itemCount === 1 ? 'item' : 'items'}`
   ].filter(Boolean).join(' · ')
   return (
     <MotionPanel {...entrance} className={cn('overflow-hidden', layoutClass)}>
