@@ -1,9 +1,6 @@
 import { useState } from 'react'
 import { motion } from 'framer-motion'
 import {
-  BatteryFull,
-  BatteryLow,
-  BatteryMedium,
   CaretDown,
   CheckCircle,
   Cloud,
@@ -15,6 +12,7 @@ import {
   type Icon
 } from '@phosphor-icons/react'
 import { Panel, SectionHeader } from '@/components/Panel'
+import { BatteryIcon, batteryColor, clampBatteryPct } from '@/components/BatteryIcon'
 import { CARD_HEIGHT, SkeletonBlock, SkeletonText } from '@/components/Skeleton'
 import { ErrorState } from '@/components/ErrorState'
 import { useDevices, useSeries } from '@/hooks/useHealth'
@@ -201,20 +199,22 @@ function DeviceHero({ device, connected }: { device: PairedDevice; connected: bo
 }
 
 function BatteryMeter({ pct, state }: { pct: number; state?: string | null }): React.JSX.Element {
-  // Severity by charge level; the track is a lighter step of the same hue.
-  const color = pct > 50 ? 'var(--color-recovery)' : pct > 20 ? 'var(--color-activity)' : 'var(--color-danger)'
-  const Icon = pct > 50 ? BatteryFull : pct > 20 ? BatteryMedium : BatteryLow
+  const level = clampBatteryPct(pct)
+  const color = batteryColor(level)
   return (
-    <div>
+    <div role="status" aria-label={`Battery ${Math.round(level)}%${state ? `, ${titleCase(state)}` : ''}`}>
       <div className="mb-1.5 flex items-center justify-between">
         <span className="flex items-center gap-1.5 text-[11px] font-medium text-ink-faint">
-          <Icon size={15} weight="fill" style={{ color }} />
+          <BatteryIcon pct={level} size={16} />
           Battery{state ? ` · ${titleCase(state)}` : ''}
         </span>
-        <span className="text-[13px] font-semibold text-ink">{Math.round(pct)}%</span>
+        <span className="text-[13px] font-semibold text-ink">{Math.round(level)}%</span>
       </div>
       <div className="h-2 overflow-hidden rounded-full" style={{ background: `color-mix(in oklab, ${color} 18%, transparent)` }}>
-        <div className="h-full rounded-full transition-[width] duration-700" style={{ width: `${pct}%`, background: color }} />
+        <div
+          className="h-full rounded-full transition-[width] duration-700 ease-out motion-reduce:transition-none"
+          style={{ width: `${level}%`, background: color }}
+        />
       </div>
     </div>
   )

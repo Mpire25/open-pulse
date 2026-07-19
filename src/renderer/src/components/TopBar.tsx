@@ -1,7 +1,8 @@
 // Title-bar strip: draggable, hosting (right-aligned, openfit-style) the date
 // control, device battery, assistant toggle, and refresh with live progress.
 
-import { ArrowClockwise, BatteryFull, BatteryLow, BatteryMedium, SidebarSimple, Sparkle } from '@phosphor-icons/react'
+import { ArrowClockwise, SidebarSimple, Sparkle } from '@phosphor-icons/react'
+import { BatteryIcon, clampBatteryPct } from '@/components/BatteryIcon'
 import { DateNav } from '@/components/DateNav'
 import { useDevices, useRefresh, useSyncBusy } from '@/hooks/useHealth'
 import { cn } from '@/lib/utils'
@@ -67,9 +68,7 @@ function BatteryPill({ enabled }: { enabled: boolean }): React.JSX.Element | nul
   const { data: devices } = useDevices(enabled)
   const device = devices?.find((d) => d.batteryPct != null)
   if (!device || device.batteryPct == null) return null
-  const pct = Math.max(0, Math.min(100, Math.round(device.batteryPct)))
-  const color = pct > 50 ? 'var(--color-recovery)' : pct > 20 ? 'var(--color-activity)' : 'var(--color-danger)'
-  const Icon = pct > 50 ? BatteryFull : pct > 20 ? BatteryMedium : BatteryLow
+  const pct = Math.round(clampBatteryPct(device.batteryPct))
   return (
     <div
       className="no-drag flex h-7 items-center gap-1.5 rounded-lg px-2 text-[11.5px] font-semibold text-ink-dim"
@@ -77,7 +76,7 @@ function BatteryPill({ enabled }: { enabled: boolean }): React.JSX.Element | nul
       aria-label={`${device.name} battery ${pct}%`}
       title={`${device.name} · ${pct}%`}
     >
-      <Icon size={16} weight="fill" style={{ color }} />
+      <BatteryIcon pct={pct} size={17} />
       {pct}%
     </div>
   )
