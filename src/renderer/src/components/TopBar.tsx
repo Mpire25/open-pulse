@@ -72,8 +72,11 @@ function BatteryPill({ enabled }: { enabled: boolean }): React.JSX.Element | nul
   return (
     <div
       className="no-drag flex h-7 items-center gap-1.5 rounded-lg px-2 text-[11.5px] font-semibold text-ink-dim"
-      role="status"
-      aria-label={`${device.name} battery ${pct}%`}
+      role="meter"
+      aria-label={`${device.name} battery level`}
+      aria-valuenow={pct}
+      aria-valuemin={0}
+      aria-valuemax={100}
       title={`${device.name} · ${pct}%`}
     >
       <BatteryIcon pct={pct} size={17} />

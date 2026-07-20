@@ -202,7 +202,14 @@ function BatteryMeter({ pct, state }: { pct: number; state?: string | null }): R
   const level = clampBatteryPct(pct)
   const color = batteryColor(level)
   return (
-    <div role="status" aria-label={`Battery ${Math.round(level)}%${state ? `, ${titleCase(state)}` : ''}`}>
+    <div
+      role="meter"
+      aria-label="Battery level"
+      aria-valuenow={Math.round(level)}
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-valuetext={`${Math.round(level)}%${state ? `, ${titleCase(state)}` : ''}`}
+    >
       <div className="mb-1.5 flex items-center justify-between">
         <span className="flex items-center gap-1.5 text-[11px] font-medium text-ink-faint">
           <BatteryIcon pct={level} size={16} />
