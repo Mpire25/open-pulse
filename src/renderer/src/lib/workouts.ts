@@ -15,6 +15,67 @@ export interface WorkoutTypeSummary {
   share: number
 }
 
+export type WorkoutColorKey =
+  | 'walking'
+  | 'running'
+  | 'strength'
+  | 'cycling'
+  | 'swimming'
+  | 'mobility'
+  | 'cardio'
+  | 'tennis'
+  | 'badminton'
+  | 'football'
+  | 'treadmill'
+  | 'other'
+
+export interface WorkoutTone {
+  key: WorkoutColorKey
+  color: string
+  soft: string
+}
+
+const WORKOUT_COLORS: Record<WorkoutColorKey, string> = {
+  walking: 'var(--color-workout-walking)',
+  running: 'var(--color-workout-running)',
+  strength: 'var(--color-workout-strength)',
+  cycling: 'var(--color-workout-cycling)',
+  swimming: 'var(--color-workout-swimming)',
+  mobility: 'var(--color-workout-mobility)',
+  cardio: 'var(--color-workout-cardio)',
+  tennis: 'var(--color-workout-tennis)',
+  badminton: 'var(--color-workout-badminton)',
+  football: 'var(--color-workout-football)',
+  treadmill: 'var(--color-workout-treadmill)',
+  other: 'var(--color-workout-other)'
+}
+
+export function workoutTone(workout: Workout | string): WorkoutTone {
+  const text = (
+    typeof workout === 'string'
+      ? workout
+      : `${workout.exerciseType ?? ''} ${workout.name}`
+  ).toLowerCase()
+  const key = workoutColorKey(text)
+  const color = WORKOUT_COLORS[key]
+  return { key, color, soft: `color-mix(in oklab, ${color} 15%, transparent)` }
+}
+
+function workoutColorKey(text: string): WorkoutColorKey {
+  if (/badminton|shuttlecock/.test(text)) return 'badminton'
+  if (/tennis/.test(text)) return 'tennis'
+  if (/football|soccer|futsal/.test(text)) return 'football'
+  if (/treadmill/.test(text)) return 'treadmill'
+  if (/swim|pool|aqua/.test(text)) return 'swimming'
+  if (/cycl|bik|spin/.test(text)) return 'cycling'
+  if (/strength|weight|resistance|crossfit|calisthen/.test(text)) return 'strength'
+  if (/yoga|pilates|stretch|mobility|meditat/.test(text)) return 'mobility'
+  if (/run|jog/.test(text)) return 'running'
+  if (/walk|hik/.test(text)) return 'walking'
+  if (/cardio|hiit|interval|aerobic|box|dance|elliptical|row|stair|climb/.test(text)) return 'cardio'
+  return 'other'
+}
+
 export function workoutDate(workout: Workout): string {
   return workout.startTime.slice(0, 10)
 }

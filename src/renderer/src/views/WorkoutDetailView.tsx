@@ -22,6 +22,7 @@ import { SkeletonChart } from '@/components/Skeleton'
 import { useHeartDetail, useIntraday, useWorkoutTrack } from '@/hooks/useHealth'
 import { formatClock, formatInt, formatMinuteOfDay, formatMinutes, longDate } from '@/lib/format'
 import { fade } from '@/lib/motion'
+import { workoutTone } from '@/lib/workouts'
 import type { HeartZoneDetail, Workout, WorkoutSplit, WorkoutTrackPoint } from '@shared/types'
 
 interface WorkoutDetailViewProps {
@@ -38,6 +39,7 @@ interface DetailItem {
 
 export function WorkoutDetailView({ workout, date, onBack }: WorkoutDetailViewProps): React.JSX.Element {
   const [showHeartRateZones, setShowHeartRateZones] = useState(false)
+  const tone = workoutTone(workout)
   const intraday = useIntraday(date, true, 'heart')
   const track = useWorkoutTrack(workout.id, workout.hasGps !== false)
   const heartZoneDetail = useHeartDetail(date, 'restingHeartRate', workout.heartRateZones != null, 'thresholds')
@@ -105,7 +107,10 @@ export function WorkoutDetailView({ workout, date, onBack }: WorkoutDetailViewPr
         </button>
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="flex min-w-0 items-center gap-3">
-            <div className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-recovery-soft text-recovery">
+            <div
+              className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl"
+              style={{ background: tone.soft, color: tone.color }}
+            >
               <PersonSimpleRun size={22} weight="fill" />
             </div>
             <div className="min-w-0">
@@ -126,7 +131,7 @@ export function WorkoutDetailView({ workout, date, onBack }: WorkoutDetailViewPr
       <motion.div custom={1} variants={fade} initial="hidden" animate="show">
         <Panel className="workout-summary-grid grid grid-cols-2 gap-2 p-2">
           {summary.map((item) => (
-            <DetailStat key={item.label} item={item} />
+            <DetailStat key={item.label} item={item} color={tone.color} />
           ))}
         </Panel>
       </motion.div>
@@ -229,13 +234,13 @@ export function WorkoutDetailView({ workout, date, onBack }: WorkoutDetailViewPr
                 <SectionHeader
                   title="Route"
                   hint={routePoints.length ? `${routePoints.length} GPS trackpoints` : 'Recorded GPS trace'}
-                  icon={<MapPin size={18} weight="fill" className="text-recovery" />}
+                  icon={<MapPin size={18} weight="fill" style={{ color: tone.color }} />}
                 />
                 <div className="mt-4">
                   {track.isPending ? (
                     <SkeletonChart height={180} columns={10} />
                   ) : routePoints.length > 1 ? (
-                    <RoutePlot points={routePoints} />
+                    <RoutePlot points={routePoints} color={tone.color} />
                   ) : (
                     <div className="grid h-[180px] place-items-center text-center text-[13px] text-ink-faint">
                       The workout is marked as GPS-tracked, but no route points were available.
@@ -254,13 +259,19 @@ export function WorkoutDetailView({ workout, date, onBack }: WorkoutDetailViewPr
             <SectionHeader
               title="Session timing"
               hint="Elapsed time, active time, and recorded events"
-              icon={<Clock size={18} weight="fill" className="text-recovery" />}
+              icon={<Clock size={18} weight="fill" style={{ color: tone.color }} />}
             />
             <div className="mt-7 grid grid-cols-[auto_1fr_auto] items-center gap-4">
               <TimePoint label="Started" value={startLabel} />
               <div className="relative h-px bg-hairline-strong">
-                <span className="absolute left-0 top-1/2 h-2 w-2 -translate-y-1/2 rounded-full bg-recovery" />
-                <span className="absolute right-0 top-1/2 h-2 w-2 -translate-y-1/2 rounded-full bg-recovery" />
+                <span
+                  className="absolute left-0 top-1/2 h-2 w-2 -translate-y-1/2 rounded-full"
+                  style={{ background: tone.color }}
+                />
+                <span
+                  className="absolute right-0 top-1/2 h-2 w-2 -translate-y-1/2 rounded-full"
+                  style={{ background: tone.color }}
+                />
               </div>
               <TimePoint label="Finished" value={endLabel} align="right" />
             </div>
@@ -291,7 +302,7 @@ export function WorkoutDetailView({ workout, date, onBack }: WorkoutDetailViewPr
             <SectionHeader
               title="Performance"
               hint="Native exercise metrics where available"
-              icon={<Gauge size={18} weight="fill" className="text-recovery" />}
+              icon={<Gauge size={18} weight="fill" style={{ color: tone.color }} />}
             />
             {performance.length > 0 ? (
               <div className="mt-5 grid grid-cols-2 gap-x-5 gap-y-4">
@@ -317,11 +328,11 @@ export function WorkoutDetailView({ workout, date, onBack }: WorkoutDetailViewPr
             <SectionHeader
               title="Advanced metrics"
               hint="Sport-specific measurements supplied by the tracker"
-              icon={<Mountains size={18} weight="fill" className="text-recovery" />}
+              icon={<Mountains size={18} weight="fill" style={{ color: tone.color }} />}
             />
             <div className="workout-advanced-grid mt-4 grid grid-cols-2 gap-2">
               {specialized.map((item) => (
-                <DetailStat key={item.label} item={item} />
+                <DetailStat key={item.label} item={item} color={tone.color} />
               ))}
             </div>
           </Panel>
@@ -337,11 +348,11 @@ export function WorkoutDetailView({ workout, date, onBack }: WorkoutDetailViewPr
   )
 }
 
-function DetailStat({ item }: { item: DetailItem }): React.JSX.Element {
+function DetailStat({ item, color }: { item: DetailItem; color: string }): React.JSX.Element {
   return (
     <div className="min-w-0 rounded-[16px] bg-white/[0.025] px-4 py-4">
       <div className="flex items-center gap-2 text-[11px] text-ink-faint">
-        <span className="text-recovery">{item.icon}</span>
+        <span style={{ color }}>{item.icon}</span>
         <span className="truncate">{item.label}</span>
       </div>
       <div className="mt-2 truncate font-mono text-[15px] font-medium text-ink">{item.value}</div>
@@ -397,7 +408,13 @@ function HeartRateZones({ zones }: { zones: ReturnType<typeof zoneItems> }): Rea
   )
 }
 
-function RoutePlot({ points }: { points: Array<WorkoutTrackPoint & { latitude: number; longitude: number }> }): React.JSX.Element {
+function RoutePlot({
+  points,
+  color
+}: {
+  points: Array<WorkoutTrackPoint & { latitude: number; longitude: number }>
+  color: string
+}): React.JSX.Element {
   const width = 600
   const height = 180
   const pad = 14
@@ -433,8 +450,8 @@ function RoutePlot({ points }: { points: Array<WorkoutTrackPoint & { latitude: n
           <line x1="0" x2={width} y1={height * ratio} y2={height * ratio} />
         </g>
       ))}
-      <path d={path} fill="none" stroke="var(--color-recovery)" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
-      <circle cx={start.x} cy={start.y} r="6" fill="var(--color-recovery)" stroke="var(--color-panel)" strokeWidth="3" />
+      <path d={path} fill="none" stroke={color} strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx={start.x} cy={start.y} r="6" fill={color} stroke="var(--color-panel)" strokeWidth="3" />
       <circle cx={finish.x} cy={finish.y} r="6" fill="var(--color-heart)" stroke="var(--color-panel)" strokeWidth="3" />
     </svg>
   )

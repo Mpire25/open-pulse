@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import type { Workout } from '../src/shared/types'
-import { workoutDaySummaries, workoutTypeLabel, workoutTypeSummaries } from '../src/renderer/src/lib/workouts'
+import { workoutDaySummaries, workoutTone, workoutTypeLabel, workoutTypeSummaries } from '../src/renderer/src/lib/workouts'
 
 function workout(overrides: Partial<Workout> = {}): Workout {
   return {
@@ -50,5 +50,19 @@ describe('workout overview analytics', () => {
 
   test('falls back to the display name when exercise type is unavailable', () => {
     expect(workoutTypeLabel(workout({ name: 'indoor-cycling', exerciseType: null }))).toBe('Indoor Cycling')
+  })
+
+  test('assigns stable colors by workout family rather than rank', () => {
+    expect(workoutTone(workout({ exerciseType: 'WALKING' })).key).toBe('walking')
+    expect(workoutTone(workout({ exerciseType: 'STRENGTH_TRAINING' })).key).toBe('strength')
+    expect(workoutTone('Strength training').color).toBe('var(--color-workout-strength)')
+    expect(workoutTone('Indoor Cycling').color).toBe('var(--color-workout-cycling)')
+    expect(workoutTone('Tennis').key).toBe('tennis')
+    expect(workoutTone('Badminton doubles').key).toBe('badminton')
+    expect(workoutTone('Five-a-side football').key).toBe('football')
+    expect(workoutTone('Futsal').color).toBe('var(--color-workout-football)')
+    expect(workoutTone('Treadmill running').key).toBe('treadmill')
+    expect(workoutTone('Treadmill').color).toBe('var(--color-workout-treadmill)')
+    expect(workoutTone('Unclassified activity').key).toBe('other')
   })
 })

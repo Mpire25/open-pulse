@@ -8,6 +8,7 @@ import { DrillHeader, Panel, SectionHeader } from '@/components/Panel'
 import { SleepStages } from '@/components/SleepStages'
 import { METRICS } from '@/lib/metric-registry'
 import { formatClock, formatInt, formatMinutes, shortDate } from '@/lib/format'
+import { workoutTone } from '@/lib/workouts'
 import { cn } from '@/lib/utils'
 import {
   assistantVisualLayout,
@@ -254,10 +255,11 @@ function AssistantResponsePartsBase({
 
         if (part.type === 'workout-card') {
           const workout = part.workout
+          const tone = workoutTone(workout)
           return (
             <MotionPanel key={part.id} {...entrance} className={cn('p-5', layoutClass)}>
               <DrillHeader
-                icon={<PersonSimpleRun size={18} weight="fill" className="text-recovery" />}
+                icon={<PersonSimpleRun size={18} weight="fill" style={{ color: tone.color }} />}
                 title={workout.name}
                 hint={`${shortDate(part.date)} · ${formatClock(workout.startTime)} · ${formatMinutes(workout.durationMin)}`}
                 onOpen={() => onAction(part.action)}

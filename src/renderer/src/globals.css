@@ -32,6 +32,21 @@
   --color-body-metric: #b44ba9;
   --color-body-metric-soft: rgb(180 75 169 / 0.14);
 
+  /* Workout identity palette — stable by exercise family everywhere workouts
+     appear, so a color learned in history carries into charts and details. */
+  --color-workout-walking: #189e74;
+  --color-workout-running: #dd733d;
+  --color-workout-strength: #c08122;
+  --color-workout-cycling: #2b8fc4;
+  --color-workout-swimming: #7d7bf0;
+  --color-workout-mobility: #43aaa0;
+  --color-workout-cardio: #e4604f;
+  --color-workout-tennis: #8fa83b;
+  --color-workout-badminton: #28a5b8;
+  --color-workout-football: #b44ba9;
+  --color-workout-treadmill: #d85f82;
+  --color-workout-other: #7d8491;
+
   /* Sleep stage set — validated as an adjacent (stacked) group */
   --color-stage-deep: #5b5be0;
   --color-stage-light: #8487ec;

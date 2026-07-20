@@ -20,6 +20,7 @@ import { fade } from '@/lib/motion'
 import {
   workoutDate,
   workoutDaySummaries,
+  workoutTone,
   workoutTypeLabel,
   workoutTypeSummaries,
   type WorkoutTypeSummary
@@ -33,15 +34,6 @@ const RANGES: Array<{ id: MetricRange; label: string; days: number }> = [
   { id: 'M', label: 'M', days: 30 },
   { id: '3M', label: '3M', days: 90 },
   { id: 'Y', label: 'Y', days: 365 }
-]
-
-const TYPE_COLORS = [
-  'var(--color-recovery)',
-  'var(--color-activity)',
-  'var(--color-sleep)',
-  'var(--color-hydration)',
-  'var(--color-heart)',
-  'var(--color-body-metric)'
 ]
 
 interface WorkoutsViewProps {
@@ -162,11 +154,11 @@ export function WorkoutsView({
                         key: day.date,
                         label: `${weekdayShort(day.date)} · ${shortDate(day.date)}`,
                         tick: workoutTick(range, day.date, index),
-                        segments: displayedTypes.map((type, typeIndex): StackedColumnSegment => ({
+                        segments: displayedTypes.map((type): StackedColumnSegment => ({
                           key: type.label,
                           label: type.label,
                           value: durationByDayAndType.get(day.date)?.get(type.label) ?? 0,
-                          color: TYPE_COLORS[typeIndex % TYPE_COLORS.length]
+                          color: workoutTone(type.label).color
                         }))
                       }))}
                       height={190}
@@ -268,11 +260,11 @@ function TrainingSplit({
         fullWidth ? (
           <>
             <div className="mt-6 flex h-2.5 overflow-hidden rounded-full bg-white/[0.04]">
-              {types.map((type, index) => (
+              {types.map((type) => (
                 <span
                   key={type.label}
                   className="h-full first:rounded-l-full last:rounded-r-full"
-                  style={{ width: `${type.share}%`, background: TYPE_COLORS[index % TYPE_COLORS.length] }}
+                  style={{ width: `${type.share}%`, background: workoutTone(type.label).color }}
                 />
               ))}
             </div>
@@ -295,8 +287,8 @@ function TrainingSplit({
 
 function TrainingSplitPie({ types }: { types: DisplayedWorkoutType[] }): React.JSX.Element {
   let start = 0
-  const slices = types.map((type, index) => {
-    const slice = { type, index, start, end: start + type.share }
+  const slices = types.map((type) => {
+    const slice = { type, start, end: start + type.share }
     start = slice.end
     return slice
   })
@@ -312,8 +304,8 @@ function TrainingSplitPie({ types }: { types: DisplayedWorkoutType[] }): React.J
       className="h-36 w-36 shrink-0 drop-shadow-[0_18px_24px_rgb(0_0_0/0.22)]"
     >
       <circle cx="60" cy="60" r="51" fill="rgb(255 255 255 / 0.035)" />
-      {slices.map(({ type, index, start: sliceStart, end }) => {
-        const color = TYPE_COLORS[index % TYPE_COLORS.length]
+      {slices.map(({ type, start: sliceStart, end }) => {
+        const color = workoutTone(type.label).color
         return type.share >= 99.999 ? (
           <circle
             key={type.label}
@@ -352,11 +344,11 @@ function TrainingSplitLegend({
 }): React.JSX.Element {
   return (
     <div className={cn('grid gap-x-10 gap-y-3', wide ? 'mt-4 display-lg-pair-grid' : 'w-full grid-cols-1')}>
-      {types.map((type, index) => (
+      {types.map((type) => (
         <div key={type.label} className="flex min-w-0 items-center gap-3">
           <span
             className="h-2 w-2 shrink-0 rounded-full"
-            style={{ background: TYPE_COLORS[index % TYPE_COLORS.length] }}
+            style={{ background: workoutTone(type.label).color }}
           />
           <span className="min-w-0 flex-1 truncate text-[12.5px] font-medium text-ink-dim">{type.label}</span>
           <span className="shrink-0 font-mono text-[11.5px] text-ink">{formatMinutes(type.durationMin)}</span>
