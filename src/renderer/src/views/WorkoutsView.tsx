@@ -82,7 +82,16 @@ export function WorkoutsView({
     durationByDayAndType.set(day, durations)
   }
   const totalMinutes = sessions.reduce((sum, workout) => sum + workout.durationMin, 0)
-  const totalCalories = sessions.reduce((sum, workout) => sum + (workout.calories ?? 0), 0)
+  const measuredCalories = sessions.flatMap((workout) =>
+    workout.calories == null ? [] : [workout.calories]
+  )
+  const totalCalories = measuredCalories.reduce((sum, calories) => sum + calories, 0)
+  const calorieSummary =
+    sessions.length === 0
+      ? '0 kcal'
+      : measuredCalories.length === 0
+        ? '—'
+        : `${formatInt(totalCalories)}${measuredCalories.length < sessions.length ? '+' : ''} kcal`
   const activeDays = new Set(sessions.map(workoutDate)).size
   const groups = [...new Set(sessions.map(workoutDate))]
     .sort((a, b) => b.localeCompare(a))
@@ -126,7 +135,7 @@ export function WorkoutsView({
             <Panel className={`display-sm-four-grid divide-x divide-hairline overflow-hidden ${CARD_HEIGHT.periodStats}`}>
               <SummaryStat icon={<Barbell size={15} weight="fill" />} label="Sessions" value={formatInt(sessions.length)} />
               <SummaryStat icon={<Timer size={15} weight="fill" />} label="Active time" value={formatMinutes(totalMinutes)} />
-              <SummaryStat icon={<Fire size={15} weight="fill" />} label="Workout calories" value={`${formatInt(totalCalories)} kcal`} />
+              <SummaryStat icon={<Fire size={15} weight="fill" />} label="Workout calories" value={calorieSummary} />
               <SummaryStat
                 icon={<CalendarCheck size={15} weight="fill" />}
                 label="Active days"
