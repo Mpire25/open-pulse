@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import { motion } from 'framer-motion'
 import {
   ArrowLeft,
@@ -15,7 +16,7 @@ import { StackedColumnChart, type StackedColumnSegment } from '@/components/char
 import { useWorkouts } from '@/hooks/useHealth'
 import { formatInt, formatMinutes, longDate, shortDate, weekdayShort } from '@/lib/format'
 import type { MetricRange } from '@/lib/metric-navigation'
-import { listDates, rangeEnding } from '@/lib/metrics'
+import { rangeEnding } from '@/lib/metrics'
 import { fade } from '@/lib/motion'
 import {
   displayedWorkoutTypes,
@@ -36,6 +37,7 @@ const RANGES: Array<{ id: MetricRange; label: string; days: number }> = [
   { id: '3M', label: '3M', days: 90 },
   { id: 'Y', label: 'Y', days: 365 }
 ]
+const EMPTY_WORKOUTS: Workout[] = []
 
 interface WorkoutsViewProps {
   date: string
@@ -57,6 +59,11 @@ export function WorkoutsView({
   const spec = RANGES.find((candidate) => candidate.id === range)!
   const shown = rangeEnding(date, spec.days)
   const workouts = useWorkouts(shown.start, shown.end)
+  const sessions = workouts.data ?? EMPTY_WORKOUTS
+  const overview = useMemo(
+    () => buildWorkoutOverview(sessions, shown.start, shown.end),
+    [sessions, shown.end, shown.start]
+  )
 
   if (workouts.isError) {
     return (
@@ -67,41 +74,15 @@ export function WorkoutsView({
     )
   }
 
-  const sessions = workouts.data ?? []
-  const days = workoutDaySummaries(sessions, shown.start, shown.end)
-  const types = workoutTypeSummaries(sessions)
-  const displayedTypes = displayedWorkoutTypes(types)
-  const displayedTypeFor = new Map(
-    displayedTypes.flatMap((type) => type.sourceLabels.map((label) => [label, type.label] as const))
-  )
-  const durationByDayAndType = new Map<string, Map<string, number>>()
-  for (const workout of sessions) {
-    const day = workoutDate(workout)
-    const type = displayedTypeFor.get(workoutCategoryLabel(workout)) ?? 'Other'
-    const durations = durationByDayAndType.get(day) ?? new Map<string, number>()
-    durations.set(type, (durations.get(type) ?? 0) + workout.durationMin)
-    durationByDayAndType.set(day, durations)
-  }
-  const totalMinutes = sessions.reduce((sum, workout) => sum + workout.durationMin, 0)
-  const measuredCalories = sessions.flatMap((workout) =>
-    workout.calories == null ? [] : [workout.calories]
-  )
-  const totalCalories = measuredCalories.reduce((sum, calories) => sum + calories, 0)
-  const calorieSummary =
-    sessions.length === 0
-      ? '0 kcal'
-      : measuredCalories.length === 0
-        ? '—'
-        : `${formatInt(totalCalories)}${measuredCalories.length < sessions.length ? '+' : ''} kcal`
-  const activeDays = new Set(sessions.map(workoutDate)).size
-  const groups = [...new Set(sessions.map(workoutDate))]
-    .sort((a, b) => b.localeCompare(a))
-    .map((groupDate) => ({
-      date: groupDate,
-      workouts: sessions
-        .filter((workout) => workoutDate(workout) === groupDate)
-        .sort((a, b) => b.startTime.localeCompare(a.startTime))
-    }))
+  const {
+    activeDays,
+    calorieSummary,
+    days,
+    displayedTypes,
+    durationByDayAndType,
+    groups,
+    totalMinutes
+  } = overview
 
   return (
     <div className="mx-auto flex max-w-[1180px] flex-col gap-5 px-8 pb-12">
@@ -140,7 +121,7 @@ export function WorkoutsView({
               <SummaryStat
                 icon={<CalendarCheck size={15} weight="fill" />}
                 label="Active days"
-                value={`${activeDays} of ${listDates(shown.start, shown.end).length}`}
+                value={`${activeDays} of ${days.length}`}
               />
             </Panel>
           </motion.div>
@@ -226,6 +207,60 @@ export function WorkoutsView({
       )}
     </div>
   )
+}
+
+function buildWorkoutOverview(sessions: Workout[], start: string, end: string) {
+  const days = workoutDaySummaries(sessions, start, end)
+  const displayedTypes = displayedWorkoutTypes(workoutTypeSummaries(sessions))
+  const displayedTypeFor = new Map(
+    displayedTypes.flatMap((type) => type.sourceLabels.map((label) => [label, type.label] as const))
+  )
+  const durationByDayAndType = new Map<string, Map<string, number>>()
+  const groupsByDate = new Map<string, Workout[]>()
+  let totalMinutes = 0
+  let totalCalories = 0
+  let measuredCalories = 0
+
+  for (const workout of sessions) {
+    const day = workoutDate(workout)
+    const type = displayedTypeFor.get(workoutCategoryLabel(workout)) ?? 'Other'
+    const durations = durationByDayAndType.get(day) ?? new Map<string, number>()
+    durations.set(type, (durations.get(type) ?? 0) + workout.durationMin)
+    durationByDayAndType.set(day, durations)
+
+    const group = groupsByDate.get(day) ?? []
+    group.push(workout)
+    groupsByDate.set(day, group)
+
+    totalMinutes += workout.durationMin
+    if (workout.calories != null) {
+      totalCalories += workout.calories
+      measuredCalories += 1
+    }
+  }
+
+  const calorieSummary =
+    sessions.length === 0
+      ? '0 kcal'
+      : measuredCalories === 0
+        ? '—'
+        : `${formatInt(totalCalories)}${measuredCalories < sessions.length ? '+' : ''} kcal`
+  const groups = [...groupsByDate.entries()]
+    .sort(([a], [b]) => b.localeCompare(a))
+    .map(([groupDate, workouts]) => ({
+      date: groupDate,
+      workouts: workouts.sort((a, b) => b.startTime.localeCompare(a.startTime))
+    }))
+
+  return {
+    activeDays: groupsByDate.size,
+    calorieSummary,
+    days,
+    displayedTypes,
+    durationByDayAndType,
+    groups,
+    totalMinutes
+  }
 }
 
 function SummaryStat({
