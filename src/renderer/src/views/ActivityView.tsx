@@ -1,6 +1,6 @@
 import { motion } from 'framer-motion'
 import { Barbell, Footprints } from '@phosphor-icons/react'
-import { Panel, DrillHeader, InteractivePanel, SectionHeader } from '@/components/Panel'
+import { DrillHeader, DrillPanel, InteractivePanel, Panel, SectionHeader } from '@/components/Panel'
 import { ColumnChart, ProgressRing } from '@/components/charts'
 import { MetricStat } from '@/components/MetricStat'
 import { CARD_HEIGHT, SkeletonChart, SkeletonMetricStat, SkeletonRing, SkeletonRows, SkeletonText } from '@/components/Skeleton'
@@ -243,16 +243,13 @@ export function ActivityView({ date, goals, onOpenMetric, onOpenWorkout, onOpenW
 
         {/* Workouts */}
         <motion.div custom={3} variants={fade} initial="hidden" animate="show" className="min-w-0">
-          <Panel
-            className={`group/drill relative flex h-full min-w-0 cursor-pointer flex-col gap-2 px-3 py-5 transition-[background-color,border-color,box-shadow,transform] hover:border-hairline-strong hover:bg-panel-2/60 active:translate-y-px ${CARD_HEIGHT.large}`}
+          <DrillPanel
+            label="Open workout details"
+            onOpen={() => onOpenWorkouts('D')}
+            className={`h-full min-w-0 ${CARD_HEIGHT.large}`}
+            contentClassName="flex h-full min-w-0 flex-col gap-2 px-3 py-5"
           >
-            <button
-              type="button"
-              aria-label="Open workout details"
-              onClick={() => onOpenWorkouts('D')}
-              className="absolute inset-0 rounded-[22px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
-            />
-            <div className="pointer-events-none relative z-10 px-2">
+            <div className="px-2">
               <DrillHeader
                 title="Workouts"
                 hint={
@@ -270,13 +267,15 @@ export function ActivityView({ date, goals, onOpenMetric, onOpenWorkout, onOpenW
             {workouts.isPending ? (
               <SkeletonRows />
             ) : workouts.data && workouts.data.length > 0 ? (
-              <WorkoutList workouts={workouts.data} onOpen={onOpenWorkout} />
+              <div className="pointer-events-auto">
+                <WorkoutList workouts={workouts.data} onOpen={onOpenWorkout} />
+              </div>
             ) : (
               <div className="grid flex-1 place-items-center text-[13px] text-ink-faint">
                 Tracked exercises appear here automatically.
               </div>
             )}
-          </Panel>
+          </DrillPanel>
         </motion.div>
       </div>
 

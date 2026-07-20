@@ -1,6 +1,6 @@
 import { motion } from 'framer-motion'
 import { Barbell, Footprints, Heartbeat, Moon, PersonSimpleRun } from '@phosphor-icons/react'
-import { Panel, DrillHeader, InteractivePanel, SectionHeader } from '@/components/Panel'
+import { DrillHeader, DrillPanel, InteractivePanel, Panel, SectionHeader } from '@/components/Panel'
 import { ColumnChart, ProgressRing } from '@/components/charts'
 import { MetricStat } from '@/components/MetricStat'
 import { SleepStages } from '@/components/SleepStages'
@@ -260,16 +260,13 @@ export function HomeView({ date, goals, onOpenMetric, onOpenWorkout, onOpenWorko
 
       {/* Workouts */}
       <motion.div custom={5} variants={fade} initial="hidden" animate="show">
-          <Panel
-            className="group/drill relative flex min-h-[126px] cursor-pointer flex-col gap-2 px-3 py-5 transition-[background-color,border-color,box-shadow,transform] hover:border-hairline-strong hover:bg-panel-2/60 active:translate-y-px"
-          >
-            <button
-              type="button"
-              aria-label="Open workout details"
-              onClick={() => onOpenWorkouts('D')}
-              className="absolute inset-0 rounded-[22px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
-            />
-            <div className="pointer-events-none relative z-10 px-2">
+        <DrillPanel
+          label="Open workout details"
+          onOpen={() => onOpenWorkouts('D')}
+          className="min-h-[126px]"
+          contentClassName="flex min-h-[124px] flex-col gap-2 px-3 py-5"
+        >
+            <div className="px-2">
               <DrillHeader
                 title="Workouts"
                 hint={
@@ -286,15 +283,17 @@ export function HomeView({ date, goals, onOpenMetric, onOpenWorkout, onOpenWorko
               <SkeletonRows />
             ) : (
               workouts.data && workouts.data.length > 0 ? (
-                <WorkoutList workouts={workouts.data} onOpen={onOpenWorkout} />
+                <div className="pointer-events-auto">
+                  <WorkoutList workouts={workouts.data} onOpen={onOpenWorkout} />
+                </div>
               ) : (
                 <div className="pointer-events-none relative z-10 grid min-h-[58px] flex-1 place-items-center text-[13px] text-ink-faint">
                   Tracked exercises appear here automatically.
                 </div>
               )
             )}
-          </Panel>
-        </motion.div>
+        </DrillPanel>
+      </motion.div>
     </div>
   )
 }

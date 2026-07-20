@@ -115,7 +115,7 @@ export function SkeletonMetricStat({ sparkWidth = 72 }: { sparkWidth?: number })
 
 export function SkeletonRows({ rows = 2 }: { rows?: number }): React.JSX.Element {
   return (
-    <div className="pointer-events-none flex flex-col gap-1" aria-hidden>
+    <div className="flex flex-col gap-1" aria-hidden>
       {Array.from({ length: rows }, (_, index) => (
         <div key={index} className="flex items-center justify-between rounded-xl px-3 py-2.5">
           <div className="flex items-center gap-3">
