@@ -11,7 +11,6 @@ import {
   Lightning,
   MapPin,
   Mountains,
-  PersonSimpleRun,
   StackSimple,
   SwimmingPool,
   Timer
@@ -19,6 +18,7 @@ import {
 import { Panel, SectionHeader } from '@/components/Panel'
 import { IntradayLine } from '@/components/charts'
 import { SkeletonChart } from '@/components/Skeleton'
+import { WorkoutIcon } from '@/components/WorkoutIcon'
 import { useHeartDetail, useIntraday, useWorkoutTrack } from '@/hooks/useHealth'
 import { formatClock, formatInt, formatMinuteOfDay, formatMinutes, longDate } from '@/lib/format'
 import { fade } from '@/lib/motion'
@@ -111,7 +111,7 @@ export function WorkoutDetailView({ workout, date, onBack }: WorkoutDetailViewPr
               className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl"
               style={{ background: tone.soft, color: tone.color }}
             >
-              <PersonSimpleRun size={22} weight="fill" />
+              <WorkoutIcon workout={workout} size={22} />
             </div>
             <div className="min-w-0">
               <h1 className="display truncate text-[27px] font-bold leading-tight text-ink">{workout.name}</h1>

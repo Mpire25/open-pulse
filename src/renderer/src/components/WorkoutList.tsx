@@ -1,4 +1,4 @@
-import { PersonSimpleRun } from '@phosphor-icons/react'
+import { WorkoutIcon } from '@/components/WorkoutIcon'
 import { formatClock, formatInt, formatMinutes } from '@/lib/format'
 import { workoutTone } from '@/lib/workouts'
 import type { Workout } from '@shared/types'
@@ -25,7 +25,7 @@ export function WorkoutList({ workouts, onOpen }: WorkoutListProps): React.JSX.E
                 className="grid h-9 w-9 shrink-0 place-items-center rounded-xl"
                 style={{ background: tone.soft }}
               >
-                <PersonSimpleRun size={17} weight="fill" style={{ color: tone.color }} />
+                <WorkoutIcon workout={w} size={17} />
               </div>
               <div className="min-w-0">
                 <div className="text-[13.5px] font-semibold text-ink">{w.name}</div>
