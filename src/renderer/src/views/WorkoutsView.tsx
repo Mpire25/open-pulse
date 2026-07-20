@@ -18,12 +18,13 @@ import type { MetricRange } from '@/lib/metric-navigation'
 import { listDates, rangeEnding } from '@/lib/metrics'
 import { fade } from '@/lib/motion'
 import {
+  displayedWorkoutTypes,
   workoutCategoryLabel,
   workoutDate,
   workoutDaySummaries,
   workoutTone,
   workoutTypeSummaries,
-  type WorkoutTypeSummary
+  type DisplayedWorkoutType
 } from '@/lib/workouts'
 import { cn } from '@/lib/utils'
 import type { Workout } from '@shared/types'
@@ -247,10 +248,6 @@ function SummaryStat({
   )
 }
 
-interface DisplayedWorkoutType extends WorkoutTypeSummary {
-  sourceLabels: string[]
-}
-
 function TrainingSplit({
   types,
   fullWidth = false
@@ -460,38 +457,6 @@ function WorkoutsSkeleton({ range }: { range: MetricRange }): React.JSX.Element 
       </Panel>
     </>
   )
-}
-
-function displayedWorkoutTypes(types: WorkoutTypeSummary[]): DisplayedWorkoutType[] {
-  const visible = types.slice(0, 5).map((type) => ({ ...type, sourceLabels: [type.label] }))
-  const overflow = types.slice(5)
-  if (overflow.length === 0) return visible
-
-  const visibleOther = visible.find((type) => type.label === 'Other')
-  if (visibleOther) {
-    return visible.map((type) =>
-      type === visibleOther
-        ? {
-            ...type,
-            sessions: type.sessions + overflow.reduce((sum, item) => sum + item.sessions, 0),
-            durationMin: type.durationMin + overflow.reduce((sum, item) => sum + item.durationMin, 0),
-            share: type.share + overflow.reduce((sum, item) => sum + item.share, 0),
-            sourceLabels: [...type.sourceLabels, ...overflow.map((item) => item.label)]
-          }
-        : type
-    )
-  }
-
-  return [
-    ...visible,
-    {
-      label: 'Other',
-      sessions: overflow.reduce((sum, type) => sum + type.sessions, 0),
-      durationMin: overflow.reduce((sum, type) => sum + type.durationMin, 0),
-      share: overflow.reduce((sum, type) => sum + type.share, 0),
-      sourceLabels: overflow.map((type) => type.label)
-    }
-  ]
 }
 
 function periodLabel(range: MetricRange, start: string, end: string): string {

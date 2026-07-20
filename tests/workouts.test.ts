@@ -1,6 +1,12 @@
 import { describe, expect, test } from 'bun:test'
 import type { Workout } from '../src/shared/types'
-import { workoutDaySummaries, workoutTone, workoutTypeLabel, workoutTypeSummaries } from '../src/renderer/src/lib/workouts'
+import {
+  displayedWorkoutTypes,
+  workoutDaySummaries,
+  workoutTone,
+  workoutTypeLabel,
+  workoutTypeSummaries
+} from '../src/renderer/src/lib/workouts'
 
 function workout(overrides: Partial<Workout> = {}): Workout {
   return {
@@ -64,5 +70,26 @@ describe('workout overview analytics', () => {
     expect(workoutTone('Treadmill running').key).toBe('treadmill')
     expect(workoutTone('Treadmill').color).toBe('var(--color-workout-treadmill)')
     expect(workoutTone('Unclassified activity').key).toBe('other')
+  })
+
+  test('merges overflow into an existing Other category', () => {
+    const result = displayedWorkoutTypes([
+      { label: 'Other', sessions: 1, durationMin: 60, share: 30 },
+      { label: 'Walking', sessions: 1, durationMin: 40, share: 20 },
+      { label: 'Running', sessions: 1, durationMin: 30, share: 15 },
+      { label: 'Strength Training', sessions: 1, durationMin: 25, share: 12.5 },
+      { label: 'Cycling', sessions: 1, durationMin: 20, share: 10 },
+      { label: 'Tennis', sessions: 1, durationMin: 15, share: 7.5 },
+      { label: 'Badminton', sessions: 1, durationMin: 10, share: 5 }
+    ])
+
+    expect(result.filter((type) => type.label === 'Other')).toHaveLength(1)
+    expect(result[0]).toEqual({
+      label: 'Other',
+      sessions: 3,
+      durationMin: 85,
+      share: 42.5,
+      sourceLabels: ['Other', 'Tennis', 'Badminton']
+    })
   })
 })
