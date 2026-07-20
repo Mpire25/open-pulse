@@ -171,6 +171,23 @@ body {
   display: none;
 }
 
+.training-split-panel {
+  container: training-split / inline-size;
+}
+
+.training-split-period {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  place-items: center;
+  gap: 1.25rem;
+}
+
+@container training-split (min-width: 23rem) {
+  .training-split-period {
+    grid-template-columns: 9rem minmax(0, 1fr);
+  }
+}
+
 .assistant-visual-pair,
 .assistant-visual-primary {
   grid-template-columns: minmax(0, 1fr);

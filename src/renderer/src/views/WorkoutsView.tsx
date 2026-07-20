@@ -258,39 +258,32 @@ function TrainingSplit({
   fullWidth?: boolean
 }): React.JSX.Element {
   return (
-    <Panel className={cn('flex h-full min-w-0 flex-col p-5', fullWidth ? 'min-h-[220px]' : CARD_HEIGHT.large)}>
+    <Panel className={cn('training-split-panel flex h-full min-w-0 flex-col p-5', fullWidth ? 'min-h-[220px]' : CARD_HEIGHT.large)}>
       <SectionHeader
         title="Training split"
         hint="Share of active time"
         icon={<ChartDonut size={18} weight="fill" className="text-recovery" />}
       />
       {types.length > 0 ? (
-        <>
-          <div className="mt-6 flex h-2.5 overflow-hidden rounded-full bg-white/[0.04]">
-            {types.map((type, index) => (
-              <span
-                key={type.label}
-                className="h-full first:rounded-l-full last:rounded-r-full"
-                style={{ width: `${type.share}%`, background: TYPE_COLORS[index % TYPE_COLORS.length] }}
-              />
-            ))}
-          </div>
-          <div className={cn('mt-4 grid gap-x-10 gap-y-3', fullWidth ? 'display-lg-pair-grid' : 'grid-cols-1')}>
-            {types.map((type, index) => (
-              <div key={type.label} className="flex min-w-0 items-center gap-3">
+        fullWidth ? (
+          <>
+            <div className="mt-6 flex h-2.5 overflow-hidden rounded-full bg-white/[0.04]">
+              {types.map((type, index) => (
                 <span
-                  className="h-2 w-2 shrink-0 rounded-full"
-                  style={{ background: TYPE_COLORS[index % TYPE_COLORS.length] }}
+                  key={type.label}
+                  className="h-full first:rounded-l-full last:rounded-r-full"
+                  style={{ width: `${type.share}%`, background: TYPE_COLORS[index % TYPE_COLORS.length] }}
                 />
-                <span className="min-w-0 flex-1 truncate text-[12.5px] font-medium text-ink-dim">{type.label}</span>
-                <span className="shrink-0 font-mono text-[11.5px] text-ink">{formatMinutes(type.durationMin)}</span>
-                <span className="w-8 shrink-0 text-right font-mono text-[10.5px] text-ink-faint">
-                  {Math.round(type.share)}%
-                </span>
-              </div>
-            ))}
+              ))}
+            </div>
+            <TrainingSplitLegend types={types} wide />
+          </>
+        ) : (
+          <div className="training-split-period mt-5 flex-1">
+            <TrainingSplitPie types={types} />
+            <TrainingSplitLegend types={types} />
           </div>
-        </>
+        )
       ) : (
         <div className="grid flex-1 place-items-center text-center text-[13px] text-ink-faint">
           Your workout mix will appear here once sessions are recorded.
@@ -298,6 +291,93 @@ function TrainingSplit({
       )}
     </Panel>
   )
+}
+
+function TrainingSplitPie({ types }: { types: DisplayedWorkoutType[] }): React.JSX.Element {
+  let start = 0
+  const slices = types.map((type, index) => {
+    const slice = { type, index, start, end: start + type.share }
+    start = slice.end
+    return slice
+  })
+  const label = `Training split: ${types
+    .map((type) => `${type.label} ${Math.round(type.share)} percent`)
+    .join(', ')}`
+
+  return (
+    <svg
+      viewBox="0 0 120 120"
+      role="img"
+      aria-label={label}
+      className="h-36 w-36 shrink-0 drop-shadow-[0_18px_24px_rgb(0_0_0/0.22)]"
+    >
+      <circle cx="60" cy="60" r="51" fill="rgb(255 255 255 / 0.035)" />
+      {slices.map(({ type, index, start: sliceStart, end }) => {
+        const color = TYPE_COLORS[index % TYPE_COLORS.length]
+        return type.share >= 99.999 ? (
+          <circle
+            key={type.label}
+            cx="60"
+            cy="60"
+            r="50"
+            fill={color}
+            stroke="var(--color-panel)"
+            strokeWidth="1"
+          >
+            <title>{`${type.label}: ${Math.round(type.share)}% · ${formatMinutes(type.durationMin)}`}</title>
+          </circle>
+        ) : (
+          <path
+            key={type.label}
+            d={pieSlicePath(sliceStart, end)}
+            fill={color}
+            stroke="var(--color-panel)"
+            strokeWidth="1"
+            strokeLinejoin="round"
+          >
+            <title>{`${type.label}: ${Math.round(type.share)}% · ${formatMinutes(type.durationMin)}`}</title>
+          </path>
+        )
+      })}
+    </svg>
+  )
+}
+
+function TrainingSplitLegend({
+  types,
+  wide = false
+}: {
+  types: DisplayedWorkoutType[]
+  wide?: boolean
+}): React.JSX.Element {
+  return (
+    <div className={cn('grid gap-x-10 gap-y-3', wide ? 'mt-4 display-lg-pair-grid' : 'w-full grid-cols-1')}>
+      {types.map((type, index) => (
+        <div key={type.label} className="flex min-w-0 items-center gap-3">
+          <span
+            className="h-2 w-2 shrink-0 rounded-full"
+            style={{ background: TYPE_COLORS[index % TYPE_COLORS.length] }}
+          />
+          <span className="min-w-0 flex-1 truncate text-[12.5px] font-medium text-ink-dim">{type.label}</span>
+          <span className="shrink-0 font-mono text-[11.5px] text-ink">{formatMinutes(type.durationMin)}</span>
+          <span className="w-8 shrink-0 text-right font-mono text-[10.5px] text-ink-faint">
+            {Math.round(type.share)}%
+          </span>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function pieSlicePath(startPercent: number, endPercent: number): string {
+  const point = (percent: number): { x: number; y: number } => {
+    const radians = (percent / 100) * Math.PI * 2 - Math.PI / 2
+    return { x: 60 + Math.cos(radians) * 50, y: 60 + Math.sin(radians) * 50 }
+  }
+  const start = point(startPercent)
+  const end = point(endPercent)
+  const largeArc = endPercent - startPercent > 50 ? 1 : 0
+  return `M 60 60 L ${start.x} ${start.y} A 50 50 0 ${largeArc} 1 ${end.x} ${end.y} Z`
 }
 
 function WorkoutRangeTabs({
@@ -351,14 +431,27 @@ function WorkoutsSkeleton({ range }: { range: MetricRange }): React.JSX.Element 
             <SkeletonChart height={190} columns={range === 'W' ? 7 : 12} />
           </Panel>
         )}
-        <Panel className={`flex flex-col gap-4 p-5 ${CARD_HEIGHT.large}`}>
+        <Panel className={`training-split-panel flex flex-col gap-4 p-5 ${CARD_HEIGHT.large}`}>
           <SkeletonText className="w-28" />
-          <SkeletonBlock className="mt-4 h-2.5 w-full rounded-full" />
-          <div className="flex flex-col gap-4">
-            {Array.from({ length: 4 }, (_, index) => (
-              <SkeletonText key={index} className="w-full" />
-            ))}
-          </div>
+          {range === 'D' ? (
+            <>
+              <SkeletonBlock className="mt-4 h-2.5 w-full rounded-full" />
+              <div className="flex flex-col gap-4">
+                {Array.from({ length: 4 }, (_, index) => (
+                  <SkeletonText key={index} className="w-full" />
+                ))}
+              </div>
+            </>
+          ) : (
+            <div className="training-split-period flex-1">
+              <SkeletonBlock className="h-36 w-36 shrink-0 rounded-full" />
+              <div className="flex w-full flex-col gap-4">
+                {Array.from({ length: 4 }, (_, index) => (
+                  <SkeletonText key={index} className="w-full" />
+                ))}
+              </div>
+            </div>
+          )}
         </Panel>
       </div>
       <Panel className="min-h-[164px] p-3">
