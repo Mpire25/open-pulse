@@ -23,7 +23,6 @@ import { formatClock, formatHour, formatInt, formatMinutes, greeting, isoToday, 
 import type { OpenMetric } from '@/lib/metric-navigation'
 import type { MetricRange } from '@/lib/metric-navigation'
 import { fade } from '@/lib/motion'
-import { workoutTone } from '@/lib/workouts'
 import type { Goals, MetricKey, Workout } from '@shared/types'
 
 const HOME_METRICS: MetricKey[] = [
@@ -169,17 +168,7 @@ export function HomeView({ date, goals, onOpenMetric, onOpenWorkout, onOpenWorko
                 workouts.isPending ? (
                   <SkeletonText className="w-28" />
                 ) : workouts.data?.length ? (
-                  <span className="flex min-w-0 flex-wrap gap-x-2 gap-y-0.5">
-                    {workouts.data.slice(0, 2).map((workout) => (
-                      <span key={workout.id} className="inline-flex min-w-0 items-center gap-1">
-                        <span
-                          className="h-1.5 w-1.5 shrink-0 rounded-full"
-                          style={{ background: workoutTone(workout).color }}
-                        />
-                        <span className="truncate">{workout.name}</span>
-                      </span>
-                    ))}
-                  </span>
+                  workouts.data.map((workout) => workout.name).slice(0, 2).join(', ')
                 ) : undefined
               }
               onClick={() => onOpenWorkouts('D')}
