@@ -20,8 +20,7 @@ import { useIntraday, useSeries, useSleepNight, useWorkouts } from '@/hooks/useH
 import { METRICS } from '@/lib/metric-registry'
 import { baseline, baselineDeltaPct, pointValues, rangeEnding, seriesPoints } from '@/lib/metrics'
 import { formatClock, formatHour, formatInt, formatMinutes, greeting, isoToday, longDate } from '@/lib/format'
-import type { OpenMetric } from '@/lib/metric-navigation'
-import type { MetricRange } from '@/lib/metric-navigation'
+import type { MetricRange, OpenMetric } from '@/lib/metric-navigation'
 import { fade } from '@/lib/motion'
 import type { Goals, MetricKey, Workout } from '@shared/types'
 
@@ -266,32 +265,30 @@ export function HomeView({ date, goals, onOpenMetric, onOpenWorkout, onOpenWorko
           className="min-h-[126px]"
           contentClassName="flex min-h-[124px] flex-col gap-2 px-3 py-5"
         >
-            <div className="px-2">
-              <DrillHeader
-                title="Workouts"
-                hint={
-                  workouts.isPending ? (
-                    <SkeletonText className="w-20" />
-                  ) : (
-                    `${workouts.data?.length ?? 0} session${workouts.data?.length === 1 ? '' : 's'}`
-                  )
-                }
-                icon={<Barbell size={18} weight="fill" style={{ color: 'var(--color-recovery)' }} />}
-              />
+          <div className="px-2">
+            <DrillHeader
+              title="Workouts"
+              hint={
+                workouts.isPending ? (
+                  <SkeletonText className="w-20" />
+                ) : (
+                  `${workouts.data?.length ?? 0} session${workouts.data?.length === 1 ? '' : 's'}`
+                )
+              }
+              icon={<Barbell size={18} weight="fill" style={{ color: 'var(--color-recovery)' }} />}
+            />
+          </div>
+          {workouts.isPending ? (
+            <SkeletonRows />
+          ) : workouts.data && workouts.data.length > 0 ? (
+            <div className="pointer-events-auto">
+              <WorkoutList workouts={workouts.data} onOpen={onOpenWorkout} />
             </div>
-            {workouts.isPending ? (
-              <SkeletonRows />
-            ) : (
-              workouts.data && workouts.data.length > 0 ? (
-                <div className="pointer-events-auto">
-                  <WorkoutList workouts={workouts.data} onOpen={onOpenWorkout} />
-                </div>
-              ) : (
-                <div className="pointer-events-none relative z-10 grid min-h-[58px] flex-1 place-items-center text-[13px] text-ink-faint">
-                  Tracked exercises appear here automatically.
-                </div>
-              )
-            )}
+          ) : (
+            <div className="grid min-h-[58px] flex-1 place-items-center text-[13px] text-ink-faint">
+              Tracked exercises appear here automatically.
+            </div>
+          )}
         </DrillPanel>
       </motion.div>
     </div>
