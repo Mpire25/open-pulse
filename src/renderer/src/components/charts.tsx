@@ -2,7 +2,7 @@
 // gridlines, a hover layer on every plot (full-band hit targets, one tooltip
 // with the value leading), previous render held while data refetches.
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { animate, motion, useMotionValue, useReducedMotion, useTransform } from 'framer-motion'
 import { formatMinuteOfDay } from '@/lib/format'
 import { sampleHeartRateForChart } from '@/lib/heart-rate'
@@ -299,6 +299,209 @@ export function ColumnChart({
 function roundedColumn(x: number, top: number, w: number, h: number): string {
   const r = Math.min(4, w / 2, h)
   return `M ${x} ${top + h} V ${top + r} Q ${x} ${top} ${x + r} ${top} H ${x + w - r} Q ${x + w} ${top} ${x + w} ${top + r} V ${top + h} Z`
+}
+
+// ---------------------------------------------------------------------------
+// Stacked columns — a daily total split into consistently colored categories
+
+export interface StackedColumnSegment {
+  key: string
+  label: string
+  value: number
+  color: string
+}
+
+export interface StackedColumnDatum {
+  key: string
+  label: string
+  segments: StackedColumnSegment[]
+  tick?: string
+}
+
+interface StackedColumnChartProps {
+  data: StackedColumnDatum[]
+  height?: number
+  format?: (value: number) => string
+  unitLabel?: string
+  axisLabel?: string
+  onSelect?: (datum: StackedColumnDatum) => void
+}
+
+export function StackedColumnChart({
+  data,
+  height = 170,
+  format = (value) => compact(value),
+  unitLabel = '',
+  axisLabel = unitLabel,
+  onSelect
+}: StackedColumnChartProps): React.JSX.Element {
+  const [ref, width] = useWidth()
+  const [tip, setTip] = useState<TipState | null>(null)
+  const [hovered, setHovered] = useState<number | null>(null)
+  const clipPrefix = useId().replaceAll(':', '')
+  const pad = { top: 14, bottom: 18, left: 0, right: 46 }
+  const plotW = Math.max(0, width - pad.left - pad.right)
+  const plotH = height - pad.top - pad.bottom
+  const totals = data.map((datum) => datum.segments.reduce((sum, segment) => sum + segment.value, 0))
+  const max = niceMax(Math.max(0, ...totals))
+  const band = data.length > 0 ? plotW / data.length : 0
+  const barW = Math.min(24, Math.max(3, band - 2))
+  const keyboardSelectionEnabled = data.length <= MAX_KEYBOARD_SELECTABLE_POINTS
+  const y = (value: number): number => pad.top + plotH * (1 - value / max)
+  const gridValues = [0, max / 2, max]
+
+  return (
+    <div ref={ref} className="relative w-full select-none" style={{ height }}>
+      {width > 0 && (
+        <svg width={width} height={height} className="block">
+          <defs>
+            {data.map((datum, index) => {
+              const total = totals[index]
+              const columnHeight = total > 0 ? Math.max(2, plotH * (total / max)) : 0
+              return (
+                <clipPath key={datum.key} id={`${clipPrefix}-${index}`}>
+                  <rect
+                    x={pad.left + band * index + band / 2 - barW / 2}
+                    y={y(0) - columnHeight}
+                    width={barW}
+                    height={columnHeight}
+                    rx={Math.min(4, barW / 2)}
+                  />
+                </clipPath>
+              )
+            })}
+          </defs>
+
+          {gridValues.map((value) => (
+            <g key={value}>
+              <line
+                x1={0}
+                x2={plotW}
+                y1={y(value)}
+                y2={y(value)}
+                stroke={value === 0 ? 'var(--color-hairline-strong)' : 'var(--color-hairline)'}
+                strokeWidth={1}
+              />
+              <text
+                x={plotW + 6}
+                y={y(value) + 3.5}
+                className="fill-[var(--color-ink-faint)] font-mono"
+                fontSize={10}
+              >
+                {axisNumber(value)}
+              </text>
+            </g>
+          ))}
+
+          {axisLabel && (
+            <text
+              x={width - 5}
+              y={pad.top + plotH / 2}
+              textAnchor="middle"
+              dominantBaseline="middle"
+              transform={`rotate(-90 ${width - 5} ${pad.top + plotH / 2})`}
+              className="fill-[var(--color-ink-faint)] font-mono"
+              fontSize={9}
+            >
+              {axisLabel}
+            </text>
+          )}
+
+          {data.map((datum, index) => {
+            const columnX = pad.left + band * index + band / 2 - barW / 2
+            let cumulative = 0
+            return (
+              <g
+                key={datum.key}
+                clipPath={`url(#${clipPrefix}-${index})`}
+                opacity={hovered == null || hovered === index ? 0.9 : 0.42}
+              >
+                {datum.segments.map((segment) => {
+                  if (segment.value <= 0) return null
+                  const bottom = cumulative
+                  cumulative += segment.value
+                  return (
+                    <rect
+                      key={segment.key}
+                      x={columnX}
+                      y={y(cumulative)}
+                      width={barW}
+                      height={Math.max(1, y(bottom) - y(cumulative))}
+                      fill={segment.color}
+                    />
+                  )
+                })}
+              </g>
+            )
+          })}
+
+          {data.map(
+            (datum, index) =>
+              datum.tick && (
+                <text
+                  key={`t-${datum.key}`}
+                  x={pad.left + band * index + band / 2}
+                  y={height - 4}
+                  textAnchor="middle"
+                  className="fill-[var(--color-ink-faint)] font-mono"
+                  fontSize={10}
+                >
+                  {datum.tick}
+                </text>
+              )
+          )}
+
+          {data.map((datum, index) => {
+            const total = totals[index]
+            const keyboardSelectable = keyboardSelectionEnabled && onSelect != null
+            const presentSegments = datum.segments.filter((segment) => segment.value > 0)
+            return (
+              <rect
+                key={`h-${datum.key}`}
+                x={pad.left + band * index}
+                y={0}
+                width={band}
+                height={height}
+                fill="transparent"
+                className={onSelect ? 'cursor-pointer' : undefined}
+                role={keyboardSelectable ? 'button' : undefined}
+                tabIndex={keyboardSelectable ? 0 : undefined}
+                aria-label={keyboardSelectable ? `View ${datum.label}` : undefined}
+                onPointerMove={() => {
+                  setHovered(index)
+                  setTip({
+                    x: pad.left + band * index + band / 2,
+                    y: total > 0 ? y(total) : y(0),
+                    title: datum.label,
+                    rows: [
+                      { label: unitLabel, value: format(total) },
+                      ...presentSegments.map((segment) => ({
+                        label: segment.label,
+                        value: format(segment.value),
+                        color: segment.color
+                      }))
+                    ]
+                  })
+                }}
+                onPointerLeave={() => {
+                  setHovered(null)
+                  setTip(null)
+                }}
+                onPointerDown={(event) => event.preventDefault()}
+                onClick={() => onSelect?.(datum)}
+                onKeyDown={(event) => {
+                  if (!keyboardSelectable || !onSelect || (event.key !== 'Enter' && event.key !== ' ')) return
+                  event.preventDefault()
+                  onSelect(datum)
+                }}
+              />
+            )
+          })}
+        </svg>
+      )}
+      {tip && <Tip tip={tip} width={width} />}
+    </div>
+  )
 }
 
 // ---------------------------------------------------------------------------

@@ -11,7 +11,7 @@ import { ErrorState } from '@/components/ErrorState'
 import { Panel, SectionHeader } from '@/components/Panel'
 import { CARD_HEIGHT, SkeletonBlock, SkeletonChart, SkeletonRows, SkeletonText } from '@/components/Skeleton'
 import { WorkoutList } from '@/components/WorkoutList'
-import { ColumnChart } from '@/components/charts'
+import { StackedColumnChart, type StackedColumnSegment } from '@/components/charts'
 import { useWorkouts } from '@/hooks/useHealth'
 import { formatInt, formatMinutes, longDate, shortDate, weekdayShort } from '@/lib/format'
 import type { MetricRange } from '@/lib/metric-navigation'
@@ -20,6 +20,7 @@ import { fade } from '@/lib/motion'
 import {
   workoutDate,
   workoutDaySummaries,
+  workoutTypeLabel,
   workoutTypeSummaries,
   type WorkoutTypeSummary
 } from '@/lib/workouts'
@@ -76,6 +77,18 @@ export function WorkoutsView({
   const sessions = workouts.data ?? []
   const days = workoutDaySummaries(sessions, shown.start, shown.end)
   const types = workoutTypeSummaries(sessions)
+  const displayedTypes = displayedWorkoutTypes(types)
+  const displayedTypeFor = new Map(
+    displayedTypes.flatMap((type) => type.sourceLabels.map((label) => [label, type.label] as const))
+  )
+  const durationByDayAndType = new Map<string, Map<string, number>>()
+  for (const workout of sessions) {
+    const day = workoutDate(workout)
+    const type = displayedTypeFor.get(workoutTypeLabel(workout)) ?? 'Other'
+    const durations = durationByDayAndType.get(day) ?? new Map<string, number>()
+    durations.set(type, (durations.get(type) ?? 0) + workout.durationMin)
+    durationByDayAndType.set(day, durations)
+  }
   const totalMinutes = sessions.reduce((sum, workout) => sum + workout.durationMin, 0)
   const totalCalories = sessions.reduce((sum, workout) => sum + (workout.calories ?? 0), 0)
   const activeDays = new Set(sessions.map(workoutDate)).size
@@ -130,38 +143,47 @@ export function WorkoutsView({
             </Panel>
           </motion.div>
 
-          <div className="display-lg-pair-grid display-lg-pair-grid--weighted-135">
-            <motion.div custom={2} variants={fade} initial="hidden" animate="show" className="min-w-0">
-              <Panel className={`flex h-full min-w-0 flex-col gap-4 p-5 ${CARD_HEIGHT.large}`}>
-                <SectionHeader
-                  title="Training rhythm"
-                  hint="Active minutes by day"
-                  icon={<CalendarCheck size={18} weight="fill" className="text-recovery" />}
-                />
-                <div className="mt-auto">
-                  <ColumnChart
-                    data={days.map((day, index) => ({
-                      key: day.date,
-                      label: `${weekdayShort(day.date)} · ${shortDate(day.date)}`,
-                      value: day.durationMin,
-                      tick: workoutTick(range, day.date, index)
-                    }))}
-                    color="var(--color-recovery)"
-                    height={190}
-                    format={formatMinutes}
-                    unitLabel="active"
-                    axisLabel="min"
-                    emphasisIndex={range === 'D' ? 0 : undefined}
-                    onSelect={(point) => onSelectDate(point.key)}
+          {range === 'D' ? (
+            <motion.div custom={2} variants={fade} initial="hidden" animate="show">
+              <TrainingSplit types={displayedTypes} fullWidth />
+            </motion.div>
+          ) : (
+            <div className="display-lg-pair-grid display-lg-pair-grid--weighted-135">
+              <motion.div custom={2} variants={fade} initial="hidden" animate="show" className="min-w-0">
+                <Panel className={`flex h-full min-w-0 flex-col gap-4 p-5 ${CARD_HEIGHT.large}`}>
+                  <SectionHeader
+                    title="Training rhythm"
+                    hint="Active minutes by workout type"
+                    icon={<CalendarCheck size={18} weight="fill" className="text-recovery" />}
                   />
-                </div>
-              </Panel>
-            </motion.div>
+                  <div className="mt-auto">
+                    <StackedColumnChart
+                      data={days.map((day, index) => ({
+                        key: day.date,
+                        label: `${weekdayShort(day.date)} · ${shortDate(day.date)}`,
+                        tick: workoutTick(range, day.date, index),
+                        segments: displayedTypes.map((type, typeIndex): StackedColumnSegment => ({
+                          key: type.label,
+                          label: type.label,
+                          value: durationByDayAndType.get(day.date)?.get(type.label) ?? 0,
+                          color: TYPE_COLORS[typeIndex % TYPE_COLORS.length]
+                        }))
+                      }))}
+                      height={190}
+                      format={formatMinutes}
+                      unitLabel="active"
+                      axisLabel="min"
+                      onSelect={(point) => onSelectDate(point.key)}
+                    />
+                  </div>
+                </Panel>
+              </motion.div>
 
-            <motion.div custom={3} variants={fade} initial="hidden" animate="show" className="min-w-0">
-              <TrainingSplit types={types} />
-            </motion.div>
-          </div>
+              <motion.div custom={3} variants={fade} initial="hidden" animate="show" className="min-w-0">
+                <TrainingSplit types={displayedTypes} />
+              </motion.div>
+            </div>
+          )}
 
           <motion.div custom={4} variants={fade} initial="hidden" animate="show">
             <Panel className="min-h-[164px] overflow-hidden">
@@ -224,32 +246,28 @@ function SummaryStat({
   )
 }
 
-function TrainingSplit({ types }: { types: WorkoutTypeSummary[] }): React.JSX.Element {
-  const visible = types.slice(0, 5)
-  const overflow = types.slice(5)
-  const displayed = overflow.length
-    ? [
-        ...visible,
-        {
-          label: 'Other',
-          sessions: overflow.reduce((sum, type) => sum + type.sessions, 0),
-          durationMin: overflow.reduce((sum, type) => sum + type.durationMin, 0),
-          share: overflow.reduce((sum, type) => sum + type.share, 0)
-        }
-      ]
-    : visible
+interface DisplayedWorkoutType extends WorkoutTypeSummary {
+  sourceLabels: string[]
+}
 
+function TrainingSplit({
+  types,
+  fullWidth = false
+}: {
+  types: DisplayedWorkoutType[]
+  fullWidth?: boolean
+}): React.JSX.Element {
   return (
-    <Panel className={`flex h-full min-w-0 flex-col p-5 ${CARD_HEIGHT.large}`}>
+    <Panel className={cn('flex h-full min-w-0 flex-col p-5', fullWidth ? 'min-h-[220px]' : CARD_HEIGHT.large)}>
       <SectionHeader
         title="Training split"
         hint="Share of active time"
         icon={<ChartDonut size={18} weight="fill" className="text-recovery" />}
       />
-      {displayed.length > 0 ? (
+      {types.length > 0 ? (
         <>
           <div className="mt-6 flex h-2.5 overflow-hidden rounded-full bg-white/[0.04]">
-            {displayed.map((type, index) => (
+            {types.map((type, index) => (
               <span
                 key={type.label}
                 className="h-full first:rounded-l-full last:rounded-r-full"
@@ -257,8 +275,8 @@ function TrainingSplit({ types }: { types: WorkoutTypeSummary[] }): React.JSX.El
               />
             ))}
           </div>
-          <div className="mt-4 flex flex-col gap-3">
-            {displayed.map((type, index) => (
+          <div className={cn('mt-4 grid gap-x-10 gap-y-3', fullWidth ? 'display-lg-pair-grid' : 'grid-cols-1')}>
+            {types.map((type, index) => (
               <div key={type.label} className="flex min-w-0 items-center gap-3">
                 <span
                   className="h-2 w-2 shrink-0 rounded-full"
@@ -326,11 +344,13 @@ function WorkoutsSkeleton({ range }: { range: MetricRange }): React.JSX.Element 
           </div>
         ))}
       </Panel>
-      <div className="display-lg-pair-grid display-lg-pair-grid--weighted-135">
-        <Panel className={`flex flex-col gap-4 p-5 ${CARD_HEIGHT.large}`}>
-          <SkeletonText className="w-28" />
-          <SkeletonChart height={190} columns={range === 'D' ? 1 : range === 'W' ? 7 : 12} />
-        </Panel>
+      <div className={range === 'D' ? '' : 'display-lg-pair-grid display-lg-pair-grid--weighted-135'}>
+        {range !== 'D' && (
+          <Panel className={`flex flex-col gap-4 p-5 ${CARD_HEIGHT.large}`}>
+            <SkeletonText className="w-28" />
+            <SkeletonChart height={190} columns={range === 'W' ? 7 : 12} />
+          </Panel>
+        )}
         <Panel className={`flex flex-col gap-4 p-5 ${CARD_HEIGHT.large}`}>
           <SkeletonText className="w-28" />
           <SkeletonBlock className="mt-4 h-2.5 w-full rounded-full" />
@@ -346,6 +366,22 @@ function WorkoutsSkeleton({ range }: { range: MetricRange }): React.JSX.Element 
       </Panel>
     </>
   )
+}
+
+function displayedWorkoutTypes(types: WorkoutTypeSummary[]): DisplayedWorkoutType[] {
+  const visible = types.slice(0, 5).map((type) => ({ ...type, sourceLabels: [type.label] }))
+  const overflow = types.slice(5)
+  if (overflow.length === 0) return visible
+  return [
+    ...visible,
+    {
+      label: 'Other',
+      sessions: overflow.reduce((sum, type) => sum + type.sessions, 0),
+      durationMin: overflow.reduce((sum, type) => sum + type.durationMin, 0),
+      share: overflow.reduce((sum, type) => sum + type.share, 0),
+      sourceLabels: overflow.map((type) => type.label)
+    }
+  ]
 }
 
 function periodLabel(range: MetricRange, start: string, end: string): string {
