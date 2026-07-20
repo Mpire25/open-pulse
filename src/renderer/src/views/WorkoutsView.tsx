@@ -466,6 +466,22 @@ function displayedWorkoutTypes(types: WorkoutTypeSummary[]): DisplayedWorkoutTyp
   const visible = types.slice(0, 5).map((type) => ({ ...type, sourceLabels: [type.label] }))
   const overflow = types.slice(5)
   if (overflow.length === 0) return visible
+
+  const visibleOther = visible.find((type) => type.label === 'Other')
+  if (visibleOther) {
+    return visible.map((type) =>
+      type === visibleOther
+        ? {
+            ...type,
+            sessions: type.sessions + overflow.reduce((sum, item) => sum + item.sessions, 0),
+            durationMin: type.durationMin + overflow.reduce((sum, item) => sum + item.durationMin, 0),
+            share: type.share + overflow.reduce((sum, item) => sum + item.share, 0),
+            sourceLabels: [...type.sourceLabels, ...overflow.map((item) => item.label)]
+          }
+        : type
+    )
+  }
+
   return [
     ...visible,
     {
