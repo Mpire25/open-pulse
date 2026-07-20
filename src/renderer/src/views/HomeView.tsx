@@ -21,6 +21,7 @@ import { METRICS } from '@/lib/metric-registry'
 import { baseline, baselineDeltaPct, pointValues, rangeEnding, seriesPoints } from '@/lib/metrics'
 import { formatClock, formatHour, formatInt, formatMinutes, greeting, isoToday, longDate } from '@/lib/format'
 import type { OpenMetric } from '@/lib/metric-navigation'
+import type { MetricRange } from '@/lib/metric-navigation'
 import { fade } from '@/lib/motion'
 import type { Goals, MetricKey, Workout } from '@shared/types'
 
@@ -42,10 +43,11 @@ interface HomeViewProps {
   goals: Goals
   onOpenMetric: OpenMetric
   onOpenWorkout: (workout: Workout) => void
+  onOpenWorkouts: (initialRange?: MetricRange) => void
   onNavigate: (view: View) => void
 }
 
-export function HomeView({ date, goals, onOpenMetric, onOpenWorkout, onNavigate }: HomeViewProps): React.JSX.Element {
+export function HomeView({ date, goals, onOpenMetric, onOpenWorkout, onOpenWorkouts, onNavigate }: HomeViewProps): React.JSX.Element {
   const { start, end } = rangeEnding(date, 7)
   const series = useSeries(HOME_METRICS, start, end)
   const night = useSleepNight(date)
@@ -169,7 +171,7 @@ export function HomeView({ date, goals, onOpenMetric, onOpenWorkout, onNavigate 
                   workouts.data.map((w) => w.name).slice(0, 2).join(', ')
                 ) : undefined
               }
-              onClick={() => onNavigate('activity')}
+              onClick={() => onOpenWorkouts('D')}
             />
           </div>
         </Panel>
@@ -257,11 +259,18 @@ export function HomeView({ date, goals, onOpenMetric, onOpenWorkout, onNavigate 
       </motion.div>
 
       {/* Workouts */}
-      {(workouts.isPending || (workouts.data && workouts.data.length > 0)) && (
-        <motion.div custom={5} variants={fade} initial="hidden" animate="show">
-          <Panel className="flex min-h-[126px] flex-col gap-2 px-3 py-5">
-            <div className="px-2">
-              <SectionHeader
+      <motion.div custom={5} variants={fade} initial="hidden" animate="show">
+          <Panel
+            className="group/drill relative flex min-h-[126px] cursor-pointer flex-col gap-2 px-3 py-5 transition-[background-color,border-color,box-shadow,transform] hover:border-hairline-strong hover:bg-panel-2/60 active:translate-y-px"
+          >
+            <button
+              type="button"
+              aria-label="Open workout details"
+              onClick={() => onOpenWorkouts('D')}
+              className="absolute inset-0 rounded-[22px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+            />
+            <div className="pointer-events-none relative z-10 px-2">
+              <DrillHeader
                 title="Workouts"
                 hint={
                   workouts.isPending ? (
@@ -276,11 +285,16 @@ export function HomeView({ date, goals, onOpenMetric, onOpenWorkout, onNavigate 
             {workouts.isPending ? (
               <SkeletonRows />
             ) : (
-              <WorkoutList workouts={workouts.data ?? []} onOpen={onOpenWorkout} />
+              workouts.data && workouts.data.length > 0 ? (
+                <WorkoutList workouts={workouts.data} onOpen={onOpenWorkout} />
+              ) : (
+                <div className="pointer-events-none relative z-10 grid min-h-[58px] flex-1 place-items-center text-[13px] text-ink-faint">
+                  Tracked exercises appear here automatically.
+                </div>
+              )
             )}
           </Panel>
         </motion.div>
-      )}
     </div>
   )
 }

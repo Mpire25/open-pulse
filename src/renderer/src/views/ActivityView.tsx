@@ -11,6 +11,7 @@ import { METRICS } from '@/lib/metric-registry'
 import { baseline, baselineDeltaPct, pointValues, rangeEnding, seriesPoints } from '@/lib/metrics'
 import { formatHour, formatInt, longDate, weekdayShort } from '@/lib/format'
 import type { OpenMetric } from '@/lib/metric-navigation'
+import type { MetricRange } from '@/lib/metric-navigation'
 import { fade } from '@/lib/motion'
 import type { Goals, MetricKey, Workout } from '@shared/types'
 
@@ -42,6 +43,7 @@ interface ActivityViewProps {
   goals: Goals
   onOpenMetric: OpenMetric
   onOpenWorkout: (workout: Workout) => void
+  onOpenWorkouts: (initialRange?: MetricRange) => void
 }
 
 function ActivityGoalRing({
@@ -93,7 +95,7 @@ function ActivityGoalRing({
   )
 }
 
-export function ActivityView({ date, goals, onOpenMetric, onOpenWorkout }: ActivityViewProps): React.JSX.Element {
+export function ActivityView({ date, goals, onOpenMetric, onOpenWorkout, onOpenWorkouts }: ActivityViewProps): React.JSX.Element {
   const { start, end } = rangeEnding(date, 7)
   const series = useSeries(ACTIVITY_METRICS, start, end)
   const intraday = useIntraday(date, true, 'steps')
@@ -241,9 +243,17 @@ export function ActivityView({ date, goals, onOpenMetric, onOpenWorkout }: Activ
 
         {/* Workouts */}
         <motion.div custom={3} variants={fade} initial="hidden" animate="show" className="min-w-0">
-          <Panel className={`flex h-full min-w-0 flex-col gap-2 px-3 py-5 ${CARD_HEIGHT.large}`}>
-            <div className="px-2">
-              <SectionHeader
+          <Panel
+            className={`group/drill relative flex h-full min-w-0 cursor-pointer flex-col gap-2 px-3 py-5 transition-[background-color,border-color,box-shadow,transform] hover:border-hairline-strong hover:bg-panel-2/60 active:translate-y-px ${CARD_HEIGHT.large}`}
+          >
+            <button
+              type="button"
+              aria-label="Open workout details"
+              onClick={() => onOpenWorkouts('D')}
+              className="absolute inset-0 rounded-[22px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+            />
+            <div className="pointer-events-none relative z-10 px-2">
+              <DrillHeader
                 title="Workouts"
                 hint={
                   workouts.isPending ? (

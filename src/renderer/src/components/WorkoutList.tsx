@@ -9,13 +9,13 @@ interface WorkoutListProps {
 
 export function WorkoutList({ workouts, onOpen }: WorkoutListProps): React.JSX.Element {
   return (
-    <div className="workout-list flex flex-col gap-1">
+    <div className="workout-list pointer-events-none flex flex-col gap-1">
       {workouts.map((w) => (
         <button
           key={w.id}
           type="button"
           onClick={() => onOpen(w)}
-          className="flex w-full min-w-0 items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-white/[0.05] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 active:bg-white/[0.07]"
+          className="pointer-events-auto relative z-10 flex w-full min-w-0 items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-white/[0.05] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 active:bg-white/[0.07]"
         >
           <div className="flex min-w-0 flex-1 items-center gap-3">
             <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-recovery-soft">
