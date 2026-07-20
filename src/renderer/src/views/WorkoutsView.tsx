@@ -18,10 +18,10 @@ import type { MetricRange } from '@/lib/metric-navigation'
 import { listDates, rangeEnding } from '@/lib/metrics'
 import { fade } from '@/lib/motion'
 import {
+  workoutCategoryLabel,
   workoutDate,
   workoutDaySummaries,
   workoutTone,
-  workoutTypeLabel,
   workoutTypeSummaries,
   type WorkoutTypeSummary
 } from '@/lib/workouts'
@@ -76,7 +76,7 @@ export function WorkoutsView({
   const durationByDayAndType = new Map<string, Map<string, number>>()
   for (const workout of sessions) {
     const day = workoutDate(workout)
-    const type = displayedTypeFor.get(workoutTypeLabel(workout)) ?? 'Other'
+    const type = displayedTypeFor.get(workoutCategoryLabel(workout)) ?? 'Other'
     const durations = durationByDayAndType.get(day) ?? new Map<string, number>()
     durations.set(type, (durations.get(type) ?? 0) + workout.durationMin)
     durationByDayAndType.set(day, durations)

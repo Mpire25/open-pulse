@@ -50,15 +50,37 @@ const WORKOUT_COLORS: Record<WorkoutColorKey, string> = {
   other: 'var(--color-workout-other)'
 }
 
+const WORKOUT_CATEGORY_LABELS: Record<WorkoutColorKey, string> = {
+  walking: 'Walking',
+  running: 'Running',
+  strength: 'Strength Training',
+  cycling: 'Cycling',
+  swimming: 'Swimming',
+  mobility: 'Mobility',
+  cardio: 'Cardio',
+  tennis: 'Tennis',
+  badminton: 'Badminton',
+  football: 'Football',
+  treadmill: 'Treadmill',
+  other: 'Other'
+}
+
 export function workoutTone(workout: Workout | string): WorkoutTone {
-  const text = (
+  const key = workoutColorKey(workoutText(workout))
+  const color = WORKOUT_COLORS[key]
+  return { key, color, soft: `color-mix(in oklab, ${color} 15%, transparent)` }
+}
+
+export function workoutCategoryLabel(workout: Workout | string): string {
+  return WORKOUT_CATEGORY_LABELS[workoutColorKey(workoutText(workout))]
+}
+
+function workoutText(workout: Workout | string): string {
+  return (
     typeof workout === 'string'
       ? workout
       : `${workout.exerciseType ?? ''} ${workout.name}`
   ).toLowerCase()
-  const key = workoutColorKey(text)
-  const color = WORKOUT_COLORS[key]
-  return { key, color, soft: `color-mix(in oklab, ${color} 15%, transparent)` }
 }
 
 function workoutColorKey(text: string): WorkoutColorKey {
@@ -115,7 +137,7 @@ export function workoutTypeSummaries(workouts: Workout[]): WorkoutTypeSummary[] 
   const byType = new Map<string, Omit<WorkoutTypeSummary, 'share'>>()
 
   for (const workout of workouts) {
-    const label = workoutTypeLabel(workout)
+    const label = workoutCategoryLabel(workout)
     const current = byType.get(label) ?? { label, sessions: 0, durationMin: 0 }
     current.sessions += 1
     current.durationMin += workout.durationMin

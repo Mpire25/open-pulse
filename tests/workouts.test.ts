@@ -38,7 +38,7 @@ describe('workout overview analytics', () => {
   test('uses exercise types for a duration-weighted training split', () => {
     const result = workoutTypeSummaries([
       workout({ exerciseType: 'WALKING', durationMin: 30 }),
-      workout({ id: 'workout-2', exerciseType: 'WALKING', durationMin: 20 }),
+      workout({ id: 'workout-2', exerciseType: 'HIKING', durationMin: 20 }),
       workout({ id: 'workout-3', exerciseType: 'STRENGTH_TRAINING', durationMin: 50 })
     ])
 
