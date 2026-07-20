@@ -13,6 +13,7 @@ import { SleepStagesDetailView } from '@/views/SleepStagesDetailView'
 import { BodyView } from '@/views/BodyView'
 import { NutritionView } from '@/views/NutritionView'
 import { MetricDetailView } from '@/views/MetricDetailView'
+import { WorkoutsView } from '@/views/WorkoutsView'
 import { WorkoutDetailView } from '@/views/WorkoutDetailView'
 import { DevicesView } from '@/views/DevicesView'
 import { AssistantView } from '@/views/AssistantView'
@@ -25,7 +26,7 @@ import type { AssistantAction, AppSettings, CodexAuthStatus, GoogleAuthStatus, M
 
 const DATA_VIEWS: View[] = ['home', 'activity', 'heart', 'sleep', 'body', 'nutrition']
 const HEALTH_VIEWS: View[] = [...DATA_VIEWS, 'devices']
-const NAVIGATION_STATE_KEY = 'open-pulse-navigation-v4'
+const NAVIGATION_STATE_KEY = 'open-pulse-navigation-v5'
 
 interface MetricDetailSelection {
   metric: MetricKey
@@ -39,6 +40,8 @@ interface NavigationEntry {
   selectedDate: string
   detailMetric: MetricDetailSelection | null
   sleepStagesOpen: boolean
+  workoutsOpen: boolean
+  workoutRange: MetricRange
   selectedWorkout: Workout | null
 }
 
@@ -61,6 +64,8 @@ function sameNavigationEntry(a: NavigationEntry, b: NavigationEntry): boolean {
     a.detailMetric?.metric === b.detailMetric?.metric &&
     a.detailMetric?.range === b.detailMetric?.range &&
     a.sleepStagesOpen === b.sleepStagesOpen &&
+    a.workoutsOpen === b.workoutsOpen &&
+    a.workoutRange === b.workoutRange &&
     a.selectedWorkout?.id === b.selectedWorkout?.id
   )
 }
@@ -76,6 +81,8 @@ export default function App(): React.JSX.Element {
   // Non-null = a metric detail page is open on top of the current data view.
   const [detailMetric, setDetailMetric] = useState<MetricDetailSelection | null>(null)
   const [sleepStagesOpen, setSleepStagesOpen] = useState(false)
+  const [workoutsOpen, setWorkoutsOpen] = useState(false)
+  const [workoutRange, setWorkoutRange] = useState<MetricRange>('D')
   const [selectedWorkout, setSelectedWorkout] = useState<Workout | null>(null)
   const [settings, setSettings] = useState<AppSettings | null>(null)
   const [google, setGoogle] = useState<GoogleAuthStatus>({ connected: false })
@@ -109,6 +116,7 @@ export default function App(): React.JSX.Element {
     accountEpochRef.current = accountEpoch
     setDetailMetric(null)
     setSleepStagesOpen(false)
+    setWorkoutsOpen(false)
     setSelectedWorkout(null)
 
     const historyEntry = window.history.state
@@ -119,6 +127,7 @@ export default function App(): React.JSX.Element {
           accountEpoch,
           detailMetric: null,
           sleepStagesOpen: false,
+          workoutsOpen: false,
           selectedWorkout: null
         },
         ''
@@ -133,6 +142,7 @@ export default function App(): React.JSX.Element {
       accountEpoch: accountEpochRef.current,
       detailMetric: null,
       sleepStagesOpen: false,
+      workoutsOpen: false,
       selectedWorkout: null
     }
   }
@@ -143,6 +153,8 @@ export default function App(): React.JSX.Element {
     setSelectedDate(currentEntry.selectedDate)
     setDetailMetric(currentEntry.detailMetric)
     setSleepStagesOpen(currentEntry.sleepStagesOpen)
+    setWorkoutsOpen(currentEntry.workoutsOpen)
+    setWorkoutRange(currentEntry.workoutRange)
     setSelectedWorkout(currentEntry.selectedWorkout)
   }
 
@@ -153,6 +165,8 @@ export default function App(): React.JSX.Element {
     selectedDate,
     detailMetric,
     sleepStagesOpen,
+    workoutsOpen,
+    workoutRange,
     selectedWorkout
   })
 
@@ -208,6 +222,8 @@ export default function App(): React.JSX.Element {
       selectedDate: isoToday(),
       detailMetric: null,
       sleepStagesOpen: false,
+      workoutsOpen: false,
+      workoutRange: 'D',
       selectedWorkout: null
     }
 
@@ -255,6 +271,7 @@ export default function App(): React.JSX.Element {
       view: 'assistant',
       detailMetric: null,
       sleepStagesOpen: false,
+      workoutsOpen: false,
       selectedWorkout: null
     })
   }
@@ -280,6 +297,7 @@ export default function App(): React.JSX.Element {
       view: v,
       detailMetric: null,
       sleepStagesOpen: false,
+      workoutsOpen: false,
       selectedWorkout: null
     })
   }
@@ -292,7 +310,7 @@ export default function App(): React.JSX.Element {
       selectedWorkout: null
     }
 
-    if (entry.detailMetric || entry.sleepStagesOpen) {
+    if (entry.detailMetric || entry.sleepStagesOpen || entry.workoutsOpen) {
       replaceNavigation(nextEntry)
     } else {
       navigate(nextEntry)
@@ -304,6 +322,7 @@ export default function App(): React.JSX.Element {
       ...currentNavigationEntry(),
       detailMetric: { metric, range: initialRange },
       sleepStagesOpen: false,
+      workoutsOpen: false,
       selectedWorkout: null
     })
   }
@@ -341,13 +360,46 @@ export default function App(): React.JSX.Element {
       ...currentNavigationEntry(),
       detailMetric: null,
       sleepStagesOpen: true,
+      workoutsOpen: false,
       selectedWorkout: null
     })
+  }
+
+  const openWorkouts = (initialRange: MetricRange = 'D'): void => {
+    navigate({
+      ...currentNavigationEntry(),
+      detailMetric: null,
+      sleepStagesOpen: false,
+      workoutsOpen: true,
+      workoutRange: initialRange,
+      selectedWorkout: null
+    })
+  }
+
+  const selectWorkoutRange = (range: MetricRange): void => {
+    const entry = currentNavigationEntry()
+    if (!entry.workoutsOpen || entry.workoutRange === range) return
+    replaceNavigation({ ...entry, workoutRange: range })
+  }
+
+  const selectWorkoutDate = (date: string): void => {
+    const entry = currentNavigationEntry()
+    if (!entry.workoutsOpen) return
+
+    const nextEntry: NavigationEntry = {
+      ...entry,
+      selectedDate: date,
+      workoutRange: 'D'
+    }
+
+    if (entry.workoutRange === 'D') replaceNavigation(nextEntry)
+    else navigate(nextEntry)
   }
 
   const openWorkout = (workout: Workout): void => {
     navigate({
       ...currentNavigationEntry(),
+      selectedDate: workout.startTime.slice(0, 10),
       detailMetric: null,
       sleepStagesOpen: false,
       selectedWorkout: workout
@@ -363,6 +415,7 @@ export default function App(): React.JSX.Element {
         selectedDate: action.date,
         detailMetric: null,
         sleepStagesOpen: false,
+        workoutsOpen: false,
         selectedWorkout: null
       })
       return
@@ -374,6 +427,7 @@ export default function App(): React.JSX.Element {
         selectedDate: action.date,
         detailMetric: null,
         sleepStagesOpen: true,
+        workoutsOpen: false,
         selectedWorkout: null
       })
       return
@@ -385,6 +439,7 @@ export default function App(): React.JSX.Element {
         selectedDate: action.date,
         detailMetric: { metric: action.metric, range: action.range },
         sleepStagesOpen: false,
+        workoutsOpen: false,
         selectedWorkout: null
       })
       return
@@ -395,6 +450,7 @@ export default function App(): React.JSX.Element {
       selectedDate: action.date,
       detailMetric: null,
       sleepStagesOpen: false,
+      workoutsOpen: false,
       selectedWorkout: action.workout
     })
   }
@@ -408,6 +464,7 @@ export default function App(): React.JSX.Element {
   const showDetail = isDataView && detailMetric != null
   const showSleepStagesDetail = isDataView && view === 'sleep' && sleepStagesOpen
   const showWorkoutDetail = isDataView && selectedWorkout != null
+  const showWorkouts = isDataView && workoutsOpen && selectedWorkout == null
 
   return (
     <div
@@ -443,7 +500,7 @@ export default function App(): React.JSX.Element {
           <div className="scroll-stable min-h-0 min-w-0 flex-1 overflow-y-auto [container-name:display] [container-type:inline-size]">
             <AnimatePresence mode="wait">
               <motion.div
-                key={`${view}-${detailMetric ? detailMetric.metric : sleepStagesOpen ? 'sleep-stages' : selectedWorkout?.id ?? 'root'}-${google.connected}`}
+                key={`${view}-${detailMetric ? detailMetric.metric : sleepStagesOpen ? 'sleep-stages' : selectedWorkout?.id ?? (workoutsOpen ? 'workouts' : 'root')}-${google.connected}`}
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -6 }}
@@ -465,6 +522,15 @@ export default function App(): React.JSX.Element {
                         workout={selectedWorkout}
                         date={selectedDate}
                         onBack={navigateBack}
+                      />
+                    ) : showWorkouts ? (
+                      <WorkoutsView
+                        date={selectedDate}
+                        range={workoutRange}
+                        onBack={navigateBack}
+                        onRangeChange={selectWorkoutRange}
+                        onSelectDate={selectWorkoutDate}
+                        onOpenWorkout={openWorkout}
                       />
                     ) : showSleepStagesDetail ? (
                       <SleepStagesDetailView
@@ -489,6 +555,7 @@ export default function App(): React.JSX.Element {
                             goals={settings.goals}
                             onOpenMetric={openMetric}
                             onOpenWorkout={openWorkout}
+                            onOpenWorkouts={openWorkouts}
                             onNavigate={selectView}
                           />
                         )}
@@ -498,6 +565,7 @@ export default function App(): React.JSX.Element {
                             goals={settings.goals}
                             onOpenMetric={openMetric}
                             onOpenWorkout={openWorkout}
+                            onOpenWorkouts={openWorkouts}
                           />
                         )}
                         {view === 'heart' && <HeartView date={selectedDate} onOpenMetric={openMetric} />}

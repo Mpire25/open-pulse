@@ -1,6 +1,6 @@
 import { motion } from 'framer-motion'
 import { Barbell, Footprints } from '@phosphor-icons/react'
-import { Panel, DrillHeader, InteractivePanel, SectionHeader } from '@/components/Panel'
+import { DrillHeader, DrillPanel, InteractivePanel, Panel } from '@/components/Panel'
 import { ColumnChart, ProgressRing } from '@/components/charts'
 import { MetricStat } from '@/components/MetricStat'
 import { CARD_HEIGHT, SkeletonChart, SkeletonMetricStat, SkeletonRing, SkeletonRows, SkeletonText } from '@/components/Skeleton'
@@ -10,7 +10,7 @@ import { useIntraday, useSeries, useWorkouts } from '@/hooks/useHealth'
 import { METRICS } from '@/lib/metric-registry'
 import { baseline, baselineDeltaPct, pointValues, rangeEnding, seriesPoints } from '@/lib/metrics'
 import { formatHour, formatInt, longDate, weekdayShort } from '@/lib/format'
-import type { OpenMetric } from '@/lib/metric-navigation'
+import type { MetricRange, OpenMetric } from '@/lib/metric-navigation'
 import { fade } from '@/lib/motion'
 import type { Goals, MetricKey, Workout } from '@shared/types'
 
@@ -42,6 +42,7 @@ interface ActivityViewProps {
   goals: Goals
   onOpenMetric: OpenMetric
   onOpenWorkout: (workout: Workout) => void
+  onOpenWorkouts: (initialRange?: MetricRange) => void
 }
 
 function ActivityGoalRing({
@@ -93,7 +94,7 @@ function ActivityGoalRing({
   )
 }
 
-export function ActivityView({ date, goals, onOpenMetric, onOpenWorkout }: ActivityViewProps): React.JSX.Element {
+export function ActivityView({ date, goals, onOpenMetric, onOpenWorkout, onOpenWorkouts }: ActivityViewProps): React.JSX.Element {
   const { start, end } = rangeEnding(date, 7)
   const series = useSeries(ACTIVITY_METRICS, start, end)
   const intraday = useIntraday(date, true, 'steps')
@@ -241,9 +242,14 @@ export function ActivityView({ date, goals, onOpenMetric, onOpenWorkout }: Activ
 
         {/* Workouts */}
         <motion.div custom={3} variants={fade} initial="hidden" animate="show" className="min-w-0">
-          <Panel className={`flex h-full min-w-0 flex-col gap-2 px-3 py-5 ${CARD_HEIGHT.large}`}>
+          <DrillPanel
+            label="Open workout details"
+            onOpen={() => onOpenWorkouts('D')}
+            className={`h-full min-w-0 ${CARD_HEIGHT.large}`}
+            contentClassName="flex h-full min-w-0 flex-col gap-2 px-3 py-5"
+          >
             <div className="px-2">
-              <SectionHeader
+              <DrillHeader
                 title="Workouts"
                 hint={
                   workouts.isPending ? (
@@ -260,13 +266,15 @@ export function ActivityView({ date, goals, onOpenMetric, onOpenWorkout }: Activ
             {workouts.isPending ? (
               <SkeletonRows />
             ) : workouts.data && workouts.data.length > 0 ? (
-              <WorkoutList workouts={workouts.data} onOpen={onOpenWorkout} />
+              <div className="pointer-events-auto">
+                <WorkoutList workouts={workouts.data} onOpen={onOpenWorkout} />
+              </div>
             ) : (
               <div className="grid flex-1 place-items-center text-[13px] text-ink-faint">
                 Tracked exercises appear here automatically.
               </div>
             )}
-          </Panel>
+          </DrillPanel>
         </motion.div>
       </div>
 

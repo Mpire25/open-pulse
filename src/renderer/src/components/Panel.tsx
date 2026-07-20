@@ -49,6 +49,35 @@ export const InteractivePanel = forwardRef<HTMLDivElement, InteractivePanelProps
 )
 InteractivePanel.displayName = 'InteractivePanel'
 
+type DrillPanelProps = HTMLAttributes<HTMLDivElement> & {
+  onOpen: () => void
+  label: string
+  contentClassName?: string
+}
+
+/** A drill-in panel that can also contain independent interactive controls. */
+export const DrillPanel = forwardRef<HTMLDivElement, DrillPanelProps>(
+  ({ children, className, contentClassName, label, onOpen, ...props }, ref) => (
+    <Panel
+      ref={ref}
+      {...props}
+      className={cn(
+        'group/drill relative cursor-pointer transition-[background-color,border-color,box-shadow,transform] hover:border-hairline-strong hover:bg-panel-2/60 active:translate-y-px',
+        className
+      )}
+    >
+      <button
+        type="button"
+        aria-label={label}
+        onClick={onOpen}
+        className="absolute inset-0 rounded-[22px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+      />
+      <div className={cn('pointer-events-none relative z-10', contentClassName)}>{children}</div>
+    </Panel>
+  )
+)
+DrillPanel.displayName = 'DrillPanel'
+
 interface SectionHeaderProps {
   title: string
   hint?: React.ReactNode

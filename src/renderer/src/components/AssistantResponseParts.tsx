@@ -1,11 +1,12 @@
 import { memo, useEffect, useState } from 'react'
-import { ForkKnife, Minus, Moon, PersonSimpleRun, Pulse, TrendDown, TrendUp } from '@phosphor-icons/react'
+import { ForkKnife, Minus, Moon, Pulse, TrendDown, TrendUp } from '@phosphor-icons/react'
 import { motion } from 'framer-motion'
 import { ColumnChart, TrendLine } from '@/components/charts'
 import { MetricStat } from '@/components/MetricStat'
 import { NutritionMacroBar, NutritionMacroTotal } from '@/components/NutritionMacros'
 import { DrillHeader, Panel, SectionHeader } from '@/components/Panel'
 import { SleepStages } from '@/components/SleepStages'
+import { WorkoutIcon } from '@/components/WorkoutIcon'
 import { METRICS } from '@/lib/metric-registry'
 import { formatClock, formatInt, formatMinutes, shortDate } from '@/lib/format'
 import { cn } from '@/lib/utils'
@@ -257,7 +258,7 @@ function AssistantResponsePartsBase({
           return (
             <MotionPanel key={part.id} {...entrance} className={cn('p-5', layoutClass)}>
               <DrillHeader
-                icon={<PersonSimpleRun size={18} weight="fill" className="text-recovery" />}
+                icon={<WorkoutIcon workout={workout} size={18} />}
                 title={workout.name}
                 hint={`${shortDate(part.date)} · ${formatClock(workout.startTime)} · ${formatMinutes(workout.durationMin)}`}
                 onOpen={() => onAction(part.action)}

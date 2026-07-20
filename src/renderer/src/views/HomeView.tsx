@@ -1,6 +1,6 @@
 import { motion } from 'framer-motion'
 import { Barbell, Footprints, Heartbeat, Moon, PersonSimpleRun } from '@phosphor-icons/react'
-import { Panel, DrillHeader, InteractivePanel, SectionHeader } from '@/components/Panel'
+import { DrillHeader, DrillPanel, InteractivePanel, Panel, SectionHeader } from '@/components/Panel'
 import { ColumnChart, ProgressRing } from '@/components/charts'
 import { MetricStat } from '@/components/MetricStat'
 import { SleepStages } from '@/components/SleepStages'
@@ -20,7 +20,7 @@ import { useIntraday, useSeries, useSleepNight, useWorkouts } from '@/hooks/useH
 import { METRICS } from '@/lib/metric-registry'
 import { baseline, baselineDeltaPct, pointValues, rangeEnding, seriesPoints } from '@/lib/metrics'
 import { formatClock, formatHour, formatInt, formatMinutes, greeting, isoToday, longDate } from '@/lib/format'
-import type { OpenMetric } from '@/lib/metric-navigation'
+import type { MetricRange, OpenMetric } from '@/lib/metric-navigation'
 import { fade } from '@/lib/motion'
 import type { Goals, MetricKey, Workout } from '@shared/types'
 
@@ -42,10 +42,11 @@ interface HomeViewProps {
   goals: Goals
   onOpenMetric: OpenMetric
   onOpenWorkout: (workout: Workout) => void
+  onOpenWorkouts: (initialRange?: MetricRange) => void
   onNavigate: (view: View) => void
 }
 
-export function HomeView({ date, goals, onOpenMetric, onOpenWorkout, onNavigate }: HomeViewProps): React.JSX.Element {
+export function HomeView({ date, goals, onOpenMetric, onOpenWorkout, onOpenWorkouts, onNavigate }: HomeViewProps): React.JSX.Element {
   const { start, end } = rangeEnding(date, 7)
   const series = useSeries(HOME_METRICS, start, end)
   const night = useSleepNight(date)
@@ -166,10 +167,10 @@ export function HomeView({ date, goals, onOpenMetric, onOpenWorkout, onNavigate 
                 workouts.isPending ? (
                   <SkeletonText className="w-28" />
                 ) : workouts.data?.length ? (
-                  workouts.data.map((w) => w.name).slice(0, 2).join(', ')
+                  workouts.data.map((workout) => workout.name).slice(0, 2).join(', ')
                 ) : undefined
               }
-              onClick={() => onNavigate('activity')}
+              onClick={() => onOpenWorkouts('D')}
             />
           </div>
         </Panel>
@@ -257,30 +258,39 @@ export function HomeView({ date, goals, onOpenMetric, onOpenWorkout, onNavigate 
       </motion.div>
 
       {/* Workouts */}
-      {(workouts.isPending || (workouts.data && workouts.data.length > 0)) && (
-        <motion.div custom={5} variants={fade} initial="hidden" animate="show">
-          <Panel className="flex min-h-[126px] flex-col gap-2 px-3 py-5">
-            <div className="px-2">
-              <SectionHeader
-                title="Workouts"
-                hint={
-                  workouts.isPending ? (
-                    <SkeletonText className="w-20" />
-                  ) : (
-                    `${workouts.data?.length ?? 0} session${workouts.data?.length === 1 ? '' : 's'}`
-                  )
-                }
-                icon={<Barbell size={18} weight="fill" style={{ color: 'var(--color-recovery)' }} />}
-              />
+      <motion.div custom={5} variants={fade} initial="hidden" animate="show">
+        <DrillPanel
+          label="Open workout details"
+          onOpen={() => onOpenWorkouts('D')}
+          className="min-h-[126px]"
+          contentClassName="flex min-h-[124px] flex-col gap-2 px-3 py-5"
+        >
+          <div className="px-2">
+            <DrillHeader
+              title="Workouts"
+              hint={
+                workouts.isPending ? (
+                  <SkeletonText className="w-20" />
+                ) : (
+                  `${workouts.data?.length ?? 0} session${workouts.data?.length === 1 ? '' : 's'}`
+                )
+              }
+              icon={<Barbell size={18} weight="fill" style={{ color: 'var(--color-recovery)' }} />}
+            />
+          </div>
+          {workouts.isPending ? (
+            <SkeletonRows />
+          ) : workouts.data && workouts.data.length > 0 ? (
+            <div className="pointer-events-auto">
+              <WorkoutList workouts={workouts.data} onOpen={onOpenWorkout} />
             </div>
-            {workouts.isPending ? (
-              <SkeletonRows />
-            ) : (
-              <WorkoutList workouts={workouts.data ?? []} onOpen={onOpenWorkout} />
-            )}
-          </Panel>
-        </motion.div>
-      )}
+          ) : (
+            <div className="grid min-h-[58px] flex-1 place-items-center text-[13px] text-ink-faint">
+              Tracked exercises appear here automatically.
+            </div>
+          )}
+        </DrillPanel>
+      </motion.div>
     </div>
   )
 }
