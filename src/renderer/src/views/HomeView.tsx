@@ -19,7 +19,7 @@ import type { View } from '@/components/Sidebar'
 import { useIntraday, useSeries, useSleepNight, useWorkouts } from '@/hooks/useHealth'
 import { METRICS } from '@/lib/metric-registry'
 import { baseline, baselineDeltaPct, latestPoint, pointValues, rangeEnding, seriesPoints } from '@/lib/metrics'
-import { formatClock, formatHour, formatInt, formatMinutes, greeting, isoToday, longDate, shiftDate } from '@/lib/format'
+import { formatClock, formatHour, formatInt, formatMinutes, greeting, isoToday, longDate, shiftDate, shortDate } from '@/lib/format'
 import type { MetricRange, OpenMetric } from '@/lib/metric-navigation'
 import { fade } from '@/lib/motion'
 import type { Goals, MetricKey, Workout } from '@shared/types'
@@ -169,12 +169,14 @@ export function HomeView({ date, goals, onOpenMetric, onOpenWorkout, onOpenWorko
                 ) : weight?.value != null ? (
                   `${METRICS.weightKg.format(weight.value)} ${METRICS.weightKg.unit}`
                 ) : (
-                  'No data'
+                  'No recent data'
                 )
               }
               sub={
                 weightSeries.isMetricPending('weightKg') ? (
                   <SkeletonText className="w-28" />
+                ) : weight && weight.date !== date ? (
+                  `Last measured ${shortDate(weight.date)}`
                 ) : weightChange == null ? (
                   weight ? 'Not enough data for 7-day change' : undefined
                 ) : weightChange === 0 ? (
