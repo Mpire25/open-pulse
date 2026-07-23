@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion'
-import { Barbell, Footprints, Heartbeat, Moon, PersonSimpleRun } from '@phosphor-icons/react'
+import { Barbell, Footprints, Heartbeat, Moon, Scales } from '@phosphor-icons/react'
 import { DrillHeader, DrillPanel, InteractivePanel, Panel, SectionHeader } from '@/components/Panel'
 import { ColumnChart, ProgressRing } from '@/components/charts'
 import { MetricStat } from '@/components/MetricStat'
@@ -18,8 +18,8 @@ import { WorkoutList } from '@/components/WorkoutList'
 import type { View } from '@/components/Sidebar'
 import { useIntraday, useSeries, useSleepNight, useWorkouts } from '@/hooks/useHealth'
 import { METRICS } from '@/lib/metric-registry'
-import { baseline, baselineDeltaPct, pointValues, rangeEnding, seriesPoints } from '@/lib/metrics'
-import { formatClock, formatHour, formatInt, formatMinutes, greeting, isoToday, longDate } from '@/lib/format'
+import { baseline, baselineDeltaPct, latestPoint, pointValues, rangeEnding, seriesPoints } from '@/lib/metrics'
+import { formatClock, formatHour, formatInt, formatMinutes, greeting, isoToday, longDate, shiftDate, shortDate } from '@/lib/format'
 import type { MetricRange, OpenMetric } from '@/lib/metric-navigation'
 import { fade } from '@/lib/motion'
 import type { Goals, MetricKey, Workout } from '@shared/types'
@@ -36,6 +36,7 @@ const HOME_METRICS: MetricKey[] = [
 ]
 
 const SIGNAL_KEYS: MetricKey[] = ['hrvMs', 'spo2Pct', 'breathingRate', 'skinTempDeltaC']
+const WEIGHT_METRICS: MetricKey[] = ['weightKg']
 
 interface HomeViewProps {
   date: string
@@ -48,7 +49,9 @@ interface HomeViewProps {
 
 export function HomeView({ date, goals, onOpenMetric, onOpenWorkout, onOpenWorkouts, onNavigate }: HomeViewProps): React.JSX.Element {
   const { start, end } = rangeEnding(date, 7)
+  const weightRange = rangeEnding(date, 30)
   const series = useSeries(HOME_METRICS, start, end)
+  const weightSeries = useSeries(WEIGHT_METRICS, weightRange.start, weightRange.end)
   const night = useSleepNight(date)
   const workouts = useWorkouts(date, date)
   const intraday = useIntraday(date, true, 'steps')
@@ -63,6 +66,12 @@ export function HomeView({ date, goals, onOpenMetric, onOpenWorkout, onOpenWorko
   const today = days?.[date] ?? {}
   const pointsFor = (key: MetricKey) => seriesPoints(days, key, start, end)
   const rhrBase = baseline(pointsFor('restingHeartRate'), date)
+  const weightPoints = seriesPoints(weightSeries.data?.days, 'weightKg', weightRange.start, weightRange.end)
+  const weight = latestPoint(weightPoints)
+  const recentWeightReadings = weightPoints.filter((point) => point.date >= shiftDate(date, -7) && point.value != null)
+  const weightChange = recentWeightReadings.length >= 2
+    ? Number(((recentWeightReadings.at(-1)?.value ?? 0) - (recentWeightReadings[0].value ?? 0)).toFixed(1))
+    : null
 
   return (
     <div className="mx-auto flex max-w-[1180px] flex-col gap-5 px-8 pb-12">
@@ -152,25 +161,31 @@ export function HomeView({ date, goals, onOpenMetric, onOpenWorkout, onOpenWorko
               onClick={() => onNavigate('heart')}
             />
             <HeroRow
-              icon={<PersonSimpleRun size={15} weight="fill" style={{ color: 'var(--color-activity)' }} />}
-              label="Workouts"
+              icon={<Scales size={15} weight="fill" style={{ color: 'var(--color-body-metric)' }} />}
+              label="Weight"
               value={
-                workouts.isPending ? (
+                weightSeries.isMetricPending('weightKg') ? (
                   <SkeletonText className="h-3.5 w-20" />
-                ) : workouts.data && workouts.data.length > 0 ? (
-                  `${workouts.data.length} logged`
+                ) : weight?.value != null ? (
+                  `${METRICS.weightKg.format(weight.value)} ${METRICS.weightKg.unit}`
                 ) : (
-                  'None yet'
+                  'No recent data'
                 )
               }
               sub={
-                workouts.isPending ? (
+                weightSeries.isMetricPending('weightKg') ? (
                   <SkeletonText className="w-28" />
-                ) : workouts.data?.length ? (
-                  workouts.data.map((workout) => workout.name).slice(0, 2).join(', ')
-                ) : undefined
+                ) : weight && weight.date !== date ? (
+                  `Last measured ${shortDate(weight.date)}`
+                ) : weightChange == null ? (
+                  weight ? 'Not enough data for 7-day change' : undefined
+                ) : weightChange === 0 ? (
+                  'No change in 7 days'
+                ) : (
+                  `${weightChange > 0 ? '+' : ''}${weightChange.toFixed(1)} kg in 7 days`
+                )
               }
-              onClick={() => onOpenWorkouts('D')}
+              onClick={() => onNavigate('body')}
             />
           </div>
         </Panel>
