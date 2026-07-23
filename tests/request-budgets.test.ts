@@ -63,8 +63,10 @@ function emptyHealthResponse(input: string | URL | Request): Promise<Response> {
 
 async function loadHome(date: string): Promise<void> {
   const start = shiftIsoDate(date, -6)
+  const weightStart = shiftIsoDate(date, -29)
   await Promise.all([
     ...HOME_METRICS.map((metric) => getSeries([metric], start, date)),
+    getSeries(['weightKg'], weightStart, date),
     getSleepRange(date, date),
     getWorkoutsRange(date, date),
     getIntraday(date, false, undefined, 'steps')
@@ -158,12 +160,14 @@ describe('health request budgets', () => {
 
   test('keeps cold and overlapping Home navigation within budget without refetching covered dates', async () => {
     await loadHome('2026-07-01')
-    expect(requests.length).toBeLessThanOrEqual(11)
+    // Weight bootstraps the cached latest-height input alongside its rollup.
+    expect(requests.length).toBeLessThanOrEqual(13)
     expect(requests.some((url) => url.includes('/nutrition-log/dataPoints?'))).toBe(false)
 
     requests = []
     await loadHome('2026-07-02')
-    expect(requests.length).toBeLessThanOrEqual(11)
+    // Height is cached; moving forward only extends the weight window by a day.
+    expect(requests.length).toBeLessThanOrEqual(12)
 
     requests = []
     await loadHome('2026-07-01')
