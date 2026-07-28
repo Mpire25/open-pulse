@@ -31,7 +31,7 @@ describe('assistant web research policy', () => {
       enabled: false,
       reason: 'personal-data-only'
     })
-    expect(researchPolicyForRequest('How many sedentary minutes yesterday?')).toMatchObject({
+    expect(researchPolicyForRequest('How many sedentary minutes did I have yesterday?')).toMatchObject({
       enabled: false,
       reason: 'personal-data-only'
     })
@@ -77,6 +77,18 @@ describe('assistant web research policy', () => {
   })
 
   test('keeps research available when a request is not confidently personal-data-only', () => {
+    for (const request of [
+      'Steps today',
+      'Best sleep tracker released this month?',
+      'What is the best water bottle to buy this month?',
+      'Any new running distance apps this month?',
+      'Which sugar substitute is best, buying some today'
+    ]) {
+      expect(researchPolicyForRequest(request)).toMatchObject({
+        enabled: true,
+        reason: 'model-directed'
+      })
+    }
     expect(researchPolicyForRequest('Which running shoes are best for overpronation?')).toMatchObject({
       enabled: true,
       reason: 'model-directed'
