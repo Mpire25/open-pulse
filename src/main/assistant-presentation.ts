@@ -408,7 +408,9 @@ export function resolveAutomaticPresentation(
     /\b(how many|how much|what (?:was|is|were|are))\b/.test(request)
   const asksForSleepStructure = /\b(sleep stages?|sleep breakdown|sleep structure)\b/.test(request)
   const identifiesOneNight = /\b(last night|yesterday|tonight|on \d{4}-\d{2}-\d{2})\b/.test(request)
-  const asksForSleepNight = asksForSleepStructure || (identifiesOneNight && /\bhow did i sleep\b/.test(request))
+  const asksForSleepNight =
+    asksForSleepStructure ||
+    (identifiesOneNight && /\bhow (?:did i|was my) sleep\b/.test(request))
   const requestedMeal = NUTRITION_MEAL_GROUPS.find((meal) =>
     new RegExp(`\\b${meal.toLowerCase()}\\b`).test(request)
   ) ?? null

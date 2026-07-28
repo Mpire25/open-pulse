@@ -604,6 +604,10 @@ describe('assistant visual presentation', () => {
       type: 'sleep-card',
       night: { date: '2026-07-11' }
     })
+    expect(resolveAutomaticPresentation('How was my sleep yesterday night?', sleepDatasets(), 'exact-value')[0]).toMatchObject({
+      type: 'sleep-card',
+      night: { date: '2026-07-11' }
+    })
     expect(resolveAutomaticPresentation('How did I sleep this week?', sleepDatasets())).toEqual([])
   })
 
