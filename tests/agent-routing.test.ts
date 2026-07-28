@@ -28,6 +28,30 @@ describe('adaptive assistant routing', () => {
     })
   })
 
+  test('supports an unambiguous day-before-yesterday request', () => {
+    expect(fastHealthPlanForRequest('How many steps did I do the day before yesterday?', TODAY)).toEqual({
+      tool: 'query_daily_metrics',
+      args: {
+        metrics: ['steps'],
+        startDate: '2026-07-26',
+        endDate: '2026-07-26'
+      },
+      reason: 'exact-value'
+    })
+  })
+
+  test('falls back when date language is present but not fully parsed', () => {
+    expect(fastHealthPlanForRequest('How many steps did I do on July 3rd?', TODAY)).toBeNull()
+    expect(fastHealthPlanForRequest('How many steps did I do last Tuesday?', TODAY)).toBeNull()
+    expect(fastHealthPlanForRequest('How many steps did I do in March?', TODAY)).toBeNull()
+    expect(fastHealthPlanForRequest('How many steps did I do on 2026-02-30?', TODAY)).toBeNull()
+  })
+
+  test('does not silently truncate ranges beyond the health-tool limit', () => {
+    expect(fastHealthPlanForRequest('How many steps did I do in the last 365 days?', TODAY)).toBeNull()
+    expect(fastHealthPlanForRequest('How many steps did I do in the last 0 days?', TODAY)).toBeNull()
+  })
+
   test('prefetches one combined range for common comparisons', () => {
     expect(fastHealthPlanForRequest('Compare my steps this week with last week', TODAY)).toEqual({
       tool: 'query_daily_metrics',

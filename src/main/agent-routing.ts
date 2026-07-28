@@ -75,6 +75,23 @@ function explicitDate(text: string): string | null {
     : null
 }
 
+const MONTH_NAME =
+  /\b(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\b/i
+const WEEKDAY_NAME =
+  /\b(?:mon(?:day)?|tue(?:sday)?|wed(?:nesday)?|thu(?:rsday)?|fri(?:day)?|sat(?:urday)?|sun(?:day)?)\b/i
+
+function hasUnparsedDateLanguage(text: string): boolean {
+  return (
+    /\b\d{4}-\d{2}-\d{2}\b/.test(text) ||
+    /\b\d{1,2}[/-]\d{1,2}(?:[/-]\d{2,4})?\b/.test(text) ||
+    /\b\d{1,2}(?:st|nd|rd|th)\b/i.test(text) ||
+    /\b(?:day|week|month|year)s?\s+ago\b/i.test(text) ||
+    /\b(?:next|previous)\s+(?:day|week|month|year)\b/i.test(text) ||
+    MONTH_NAME.test(text) ||
+    WEEKDAY_NAME.test(text)
+  )
+}
+
 function requestedRange(
   text: string,
   today: string,
@@ -86,6 +103,10 @@ function requestedRange(
     const date = shiftIsoDate(today, -1)
     return { startDate: date, endDate: date }
   }
+  if (/\bday before yesterday\b/i.test(text)) {
+    const date = shiftIsoDate(today, -2)
+    return { startDate: date, endDate: date }
+  }
   if (/\byesterday\b/i.test(text)) {
     const date = shiftIsoDate(today, -1)
     return { startDate: date, endDate: date }
@@ -94,7 +115,8 @@ function requestedRange(
 
   const numberedDays = text.match(/\b(?:past|last) (\d{1,3}) days?\b/i)
   if (numberedDays) {
-    const days = Math.min(120, Math.max(1, Number(numberedDays[1])))
+    const days = Number(numberedDays[1])
+    if (days < 1 || days > 120) return null
     return { startDate: shiftIsoDate(today, -(days - 1)), endDate: today }
   }
 
@@ -114,6 +136,7 @@ function requestedRange(
   if (/\blast month\b/i.test(text)) return { startDate: lastMonth.start, endDate: lastMonth.end }
   if (/\bthis month\b/i.test(text)) return { startDate: startOfMonth(today), endDate: today }
 
+  if (hasUnparsedDateLanguage(text)) return null
   if (mode === 'trend') return { startDate: shiftIsoDate(today, -29), endDate: today }
   if (mode === 'exact-value') return { startDate: today, endDate: today }
   return null
