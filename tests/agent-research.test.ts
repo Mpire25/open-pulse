@@ -21,11 +21,11 @@ describe('assistant web research policy', () => {
     expect(researchPolicyForRequest('Compare my steps this week with last week')).toEqual({
       enabled: false,
       suggestedSearchTurns: 1,
-      reason: 'model-directed'
+      reason: 'personal-data-only'
     })
     expect(researchPolicyForRequest('Is my resting heart rate trending up or down?')).toMatchObject({
       enabled: false,
-      reason: 'model-directed'
+      reason: 'personal-data-only'
     })
   })
 
@@ -61,6 +61,28 @@ describe('assistant web research policy', () => {
     expect(researchPolicyForRequest('Could creatine affect my sleep?')).toMatchObject({
       enabled: true,
       reason: 'causal-guidance'
+    })
+  })
+
+  test('keeps research available when a request is not confidently personal-data-only', () => {
+    expect(researchPolicyForRequest('Which running shoes are best for overpronation?')).toMatchObject({
+      enabled: true,
+      reason: 'model-directed'
+    })
+    expect(researchPolicyForRequest("What's a good VO2 max for a 35-year-old man?")).toMatchObject({
+      enabled: true,
+      reason: 'model-directed'
+    })
+    expect(researchPolicyForRequest('When did Fitbit add the Air to the Charge lineup?')).toMatchObject({
+      enabled: true,
+      reason: 'product-information'
+    })
+    expect(researchPolicyForRequest('My Fitbit keeps disconnecting, any fixes?')).toMatchObject({
+      enabled: true
+    })
+    expect(researchPolicyForRequest('Why is my HRV low?')).toMatchObject({
+      enabled: true,
+      reason: 'model-directed'
     })
   })
 

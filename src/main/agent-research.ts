@@ -6,6 +6,7 @@ export type ResearchReason =
   | 'medical-guidance'
   | 'product-information'
   | 'causal-guidance'
+  | 'personal-data-only'
   | 'model-directed'
 
 export interface ResearchPolicy {
@@ -39,10 +40,16 @@ const EXPLICIT_RESEARCH = /\b(search(?: the)? web|web search|research|look (?:it
 const COMMUNITY_REPORTS = /\b(?:people|others|users?)\b[\s\S]{0,100}\b(?:report|experience|say|mention)\b/i
 const EXTERNAL_GUIDANCE = /\b(nhs|nice|who|cdc|guidelines?|recommendations?|recommended|ideal(?:s)?|healthy|normal|clinical guidance|public health)\b/i
 const MEDICAL_GUIDANCE = /\b(medications?|drugs?|supplements?|dose|doses|dosing|dosage|treatments?|diagnos(?:is|e)|symptoms?|diseases?|medical conditions?|clinician|doctor|safe|unsafe|concerning|should (?:i )?worry)\b/i
-const PRODUCT_INFORMATION = /\b(product information|product specs?|device compatibility|fitbit feature|chatgpt feature|software version|release notes?)\b/i
+const PRODUCT_INFORMATION =
+  /\b(product information|product specs?|device compatibility|fitbit feature|chatgpt feature|software version|release notes?)\b|\bfitbit\b[\s\S]{0,100}\b(?:add(?:ed)?|release(?:d)?|launch(?:ed)?|lineup|features?|disconnect(?:s|ed|ing)?|sync(?:s|ed|ing)?|pair(?:s|ed|ing)?|compatib(?:le|ility)|fix(?:es|ed|ing)?)\b/i
 const CAUSAL_GUIDANCE =
   /\b(?:can|could|does|do|did|is|are|will|would|might)\b[\s\S]{0,140}\b(?:affect|impact|influence|cause|improve|worse|worsen|better|help|interact|side effects?|make[\s\S]{0,40}(?:worse|better))\b|\b(?:affect|impact|influence|cause|improve|worse|worsen|better|help|interact)\b[\s\S]{0,140}\b(?:sleep|hrv|heart rate|health|recovery|weight|activity|nutrition)\b/i
 const BROAD_RESEARCH = /\b(overall|current health|health overview|across|multiple|in general|deep research|thorough(?:ly)?|comprehensive)\b/i
+const PERSONAL_REFERENCE = /\b(?:i|me|my|mine)\b/i
+const TRACKED_HEALTH_DATA =
+  /\b(?:steps?|distance|floors?|flights?|active(?: zone)? minutes?|activity|workouts?|exercise|resting heart rate|resting pulse|rhr|hrv|heart rate variability|spo2|blood oxygen|oxygen saturation|breathing rate|respiratory rate|skin temperature|sleep|weight|body fat|bmi|nutrition|calories?|protein|carbs?|carbohydrates?|dietary fat|fibre|fiber|sodium|sugar|water|hydration|recovery|health data|readings?|baseline)\b/i
+const INTERPRETIVE_GUIDANCE =
+  /\b(?:why|cause|meaning|mean|explain|interpret|recommend|advice|should|normal|healthy|good|bad|high|low|enough|safe|unsafe|ideal)\b/i
 
 export function researchPolicyForRequest(userText: string): ResearchPolicy {
   const explicit = EXPLICIT_RESEARCH.test(userText) || COMMUNITY_REPORTS.test(userText)
@@ -50,6 +57,10 @@ export function researchPolicyForRequest(userText: string): ResearchPolicy {
   const medicalGuidance = MEDICAL_GUIDANCE.test(userText)
   const productInformation = PRODUCT_INFORMATION.test(userText)
   const causalGuidance = CAUSAL_GUIDANCE.test(userText)
+  const personalDataOnly =
+    PERSONAL_REFERENCE.test(userText) &&
+    TRACKED_HEALTH_DATA.test(userText) &&
+    !INTERPRETIVE_GUIDANCE.test(userText)
 
   const reason: ResearchReason = explicit
     ? 'explicit'
@@ -61,8 +72,10 @@ export function researchPolicyForRequest(userText: string): ResearchPolicy {
           ? 'product-information'
           : causalGuidance
             ? 'causal-guidance'
-            : 'model-directed'
-  const enabled = reason !== 'model-directed'
+            : personalDataOnly
+              ? 'personal-data-only'
+              : 'model-directed'
+  const enabled = reason !== 'personal-data-only'
   const suggestedSearchTurns = BROAD_RESEARCH.test(userText) || (explicit && /\b(compare|several|multiple|sources)\b/i.test(userText))
     ? 2
     : 1
