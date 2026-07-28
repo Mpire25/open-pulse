@@ -324,6 +324,42 @@ describe('assistant visual presentation', () => {
     ).toThrow('is not in dataset')
   })
 
+  test('adds a workout-card fallback for one unambiguous session', () => {
+    const datasets = new Map<string, AgentDataset>([
+      [
+        'workouts-1',
+        {
+          tool: 'query_workouts',
+          data: {
+            source: 'live',
+            workouts: [
+              {
+                id: 'strength-session',
+                name: 'Strength training',
+                startTime: '2026-07-27T17:30:00Z',
+                durationMin: 27,
+                elapsedDurationMin: 26.8,
+                calories: 157,
+                distanceKm: null,
+                avgHeartRate: 113,
+                steps: null,
+                activeZoneMinutes: 11
+              }
+            ]
+          }
+        }
+      ]
+    ])
+
+    expect(
+      resolveAutomaticPresentation('What were the details on that strength training session?', datasets)[0]
+    ).toMatchObject({
+      type: 'workout-card',
+      workout: { id: 'strength-session', name: 'Strength training' },
+      date: '2026-07-27'
+    })
+  })
+
   test('resolves a sleep-stage card only from a returned night', () => {
     const parts = resolvePresentation(
       { sleepCards: [{ datasetId: 'sleep-1', date: '2026-07-11' }] },

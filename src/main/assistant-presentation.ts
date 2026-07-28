@@ -415,6 +415,8 @@ export function resolveAutomaticPresentation(
     new RegExp(`\\b${meal.toLowerCase()}\\b`).test(request)
   ) ?? null
   const asksForNutritionCard = requestedMeal != null || /\b(nutrition(?:al)?|macros?|what did i eat|meal breakdown)\b/.test(request)
+  const asksForWorkoutCard =
+    /\b(workouts?|exercise|training|session|run|walk|ride|hike|swim)\b/.test(request)
   const asksForMultiDayRange = /\b(this|last|past|previous) (week|month|year)|\b\d+ (days|weeks|months)\b/.test(request)
   const asksForRecentRange = routeReason === 'recent-range' || asksForMultiDayRange
   if (asksForComparison && comparesExternalStandard) return []
@@ -424,10 +426,37 @@ export function resolveAutomaticPresentation(
     (!asksForComparison || comparesExternalStandard) &&
     !asksForExactValue &&
     !asksForSleepNight &&
-    !asksForNutritionCard
+    !asksForNutritionCard &&
+    !asksForWorkoutCard
   ) return []
 
   const candidates = [...datasets.entries()].reverse()
+  if (asksForWorkoutCard && !asksForTrend && !asksForComparison) {
+    for (const [datasetId, source] of candidates) {
+      if (source.tool !== 'query_workouts') continue
+      try {
+        const dataset = workoutDataset(datasetId, datasets)
+        const matching = dataset.workouts.filter((workout) =>
+          [workout.name, workout.exerciseType]
+            .filter((value): value is string => typeof value === 'string' && value.length > 0)
+            .some((value) => request.includes(value.toLowerCase()))
+        )
+        const workout =
+          dataset.workouts.length === 1
+            ? dataset.workouts[0]
+            : matching.length === 1
+              ? matching[0]
+              : null
+        if (!workout) continue
+        return resolvePresentation(
+          { workouts: [{ datasetId, workoutId: workout.id }] },
+          datasets
+        ).slice(0, 1)
+      } catch {
+        continue
+      }
+    }
+  }
   if (asksForSleepNight && !asksForTrend && !asksForComparison) {
     for (const [datasetId, source] of candidates) {
       if (source.tool !== 'query_sleep') continue
