@@ -14,6 +14,11 @@ const COMPLEX_REQUEST =
 const TREND_REQUEST = /\b(trend|trending|over time|up or down|increas(?:e|ing)|decreas(?:e|ing))\b/i
 const COMPARISON_REQUEST = /\b(compare|compared|comparison|versus|vs\.?|difference|match(?:es|ed|ing)?|align(?:s|ed|ing)?|correspond(?:s|ed|ing)?|track(?:s|ed|ing)? with|than last|this week.*last week|this month.*last month)\b/i
 const EXACT_REQUEST = /\b(how many|how much|what (?:was|is|were|are)|show me|did i|get yesterday|today|yesterday|last night|night before last|on \d{4}-\d{2}-\d{2})\b/i
+const NUTRITION_EVENT_REQUEST =
+  /\b(ate|eaten|eat|eating|intake|consum(?:e[ds]?|ing|ption)|food|meal|snack|nutrition)\b/i
+const ACTIVITY_EVENT_REQUEST =
+  /\b(activity|workouts?|exercise|training|runs?|walks?|rides?|hikes?|swims?|sessions?)\b/i
+const EVENT_TIME_RELATION = /\b(after|before|since|following|prior to)\b/i
 
 const METRIC_MATCHERS: Array<{ metric: MetricKey; pattern: RegExp }> = [
   { metric: 'activeZoneMinutes', pattern: /\b(active zone minutes?|zone minutes?)\b/i },
@@ -264,6 +269,13 @@ export function fastHealthPlanForRequest(
 ): FastHealthPlan | null {
   const text = userText.trim()
   if (!text || COMPLEX_REQUEST.test(text)) return null
+  if (
+    NUTRITION_EVENT_REQUEST.test(text) &&
+    ACTIVITY_EVENT_REQUEST.test(text) &&
+    EVENT_TIME_RELATION.test(text)
+  ) {
+    return null
+  }
 
   const comparison = COMPARISON_REQUEST.test(text)
   if (comparison) return null

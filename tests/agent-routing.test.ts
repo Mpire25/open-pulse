@@ -196,6 +196,15 @@ describe('adaptive assistant routing', () => {
       },
       reason: 'exact-value'
     })
+    expect(fastHealthPlanForRequest('How many calories did I consume yesterday?', TODAY)).toEqual({
+      tool: 'query_daily_metrics',
+      args: {
+        metrics: ['caloriesIn'],
+        startDate: '2026-07-27',
+        endDate: '2026-07-27'
+      },
+      reason: 'exact-value'
+    })
     expect(fastHealthPlanForRequest('How many calories did I burn yesterday?', TODAY)).toEqual({
       tool: 'query_daily_metrics',
       args: {
@@ -221,15 +230,13 @@ describe('adaptive assistant routing', () => {
         'How many calories did I consume after my activity yesterday?',
         TODAY
       )
-    ).toEqual({
-      tool: 'query_daily_metrics',
-      args: {
-        metrics: ['caloriesIn'],
-        startDate: '2026-07-27',
-        endDate: '2026-07-27'
-      },
-      reason: 'exact-value'
-    })
+    ).toBeNull()
+    expect(
+      fastHealthPlanForRequest('What did I eat after my workout yesterday?', TODAY)
+    ).toBeNull()
+    expect(
+      fastHealthPlanForRequest('What food did I have before exercise yesterday?', TODAY)
+    ).toBeNull()
     expect(
       fastHealthPlanForRequest('Show my food calories and activity calories yesterday.', TODAY)
     ).toEqual({
