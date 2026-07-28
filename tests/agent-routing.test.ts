@@ -134,6 +134,31 @@ describe('adaptive assistant routing', () => {
     })
   })
 
+  test('distinguishes a rolling month from the previous calendar month', () => {
+    expect(
+      fastHealthPlanForRequest('How has my weight been trending over the last month?', TODAY)
+    ).toEqual({
+      tool: 'analyze_daily_metrics',
+      args: {
+        metrics: ['weightKg'],
+        startDate: '2026-06-29',
+        endDate: TODAY,
+        operation: 'summary'
+      },
+      reason: 'trend'
+    })
+    expect(fastHealthPlanForRequest('How did my weight trend last month?', TODAY)).toEqual({
+      tool: 'analyze_daily_metrics',
+      args: {
+        metrics: ['weightKg'],
+        startDate: '2026-06-01',
+        endDate: '2026-06-30',
+        operation: 'summary'
+      },
+      reason: 'trend'
+    })
+  })
+
   test('keeps multi-day totals as raw daily data rather than a trend summary', () => {
     expect(fastHealthPlanForRequest('How many steps did I do in the last 7 days?', TODAY)).toEqual({
       tool: 'query_daily_metrics',

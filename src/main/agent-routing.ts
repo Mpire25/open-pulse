@@ -201,6 +201,9 @@ function requestedRange(
   }
   if (/\bthis week\b/i.test(text)) return { startDate: thisWeek, endDate: today }
 
+  if (/\b(?:over|for) the last month\b|\b(?:the )?past month\b/i.test(text)) {
+    return { startDate: shiftIsoDate(today, -29), endDate: today }
+  }
   const lastMonth = previousMonth(today)
   if (/\blast month\b/i.test(text)) return { startDate: lastMonth.start, endDate: lastMonth.end }
   if (/\bthis month\b/i.test(text)) return { startDate: startOfMonth(today), endDate: today }
