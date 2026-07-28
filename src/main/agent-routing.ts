@@ -75,10 +75,14 @@ function explicitDate(text: string): string | null {
     : null
 }
 
-const MONTH_NAME =
-  /\b(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\b/i
-const WEEKDAY_NAME =
-  /\b(?:mon(?:day)?|tue(?:sday)?|wed(?:nesday)?|thu(?:rsday)?|fri(?:day)?|sat(?:urday)?|sun(?:day)?)\b/i
+const FULL_MONTH_NAME =
+  /\b(?:january|february|march|april|june|july|august|september|october|november|december)\b/i
+const CONTEXTUAL_MONTH_NAME =
+  /\b(?:in|on|since|during|from|until|through)\s+(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)\.?\b|\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)\.?\s+\d{1,2}(?:st|nd|rd|th)?\b/i
+const FULL_WEEKDAY_NAME =
+  /\b(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/i
+const CONTEXTUAL_WEEKDAY_NAME =
+  /\b(?:on|last|this|next)\s+(?:mon|tue|tues|wed|thu|thur|thurs|fri|sat|sun)\.?\b/i
 
 function hasUnparsedDateLanguage(text: string): boolean {
   return (
@@ -87,9 +91,34 @@ function hasUnparsedDateLanguage(text: string): boolean {
     /\b\d{1,2}(?:st|nd|rd|th)\b/i.test(text) ||
     /\b(?:day|week|month|year)s?\s+ago\b/i.test(text) ||
     /\b(?:next|previous)\s+(?:day|week|month|year)\b/i.test(text) ||
-    MONTH_NAME.test(text) ||
-    WEEKDAY_NAME.test(text)
+    FULL_MONTH_NAME.test(text) ||
+    CONTEXTUAL_MONTH_NAME.test(text) ||
+    FULL_WEEKDAY_NAME.test(text) ||
+    CONTEXTUAL_WEEKDAY_NAME.test(text)
   )
+}
+
+function recognizedTemporalSelectorCount(text: string): number {
+  let remaining = text
+  let count = 0
+  const selectors = [
+    /\bnight before last\b/gi,
+    /\bday before yesterday\b/gi,
+    /\b(?:past|last) \d{1,3} days?\b/gi,
+    /\blast night\b/gi,
+    /\bthis week\b/gi,
+    /\blast week\b/gi,
+    /\bthis month\b/gi,
+    /\blast month\b/gi,
+    /\byesterday\b/gi,
+    /\btoday\b/gi,
+    /\btonight\b/gi
+  ]
+  for (const selector of selectors) {
+    count += remaining.match(selector)?.length ?? 0
+    remaining = remaining.replace(selector, ' ')
+  }
+  return count
 }
 
 function requestedRange(
@@ -97,8 +126,22 @@ function requestedRange(
   today: string,
   mode: 'exact-value' | 'recent-range' | 'trend'
 ): { startDate: string; endDate: string } | null {
-  const exact = explicitDate(text)
-  if (exact) return { startDate: exact, endDate: exact }
+  const isoDates = text.match(/\b\d{4}-\d{2}-\d{2}\b/g) ?? []
+  if (isoDates.length > 0) {
+    if (isoDates.length !== 1) return null
+    const exact = explicitDate(text)
+    if (!exact) return null
+    const remaining = text.replace(isoDates[0], ' ')
+    if (
+      recognizedTemporalSelectorCount(remaining) > 0 ||
+      hasUnparsedDateLanguage(remaining)
+    ) {
+      return null
+    }
+    return { startDate: exact, endDate: exact }
+  }
+
+  if (hasUnparsedDateLanguage(text) || recognizedTemporalSelectorCount(text) > 1) return null
   if (/\bnight before last\b/i.test(text)) {
     const date = shiftIsoDate(today, -1)
     return { startDate: date, endDate: date }
@@ -121,22 +164,15 @@ function requestedRange(
   }
 
   const thisWeek = startOfWeek(today)
-  if (/\bthis week\b/i.test(text) && /\blast week\b/i.test(text)) {
-    return { startDate: shiftIsoDate(thisWeek, -7), endDate: today }
-  }
   if (/\blast week\b/i.test(text)) {
     return { startDate: shiftIsoDate(thisWeek, -7), endDate: shiftIsoDate(thisWeek, -1) }
   }
   if (/\bthis week\b/i.test(text)) return { startDate: thisWeek, endDate: today }
 
   const lastMonth = previousMonth(today)
-  if (/\bthis month\b/i.test(text) && /\blast month\b/i.test(text)) {
-    return { startDate: lastMonth.start, endDate: today }
-  }
   if (/\blast month\b/i.test(text)) return { startDate: lastMonth.start, endDate: lastMonth.end }
   if (/\bthis month\b/i.test(text)) return { startDate: startOfMonth(today), endDate: today }
 
-  if (hasUnparsedDateLanguage(text)) return null
   if (mode === 'trend') return { startDate: shiftIsoDate(today, -29), endDate: today }
   if (mode === 'exact-value') return { startDate: today, endDate: today }
   return null

@@ -40,11 +40,67 @@ describe('adaptive assistant routing', () => {
     })
   })
 
+  test('keeps one valid ISO date on the fast path', () => {
+    expect(fastHealthPlanForRequest('How many steps did I do on 2026-07-03?', TODAY)).toEqual({
+      tool: 'query_daily_metrics',
+      args: {
+        metrics: ['steps'],
+        startDate: '2026-07-03',
+        endDate: '2026-07-03'
+      },
+      reason: 'exact-value'
+    })
+  })
+
   test('falls back when date language is present but not fully parsed', () => {
     expect(fastHealthPlanForRequest('How many steps did I do on July 3rd?', TODAY)).toBeNull()
     expect(fastHealthPlanForRequest('How many steps did I do last Tuesday?', TODAY)).toBeNull()
     expect(fastHealthPlanForRequest('How many steps did I do in March?', TODAY)).toBeNull()
     expect(fastHealthPlanForRequest('How many steps did I do on 2026-02-30?', TODAY)).toBeNull()
+  })
+
+  test('falls back when recognised and unparsed date expressions are mixed', () => {
+    expect(
+      fastHealthPlanForRequest('What were my steps yesterday and on July 3rd?', TODAY)
+    ).toBeNull()
+    expect(
+      fastHealthPlanForRequest('Show me my steps this week and on March 2nd', TODAY)
+    ).toBeNull()
+    expect(fastHealthPlanForRequest('Show my steps last week and 3 weeks ago', TODAY)).toBeNull()
+    expect(fastHealthPlanForRequest('Show my steps yesterday and 3 days ago', TODAY)).toBeNull()
+    expect(
+      fastHealthPlanForRequest('Show my steps on 2026-07-03 and yesterday', TODAY)
+    ).toBeNull()
+  })
+
+  test('falls back when a non-comparison request contains multiple recognised periods', () => {
+    expect(fastHealthPlanForRequest('Show my steps yesterday and today', TODAY)).toBeNull()
+    expect(fastHealthPlanForRequest('Show my steps this week and last week', TODAY)).toBeNull()
+  })
+
+  test('does not treat ambiguous date abbreviations as ordinary English', () => {
+    expect(fastHealthPlanForRequest('How many steps may I have logged yesterday?', TODAY)).toEqual({
+      tool: 'query_daily_metrics',
+      args: {
+        metrics: ['steps'],
+        startDate: '2026-07-27',
+        endDate: '2026-07-27'
+      },
+      reason: 'exact-value'
+    })
+    expect(
+      fastHealthPlanForRequest('How many steps did I take after I sat down yesterday?', TODAY)
+    ).toEqual({
+      tool: 'query_daily_metrics',
+      args: {
+        metrics: ['steps'],
+        startDate: '2026-07-27',
+        endDate: '2026-07-27'
+      },
+      reason: 'exact-value'
+    })
+    expect(fastHealthPlanForRequest('How many steps did I do in May?', TODAY)).toBeNull()
+    expect(fastHealthPlanForRequest('How many steps did I do on Mon?', TODAY)).toBeNull()
   })
 
   test('does not silently truncate ranges beyond the health-tool limit', () => {
