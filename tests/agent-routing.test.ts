@@ -57,6 +57,7 @@ describe('adaptive assistant routing', () => {
     expect(fastHealthPlanForRequest('How many steps did I do last Tuesday?', TODAY)).toBeNull()
     expect(fastHealthPlanForRequest('How many steps did I do in March?', TODAY)).toBeNull()
     expect(fastHealthPlanForRequest('How many steps did I do on 2026-02-30?', TODAY)).toBeNull()
+    expect(fastHealthPlanForRequest('What was my HRV yestarday?', TODAY)).toBeNull()
   })
 
   test('falls back when recognised and unparsed date expressions are mixed', () => {

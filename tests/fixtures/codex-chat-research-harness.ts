@@ -264,6 +264,41 @@ describe('brokered Codex research orchestration', () => {
     })
   })
 
+  test('lets the tool-enabled agent recover an obvious date typo', async () => {
+    const sender = new FakeSender()
+    let calls = 0
+    globalThis.fetch = (async (_input, init) => {
+      calls++
+      const body = requestBody(init)
+      if (calls === 1) {
+        expect(toolNames(body)).toContain('query_daily_metrics')
+        expect(body.tool_choice).toBe('auto')
+        expect(String(body.instructions)).toContain('"yestarday" means "yesterday"')
+        expect(JSON.stringify(body.input)).not.toContain('OPENPULSE_PREFETCHED_HEALTH_DATA')
+        return functionCall('query_daily_metrics', 'typo-health-call', {
+          metrics: ['hrvMs'],
+          startDate: '2026-07-27',
+          endDate: '2026-07-27'
+        })
+      }
+      return message('Your HRV yesterday was 41.2 ms.')
+    }) as typeof fetch
+
+    await runChat(
+      sender as unknown as WebContents,
+      'typo-chat',
+      'typo-run',
+      [{ role: 'user', text: 'What was my HRV yestarday?' }]
+    )
+
+    expect(calls).toBe(2)
+    expect(sender.events.filter((event) => event.type === 'tool')).toHaveLength(1)
+    expect(sender.events.find((event) => event.type === 'done')).toMatchObject({
+      type: 'done',
+      text: 'Your HRV yesterday was 41.2 ms.'
+    })
+  })
+
   test('runs independent health tools concurrently on the agent path', async () => {
     const sender = new FakeSender()
     let calls = 0

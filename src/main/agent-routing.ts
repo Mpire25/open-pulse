@@ -98,6 +98,34 @@ function hasUnparsedDateLanguage(text: string): boolean {
   )
 }
 
+function isOneEditFrom(value: string, expected: string): boolean {
+  if (value === expected || Math.abs(value.length - expected.length) > 1) return false
+  let valueIndex = 0
+  let expectedIndex = 0
+  let edits = 0
+  while (valueIndex < value.length && expectedIndex < expected.length) {
+    if (value[valueIndex] === expected[expectedIndex]) {
+      valueIndex++
+      expectedIndex++
+      continue
+    }
+    if (++edits > 1) return false
+    if (value.length > expected.length) valueIndex++
+    else if (expected.length > value.length) expectedIndex++
+    else {
+      valueIndex++
+      expectedIndex++
+    }
+  }
+  return edits + (value.length - valueIndex) + (expected.length - expectedIndex) === 1
+}
+
+function hasLikelyMisspelledDateLanguage(text: string): boolean {
+  return (text.match(/\b[a-z]+\b/gi) ?? []).some((word) =>
+    isOneEditFrom(word.toLowerCase(), 'yesterday')
+  )
+}
+
 function recognizedTemporalSelectorCount(text: string): number {
   let remaining = text
   let count = 0
@@ -141,7 +169,11 @@ function requestedRange(
     return { startDate: exact, endDate: exact }
   }
 
-  if (hasUnparsedDateLanguage(text) || recognizedTemporalSelectorCount(text) > 1) return null
+  if (
+    hasUnparsedDateLanguage(text) ||
+    hasLikelyMisspelledDateLanguage(text) ||
+    recognizedTemporalSelectorCount(text) > 1
+  ) return null
   if (/\bnight before last\b/i.test(text)) {
     const date = shiftIsoDate(today, -1)
     return { startDate: date, endDate: date }
