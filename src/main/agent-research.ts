@@ -1,4 +1,5 @@
 import type { AgentToolSpec } from './health-agent-tools'
+import { requestMentionsTrackedHealthData } from './agent-routing'
 
 export type ResearchReason =
   | 'explicit'
@@ -46,8 +47,9 @@ const CAUSAL_GUIDANCE =
   /\b(?:can|could|does|do|did|is|are|will|would|might)\b[\s\S]{0,140}\b(?:affect|impact|influence|cause|improve|worse|worsen|better|help|interact|side effects?|make[\s\S]{0,40}(?:worse|better))\b|\b(?:affect|impact|influence|cause|improve|worse|worsen|better|help|interact)\b[\s\S]{0,140}\b(?:sleep|hrv|heart rate|health|recovery|weight|activity|nutrition)\b/i
 const BROAD_RESEARCH = /\b(overall|current health|health overview|across|multiple|in general|deep research|thorough(?:ly)?|comprehensive)\b/i
 const PERSONAL_REFERENCE = /\b(?:i|me|my|mine)\b/i
-const TRACKED_HEALTH_DATA =
-  /\b(?:steps?|distance|floors?|flights?|active(?: zone)? minutes?|activity|workouts?|exercise|resting heart rate|resting pulse|rhr|hrv|heart rate variability|spo2|blood oxygen|oxygen saturation|breathing rate|respiratory rate|skin temperature|sleep|weight|body fat|bmi|nutrition|calories?|protein|carbs?|carbohydrates?|dietary fat|fibre|fiber|sodium|sugar|water|hydration|recovery|health data|readings?|baseline)\b/i
+const PERSONAL_TIME_CONTEXT =
+  /\b(?:today|yesterday|last night|night before last|this week|last week|this month|last month|past \d{1,3} days?|last \d{1,3} days?|on \d{4}-\d{2}-\d{2})\b/i
+const GENERAL_SUBJECT = /\b(?:people|person|adults?|men|women|children|someone)\b/i
 const INTERPRETIVE_GUIDANCE =
   /\b(?:why|cause|meaning|mean|explain|interpret|recommend|advice|should|normal|healthy|good|bad|high|low|enough|safe|unsafe|ideal)\b/i
 
@@ -58,8 +60,9 @@ export function researchPolicyForRequest(userText: string): ResearchPolicy {
   const productInformation = PRODUCT_INFORMATION.test(userText)
   const causalGuidance = CAUSAL_GUIDANCE.test(userText)
   const personalDataOnly =
-    PERSONAL_REFERENCE.test(userText) &&
-    TRACKED_HEALTH_DATA.test(userText) &&
+    (PERSONAL_REFERENCE.test(userText) || PERSONAL_TIME_CONTEXT.test(userText)) &&
+    requestMentionsTrackedHealthData(userText) &&
+    !GENERAL_SUBJECT.test(userText) &&
     !INTERPRETIVE_GUIDANCE.test(userText)
 
   const reason: ResearchReason = explicit

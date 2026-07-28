@@ -204,6 +204,13 @@ function requestedMetrics(text: string): MetricKey[] {
   return [...new Set(metrics)].slice(0, 8)
 }
 
+export function requestMentionsTrackedHealthData(text: string): boolean {
+  return (
+    requestedMetrics(text).length > 0 ||
+    /\b(?:activity|workouts?|exercise|recovery|health data|readings?|baseline|calories?)\b/i.test(text)
+  )
+}
+
 /**
  * Selects only requests for which one narrow, existing health query is very
  * likely to contain the complete answer. Ambiguous or interpretive requests

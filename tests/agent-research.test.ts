@@ -27,6 +27,18 @@ describe('assistant web research policy', () => {
       enabled: false,
       reason: 'personal-data-only'
     })
+    expect(researchPolicyForRequest('How much did I weigh yesterday?')).toMatchObject({
+      enabled: false,
+      reason: 'personal-data-only'
+    })
+    expect(researchPolicyForRequest('How many sedentary minutes yesterday?')).toMatchObject({
+      enabled: false,
+      reason: 'personal-data-only'
+    })
+    expect(researchPolicyForRequest('How much fat did I eat yesterday?')).toMatchObject({
+      enabled: false,
+      reason: 'personal-data-only'
+    })
   })
 
   test('enables bounded research for external and explicit requests', () => {
@@ -81,6 +93,10 @@ describe('assistant web research policy', () => {
       enabled: true
     })
     expect(researchPolicyForRequest('Why is my HRV low?')).toMatchObject({
+      enabled: true,
+      reason: 'model-directed'
+    })
+    expect(researchPolicyForRequest('What is average sedentary time for adults?')).toMatchObject({
       enabled: true,
       reason: 'model-directed'
     })
