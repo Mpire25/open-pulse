@@ -67,6 +67,8 @@ mock.module('../../src/main/assistant-presentation', () => ({
     strict: true,
     parameters: { type: 'object', properties: {}, required: [], additionalProperties: false }
   },
+  normalizePresentationAggregations: (args: Record<string, unknown>) => args,
+  presentationFactsForModel: () => [],
   resolveAutomaticPresentation: () => [],
   resolvePresentation: () => []
 }))

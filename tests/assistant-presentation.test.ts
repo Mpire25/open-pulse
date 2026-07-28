@@ -1,5 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import {
+  normalizePresentationAggregations,
+  presentationFactsForModel,
   resolveAutomaticPresentation,
   resolvePresentation,
   type AgentDataset
@@ -193,6 +195,85 @@ describe('assistant visual presentation', () => {
       absoluteChange: 4_000
     })
     expect(parts[2]).toMatchObject({ type: 'trend-chart', observations: 3 })
+  })
+
+  test('returns app-computed comparison facts for the written answer', () => {
+    const [comparison] = resolvePresentation(
+      {
+        comparisons: [
+          {
+            datasetId: 'daily-1',
+            metric: 'steps',
+            title: 'Steps comparison',
+            currentLabel: 'Latest day',
+            currentStartDate: '2026-07-04',
+            currentEndDate: '2026-07-04',
+            currentAggregation: 'auto',
+            previousLabel: 'Previous days',
+            previousStartDate: '2026-07-01',
+            previousEndDate: '2026-07-03',
+            previousAggregation: 'auto'
+          }
+        ]
+      },
+      dailyDatasets()
+    )
+
+    expect(presentationFactsForModel([comparison])).toEqual([
+      {
+        type: 'comparison',
+        metric: 'steps',
+        current: {
+          label: 'Latest day',
+          startDate: '2026-07-04',
+          endDate: '2026-07-04',
+          value: 7_000,
+          aggregation: 'value',
+          observations: 1,
+          days: 1
+        },
+        previous: {
+          label: 'Previous days',
+          startDate: '2026-07-01',
+          endDate: '2026-07-03',
+          value: 5_000,
+          aggregation: 'average',
+          observations: 3,
+          days: 3
+        },
+        comparable: true,
+        absoluteChange: 2_000,
+        percentChange: 40
+      }
+    ])
+  })
+
+  test('uses automatic comparison semantics unless the user explicitly requests an aggregation', () => {
+    const modelRequest = {
+      comparisons: [
+        {
+          datasetId: 'daily-1',
+          metric: 'steps',
+          currentAggregation: 'total',
+          previousAggregation: 'total'
+        }
+      ]
+    }
+
+    expect(
+      normalizePresentationAggregations(
+        modelRequest,
+        'Compare my steps yesterday with last week.'
+      )
+    ).toMatchObject({
+      comparisons: [{ currentAggregation: 'auto', previousAggregation: 'auto' }]
+    })
+    expect(
+      normalizePresentationAggregations(
+        modelRequest,
+        'Compare my total steps yesterday with the total for last week.'
+      )
+    ).toBe(modelRequest)
   })
 
   test('does not allow a visual to escape its source dataset', () => {

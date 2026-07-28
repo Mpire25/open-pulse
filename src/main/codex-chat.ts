@@ -23,7 +23,9 @@ import {
   type UrlCitationAnnotation
 } from './ai-citations'
 import {
+  normalizePresentationAggregations,
   PRESENTATION_TOOL,
+  presentationFactsForModel,
   resolveAutomaticPresentation,
   resolvePresentation,
   type AgentDataset
@@ -74,7 +76,7 @@ function buildInstructions(options: { fastContext: boolean; researchEnabled: boo
     : 'External web research is intentionally unavailable because this request can be answered from the user\'s tracked health data alone. Do not claim that you searched the web or delay the answer for external evidence.'
   const presentationInstructions = options.fastContext
     ? 'OpenPulse will derive any obvious exact-value card, comparison, or chart directly from the prefetched dataset after your answer. Do not request or describe a presentation tool.'
-    : 'When a visual would materially clarify the answer, call present_health_data after the relevant tools have returned datasetId values. For a broad multi-domain health summary, weekly review, focus-area question, or comparison with external guidance, use one overview containing 2-4 relevant metrics and no other visual; do not substitute an arbitrary single-metric chart. A direct comparison or trend question should normally get one appropriate visual. Use an exact-value card for one fact, a comparison for two periods, a chart for a trend, a sleep card for one specific night when stages or the night\'s structure are central, a nutrition card for the composition of one day, meal, or logged food item, or a workout card for a specific workout. For comparisons, preserve explicit user wording by selecting total, average, latest, or value independently for each side; use auto when the user did not specify. Auto compares one day with a multi-day daily/nightly average, equal-length additive periods as totals, rates as averages, and state measurements as latest readings. Never total rates, percentages, weight, body fat, or BMI. Unequal totals may be displayed when explicitly requested, but they are descriptive and will not receive a change judgement. Use query_daily_metrics for a day nutrition card and query_nutrition_logs for meal or item cards. Do not use a domain card for a trend, period comparison, or broad health assessment. Normally show one block; only show two when both add distinct value, and never decorate a simple explanation unnecessarily. Only reference dataset IDs and records returned in this run; OpenPulse will compute and validate every displayed value. Still give a concise written answer after presenting data.'
+    : 'When a visual would materially clarify the answer, call present_health_data after the relevant tools have returned datasetId values. For a broad multi-domain health summary, weekly review, focus-area question, or comparison with external guidance, use one overview containing 2-4 relevant metrics and no other visual; do not substitute an arbitrary single-metric chart. A direct comparison or trend question should normally get one appropriate visual. Use an exact-value card for one fact, a comparison for two periods, a chart for a trend, a sleep card for one specific night when stages or the night\'s structure are central, a nutrition card for the composition of one day, meal, or logged food item, or a workout card for a specific workout. For comparisons, preserve explicit user wording by selecting total, average, latest, or value independently for each side; use auto when the user did not specify. Auto compares one day with a multi-day daily/nightly average, equal-length additive periods as totals, rates as averages, and state measurements as latest readings. Never total rates, percentages, weight, body fat, or BMI. Unequal totals may be displayed when explicitly requested, but they are descriptive and will not receive a change judgement. Use query_daily_metrics for a day nutrition card and query_nutrition_logs for meal or item cards. Do not use a domain card for a trend, period comparison, or broad health assessment. Normally show one block; only show two when both add distinct value, and never decorate a simple explanation unnecessarily. Only reference dataset IDs and records returned in this run; OpenPulse will compute and validate every displayed value. The presentation result returns validatedFacts; use those exact values and aggregations in the written answer instead of recalculating them. Still give a concise written answer after presenting data.'
   return `You are OpenPulse, the built-in health assistant for Google Fitbit health data.
 
 Today is ${today}; the user's local timezone is ${timezone}. Use civil calendar dates in that timezone.
@@ -714,7 +716,8 @@ export async function runChat(
           } else if (name === PRESENTATION_TOOL.name) {
             presentationCalls++
             const available = Math.max(0, 2 - visualParts.length)
-            const resolved = resolvePresentation(args, datasets).slice(0, available)
+            const presentationArgs = normalizePresentationAggregations(args, latestUserText)
+            const resolved = resolvePresentation(presentationArgs, datasets).slice(0, available)
             visualParts.push(...resolved)
             const requested = ['overviews', 'metricCards', 'comparisons', 'charts', 'sleepCards', 'nutritionCards', 'workouts'].reduce(
               (total, key) => total + (Array.isArray(args[key]) ? args[key].length : 0),
@@ -729,7 +732,12 @@ export async function runChat(
               visualTypes: resolved.map((part) => part.type),
               source: 'model'
             })
-            output = JSON.stringify({ displayed: resolved.length })
+            output = JSON.stringify({
+              displayed: resolved.length,
+              validatedFacts: presentationFactsForModel(resolved),
+              guidance:
+                'Use these exact app-computed values and aggregations in the written answer. Do not independently recalculate them.'
+            })
           } else {
             healthToolCalls++
             output = await runHealthAgentTool(name, args, signal)

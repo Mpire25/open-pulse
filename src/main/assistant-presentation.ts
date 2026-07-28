@@ -32,6 +32,9 @@ export interface AgentDataset {
   data: unknown
 }
 
+const EXPLICIT_COMPARISON_AGGREGATION =
+  /\b(?:total|sum|summed|combined|cumulative|altogether|average|avg|mean|latest|most recent)\b/i
+
 const DATE_SCHEMA = { type: 'string', pattern: '^\\d{4}-\\d{2}-\\d{2}$' }
 const DATASET_ID = { type: 'string', minLength: 1, maxLength: 200 }
 const METRIC = { type: 'string', enum: METRIC_KEYS }
@@ -636,6 +639,28 @@ function requestedComparisonAggregation(value: unknown, field: string): Comparis
   throw new Error(`${field} requires auto, value, total, average, or latest.`)
 }
 
+export function normalizePresentationAggregations(
+  args: Record<string, unknown>,
+  userText: string
+): Record<string, unknown> {
+  if (EXPLICIT_COMPARISON_AGGREGATION.test(userText) || !Array.isArray(args.comparisons)) {
+    return args
+  }
+  return {
+    ...args,
+    comparisons: args.comparisons.map((raw) => {
+      const comparison = record(raw)
+      return comparison
+        ? {
+            ...comparison,
+            currentAggregation: 'auto',
+            previousAggregation: 'auto'
+          }
+        : raw
+    })
+  }
+}
+
 function resolveComparisonAggregation(
   metric: MetricKey,
   requested: ComparisonAggregationRequest,
@@ -1025,4 +1050,21 @@ export function resolvePresentation(
 
   if (parts.length > 4) throw new Error('A response can display at most four visual blocks.')
   return parts
+}
+
+/** Returns app-validated comparison facts for the model's written answer. */
+export function presentationFactsForModel(parts: AssistantVisualPart[]): Array<Record<string, unknown>> {
+  return parts.flatMap((part) =>
+    part.type === 'comparison'
+      ? [{
+          type: part.type,
+          metric: part.metric,
+          current: part.current,
+          previous: part.previous,
+          comparable: part.comparable,
+          absoluteChange: part.absoluteChange,
+          percentChange: part.percentChange
+        }]
+      : []
+  )
 }
