@@ -8,6 +8,10 @@ export default defineConfig({
   preload: {},
   renderer: {
     plugins: [react(), tailwindcss()],
+    server: {
+      port: 43127,
+      strictPort: true
+    },
     resolve: {
       alias: {
         '@': resolve('src/renderer/src'),

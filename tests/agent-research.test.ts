@@ -17,26 +17,31 @@ describe('assistant web research policy', () => {
     })
   })
 
-  test('makes brokered research available without forcing it for personal-data questions', () => {
+  test('disables brokered research for personal-data-only questions', () => {
     expect(researchPolicyForRequest('Compare my steps this week with last week')).toEqual({
+      enabled: false,
       suggestedSearchTurns: 1,
       reason: 'model-directed'
     })
     expect(researchPolicyForRequest('Is my resting heart rate trending up or down?')).toMatchObject({
+      enabled: false,
       reason: 'model-directed'
     })
   })
 
   test('enables bounded research for external and explicit requests', () => {
     expect(researchPolicyForRequest('What do NHS guidelines recommend for weekly activity?')).toEqual({
+      enabled: true,
       suggestedSearchTurns: 1,
       reason: 'external-guidance'
     })
     expect(researchPolicyForRequest('Research my overall health compared with NHS ideals')).toEqual({
+      enabled: true,
       suggestedSearchTurns: 2,
       reason: 'explicit'
     })
     expect(researchPolicyForRequest('Is this result something I should worry about?')).toMatchObject({
+      enabled: true,
       reason: 'medical-guidance'
     })
     expect(researchPolicyForRequest('Is my resting heart rate normal?')).toMatchObject({
@@ -46,13 +51,16 @@ describe('assistant web research policy', () => {
       reason: 'explicit'
     })
     expect(researchPolicyForRequest('Can a calorie deficit affect sleep?')).toMatchObject({
-      reason: 'model-directed'
+      enabled: true,
+      reason: 'causal-guidance'
     })
     expect(researchPolicyForRequest('Could retatrutide make sleep worse?')).toMatchObject({
-      reason: 'model-directed'
+      enabled: true,
+      reason: 'causal-guidance'
     })
     expect(researchPolicyForRequest('Could creatine affect my sleep?')).toMatchObject({
-      reason: 'model-directed'
+      enabled: true,
+      reason: 'causal-guidance'
     })
   })
 
