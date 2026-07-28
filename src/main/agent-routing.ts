@@ -92,11 +92,85 @@ function hasUnparsedDateLanguage(text: string): boolean {
   )
 }
 
+function combinedRange(
+  ranges: Array<{ startDate: string; endDate: string }>
+): { startDate: string; endDate: string } | null {
+  if (ranges.length < 2) return null
+  return {
+    startDate: ranges.reduce(
+      (earliest, range) => range.startDate < earliest ? range.startDate : earliest,
+      ranges[0].startDate
+    ),
+    endDate: ranges.reduce(
+      (latest, range) => range.endDate > latest ? range.endDate : latest,
+      ranges[0].endDate
+    )
+  }
+}
+
+function requestedComparisonRange(
+  text: string,
+  today: string
+): { startDate: string; endDate: string } | null {
+  const ranges: Array<{ startDate: string; endDate: string }> = []
+  const thisWeek = startOfWeek(today)
+  const lastMonth = previousMonth(today)
+  let remaining = text
+
+  if (/\bday before yesterday\b/i.test(remaining)) {
+    const date = shiftIsoDate(today, -2)
+    ranges.push({ startDate: date, endDate: date })
+    remaining = remaining.replace(/\bday before yesterday\b/gi, '')
+  }
+  if (/\bnight before last\b/i.test(remaining)) {
+    const date = shiftIsoDate(today, -1)
+    ranges.push({ startDate: date, endDate: date })
+    remaining = remaining.replace(/\bnight before last\b/gi, '')
+  }
+  if (/\byesterday\b/i.test(remaining) && /\bnight before\b/i.test(remaining)) {
+    const yesterday = shiftIsoDate(today, -1)
+    const nightBefore = shiftIsoDate(today, -2)
+    ranges.push(
+      { startDate: nightBefore, endDate: nightBefore },
+      { startDate: yesterday, endDate: yesterday }
+    )
+    remaining = remaining
+      .replace(/\byesterday\b/gi, '')
+      .replace(/\b(?:the )?night before\b/gi, '')
+  }
+  if (/\byesterday\b/i.test(remaining)) {
+    const date = shiftIsoDate(today, -1)
+    ranges.push({ startDate: date, endDate: date })
+  }
+  if (/\b(?:today|tonight|last night)\b/i.test(remaining)) {
+    ranges.push({ startDate: today, endDate: today })
+  }
+  if (/\blast week\b/i.test(remaining)) {
+    ranges.push({
+      startDate: shiftIsoDate(thisWeek, -7),
+      endDate: shiftIsoDate(thisWeek, -1)
+    })
+  }
+  if (/\bthis week\b/i.test(remaining)) {
+    ranges.push({ startDate: thisWeek, endDate: today })
+  }
+  if (/\blast month\b/i.test(remaining)) {
+    ranges.push({ startDate: lastMonth.start, endDate: lastMonth.end })
+  }
+  if (/\bthis month\b/i.test(remaining)) {
+    ranges.push({ startDate: startOfMonth(today), endDate: today })
+  }
+
+  return combinedRange(ranges)
+}
+
 function requestedRange(
   text: string,
   today: string,
   mode: 'exact-value' | 'recent-range' | 'trend' | 'comparison'
 ): { startDate: string; endDate: string } | null {
+  if (mode === 'comparison') return requestedComparisonRange(text, today)
+
   const exact = explicitDate(text)
   if (exact) return { startDate: exact, endDate: exact }
   if (/\bnight before last\b/i.test(text)) {
