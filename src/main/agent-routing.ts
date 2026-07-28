@@ -12,7 +12,7 @@ export interface FastHealthPlan {
 const COMPLEX_REQUEST =
   /\b(why|cause|causing|affect|impact|influence|relationship|correlat(?:e|ed|es|ing|ion|ions)?|association|explain|interpret|recommend|advice|should i|normal|healthy|good|bad|low|high|enough|safe|unsafe|research|study|studies|evidence|guideline|latest|web|reddit|forum|deep dive|thorough|comprehensive|overall health|health overview)\b/i
 const TREND_REQUEST = /\b(trend|trending|over time|up or down|increas(?:e|ing)|decreas(?:e|ing))\b/i
-const COMPARISON_REQUEST = /\b(compare|compared|comparison|versus|vs\.?|difference|than last|this week.*last week|this month.*last month)\b/i
+const COMPARISON_REQUEST = /\b(compare|compared|comparison|versus|vs\.?|difference|match(?:es|ed|ing)?|align(?:s|ed|ing)?|correspond(?:s|ed|ing)?|track(?:s|ed|ing)? with|than last|this week.*last week|this month.*last month)\b/i
 const EXACT_REQUEST = /\b(how many|how much|what (?:was|is|were|are)|show me|did i|get yesterday|today|yesterday|last night|night before last|on \d{4}-\d{2}-\d{2})\b/i
 
 const METRIC_MATCHERS: Array<{ metric: MetricKey; pattern: RegExp }> = [
@@ -224,7 +224,7 @@ function requestedMetrics(text: string): MetricKey[] {
   }
   if (/\b(calories?|energy)\b/i.test(text)) {
     if (/\b(ate|eaten|eat|intake|consum|food|nutrition)\b/i.test(text)) metrics.push('caloriesIn')
-    else if (/\b(burn|burned|burnt|output|activity)\b/i.test(text)) metrics.push('caloriesOut')
+    if (/\b(burn|burned|burnt|output|activity)\b/i.test(text)) metrics.push('caloriesOut')
   }
   if (metrics.includes('saturatedFatG') && !/\b(total|dietary) fat\b/i.test(text)) {
     metrics = metrics.filter((metric) => metric !== 'fatG')

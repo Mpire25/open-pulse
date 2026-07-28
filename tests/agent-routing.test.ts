@@ -186,6 +186,50 @@ describe('adaptive assistant routing', () => {
     ).toBeNull()
   })
 
+  test('keeps calorie intake and burn as independent requested metrics', () => {
+    expect(fastHealthPlanForRequest('How many calories did I eat yesterday?', TODAY)).toEqual({
+      tool: 'query_daily_metrics',
+      args: {
+        metrics: ['caloriesIn'],
+        startDate: '2026-07-27',
+        endDate: '2026-07-27'
+      },
+      reason: 'exact-value'
+    })
+    expect(fastHealthPlanForRequest('How many calories did I burn yesterday?', TODAY)).toEqual({
+      tool: 'query_daily_metrics',
+      args: {
+        metrics: ['caloriesOut'],
+        startDate: '2026-07-27',
+        endDate: '2026-07-27'
+      },
+      reason: 'exact-value'
+    })
+    expect(
+      fastHealthPlanForRequest('What were my calorie intake and burn yesterday?', TODAY)
+    ).toEqual({
+      tool: 'query_daily_metrics',
+      args: {
+        metrics: ['caloriesIn', 'caloriesOut'],
+        startDate: '2026-07-27',
+        endDate: '2026-07-27'
+      },
+      reason: 'exact-value'
+    })
+  })
+
+  test('leaves cross-metric relationship wording to the full agent', () => {
+    expect(
+      fastHealthPlanForRequest(
+        'Does my calorie intake/burn somewhat match my weight changes over the last month?',
+        TODAY
+      )
+    ).toBeNull()
+    expect(
+      fastHealthPlanForRequest('Do my steps align with my sleep over the last month?', TODAY)
+    ).toBeNull()
+  })
+
   test('does not confuse unrelated words or body fat with sleep and dietary fat', () => {
     expect(fastHealthPlanForRequest('Show me my embed yesterday', TODAY)).toBeNull()
     expect(fastHealthPlanForRequest('What was my body fat yesterday?', TODAY)).toEqual({
