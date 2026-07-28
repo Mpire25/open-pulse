@@ -232,6 +232,12 @@ function requestedMetrics(text: string): MetricKey[] {
   if (metrics.includes('saturatedFatG') && !/\b(total|dietary) fat\b/i.test(text)) {
     metrics = metrics.filter((metric) => metric !== 'fatG')
   }
+  if (
+    metrics.includes('bodyFatPct') &&
+    !/\b(?:dietary|total) fat\b|\bfat\b[\s\S]{0,40}\b(?:ate|eaten|intake|nutrition)\b/i.test(text)
+  ) {
+    metrics = metrics.filter((metric) => metric !== 'fatG')
+  }
 
   return [...new Set(metrics)].slice(0, 8)
 }
@@ -265,9 +271,13 @@ export function fastHealthPlanForRequest(
   const range = requestedRange(text, today, reason)
   if (!range) return null
 
-  const sleepRequest = /\bsleep|slept|asleep|bed\b/i.test(text)
+  const sleepRequest = /\b(?:sleep|slept|asleep|bed)\b/i.test(text)
   const oneDay = range.startDate === range.endDate
-  if (sleepRequest && oneDay) {
+  const metrics = requestedMetrics(text)
+  const nonSleepMetrics = metrics.filter(
+    (metric) => metric !== 'sleepMinutes' && metric !== 'sleepEfficiency'
+  )
+  if (sleepRequest && oneDay && nonSleepMetrics.length === 0) {
     const detail = /\b(stages?|breakdown|structure|interrupt|awake|wake|woke|out of bed)\b/i.test(text)
       ? 'detailed'
       : 'summary'
@@ -277,8 +287,15 @@ export function fastHealthPlanForRequest(
       reason
     }
   }
+  if (
+    sleepRequest &&
+    oneDay &&
+    nonSleepMetrics.length > 0 &&
+    /\b(stages?|breakdown|structure|interrupt|awake|wake|woke|out of bed)\b/i.test(text)
+  ) {
+    return null
+  }
 
-  const metrics = requestedMetrics(text)
   if (!metrics.length) return null
   if (reason === 'trend') {
     if (metrics.length > 2) return null

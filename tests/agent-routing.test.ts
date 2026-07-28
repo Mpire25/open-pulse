@@ -119,6 +119,34 @@ describe('adaptive assistant routing', () => {
     })
   })
 
+  test('keeps every requested metric in mixed sleep questions', () => {
+    expect(fastHealthPlanForRequest('What were my sleep and steps yesterday?', TODAY)).toEqual({
+      tool: 'query_daily_metrics',
+      args: {
+        metrics: ['steps', 'sleepMinutes', 'sleepEfficiency'],
+        startDate: '2026-07-27',
+        endDate: '2026-07-27'
+      },
+      reason: 'exact-value'
+    })
+    expect(
+      fastHealthPlanForRequest('Show my sleep stages and steps yesterday', TODAY)
+    ).toBeNull()
+  })
+
+  test('does not confuse unrelated words or body fat with sleep and dietary fat', () => {
+    expect(fastHealthPlanForRequest('Show me my embed yesterday', TODAY)).toBeNull()
+    expect(fastHealthPlanForRequest('What was my body fat yesterday?', TODAY)).toEqual({
+      tool: 'query_daily_metrics',
+      args: {
+        metrics: ['bodyFatPct'],
+        startDate: '2026-07-27',
+        endDate: '2026-07-27'
+      },
+      reason: 'exact-value'
+    })
+  })
+
   test('leaves interpretive and ambiguous requests to the full agent', () => {
     expect(fastHealthPlanForRequest('Could creatine be affecting my sleep?', TODAY)).toBeNull()
     expect(fastHealthPlanForRequest('Was my resting heart rate high yesterday?', TODAY)).toBeNull()
