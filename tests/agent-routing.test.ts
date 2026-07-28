@@ -216,6 +216,42 @@ describe('adaptive assistant routing', () => {
       },
       reason: 'exact-value'
     })
+    expect(
+      fastHealthPlanForRequest(
+        'How many calories did I consume after my activity yesterday?',
+        TODAY
+      )
+    ).toEqual({
+      tool: 'query_daily_metrics',
+      args: {
+        metrics: ['caloriesIn'],
+        startDate: '2026-07-27',
+        endDate: '2026-07-27'
+      },
+      reason: 'exact-value'
+    })
+    expect(
+      fastHealthPlanForRequest('Show my food calories and activity calories yesterday.', TODAY)
+    ).toEqual({
+      tool: 'query_daily_metrics',
+      args: {
+        metrics: ['caloriesIn', 'caloriesOut'],
+        startDate: '2026-07-27',
+        endDate: '2026-07-27'
+      },
+      reason: 'exact-value'
+    })
+    expect(
+      fastHealthPlanForRequest('How many calories did I burn during activity yesterday?', TODAY)
+    ).toEqual({
+      tool: 'query_daily_metrics',
+      args: {
+        metrics: ['caloriesOut'],
+        startDate: '2026-07-27',
+        endDate: '2026-07-27'
+      },
+      reason: 'exact-value'
+    })
   })
 
   test('leaves cross-metric relationship wording to the full agent', () => {

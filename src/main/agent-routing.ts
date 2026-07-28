@@ -223,8 +223,15 @@ function requestedMetrics(text: string): MetricKey[] {
     if (!metrics.includes('sleepEfficiency')) metrics.push('sleepEfficiency')
   }
   if (/\b(calories?|energy)\b/i.test(text)) {
-    if (/\b(ate|eaten|eat|intake|consum|food|nutrition)\b/i.test(text)) metrics.push('caloriesIn')
-    if (/\b(burn|burned|burnt|output|activity)\b/i.test(text)) metrics.push('caloriesOut')
+    const mentionsIntake =
+      /\b(ate|eaten|eat|intake|consum(?:e[ds]?|ing|ption)|food|nutrition)\b/i.test(text)
+    const mentionsBurn =
+      /\b(burn(?:ed|ing|s)?|burnt|output|expenditure)\b/i.test(text) ||
+      /\b(?:active|activity) calories?\b/i.test(text) ||
+      /\bcalories?\s+from\s+(?:my\s+)?activit(?:y|ies)\b/i.test(text)
+
+    if (mentionsIntake) metrics.push('caloriesIn')
+    if (mentionsBurn) metrics.push('caloriesOut')
   }
   if (metrics.includes('saturatedFatG') && !/\b(total|dietary) fat\b/i.test(text)) {
     metrics = metrics.filter((metric) => metric !== 'fatG')
