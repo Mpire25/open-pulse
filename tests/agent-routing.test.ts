@@ -52,42 +52,12 @@ describe('adaptive assistant routing', () => {
     expect(fastHealthPlanForRequest('How many steps did I do in the last 0 days?', TODAY)).toBeNull()
   })
 
-  test('prefetches one combined range for common comparisons', () => {
-    expect(fastHealthPlanForRequest('Compare my steps this week with last week', TODAY)).toEqual({
-      tool: 'query_daily_metrics',
-      args: {
-        metrics: ['steps'],
-        startDate: '2026-07-20',
-        endDate: TODAY
-      },
-      reason: 'comparison'
-    })
-  })
-
-  test('includes both sides of supported day and period comparisons', () => {
-    expect(fastHealthPlanForRequest('Compare my steps yesterday with last week', TODAY)).toEqual({
-      tool: 'query_daily_metrics',
-      args: {
-        metrics: ['steps'],
-        startDate: '2026-07-20',
-        endDate: '2026-07-27'
-      },
-      reason: 'comparison'
-    })
+  test('leaves comparisons to the full agent until their period semantics can be preserved', () => {
+    expect(fastHealthPlanForRequest('Compare my steps this week with last week', TODAY)).toBeNull()
+    expect(fastHealthPlanForRequest('Compare my steps yesterday with last week', TODAY)).toBeNull()
     expect(
       fastHealthPlanForRequest('How did my sleep yesterday compare to the night before?', TODAY)
-    ).toEqual({
-      tool: 'query_daily_metrics',
-      args: {
-        metrics: ['sleepMinutes', 'sleepEfficiency'],
-        startDate: '2026-07-26',
-        endDate: '2026-07-27'
-      },
-      reason: 'comparison'
-    })
-  })
-
-  test('leaves incomplete comparisons to the full agent', () => {
+    ).toBeNull()
     expect(
       fastHealthPlanForRequest('How many steps yesterday and how did that compare to my average?', TODAY)
     ).toBeNull()
