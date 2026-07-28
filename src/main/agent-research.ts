@@ -1,13 +1,17 @@
 import type { AgentToolSpec } from './health-agent-tools'
+import { requestMentionsTrackedHealthData } from './agent-routing'
 
 export type ResearchReason =
   | 'explicit'
   | 'external-guidance'
   | 'medical-guidance'
   | 'product-information'
+  | 'causal-guidance'
+  | 'personal-data-only'
   | 'model-directed'
 
 export interface ResearchPolicy {
+  enabled: boolean
   suggestedSearchTurns: number
   reason: ResearchReason
 }
@@ -33,17 +37,31 @@ export const RESEARCH_TOOL: AgentToolSpec = {
   }
 }
 
-const EXPLICIT_RESEARCH = /\b(search(?: the)? web|web search|research|look (?:it |this )?up|browse|online|sources?|citations?|cite|evidence|stud(?:y|ies)|literature|latest|up-to-date|reddit|forums?|user reports?|community discussions?|current (?:guidance|recommendations?|evidence|research|version|information))\b/i
+const EXPLICIT_RESEARCH = /\b(search(?: the)? web|web search|research|look (?:it |this )?up|browse|online|sources?|citations?|cite|evidence|stud(?:y|ies)|literature|latest|up-to-date|reddit|forums?|user reports?|people report|others report|community discussions?|experiences?|current (?:guidance|recommendations?|evidence|research|version|information))\b/i
+const COMMUNITY_REPORTS = /\b(?:people|others|users?)\b[\s\S]{0,100}\b(?:report|experience|say|mention)\b/i
 const EXTERNAL_GUIDANCE = /\b(nhs|nice|who|cdc|guidelines?|recommendations?|recommended|ideal(?:s)?|healthy|normal|clinical guidance|public health)\b/i
-const MEDICAL_GUIDANCE = /\b(medications?|treatments?|diagnos(?:is|e)|symptoms?|diseases?|medical conditions?|clinician|doctor|safe|unsafe|concerning|should (?:i )?worry)\b/i
-const PRODUCT_INFORMATION = /\b(product information|product specs?|device compatibility|fitbit feature|chatgpt feature|software version|release notes?)\b/i
+const MEDICAL_GUIDANCE = /\b(medications?|drugs?|supplements?|dose|doses|dosing|dosage|treatments?|diagnos(?:is|e)|symptoms?|diseases?|medical conditions?|clinician|doctor|safe|unsafe|concerning|should (?:i )?worry)\b/i
+const PRODUCT_INFORMATION =
+  /\b(product information|product specs?|device compatibility|fitbit feature|chatgpt feature|software version|release notes?)\b|\bfitbit\b[\s\S]{0,100}\b(?:add(?:ed)?|release(?:d)?|launch(?:ed)?|lineup|features?|disconnect(?:s|ed|ing)?|sync(?:s|ed|ing)?|pair(?:s|ed|ing)?|compatib(?:le|ility)|fix(?:es|ed|ing)?)\b/i
+const CAUSAL_GUIDANCE =
+  /\b(?:can|could|does|do|did|is|are|will|would|might)\b[\s\S]{0,140}\b(?:affect|impact|influence|cause|improve|worse|worsen|better|help|interact|side effects?|make[\s\S]{0,40}(?:worse|better))\b|\b(?:affect|impact|influence|cause|improve|worse|worsen|better|help|interact)\b[\s\S]{0,140}\b(?:sleep|hrv|heart rate|health|recovery|weight|activity|nutrition)\b/i
 const BROAD_RESEARCH = /\b(overall|current health|health overview|across|multiple|in general|deep research|thorough(?:ly)?|comprehensive)\b/i
+const PERSONAL_REFERENCE = /\b(?:i|me|my|mine)\b/i
+const GENERAL_SUBJECT = /\b(?:people|person|adults?|men|women|children|someone)\b/i
+const INTERPRETIVE_GUIDANCE =
+  /\b(?:why|cause|meaning|mean|explain|interpret|recommend|advice|should|normal|healthy|good|bad|high|low|enough|safe|unsafe|ideal)\b/i
 
 export function researchPolicyForRequest(userText: string): ResearchPolicy {
-  const explicit = EXPLICIT_RESEARCH.test(userText)
+  const explicit = EXPLICIT_RESEARCH.test(userText) || COMMUNITY_REPORTS.test(userText)
   const externalGuidance = EXTERNAL_GUIDANCE.test(userText)
   const medicalGuidance = MEDICAL_GUIDANCE.test(userText)
   const productInformation = PRODUCT_INFORMATION.test(userText)
+  const causalGuidance = CAUSAL_GUIDANCE.test(userText)
+  const personalDataOnly =
+    PERSONAL_REFERENCE.test(userText) &&
+    requestMentionsTrackedHealthData(userText) &&
+    !GENERAL_SUBJECT.test(userText) &&
+    !INTERPRETIVE_GUIDANCE.test(userText)
 
   const reason: ResearchReason = explicit
     ? 'explicit'
@@ -53,11 +71,16 @@ export function researchPolicyForRequest(userText: string): ResearchPolicy {
         ? 'medical-guidance'
         : productInformation
           ? 'product-information'
-          : 'model-directed'
+          : causalGuidance
+            ? 'causal-guidance'
+            : personalDataOnly
+              ? 'personal-data-only'
+              : 'model-directed'
+  const enabled = reason !== 'personal-data-only'
   const suggestedSearchTurns = BROAD_RESEARCH.test(userText) || (explicit && /\b(compare|several|multiple|sources)\b/i.test(userText))
     ? 2
     : 1
-  return { suggestedSearchTurns, reason }
+  return { enabled, suggestedSearchTurns, reason }
 }
 
 /** Removes direct identifiers and credentials without destroying medically useful detail. */

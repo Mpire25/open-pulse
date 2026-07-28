@@ -32,6 +32,9 @@ export interface AgentDataset {
   data: unknown
 }
 
+const EXPLICIT_COMPARISON_AGGREGATION =
+  /\b(?:total|sum|summed|combined|cumulative|altogether|average|avg|mean|latest|most recent)\b/i
+
 const DATE_SCHEMA = { type: 'string', pattern: '^\\d{4}-\\d{2}-\\d{2}$' }
 const DATASET_ID = { type: 'string', minLength: 1, maxLength: 200 }
 const METRIC = { type: 'string', enum: METRIC_KEYS }
@@ -391,31 +394,69 @@ function latestPresentDate(dataset: DailyDataset, metric: MetricKey): string | n
  */
 export function resolveAutomaticPresentation(
   userText: string,
-  datasets: Map<string, AgentDataset>
+  datasets: Map<string, AgentDataset>,
+  routeReason?: 'exact-value' | 'recent-range' | 'trend'
 ): AssistantVisualPart[] {
   const request = userText.toLowerCase()
-  const asksForTrend = /\b(trend|trending|chart|graph|over time|up or down|increas(?:e|ing)|decreas(?:e|ing))\b/.test(request)
+  const asksForTrend =
+    routeReason === 'trend' ||
+    /\b(trend|trending|chart|graph|over time|up or down|increas(?:e|ing)|decreas(?:e|ing))\b/.test(request)
   const asksForComparison = /\b(compar(?:e|ed|ing|ison)|versus|vs\.?|difference|than last)\b/.test(request)
   const comparesExternalStandard = /\b(nhs|guidelines?|recommend(?:ation|ed)|ideal|target|goal|baseline)\b/.test(request)
-  const asksForExactValue = /\b(how many|how much|what (?:was|is|were|are))\b/.test(request)
+  const asksForExactValue =
+    routeReason === 'exact-value' ||
+    /\b(how many|how much|what (?:was|is|were|are))\b/.test(request)
   const asksForSleepStructure = /\b(sleep stages?|sleep breakdown|sleep structure)\b/.test(request)
   const identifiesOneNight = /\b(last night|yesterday|tonight|on \d{4}-\d{2}-\d{2})\b/.test(request)
-  const asksForSleepNight = asksForSleepStructure || (identifiesOneNight && /\bhow did i sleep\b/.test(request))
+  const asksForSleepNight =
+    asksForSleepStructure ||
+    (identifiesOneNight && /\bhow (?:did i|was my) sleep\b/.test(request))
   const requestedMeal = NUTRITION_MEAL_GROUPS.find((meal) =>
     new RegExp(`\\b${meal.toLowerCase()}\\b`).test(request)
   ) ?? null
   const asksForNutritionCard = requestedMeal != null || /\b(nutrition(?:al)?|macros?|what did i eat|meal breakdown)\b/.test(request)
+  const asksForWorkoutCard =
+    /\b(workouts?|exercise|training|session|run|walk|ride|hike|swim)\b/.test(request)
   const asksForMultiDayRange = /\b(this|last|past|previous) (week|month|year)|\b\d+ (days|weeks|months)\b/.test(request)
+  const asksForRecentRange = routeReason === 'recent-range' || asksForMultiDayRange
   if (asksForComparison && comparesExternalStandard) return []
   if (
     !asksForTrend &&
+    !asksForRecentRange &&
     (!asksForComparison || comparesExternalStandard) &&
     !asksForExactValue &&
     !asksForSleepNight &&
-    !asksForNutritionCard
+    !asksForNutritionCard &&
+    !asksForWorkoutCard
   ) return []
 
   const candidates = [...datasets.entries()].reverse()
+  if (asksForWorkoutCard && !asksForTrend && !asksForComparison) {
+    for (const [datasetId, source] of candidates) {
+      if (source.tool !== 'query_workouts') continue
+      try {
+        const dataset = workoutDataset(datasetId, datasets)
+        const matching = dataset.workouts.filter((workout) =>
+          [workout.name, workout.exerciseType]
+            .filter((value): value is string => typeof value === 'string' && value.length > 0)
+            .some((value) => request.includes(value.toLowerCase()))
+        )
+        const workout =
+          dataset.workouts.length === 1
+            ? dataset.workouts[0]
+            : matching.length === 1
+              ? matching[0]
+              : null
+        if (!workout) continue
+        return resolvePresentation(
+          { workouts: [{ datasetId, workoutId: workout.id }] },
+          datasets
+        ).slice(0, 1)
+      } catch {
+        continue
+      }
+    }
+  }
   if (asksForSleepNight && !asksForTrend && !asksForComparison) {
     for (const [datasetId, source] of candidates) {
       if (source.tool !== 'query_sleep') continue
@@ -477,7 +518,7 @@ export function resolveAutomaticPresentation(
     const metric = requestedMetric(metrics, request)
     const label = fallbackMetricLabel(metric)
 
-    if (asksForTrend) {
+    if (asksForTrend || (asksForRecentRange && !asksForComparison && dataset.start < dataset.end)) {
       return resolvePresentation(
         { metricCards: [], comparisons: [], charts: [{ datasetId, metric, title: `${label} trend` }], workouts: [] },
         datasets
@@ -634,6 +675,28 @@ function requestedComparisonAggregation(value: unknown, field: string): Comparis
     return value
   }
   throw new Error(`${field} requires auto, value, total, average, or latest.`)
+}
+
+export function normalizePresentationAggregations(
+  args: Record<string, unknown>,
+  userText: string
+): Record<string, unknown> {
+  if (EXPLICIT_COMPARISON_AGGREGATION.test(userText) || !Array.isArray(args.comparisons)) {
+    return args
+  }
+  return {
+    ...args,
+    comparisons: args.comparisons.map((raw) => {
+      const comparison = record(raw)
+      return comparison
+        ? {
+            ...comparison,
+            currentAggregation: 'auto',
+            previousAggregation: 'auto'
+          }
+        : raw
+    })
+  }
 }
 
 function resolveComparisonAggregation(
@@ -1025,4 +1088,21 @@ export function resolvePresentation(
 
   if (parts.length > 4) throw new Error('A response can display at most four visual blocks.')
   return parts
+}
+
+/** Returns app-validated comparison facts for the model's written answer. */
+export function presentationFactsForModel(parts: AssistantVisualPart[]): Array<Record<string, unknown>> {
+  return parts.flatMap((part) =>
+    part.type === 'comparison'
+      ? [{
+          type: part.type,
+          metric: part.metric,
+          current: part.current,
+          previous: part.previous,
+          comparable: part.comparable,
+          absoluteChange: part.absoluteChange,
+          percentChange: part.percentChange
+        }]
+      : []
+  )
 }

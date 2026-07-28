@@ -17,26 +17,43 @@ describe('assistant web research policy', () => {
     })
   })
 
-  test('makes brokered research available without forcing it for personal-data questions', () => {
+  test('disables brokered research for personal-data-only questions', () => {
     expect(researchPolicyForRequest('Compare my steps this week with last week')).toEqual({
+      enabled: false,
       suggestedSearchTurns: 1,
-      reason: 'model-directed'
+      reason: 'personal-data-only'
     })
     expect(researchPolicyForRequest('Is my resting heart rate trending up or down?')).toMatchObject({
-      reason: 'model-directed'
+      enabled: false,
+      reason: 'personal-data-only'
+    })
+    expect(researchPolicyForRequest('How much did I weigh yesterday?')).toMatchObject({
+      enabled: false,
+      reason: 'personal-data-only'
+    })
+    expect(researchPolicyForRequest('How many sedentary minutes did I have yesterday?')).toMatchObject({
+      enabled: false,
+      reason: 'personal-data-only'
+    })
+    expect(researchPolicyForRequest('How much fat did I eat yesterday?')).toMatchObject({
+      enabled: false,
+      reason: 'personal-data-only'
     })
   })
 
   test('enables bounded research for external and explicit requests', () => {
     expect(researchPolicyForRequest('What do NHS guidelines recommend for weekly activity?')).toEqual({
+      enabled: true,
       suggestedSearchTurns: 1,
       reason: 'external-guidance'
     })
     expect(researchPolicyForRequest('Research my overall health compared with NHS ideals')).toEqual({
+      enabled: true,
       suggestedSearchTurns: 2,
       reason: 'explicit'
     })
     expect(researchPolicyForRequest('Is this result something I should worry about?')).toMatchObject({
+      enabled: true,
       reason: 'medical-guidance'
     })
     expect(researchPolicyForRequest('Is my resting heart rate normal?')).toMatchObject({
@@ -46,12 +63,53 @@ describe('assistant web research policy', () => {
       reason: 'explicit'
     })
     expect(researchPolicyForRequest('Can a calorie deficit affect sleep?')).toMatchObject({
-      reason: 'model-directed'
+      enabled: true,
+      reason: 'causal-guidance'
     })
     expect(researchPolicyForRequest('Could retatrutide make sleep worse?')).toMatchObject({
-      reason: 'model-directed'
+      enabled: true,
+      reason: 'causal-guidance'
     })
     expect(researchPolicyForRequest('Could creatine affect my sleep?')).toMatchObject({
+      enabled: true,
+      reason: 'causal-guidance'
+    })
+  })
+
+  test('keeps research available when a request is not confidently personal-data-only', () => {
+    for (const request of [
+      'Steps today',
+      'Best sleep tracker released this month?',
+      'What is the best water bottle to buy this month?',
+      'Any new running distance apps this month?',
+      'Which sugar substitute is best, buying some today'
+    ]) {
+      expect(researchPolicyForRequest(request)).toMatchObject({
+        enabled: true,
+        reason: 'model-directed'
+      })
+    }
+    expect(researchPolicyForRequest('Which running shoes are best for overpronation?')).toMatchObject({
+      enabled: true,
+      reason: 'model-directed'
+    })
+    expect(researchPolicyForRequest("What's a good VO2 max for a 35-year-old man?")).toMatchObject({
+      enabled: true,
+      reason: 'model-directed'
+    })
+    expect(researchPolicyForRequest('When did Fitbit add the Air to the Charge lineup?')).toMatchObject({
+      enabled: true,
+      reason: 'product-information'
+    })
+    expect(researchPolicyForRequest('My Fitbit keeps disconnecting, any fixes?')).toMatchObject({
+      enabled: true
+    })
+    expect(researchPolicyForRequest('Why is my HRV low?')).toMatchObject({
+      enabled: true,
+      reason: 'model-directed'
+    })
+    expect(researchPolicyForRequest('What is average sedentary time for adults?')).toMatchObject({
+      enabled: true,
       reason: 'model-directed'
     })
   })

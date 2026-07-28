@@ -1,5 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import {
+  normalizePresentationAggregations,
+  presentationFactsForModel,
   resolveAutomaticPresentation,
   resolvePresentation,
   type AgentDataset
@@ -195,6 +197,85 @@ describe('assistant visual presentation', () => {
     expect(parts[2]).toMatchObject({ type: 'trend-chart', observations: 3 })
   })
 
+  test('returns app-computed comparison facts for the written answer', () => {
+    const [comparison] = resolvePresentation(
+      {
+        comparisons: [
+          {
+            datasetId: 'daily-1',
+            metric: 'steps',
+            title: 'Steps comparison',
+            currentLabel: 'Latest day',
+            currentStartDate: '2026-07-04',
+            currentEndDate: '2026-07-04',
+            currentAggregation: 'auto',
+            previousLabel: 'Previous days',
+            previousStartDate: '2026-07-01',
+            previousEndDate: '2026-07-03',
+            previousAggregation: 'auto'
+          }
+        ]
+      },
+      dailyDatasets()
+    )
+
+    expect(presentationFactsForModel([comparison])).toEqual([
+      {
+        type: 'comparison',
+        metric: 'steps',
+        current: {
+          label: 'Latest day',
+          startDate: '2026-07-04',
+          endDate: '2026-07-04',
+          value: 7_000,
+          aggregation: 'value',
+          observations: 1,
+          days: 1
+        },
+        previous: {
+          label: 'Previous days',
+          startDate: '2026-07-01',
+          endDate: '2026-07-03',
+          value: 5_000,
+          aggregation: 'average',
+          observations: 3,
+          days: 3
+        },
+        comparable: true,
+        absoluteChange: 2_000,
+        percentChange: 40
+      }
+    ])
+  })
+
+  test('uses automatic comparison semantics unless the user explicitly requests an aggregation', () => {
+    const modelRequest = {
+      comparisons: [
+        {
+          datasetId: 'daily-1',
+          metric: 'steps',
+          currentAggregation: 'total',
+          previousAggregation: 'total'
+        }
+      ]
+    }
+
+    expect(
+      normalizePresentationAggregations(
+        modelRequest,
+        'Compare my steps yesterday with last week.'
+      )
+    ).toMatchObject({
+      comparisons: [{ currentAggregation: 'auto', previousAggregation: 'auto' }]
+    })
+    expect(
+      normalizePresentationAggregations(
+        modelRequest,
+        'Compare my total steps yesterday with the total for last week.'
+      )
+    ).toBe(modelRequest)
+  })
+
   test('does not allow a visual to escape its source dataset', () => {
     expect(() =>
       resolvePresentation(
@@ -241,6 +322,42 @@ describe('assistant visual presentation', () => {
         datasets
       )
     ).toThrow('is not in dataset')
+  })
+
+  test('adds a workout-card fallback for one unambiguous session', () => {
+    const datasets = new Map<string, AgentDataset>([
+      [
+        'workouts-1',
+        {
+          tool: 'query_workouts',
+          data: {
+            source: 'live',
+            workouts: [
+              {
+                id: 'strength-session',
+                name: 'Strength training',
+                startTime: '2026-07-27T17:30:00Z',
+                durationMin: 27,
+                elapsedDurationMin: 26.8,
+                calories: 157,
+                distanceKm: null,
+                avgHeartRate: 113,
+                steps: null,
+                activeZoneMinutes: 11
+              }
+            ]
+          }
+        }
+      ]
+    ])
+
+    expect(
+      resolveAutomaticPresentation('What were the details on that strength training session?', datasets)[0]
+    ).toMatchObject({
+      type: 'workout-card',
+      workout: { id: 'strength-session', name: 'Strength training' },
+      date: '2026-07-27'
+    })
   })
 
   test('resolves a sleep-stage card only from a returned night', () => {
@@ -489,8 +606,41 @@ describe('assistant visual presentation', () => {
     expect(resolveAutomaticPresentation('What is my current health compared with NHS ideals?', datasets)).toEqual([])
   })
 
+  test('uses the fast route intent to keep short-answer visuals deterministic', () => {
+    const exact = new Map<string, AgentDataset>([
+      [
+        'hrv-1',
+        {
+          tool: 'query_daily_metrics',
+          data: {
+            source: 'live',
+            requestedRange: { start: '2026-07-27', end: '2026-07-27' },
+            units: { hrvMs: 'ms' },
+            days: { '2026-07-27': { hrvMs: 41.2 } }
+          }
+        }
+      ]
+    ])
+
+    expect(resolveAutomaticPresentation('My HRV yesterday?', exact, 'exact-value')[0]).toMatchObject({
+      type: 'metric-card',
+      metric: 'hrvMs',
+      date: '2026-07-27',
+      value: 41.2
+    })
+    expect(resolveAutomaticPresentation('My steps for the last 4 days', dailyDatasets(), 'recent-range')[0]).toMatchObject({
+      type: 'trend-chart',
+      metric: 'steps',
+      observations: 4
+    })
+  })
+
   test('adds a sleep-stage card fallback for a specific-night breakdown', () => {
     expect(resolveAutomaticPresentation('How did I sleep last night?', sleepDatasets())[0]).toMatchObject({
+      type: 'sleep-card',
+      night: { date: '2026-07-11' }
+    })
+    expect(resolveAutomaticPresentation('How was my sleep yesterday night?', sleepDatasets(), 'exact-value')[0]).toMatchObject({
       type: 'sleep-card',
       night: { date: '2026-07-11' }
     })

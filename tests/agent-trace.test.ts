@@ -15,6 +15,7 @@ describe('agent execution tracing', () => {
       runId: 'run12345',
       sequence: 1,
       elapsedMs: 2,
+      enabled: true,
       maxCalls: 3,
       maxAttempts: 4,
       suggestedSearchTurns: 2,

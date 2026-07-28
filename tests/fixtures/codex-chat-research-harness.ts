@@ -7,6 +7,8 @@ import { StreamTimeoutError } from '../../src/main/stream-timeout'
 
 const HEALTH_DATA_SENTINEL = 'UNRELATED_RAW_HEALTH_DATA'
 const HISTORY_SENTINEL = 'UNRELATED_CONVERSATION_HISTORY'
+let activeHealthTools = 0
+let maxConcurrentHealthTools = 0
 
 mock.module('../../src/main/codex-auth', () => ({
   getCodexAuthGeneration: () => 1,
@@ -36,19 +38,25 @@ mock.module('../../src/main/health-agent-tools', () => ({
     }
   }],
   AGENT_TOOL_LABELS: { query_daily_metrics: 'Reading health metrics' },
-  runHealthAgentTool: async () => JSON.stringify({
-    source: 'live',
-    requestedRange: { start: '2026-07-01', end: '2026-07-07' },
-    units: { hrvMs: 'ms', sleepMinutes: 'min' },
-    observations: { hrvMs: 7, sleepMinutes: 7 },
-    days: {
-      '2026-07-07': {
-        hrvMs: 32,
-        sleepMinutes: 420,
-        unrelatedSecret: HEALTH_DATA_SENTINEL
+  runHealthAgentTool: async () => {
+    activeHealthTools++
+    maxConcurrentHealthTools = Math.max(maxConcurrentHealthTools, activeHealthTools)
+    await new Promise((resolve) => setTimeout(resolve, 5))
+    activeHealthTools--
+    return JSON.stringify({
+      source: 'live',
+      requestedRange: { start: '2026-07-01', end: '2026-07-07' },
+      units: { hrvMs: 'ms', sleepMinutes: 'min' },
+      observations: { hrvMs: 7, sleepMinutes: 7 },
+      days: {
+        '2026-07-07': {
+          hrvMs: 32,
+          sleepMinutes: 420,
+          unrelatedSecret: HEALTH_DATA_SENTINEL
+        }
       }
-    }
-  })
+    })
+  }
 }))
 
 mock.module('../../src/main/assistant-presentation', () => ({
@@ -59,6 +67,8 @@ mock.module('../../src/main/assistant-presentation', () => ({
     strict: true,
     parameters: { type: 'object', properties: {}, required: [], additionalProperties: false }
   },
+  normalizePresentationAggregations: (args: Record<string, unknown>) => args,
+  presentationFactsForModel: () => [],
   resolveAutomaticPresentation: () => [],
   resolvePresentation: () => []
 }))
@@ -97,6 +107,18 @@ function functionCall(name: string, callId: string, args: Record<string, unknown
       arguments: JSON.stringify(args)
     }
   }])
+}
+
+function functionCalls(calls: Array<{ name: string; callId: string; args: Record<string, unknown> }>): Response {
+  return sseResponse(calls.map(({ name, callId, args }) => ({
+    type: 'response.output_item.done',
+    item: {
+      type: 'function_call',
+      name,
+      call_id: callId,
+      arguments: JSON.stringify(args)
+    }
+  })))
 }
 
 function message(text: string): Response {
@@ -148,6 +170,8 @@ function toolNames(body: Record<string, unknown>): string[] {
 
 afterEach(() => {
   globalThis.fetch = originalFetch
+  activeHealthTools = 0
+  maxConcurrentHealthTools = 0
 })
 
 describe('brokered Codex research orchestration', () => {
@@ -210,6 +234,104 @@ describe('brokered Codex research orchestration', () => {
       message: 'The assistant stopped responding for 120 seconds. Try again.'
     })
     expect(sender.events.some((event) => event.type === 'error')).toBe(false)
+  })
+
+  test('answers a high-confidence health request with one model turn', async () => {
+    const sender = new FakeSender()
+    let calls = 0
+    globalThis.fetch = (async (_input, init) => {
+      calls++
+      const body = requestBody(init)
+      expect(toolNames(body)).toEqual([])
+      expect(body.tool_choice).toBe('none')
+      expect(String(body.instructions)).toContain('Answer directly')
+      expect(JSON.stringify(body.input)).toContain('OPENPULSE_PREFETCHED_HEALTH_DATA')
+      return message('You recorded 32 in the prefetched daily data.')
+    }) as typeof fetch
+
+    await runChat(
+      sender as unknown as WebContents,
+      'fast-chat',
+      'fast-run',
+      [{ role: 'user', text: 'What was my HRV yesterday?' }]
+    )
+
+    expect(calls).toBe(1)
+    expect(sender.events.filter((event) => event.type === 'tool')).toHaveLength(1)
+    expect(sender.events.find((event) => event.type === 'done')).toMatchObject({
+      type: 'done',
+      text: 'You recorded 32 in the prefetched daily data.'
+    })
+  })
+
+  test('lets the tool-enabled agent recover an obvious date typo', async () => {
+    const sender = new FakeSender()
+    let calls = 0
+    globalThis.fetch = (async (_input, init) => {
+      calls++
+      const body = requestBody(init)
+      if (calls === 1) {
+        expect(toolNames(body)).toContain('query_daily_metrics')
+        expect(body.tool_choice).toBe('auto')
+        expect(String(body.instructions)).toContain('"yestarday" means "yesterday"')
+        expect(JSON.stringify(body.input)).not.toContain('OPENPULSE_PREFETCHED_HEALTH_DATA')
+        return functionCall('query_daily_metrics', 'typo-health-call', {
+          metrics: ['hrvMs'],
+          startDate: '2026-07-27',
+          endDate: '2026-07-27'
+        })
+      }
+      return message('Your HRV yesterday was 41.2 ms.')
+    }) as typeof fetch
+
+    await runChat(
+      sender as unknown as WebContents,
+      'typo-chat',
+      'typo-run',
+      [{ role: 'user', text: 'What was my HRV yestarday?' }]
+    )
+
+    expect(calls).toBe(2)
+    expect(sender.events.filter((event) => event.type === 'tool')).toHaveLength(1)
+    expect(sender.events.find((event) => event.type === 'done')).toMatchObject({
+      type: 'done',
+      text: 'Your HRV yesterday was 41.2 ms.'
+    })
+  })
+
+  test('runs independent health tools concurrently on the agent path', async () => {
+    const sender = new FakeSender()
+    let calls = 0
+    globalThis.fetch = (async (_input, init) => {
+      calls++
+      const body = requestBody(init)
+      if (calls === 1) {
+        expect(body.parallel_tool_calls).toBe(true)
+        return functionCalls([
+          {
+            name: 'query_daily_metrics',
+            callId: 'steps-call',
+            args: { metrics: ['steps'], startDate: '2026-07-01', endDate: '2026-07-07' }
+          },
+          {
+            name: 'query_daily_metrics',
+            callId: 'hrv-call',
+            args: { metrics: ['hrvMs'], startDate: '2026-07-01', endDate: '2026-07-07' }
+          }
+        ])
+      }
+      return message('Both datasets are ready.')
+    }) as typeof fetch
+
+    await runChat(
+      sender as unknown as WebContents,
+      'parallel-chat',
+      'parallel-run',
+      [{ role: 'user', text: 'Analyse my steps and HRV together.' }]
+    )
+
+    expect(calls).toBe(2)
+    expect(maxConcurrentHealthTools).toBe(2)
   })
 
   test('searches after a health lookup without forwarding history or raw datasets', async () => {

@@ -14,10 +14,17 @@ export type AgentTracePayload =
   | { type: 'auth_ready'; accountScoped: boolean }
   | {
       type: 'research_policy'
+      enabled: boolean
       maxCalls: number
       maxAttempts: number
       suggestedSearchTurns: number
       reason: string
+    }
+  | {
+      type: 'request_routed'
+      mode: 'fast' | 'agent'
+      tool?: string
+      reason?: string
     }
   | {
       type: 'turn_started'
@@ -133,7 +140,11 @@ export function formatAgentTraceEvent(event: AgentTraceEvent): string {
     case 'auth_ready':
       return `${prefix} Auth ready · ${event.accountScoped ? 'ChatGPT account scoped' : 'no account header'}`
     case 'research_policy':
-      return `${prefix} Web research available · up to ${event.maxCalls} successful calls / ${event.maxAttempts} attempts · suggested depth ${event.suggestedSearchTurns} · ${event.reason}`
+      return event.enabled
+        ? `${prefix} Web research available · up to ${event.maxCalls} successful calls / ${event.maxAttempts} attempts · suggested depth ${event.suggestedSearchTurns} · ${event.reason}`
+        : `${prefix} Web research disabled · ${event.reason}`
+    case 'request_routed':
+      return `${prefix} ${event.mode === 'fast' ? 'Fast path' : 'Agent path'}${event.tool ? ` · ${event.tool}` : ''}${event.reason ? ` · ${event.reason}` : ''}`
     case 'turn_started':
       return `${prefix} Turn ${event.turn}/${event.maxTurns}${event.finalResponse ? ' · final response' : ''} · ${event.inputItems} input items · ${event.datasets} datasets · ${event.visuals} visuals`
     case 'model_responded': {
