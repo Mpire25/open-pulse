@@ -570,6 +570,35 @@ describe('assistant visual presentation', () => {
     expect(resolveAutomaticPresentation('What is my current health compared with NHS ideals?', datasets)).toEqual([])
   })
 
+  test('uses the fast route intent to keep short-answer visuals deterministic', () => {
+    const exact = new Map<string, AgentDataset>([
+      [
+        'hrv-1',
+        {
+          tool: 'query_daily_metrics',
+          data: {
+            source: 'live',
+            requestedRange: { start: '2026-07-27', end: '2026-07-27' },
+            units: { hrvMs: 'ms' },
+            days: { '2026-07-27': { hrvMs: 41.2 } }
+          }
+        }
+      ]
+    ])
+
+    expect(resolveAutomaticPresentation('My HRV yesterday?', exact, 'exact-value')[0]).toMatchObject({
+      type: 'metric-card',
+      metric: 'hrvMs',
+      date: '2026-07-27',
+      value: 41.2
+    })
+    expect(resolveAutomaticPresentation('My steps for the last 4 days', dailyDatasets(), 'recent-range')[0]).toMatchObject({
+      type: 'trend-chart',
+      metric: 'steps',
+      observations: 4
+    })
+  })
+
   test('adds a sleep-stage card fallback for a specific-night breakdown', () => {
     expect(resolveAutomaticPresentation('How did I sleep last night?', sleepDatasets())[0]).toMatchObject({
       type: 'sleep-card',

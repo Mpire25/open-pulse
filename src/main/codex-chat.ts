@@ -605,7 +605,11 @@ export async function runChat(
           let automaticParts: AssistantVisualPart[] = []
           const fallbackStartedAt = performance.now()
           try {
-            automaticParts = resolveAutomaticPresentation(latestUserText, datasets)
+            automaticParts = resolveAutomaticPresentation(
+              latestUserText,
+              datasets,
+              fastContext ? fastPlan?.reason : undefined
+            )
           } catch (error) {
             trace.emit({
               type: 'tool_failed',

@@ -394,13 +394,18 @@ function latestPresentDate(dataset: DailyDataset, metric: MetricKey): string | n
  */
 export function resolveAutomaticPresentation(
   userText: string,
-  datasets: Map<string, AgentDataset>
+  datasets: Map<string, AgentDataset>,
+  routeReason?: 'exact-value' | 'recent-range' | 'trend'
 ): AssistantVisualPart[] {
   const request = userText.toLowerCase()
-  const asksForTrend = /\b(trend|trending|chart|graph|over time|up or down|increas(?:e|ing)|decreas(?:e|ing))\b/.test(request)
+  const asksForTrend =
+    routeReason === 'trend' ||
+    /\b(trend|trending|chart|graph|over time|up or down|increas(?:e|ing)|decreas(?:e|ing))\b/.test(request)
   const asksForComparison = /\b(compar(?:e|ed|ing|ison)|versus|vs\.?|difference|than last)\b/.test(request)
   const comparesExternalStandard = /\b(nhs|guidelines?|recommend(?:ation|ed)|ideal|target|goal|baseline)\b/.test(request)
-  const asksForExactValue = /\b(how many|how much|what (?:was|is|were|are))\b/.test(request)
+  const asksForExactValue =
+    routeReason === 'exact-value' ||
+    /\b(how many|how much|what (?:was|is|were|are))\b/.test(request)
   const asksForSleepStructure = /\b(sleep stages?|sleep breakdown|sleep structure)\b/.test(request)
   const identifiesOneNight = /\b(last night|yesterday|tonight|on \d{4}-\d{2}-\d{2})\b/.test(request)
   const asksForSleepNight = asksForSleepStructure || (identifiesOneNight && /\bhow did i sleep\b/.test(request))
@@ -409,9 +414,11 @@ export function resolveAutomaticPresentation(
   ) ?? null
   const asksForNutritionCard = requestedMeal != null || /\b(nutrition(?:al)?|macros?|what did i eat|meal breakdown)\b/.test(request)
   const asksForMultiDayRange = /\b(this|last|past|previous) (week|month|year)|\b\d+ (days|weeks|months)\b/.test(request)
+  const asksForRecentRange = routeReason === 'recent-range' || asksForMultiDayRange
   if (asksForComparison && comparesExternalStandard) return []
   if (
     !asksForTrend &&
+    !asksForRecentRange &&
     (!asksForComparison || comparesExternalStandard) &&
     !asksForExactValue &&
     !asksForSleepNight &&
@@ -480,7 +487,7 @@ export function resolveAutomaticPresentation(
     const metric = requestedMetric(metrics, request)
     const label = fallbackMetricLabel(metric)
 
-    if (asksForTrend) {
+    if (asksForTrend || (asksForRecentRange && !asksForComparison && dataset.start < dataset.end)) {
       return resolvePresentation(
         { metricCards: [], comparisons: [], charts: [{ datasetId, metric, title: `${label} trend` }], workouts: [] },
         datasets
