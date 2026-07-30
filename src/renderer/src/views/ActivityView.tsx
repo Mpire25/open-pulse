@@ -30,6 +30,8 @@ const ACTIVITY_SUMMARY_METRICS: MetricKey[] = [
   'sedentaryMinutes'
 ]
 
+const ACTIVITY_DAILY_CARD_HEIGHT = 'h-[286px]'
+
 const SUMMARY_CELL_CLASSES = [
   'border-b border-hairline',
   'border-b border-l border-hairline',
@@ -205,7 +207,13 @@ export function ActivityView({ date, goals, onOpenMetric, onOpenWorkout, onOpenW
 
       <div className="display-lg-pair-grid display-lg-pair-grid--weighted-135">
         {/* Hourly movement */}
-        <motion.div custom={2} variants={fade} initial="hidden" animate="show" className="min-w-0">
+        <motion.div
+          custom={2}
+          variants={fade}
+          initial="hidden"
+          animate="show"
+          className={`min-w-0 ${ACTIVITY_DAILY_CARD_HEIGHT}`}
+        >
           <InteractivePanel
             className={`flex h-full min-w-0 flex-col gap-3 p-5 ${CARD_HEIGHT.large}`}
             onOpen={() => onOpenMetric('steps', 'D')}
@@ -239,12 +247,18 @@ export function ActivityView({ date, goals, onOpenMetric, onOpenWorkout, onOpenW
         </motion.div>
 
         {/* Workouts */}
-        <motion.div custom={3} variants={fade} initial="hidden" animate="show" className="min-w-0">
+        <motion.div
+          custom={3}
+          variants={fade}
+          initial="hidden"
+          animate="show"
+          className={`min-w-0 ${ACTIVITY_DAILY_CARD_HEIGHT}`}
+        >
           <DrillPanel
             label="Open workout details"
             onOpen={() => onOpenWorkouts('D')}
             className={`h-full min-w-0 ${CARD_HEIGHT.large}`}
-            contentClassName="flex h-full min-w-0 flex-col gap-2 px-3 py-5"
+            contentClassName="flex h-full min-h-0 min-w-0 flex-col gap-2 overflow-hidden px-3 py-5"
           >
             <div className="px-2">
               <DrillHeader
@@ -264,7 +278,7 @@ export function ActivityView({ date, goals, onOpenMetric, onOpenWorkout, onOpenW
             {workouts.isPending ? (
               <SkeletonRows />
             ) : workouts.data && workouts.data.length > 0 ? (
-              <div className="pointer-events-auto">
+              <div className="pointer-events-auto min-h-0 flex-1 overflow-y-auto overscroll-contain pr-1">
                 <WorkoutList workouts={workouts.data} onOpen={onOpenWorkout} />
               </div>
             ) : (
