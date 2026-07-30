@@ -13,6 +13,7 @@ import { fade } from '@/lib/motion'
 import type { MetricKey } from '@shared/types'
 
 const BODY_KEYS: MetricKey[] = ['weightKg', 'bmi']
+const BODY_TREND_CHART_HEIGHT = 170
 
 function bmi(weightKg: number, heightCm: number): number {
   const heightM = heightCm / 100
@@ -76,7 +77,7 @@ export function BodyView({ date, onOpenMetric }: BodyViewProps): React.JSX.Eleme
                   }
                 />
                 {pending ? (
-                  <SkeletonChart variant="line" />
+                  <SkeletonChart height={BODY_TREND_CHART_HEIGHT} variant="line" />
                 ) : hasData ? (
                   <TrendLine
                     data={points.map((p) => ({
@@ -85,11 +86,15 @@ export function BodyView({ date, onOpenMetric }: BodyViewProps): React.JSX.Eleme
                       value: p.value
                     }))}
                     color={def.color}
+                    height={BODY_TREND_CHART_HEIGHT}
                     format={def.format}
                     unitLabel={def.unit}
                   />
                 ) : (
-                  <div className="grid h-[150px] place-items-center text-center text-[12px] text-ink-faint">
+                  <div
+                    className="grid place-items-center text-center text-[12px] text-ink-faint"
+                    style={{ height: BODY_TREND_CHART_HEIGHT }}
+                  >
                     Nothing logged in this window
                   </div>
                 )}

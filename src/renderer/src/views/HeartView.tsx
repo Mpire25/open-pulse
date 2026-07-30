@@ -14,6 +14,7 @@ import { fade } from '@/lib/motion'
 import type { MetricKey } from '@shared/types'
 
 const VITAL_KEYS: MetricKey[] = ['restingHeartRate', 'hrvMs', 'spo2Pct', 'breathingRate', 'skinTempDeltaC']
+const VITAL_CHART_HEIGHT = 150
 
 interface HeartViewProps {
   date: string
@@ -122,25 +123,27 @@ function VitalCard({
           hint={def.hint}
           icon={<Icon size={18} weight="fill" style={{ color: def.color }} />}
           action={
-            pending ? (
-              <SkeletonText className="h-5 w-24" />
-            ) : (
-              <div className="flex items-center gap-2">
-              {def.deltaMode !== 'abs' && (
-                <DeltaChip delta={baselineDeltaPct(value, base)} upIsGood={def.upIsGood} />
+            <div className="flex w-[140px] shrink-0 justify-end">
+              {pending ? (
+                <SkeletonText className="h-5 w-24" />
+              ) : (
+                <div className="flex items-center gap-2">
+                  {def.deltaMode !== 'abs' && (
+                    <DeltaChip delta={baselineDeltaPct(value, base)} upIsGood={def.upIsGood} />
+                  )}
+                  <div className="flex items-baseline gap-1">
+                    <span className="text-[22px] font-semibold tracking-tight text-ink">
+                      {value != null ? def.format(value) : '—'}
+                    </span>
+                    <span className="text-[11.5px] text-ink-dim">{def.unit}</span>
+                  </div>
+                </div>
               )}
-              <div className="flex items-baseline gap-1">
-                <span className="text-[22px] font-semibold tracking-tight text-ink">
-                  {value != null ? def.format(value) : '—'}
-                </span>
-                <span className="text-[11.5px] text-ink-dim">{def.unit}</span>
-              </div>
-              </div>
-            )
+            </div>
           }
         />
         {pending ? (
-          <SkeletonChart height={150} variant="line" />
+          <SkeletonChart height={VITAL_CHART_HEIGHT} variant="line" />
         ) : hasData ? (
           <TrendLine
             data={points.map((p) => ({
@@ -149,7 +152,7 @@ function VitalCard({
               value: p.value
             }))}
             color={def.color}
-            height={150}
+            height={VITAL_CHART_HEIGHT}
             format={def.format}
             baseline={
               def.deltaMode === 'abs'
@@ -160,7 +163,10 @@ function VitalCard({
             domain={metricKey === 'spo2Pct' ? { max: 100 } : undefined}
           />
         ) : (
-          <div className="grid h-[130px] place-items-center text-[12px] text-ink-faint">
+          <div
+            className="grid place-items-center text-[12px] text-ink-faint"
+            style={{ height: VITAL_CHART_HEIGHT }}
+          >
             No data in this window
           </div>
         )}
