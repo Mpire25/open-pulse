@@ -230,6 +230,7 @@ export interface Workout {
   name: string
   startTime: string // ISO
   startMinute?: number | null // civil minute of day where the workout was recorded
+  startUtcOffset?: string | null
   durationMin: number
   elapsedDurationMin?: number | null
   exerciseType?: string | null

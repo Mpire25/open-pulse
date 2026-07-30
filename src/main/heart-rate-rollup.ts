@@ -3,7 +3,16 @@ import type { RollupPoint } from './health-api'
 
 export const HEART_RATE_ROLLUP_WINDOW_SECONDS = 60
 
-export function heartRatePointsFromRollups(points: RollupPoint[]): HeartRatePoint[] {
+interface HeartRateClockAnchor {
+  physicalTime: string
+  minute: number
+}
+
+export function heartRatePointsFromRollups(
+  points: RollupPoint[],
+  clockAnchor?: HeartRateClockAnchor
+): HeartRatePoint[] {
+  const anchorTime = clockAnchor ? Date.parse(clockAnchor.physicalTime) : Number.NaN
   return points
     .flatMap((point) => {
       const start = point.startTime ? new Date(point.startTime) : null
@@ -15,11 +24,12 @@ export function heartRatePointsFromRollups(points: RollupPoint[]): HeartRatePoin
       if (!start || !Number.isFinite(start.getTime()) || !Number.isFinite(bpm) || bpm <= 0) return []
 
       return [{
-        minute:
-          start.getHours() * 60 +
-          start.getMinutes() +
-          start.getSeconds() / 60 +
-          start.getMilliseconds() / 60_000,
+        minute: clockAnchor && Number.isFinite(anchorTime)
+          ? clockAnchor.minute + (start.getTime() - anchorTime) / 60_000
+          : start.getHours() * 60 +
+            start.getMinutes() +
+            start.getSeconds() / 60 +
+            start.getMilliseconds() / 60_000,
         bpm: Math.round(bpm)
       }]
     })

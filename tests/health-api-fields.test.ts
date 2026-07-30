@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, test } from 'bun:test'
 import {
   dailyRollUp,
+  getFirstDataPoint,
   listData,
   listPairedDevices,
   listRawData,
@@ -14,6 +15,30 @@ afterEach(() => {
 })
 
 describe('Health API response projections', () => {
+  test('requests only one lightweight point for an intraday timezone probe', async () => {
+    let requestedUrl = ''
+    globalThis.fetch = (async (input) => {
+      requestedUrl = String(input)
+      return new Response(JSON.stringify({ dataPoints: [] }), { status: 200 })
+    }) as typeof fetch
+
+    await getFirstDataPoint(
+      'token',
+      'heart-rate',
+      'sample',
+      '2026-07-01',
+      '2026-07-02',
+      'google-wearables',
+      0,
+      undefined
+    )
+
+    const url = new URL(requestedUrl)
+    expect(url.pathname).toEndWith('/heart-rate/dataPoints:reconcile')
+    expect(url.searchParams.get('pageSize')).toBe('1')
+    expect(url.searchParams.get('fields')).toBe('dataPoints(heartRate)')
+  })
+
   test('requests one-minute average heart-rate rollups', async () => {
     let requestedUrl = ''
     let requestedBody: Record<string, unknown> = {}

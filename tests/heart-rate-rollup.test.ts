@@ -31,6 +31,19 @@ describe('heart-rate rollup normalization', () => {
     ])
   })
 
+  test('maps workout rollups relative to the tracker-civil start minute', () => {
+    const physicalStart = '2026-07-01T14:00:00.000Z'
+    expect(
+      heartRatePointsFromRollups(
+        [{
+          startTime: '2026-07-01T14:30:00.000Z',
+          heartRate: { beatsPerMinuteAvg: 125 }
+        }],
+        { physicalTime: physicalStart, minute: 10 * 60 }
+      )
+    ).toEqual([{ minute: 10 * 60 + 30, bpm: 125 }])
+  })
+
   test('omits empty or malformed rollup windows', () => {
     expect(
       heartRatePointsFromRollups([

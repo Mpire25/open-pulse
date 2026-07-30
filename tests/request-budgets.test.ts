@@ -109,6 +109,7 @@ describe('health request budgets', () => {
         displayName: 'Run',
         interval: {
           startTime,
+          startUtcOffset: `${-start.getTimezoneOffset() * 60}s`,
           endTime,
           civilStartTime: {
             date: {
@@ -141,20 +142,148 @@ describe('health request budgets', () => {
     expect(requests).toHaveLength(0)
   })
 
-  test('loads intraday heart rate through one rollup request', async () => {
+  test('loads intraday heart rate through a timezone probe and one rollup request', async () => {
     await getIntraday('2026-07-01', false, undefined, 'heart')
 
-    expect(requests).toHaveLength(1)
-    expect(requests[0]).toContain('/heart-rate/dataPoints:rollUp')
-    expect(requests[0]).not.toContain('dataPoints:reconcile')
+    expect(requests).toHaveLength(2)
+    expect(requests.some((url) => url.includes('/heart-rate/dataPoints:rollUp'))).toBe(true)
+    expect(requests.some((url) => url.includes('/heart-rate/dataPoints:reconcile'))).toBe(true)
   })
 
-  test('loads intraday steps through one rollup request', async () => {
+  test('loads intraday steps through a timezone probe and one rollup request', async () => {
     await getIntraday('2026-07-01', false, undefined, 'steps')
 
-    expect(requests).toHaveLength(1)
-    expect(requests[0]).toContain('/steps/dataPoints:rollUp')
-    expect(requests[0]).not.toContain('dataPoints:reconcile')
+    expect(requests).toHaveLength(2)
+    expect(requests.some((url) => url.includes('/steps/dataPoints:rollUp'))).toBe(true)
+    expect(requests.some((url) => url.includes('/steps/dataPoints:reconcile'))).toBe(true)
+  })
+
+  test('keeps hourly steps when the optional timezone probe returns no point', async () => {
+    const date = '2026-07-02'
+    const physicalTime = new Date(2026, 6, 2, 6).toISOString()
+    globalThis.fetch = (async (input) => {
+      requests.push(String(input))
+      if (String(input).includes('/steps/dataPoints:rollUp')) {
+        return new Response(JSON.stringify({
+          rollupDataPoints: [{
+            startTime: physicalTime,
+            steps: { countSum: 500 }
+          }]
+        }), { status: 200 })
+      }
+      return new Response(JSON.stringify({ dataPoints: [] }), { status: 200 })
+    }) as typeof fetch
+
+    const result = await getIntraday(date, false, undefined, 'steps')
+
+    expect(result.stepsHourly[6]).toEqual({ hour: 6, steps: 500 })
+    expect(requests).toHaveLength(2)
+  })
+
+  test('keeps hourly steps when the optional timezone probe fails', async () => {
+    const date = '2026-07-03'
+    const physicalTime = new Date(2026, 6, 3, 9).toISOString()
+    globalThis.fetch = (async (input) => {
+      requests.push(String(input))
+      if (String(input).includes('/steps/dataPoints:rollUp')) {
+        return new Response(JSON.stringify({
+          rollupDataPoints: [{
+            startTime: physicalTime,
+            steps: { countSum: 750 }
+          }]
+        }), { status: 200 })
+      }
+      return new Response(JSON.stringify({
+        error: { code: 400, message: 'Invalid field mask', status: 'INVALID_ARGUMENT' }
+      }), { status: 400 })
+    }) as typeof fetch
+
+    const result = await getIntraday(date, false, undefined, 'steps')
+
+    expect(result.stepsHourly[9]).toEqual({ hour: 9, steps: 750 })
+    expect(requests).toHaveLength(2)
+  })
+
+  test('falls back to civil heart-rate samples when the tracker timezone differs', async () => {
+    const date = '2026-07-01'
+    const physicalTime = new Date(2026, 6, 1, 10, 30).toISOString()
+    const machineOffset = -new Date(physicalTime).getTimezoneOffset() * 60
+    const trackerOffset = machineOffset === 3600 ? 7200 : machineOffset + 3600
+    globalThis.fetch = (async (input) => {
+      requests.push(String(input))
+      const url = new URL(String(input))
+      if (url.pathname.endsWith('/heart-rate/dataPoints:rollUp')) {
+        return new Response(JSON.stringify({
+          rollupDataPoints: [{
+            startTime: physicalTime,
+            heartRate: { beatsPerMinuteAvg: 80 }
+          }]
+        }), { status: 200 })
+      }
+      const isProbe = url.searchParams.get('pageSize') === '1'
+      return new Response(JSON.stringify({
+        dataPoints: [{
+          heartRate: {
+            sampleTime: {
+              physicalTime,
+              utcOffset: `${trackerOffset}s`,
+              civilTime: {
+                date: { year: 2026, month: 7, day: 1 },
+                time: { hours: 10, minutes: 30 }
+              }
+            },
+            ...(isProbe ? {} : { beatsPerMinute: '120' })
+          }
+        }]
+      }), { status: 200 })
+    }) as typeof fetch
+
+    await expect(getIntraday(date, false, undefined, 'heart')).resolves.toMatchObject({
+      heartRate: [{ minute: 10 * 60 + 30, bpm: 120 }]
+    })
+    expect(requests).toHaveLength(3)
+    expect(requests.filter((url) => url.includes('/heart-rate/dataPoints:reconcile'))).toHaveLength(2)
+  })
+
+  test('falls back to civil step intervals when the tracker timezone differs', async () => {
+    const date = '2026-07-01'
+    const physicalTime = new Date(2026, 6, 1, 6).toISOString()
+    const machineOffset = -new Date(physicalTime).getTimezoneOffset() * 60
+    const trackerOffset = machineOffset === 3600 ? 7200 : machineOffset + 3600
+    globalThis.fetch = (async (input) => {
+      requests.push(String(input))
+      const url = new URL(String(input))
+      if (url.pathname.endsWith('/steps/dataPoints:rollUp')) {
+        return new Response(JSON.stringify({
+          rollupDataPoints: [{
+            startTime: physicalTime,
+            steps: { countSum: 100 }
+          }]
+        }), { status: 200 })
+      }
+      const isProbe = url.searchParams.get('pageSize') === '1'
+      return new Response(JSON.stringify({
+        dataPoints: [{
+          steps: {
+            interval: {
+              startTime: physicalTime,
+              startUtcOffset: `${trackerOffset}s`,
+              civilStartTime: {
+                date: { year: 2026, month: 7, day: 1 },
+                time: { hours: 6 }
+              }
+            },
+            ...(isProbe ? {} : { count: '500' })
+          }
+        }]
+      }), { status: 200 })
+    }) as typeof fetch
+
+    const result = await getIntraday(date, false, undefined, 'steps')
+
+    expect(result.stepsHourly[6]).toEqual({ hour: 6, steps: 500 })
+    expect(requests).toHaveLength(3)
+    expect(requests.filter((url) => url.includes('/steps/dataPoints:reconcile'))).toHaveLength(2)
   })
 
   test('loads only the workout heart-rate window when a full day is not cached', async () => {
@@ -188,6 +317,52 @@ describe('health request budgets', () => {
     ])
   })
 
+  test('keeps a travelled workout on its civil date and clock', async () => {
+    const date = '2026-07-01'
+    const startTime = '2026-07-02T03:00:00.000Z'
+    const endTime = '2026-07-02T03:59:00.000Z'
+    const heartTime = '2026-07-02T03:30:00.000Z'
+    const id = 'users/me/dataTypes/exercise/dataPoints/travelled-workout'
+    globalThis.fetch = (async (input) => {
+      requests.push(String(input))
+      if (String(input).includes('/exercise/dataPoints:reconcile')) {
+        return new Response(JSON.stringify({
+          dataPoints: [{
+            dataPointName: id,
+            exercise: {
+              exerciseType: 'RUNNING',
+              interval: {
+                startTime,
+                startUtcOffset: '-14400s',
+                endTime,
+                civilStartTime: {
+                  date: { year: 2026, month: 7, day: 1 },
+                  time: { hours: 23 }
+                }
+              },
+              activeDuration: '3540s'
+            }
+          }]
+        }), { status: 200 })
+      }
+      return new Response(JSON.stringify({
+        rollupDataPoints: [{
+          startTime: heartTime,
+          heartRate: { beatsPerMinuteAvg: 125 }
+        }]
+      }), { status: 200 })
+    }) as typeof fetch
+
+    await getWorkoutsRange(date, date)
+    requests = []
+
+    await expect(getWorkoutHeartRate(date, id)).resolves.toEqual([
+      { minute: 23 * 60 + 30, bpm: 125 }
+    ])
+    expect(requests).toHaveLength(1)
+    expect(requests[0]).toContain('/heart-rate/dataPoints:rollUp')
+  })
+
   test('reuses cached full-day heart rate for a workout without another request', async () => {
     const startTime = new Date(2026, 6, 1, 10).toISOString()
     const endTime = new Date(2026, 6, 1, 11).toISOString()
@@ -198,6 +373,18 @@ describe('health request budgets', () => {
       if (String(input).includes('/exercise/dataPoints:reconcile')) {
         return new Response(JSON.stringify({
           dataPoints: [workoutPoint(id, startTime, endTime)]
+        }), { status: 200 })
+      }
+      if (String(input).includes('/heart-rate/dataPoints:reconcile')) {
+        return new Response(JSON.stringify({
+          dataPoints: [{
+            heartRate: {
+              sampleTime: {
+                physicalTime: heartTime,
+                utcOffset: `${-new Date(heartTime).getTimezoneOffset() * 60}s`
+              }
+            }
+          }]
         }), { status: 200 })
       }
       return new Response(JSON.stringify({
@@ -238,6 +425,18 @@ describe('health request budgets', () => {
           dataPoints: [workoutPoint(id, startTime, endTime)]
         }), { status: 200 })
       }
+      if (String(input).includes('/heart-rate/dataPoints:reconcile')) {
+        return new Response(JSON.stringify({
+          dataPoints: [{
+            heartRate: {
+              sampleTime: {
+                physicalTime: heartTime,
+                utcOffset: `${-new Date(heartTime).getTimezoneOffset() * 60}s`
+              }
+            }
+          }]
+        }), { status: 200 })
+      }
       return new Response(JSON.stringify({
         rollupDataPoints: [{
           startTime: heartTime,
@@ -248,7 +447,7 @@ describe('health request budgets', () => {
 
     await getWorkoutsRange(date, date)
     await getIntraday(date, false, undefined, 'heart')
-    markFetched('intraday-heart-v2', [date], now - 31 * 60_000)
+    markFetched('intraday-heart-v3', [date], now - 31 * 60_000)
     requests = []
 
     await getWorkoutHeartRate(date, id)
@@ -326,13 +525,13 @@ describe('health request budgets', () => {
   test('keeps cold and overlapping Home navigation within budget without refetching covered dates', async () => {
     await loadHome('2026-07-01')
     // Weight bootstraps the cached latest-height input alongside its rollup.
-    expect(requests.length).toBeLessThanOrEqual(13)
+    expect(requests.length).toBeLessThanOrEqual(14)
     expect(requests.some((url) => url.includes('/nutrition-log/dataPoints?'))).toBe(false)
 
     requests = []
     await loadHome('2026-07-02')
     // Height is cached; moving forward only extends the weight window by a day.
-    expect(requests.length).toBeLessThanOrEqual(12)
+    expect(requests.length).toBeLessThanOrEqual(13)
 
     requests = []
     await loadHome('2026-07-01')

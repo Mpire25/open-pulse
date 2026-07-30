@@ -36,6 +36,7 @@ import {
   dailyRollUp,
   dateFromCivil,
   exportExerciseTcx,
+  getFirstDataPoint,
   HealthApiError,
   listData,
   listRawData,
@@ -100,6 +101,8 @@ import {
 } from './shared-operation'
 
 let healthAccountGeneration = 0
+const INTRADAY_STEPS_GROUP = 'intraday-steps-v3'
+const INTRADAY_HEART_GROUP = 'intraday-heart-v3'
 
 class HealthAccountChangedError extends Error {
   constructor() {
@@ -854,7 +857,12 @@ interface RawWorkoutSplit {
 interface RawExercise {
   exerciseType?: string
   displayName?: string
-  interval?: { startTime?: string; endTime?: string; civilStartTime?: CivilDateTime }
+  interval?: {
+    startTime?: string
+    startUtcOffset?: string
+    endTime?: string
+    civilStartTime?: CivilDateTime
+  }
   activeDuration?: string
   metricsSummary?: RawWorkoutMetrics
   splits?: RawWorkoutSplit[]
@@ -927,6 +935,7 @@ function mapWorkout(point: RawDataPoint): Workout | null {
     name: exercise.displayName || String(exercise.exerciseType ?? 'Activity').replaceAll('_', ' '),
     startTime: exercise.interval.startTime,
     startMinute: minuteFromCivil(exercise.interval.civilStartTime),
+    startUtcOffset: exercise.interval.startUtcOffset ?? null,
     durationMin: Math.round(durationSec / 60),
     elapsedDurationMin: intervalSec > 0 ? +(intervalSec / 60).toFixed(1) : null,
     exerciseType: exercise.exerciseType ?? null,
@@ -993,6 +1002,8 @@ function mapWorkout(point: RawDataPoint): Workout | null {
   }
 }
 
+const WORKOUTS_GROUP = 'workouts-v2'
+
 async function ensureWorkoutsRange(
   token: string,
   start: string,
@@ -1001,7 +1012,7 @@ async function ensureWorkoutsRange(
   generation: number,
   signal?: AbortSignal
 ): Promise<void> {
-  const missing = listDates(start, end).filter((d) => force || !isFresh('workouts', d))
+  const missing = listDates(start, end).filter((d) => force || !isFresh(WORKOUTS_GROUP, d))
   if (missing.length === 0) return
   await Promise.all(contiguousDateSpans(missing).map(async (span) => {
     const points = await listData(
@@ -1019,7 +1030,8 @@ async function ensureWorkoutsRange(
     for (const point of points) {
       const workout = mapWorkout(point)
       if (!workout) continue
-      const date = workout.startTime.slice(0, 10)
+      const exercise = point.exercise as RawExercise | undefined
+      const date = dateFromCivil(exercise?.interval?.civilStartTime) ?? workout.startTime.slice(0, 10)
       const list = byDate.get(date) ?? []
       list.push(workout)
       byDate.set(date, list)
@@ -1028,7 +1040,7 @@ async function ensureWorkoutsRange(
       const list = (byDate.get(date) ?? []).sort((a, b) => a.startTime.localeCompare(b.startTime))
       setWorkouts(date, list)
     }
-    markFetched('workouts', span.dates)
+    markFetched(WORKOUTS_GROUP, span.dates)
   }))
 }
 
@@ -1072,10 +1084,8 @@ export async function getWorkoutHeartRate(
 
   const start = new Date(workout.startTime)
   const durationMinutes = workout.elapsedDurationMin ?? workout.durationMin
-  const { dayEndTime } = physicalDayRange(d)
   const end = new Date(Math.min(
     start.getTime() + durationMinutes * 60_000,
-    Date.parse(dayEndTime),
     Date.now()
   ))
   if (
@@ -1093,8 +1103,13 @@ export async function getWorkoutHeartRate(
     point.minute >= startMinute && point.minute <= endMinute
 
   const dayRecord = peekDay(d)
-  const dayHeartRateFetchedAt = fetchedAt('intraday-heart-v2', d)
+  const dayHeartRateFetchedAt = fetchedAt(INTRADAY_HEART_GROUP, d)
+  const workoutOffsetSeconds = utcOffsetSeconds(workout.startUtcOffset)
+  const workoutUsesMachineTime =
+    workoutOffsetSeconds != null &&
+    workoutOffsetSeconds === -start.getTimezoneOffset() * 60
   if (
+    workoutUsesMachineTime &&
     dayRecord?.heartRate !== undefined &&
     dayHeartRateFetchedAt != null &&
     isHealthCacheTimestampFresh(d, dayHeartRateFetchedAt)
@@ -1117,7 +1132,10 @@ export async function getWorkoutHeartRate(
     signal
   )
   assertCurrentAccount(generation)
-  const points = heartRatePointsFromRollups(rollups).filter(inWorkoutWindow)
+  const points = heartRatePointsFromRollups(rollups, {
+    physicalTime: start.toISOString(),
+    minute: startMinute
+  }).filter(inWorkoutWindow)
   workoutHeartRateCache.set(cacheKey, { points, fetchedAt: Date.now() })
   return points
 }
@@ -1149,6 +1167,170 @@ function physicalDayRange(date: string): { startTime: string; endTime: string; d
   }
 }
 
+type IntradayRollupDataType = 'steps' | 'heart-rate'
+
+interface PhysicalTimeAnchor {
+  physicalTime: string
+  utcOffsetSeconds: number
+}
+
+interface IntradayRollupSource {
+  rollups: RollupPoint[]
+  rawPoints: RawDataPoint[] | null
+}
+
+function utcOffsetSeconds(value: unknown): number | null {
+  if (typeof value !== 'string' || !value.endsWith('s')) return null
+  const seconds = Number(value.slice(0, -1))
+  return Number.isFinite(seconds) ? seconds : null
+}
+
+function physicalTimeAnchor(
+  point: RawDataPoint,
+  dataType: IntradayRollupDataType
+): PhysicalTimeAnchor | null {
+  if (dataType === 'steps') {
+    const interval = (point.steps as {
+      interval?: { startTime?: string; startUtcOffset?: string }
+    } | undefined)?.interval
+    const offset = utcOffsetSeconds(interval?.startUtcOffset)
+    return interval?.startTime && offset != null
+      ? { physicalTime: interval.startTime, utcOffsetSeconds: offset }
+      : null
+  }
+
+  const sampleTime = (point.heartRate as {
+    sampleTime?: { physicalTime?: string; utcOffset?: string }
+  } | undefined)?.sampleTime
+  const offset = utcOffsetSeconds(sampleTime?.utcOffset)
+  return sampleTime?.physicalTime && offset != null
+    ? { physicalTime: sampleTime.physicalTime, utcOffsetSeconds: offset }
+    : null
+}
+
+function anchorMatchesMachineTime(anchor: PhysicalTimeAnchor): boolean {
+  const physicalTime = new Date(anchor.physicalTime)
+  return Number.isFinite(physicalTime.getTime()) &&
+    anchor.utcOffsetSeconds === -physicalTime.getTimezoneOffset() * 60
+}
+
+async function intradayRollupSource(
+  token: string,
+  dataType: IntradayRollupDataType,
+  date: string,
+  windowSeconds: number,
+  generation: number,
+  signal?: AbortSignal
+): Promise<IntradayRollupSource> {
+  const { startTime, endTime } = physicalDayRange(date)
+  const kind = dataType === 'steps' ? 'interval' : 'sample'
+  const [anchorPoint, rollups] = await Promise.all([
+    getFirstDataPoint(
+      token,
+      dataType,
+      kind,
+      date,
+      shiftIsoDate(date, 1),
+      'google-wearables',
+      0,
+      signal
+    ).catch((error) => {
+      rethrowIfAborted(error)
+      console.warn(`[health] ${dataType} timezone probe failed for ${date}; using rollup timestamps:`, error)
+      return null
+    }),
+    physicalRollUp(
+      token,
+      dataType,
+      startTime,
+      endTime,
+      windowSeconds,
+      'google-wearables',
+      0,
+      signal
+    )
+  ])
+  assertCurrentAccount(generation)
+
+  // The probe is only a timezone-correctness enhancement. A missing or failed
+  // probe must not erase a valid rollup, which remains the best available data.
+  if (!anchorPoint) return { rollups, rawPoints: null }
+
+  const anchor = physicalTimeAnchor(anchorPoint, dataType)
+  if (anchor && anchorMatchesMachineTime(anchor)) {
+    return { rollups, rawPoints: null }
+  }
+
+  // Physical rollups do not return civil timestamps. When the tracker and Mac
+  // offsets differ (for example after travel), retain the original civil query
+  // so the selected day and hour labels remain exact.
+  const rawPoints = await listData(
+    token,
+    dataType,
+    kind,
+    date,
+    shiftIsoDate(date, 1),
+    'google-wearables',
+    0,
+    signal
+  )
+  assertCurrentAccount(generation)
+  return { rollups: [], rawPoints }
+}
+
+function hourlyStepsFromRawPoints(points: RawDataPoint[]): ReturnType<typeof hourlyStepsFromRollups> {
+  const hourly = new Array(24).fill(0) as number[]
+  let saw = false
+  for (const point of points) {
+    const record = point.steps as
+      | { interval?: { civilStartTime?: CivilDateTime; startTime?: string }; count?: string }
+      | undefined
+    const minute = minuteFromCivil(record?.interval?.civilStartTime)
+    const physicalTime = record?.interval?.startTime
+      ? new Date(record.interval.startTime)
+      : null
+    const fallback = physicalTime && Number.isFinite(physicalTime.getTime())
+      ? physicalTime.getHours() * 60 + physicalTime.getMinutes()
+      : null
+    const value = minute ?? fallback
+    if (value == null) continue
+    saw = true
+    hourly[Math.min(23, Math.floor(value / 60))] += num(record?.count) ?? 0
+  }
+  return saw
+    ? hourly.map((steps, hour) => ({ hour, steps: Math.round(steps) }))
+    : []
+}
+
+function heartRateFromRawPoints(points: RawDataPoint[]): HeartRatePoint[] {
+  return points
+    .flatMap((point) => {
+      const record = point.heartRate as
+        | { sampleTime?: { civilTime?: CivilDateTime; physicalTime?: string }; beatsPerMinute?: string }
+        | undefined
+      const civilTime = record?.sampleTime?.civilTime?.time
+      const physicalTime = record?.sampleTime?.physicalTime
+        ? new Date(record.sampleTime.physicalTime)
+        : null
+      const minute =
+        typeof civilTime?.hours === 'number'
+          ? civilTime.hours * 60 +
+            (civilTime.minutes ?? 0) +
+            (typeof civilTime.seconds === 'number'
+              ? civilTime.seconds / 60
+              : ((physicalTime?.getSeconds() ?? 0) + (physicalTime?.getMilliseconds() ?? 0) / 1000) / 60)
+          : physicalTime && Number.isFinite(physicalTime.getTime())
+            ? physicalTime.getHours() * 60 +
+              physicalTime.getMinutes() +
+              physicalTime.getSeconds() / 60 +
+              physicalTime.getMilliseconds() / 60_000
+            : null
+      const bpm = num(record?.beatsPerMinute)
+      return minute != null && bpm ? [{ minute, bpm }] : []
+    })
+    .sort((a, b) => a.minute - b.minute)
+}
+
 async function ensureIntradaySteps(
   token: string,
   date: string,
@@ -1156,21 +1338,23 @@ async function ensureIntradaySteps(
   generation: number,
   signal?: AbortSignal
 ): Promise<void> {
-  const group = 'intraday-steps-v2'
+  const group = INTRADAY_STEPS_GROUP
   if (!force && isFresh(group, date)) return
-  const { startTime, endTime } = physicalDayRange(date)
-  const points = await physicalRollUp(
+  const source = await intradayRollupSource(
     token,
     'steps',
-    startTime,
-    endTime,
+    date,
     STEPS_ROLLUP_WINDOW_SECONDS,
-    'google-wearables',
-    0,
+    generation,
     signal
   )
   assertCurrentAccount(generation)
-  setIntradaySteps(date, hourlyStepsFromRollups(points))
+  setIntradaySteps(
+    date,
+    source.rawPoints
+      ? hourlyStepsFromRawPoints(source.rawPoints)
+      : hourlyStepsFromRollups(source.rollups)
+  )
   markFetched(group, [date])
 }
 
@@ -1181,21 +1365,20 @@ async function ensureIntradayHeart(
   generation: number,
   signal?: AbortSignal
 ): Promise<void> {
-  const group = 'intraday-heart-v2'
+  const group = INTRADAY_HEART_GROUP
   if (!force && isFresh(group, date)) return
-  const { startTime, endTime } = physicalDayRange(date)
-  const points = await physicalRollUp(
+  const source = await intradayRollupSource(
     token,
     'heart-rate',
-    startTime,
-    endTime,
+    date,
     HEART_RATE_ROLLUP_WINDOW_SECONDS,
-    'google-wearables',
-    0,
+    generation,
     signal
   )
   assertCurrentAccount(generation)
-  const series = heartRatePointsFromRollups(points)
+  const series = source.rawPoints
+    ? heartRateFromRawPoints(source.rawPoints)
+    : heartRatePointsFromRollups(source.rollups)
   setIntradayHeart(date, series)
   markFetched(group, [date])
 }
