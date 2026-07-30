@@ -69,17 +69,28 @@ export function SkeletonRing({
 export function SkeletonChart({
   height = 170,
   columns = 7,
-  variant = 'bar'
+  variant = 'bar',
+  tickEvery,
+  tickWidth = 8
 }: {
   height?: number
   columns?: number
   variant?: 'bar' | 'line'
+  tickEvery?: number
+  tickWidth?: number
 }): React.JSX.Element {
   const heights = [28, 48, 36, 68, 44, 78, 58, 34, 64, 42, 72, 52]
   const plotTop = CHART_PLOT.top
   const plotBottom = CHART_PLOT.bottom
   const axisGutter = CHART_PLOT.right
   const plotHeight = height - plotTop - plotBottom
+  const defaultTickCount = Math.min(columns, 7)
+  const tickIndexes =
+    tickEvery != null
+      ? Array.from({ length: Math.ceil(columns / tickEvery) }, (_, index) => index * tickEvery)
+      : Array.from({ length: defaultTickCount }, (_, index) =>
+          defaultTickCount <= 1 ? 0 : Math.round((index / (defaultTickCount - 1)) * (columns - 1))
+        )
   return (
     <div aria-hidden className="relative w-full overflow-hidden" style={{ height }}>
       {[plotTop, plotTop + plotHeight / 2, plotTop + plotHeight].map((top) => (
@@ -139,9 +150,16 @@ export function SkeletonChart({
           />
         </div>
       )}
-      <div className="absolute bottom-0 left-0 flex justify-between" style={{ right: axisGutter }}>
-        {Array.from({ length: Math.min(columns, 7) }, (_, index) => (
-          <SkeletonBlock key={index} className="h-2 w-2" />
+      <div className="absolute bottom-0 left-0 h-2" style={{ right: axisGutter }}>
+        {tickIndexes.map((index) => (
+          <SkeletonBlock
+            key={index}
+            className="absolute top-0 h-2 -translate-x-1/2"
+            style={{
+              left: `${((index + 0.5) / columns) * 100}%`,
+              width: tickWidth
+            }}
+          />
         ))}
       </div>
     </div>

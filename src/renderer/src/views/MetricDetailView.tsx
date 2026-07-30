@@ -27,7 +27,11 @@ import {
 import { formatHour, formatInt, formatMinuteOfDay, longDate, shortDate, weekdayShort } from '@/lib/format'
 import type { MetricRange } from '@/lib/metric-navigation'
 import { fade } from '@/lib/motion'
-import { isActivityIntradayMetric, isHeartDetailMetric } from '@shared/types'
+import {
+  ACTIVITY_INTRADAY_WINDOW_MINUTES,
+  isActivityIntradayMetric,
+  isHeartDetailMetric
+} from '@shared/types'
 import type {
   ActivityIntradayMetric,
   ActivityIntradayResult,
@@ -46,7 +50,17 @@ const RANGES: Array<{ id: MetricRange; label: string; days: number; fetchDays: n
   { id: 'Y', label: 'Y', days: 365, fetchDays: 365 }
 ]
 
+const HOURS_PER_DAY = 24
+const ACTIVITY_INTRADAY_COLUMN_COUNT = (HOURS_PER_DAY * 60) / ACTIVITY_INTRADAY_WINDOW_MINUTES
+const DAY_CONTEXT_COLUMN_COUNT = 14
+
 const SUMMARY_ONLY_DAILY_METRICS = new Set<MetricKey>(['hrvMs', 'spo2Pct', 'breathingRate', 'skinTempDeltaC'])
+
+function activityBreakdownCount(metricKey: MetricKey): number {
+  if (metricKey === 'caloriesOut') return 2
+  if (metricKey === 'activeMinutes' || metricKey === 'activeZoneMinutes') return 3
+  return 0
+}
 
 interface MetricDetailViewProps {
   metricKey: MetricKey
@@ -173,15 +187,31 @@ function MetricDetailSkeleton({
   const spec = RANGES.find((candidate) => candidate.id === range)!
 
   if (range === 'D') {
+    const isActivityTimeline = isActivityIntradayMetric(metricKey)
     const hasTimeline =
       metricKey === 'steps' ||
       metricKey === 'restingHeartRate' ||
-      isActivityIntradayMetric(metricKey)
+      isActivityTimeline
     const skeletonVariant =
       metricKey === 'restingHeartRate' || (!hasTimeline && METRICS[metricKey].chart === 'line')
         ? 'line'
         : 'bar'
-    const breakdownCount = metricKey === 'caloriesOut' ? 2 : ['activeMinutes', 'activeZoneMinutes'].includes(metricKey) ? 3 : 0
+    const columns =
+      metricKey === 'steps'
+        ? HOURS_PER_DAY
+        : isActivityTimeline
+          ? ACTIVITY_INTRADAY_COLUMN_COUNT
+          : DAY_CONTEXT_COLUMN_COUNT
+    const breakdownCount = activityBreakdownCount(metricKey)
+    const timelineTickEvery = metricKey === 'steps' || isActivityTimeline ? 6 : undefined
+    const sectionHint =
+      metricKey === 'steps'
+        ? 'Steps per hour'
+        : isActivityTimeline
+          ? `${ACTIVITY_INTRADAY_WINDOW_MINUTES}-minute windows`
+          : metricKey === 'restingHeartRate'
+            ? 'Heart rate samples'
+            : 'The last 14 days, this day highlighted'
     return (
       <>
         <Panel className={`flex flex-wrap items-center justify-between gap-6 p-6 ${CARD_HEIGHT.summary}`}>
@@ -196,27 +226,16 @@ function MetricDetailSkeleton({
         <Panel className={`flex flex-col gap-3 p-5 ${CARD_HEIGHT.detail}`}>
           <SectionHeader
             title={hasTimeline ? 'Across the day' : 'In context'}
-            hint={hasTimeline ? 'Loading intraday data' : 'The last 14 days, this day highlighted'}
+            hint={sectionHint}
           />
           <SkeletonChart
             height={breakdownCount > 0 ? 170 : 210}
-            columns={hasTimeline ? 16 : 12}
+            columns={columns}
             variant={skeletonVariant}
+            tickEvery={timelineTickEvery}
+            tickWidth={timelineTickEvery != null ? 40 : undefined}
           />
-          {breakdownCount > 0 && (
-            <div
-              className="grid gap-4 border-t border-hairline pt-3"
-              style={{ gridTemplateColumns: `repeat(${breakdownCount}, minmax(0, 1fr))` }}
-              aria-hidden
-            >
-              {Array.from({ length: breakdownCount }, (_, index) => (
-                <div key={index} className="flex flex-col gap-2">
-                  <SkeletonText className="w-16" />
-                  <SkeletonText className="h-4 w-14" />
-                </div>
-              ))}
-            </div>
-          )}
+          {breakdownCount > 0 && <ActivityBreakdownSkeleton count={breakdownCount} />}
         </Panel>
         )}
         <HistoryListSkeleton />
@@ -395,7 +414,12 @@ function DayDetail({
         {metricKey === 'steps' && intradayPending ? (
           <Panel className={`flex flex-col gap-3 p-5 ${CARD_HEIGHT.detail}`}>
             <SectionHeader title="Across the day" hint="Steps per hour" />
-            <SkeletonChart height={210} columns={12} />
+            <SkeletonChart
+              height={210}
+              columns={HOURS_PER_DAY}
+              tickEvery={6}
+              tickWidth={40}
+            />
           </Panel>
         ) : metricKey === 'steps' && intradayData && intradayData.stepsHourly.length > 0 ? (
           <Panel className={`flex flex-col gap-3 p-5 ${CARD_HEIGHT.detail}`}>
@@ -516,12 +540,21 @@ function ActivityIntradayPanel({
   const def = METRICS[metricKey]
   const recorded = data?.points.some((point) => point.value != null) ?? false
   const intervalLabel = `${data?.windowMinutes ?? 30}-minute windows`
+  const breakdownCount = activityBreakdownCount(metricKey)
 
   return (
     <Panel className={`flex flex-col gap-3 p-5 ${CARD_HEIGHT.detail}`}>
       <SectionHeader title="Across the day" hint={intervalLabel} />
       {pending ? (
-        <SkeletonChart height={210} columns={16} />
+        <>
+          <SkeletonChart
+            height={breakdownCount > 0 ? 170 : 210}
+            columns={ACTIVITY_INTRADAY_COLUMN_COUNT}
+            tickEvery={6}
+            tickWidth={40}
+          />
+          {breakdownCount > 0 && <ActivityBreakdownSkeleton count={breakdownCount} />}
+        </>
       ) : error ? (
         <div className="grid h-[190px] place-items-center text-[13px] text-ink-faint">
           Intraday data could not be loaded for this metric.
@@ -563,6 +596,26 @@ function ActivityIntradayPanel({
         </div>
       )}
     </Panel>
+  )
+}
+
+function ActivityBreakdownSkeleton({ count }: { count: number }): React.JSX.Element {
+  return (
+    <div
+      className="grid divide-x divide-hairline border-t border-hairline pt-3"
+      style={{ gridTemplateColumns: `repeat(${count}, minmax(0, 1fr))` }}
+      aria-hidden
+    >
+      {Array.from({ length: count }, (_, index) => (
+        <div key={index} className="px-4 first:pl-0 last:pr-0">
+          <SkeletonBlock className="h-[11px] w-20" />
+          <div className="mt-1 flex items-center gap-2">
+            <SkeletonBlock className="h-[15px] w-14" />
+            <SkeletonBlock className="h-[10px] w-8" />
+          </div>
+        </div>
+      ))}
+    </div>
   )
 }
 
