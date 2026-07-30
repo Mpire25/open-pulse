@@ -487,7 +487,7 @@ function MacroBreakdownSkeleton(): React.JSX.Element {
       <SkeletonBlock className="h-3 w-full rounded-full" />
       <div className="grid grid-cols-3 gap-3">
         {MACROS.map((macro) => (
-          <div key={macro.key} className="flex flex-col gap-2 px-2 py-1.5">
+          <div key={macro.key} className="-m-1 flex min-w-0 flex-col gap-2 rounded-xl p-3">
             <SkeletonText className="w-14" />
             <div className="flex items-center gap-3">
               <div className="flex flex-col gap-2">
@@ -501,9 +501,9 @@ function MacroBreakdownSkeleton(): React.JSX.Element {
       </div>
       <div className="display-sm-four-grid gap-3 border-t border-hairline pt-3">
         {SECONDARY_NUTRIENTS.map((nutrient) => (
-          <div key={nutrient.key} className="flex flex-col gap-1.5 px-2">
-            <SkeletonText className="w-16" />
-            <SkeletonBlock className="h-4 w-12" />
+          <div key={nutrient.key} className="min-w-0 rounded-xl px-2 py-1">
+            <SkeletonText className="h-4 w-16" />
+            <SkeletonBlock className="mt-1 h-5 w-12" />
           </div>
         ))}
       </div>
