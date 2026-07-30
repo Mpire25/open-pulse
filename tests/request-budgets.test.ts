@@ -21,6 +21,7 @@ const {
   getIntraday,
   getSeries,
   getSleepRange,
+  getWorkoutHeartRate,
   getWorkoutsRange,
   resetHealthAccount
 } = await import('../src/main/health-service')
@@ -93,6 +94,34 @@ afterAll(() => {
 })
 
 describe('health request budgets', () => {
+  function workoutPoint(
+    id: string,
+    startTime: string,
+    endTime: string
+  ): Record<string, unknown> {
+    const start = new Date(startTime)
+    return {
+      dataPointName: id,
+      exercise: {
+        exerciseType: 'RUNNING',
+        displayName: 'Run',
+        interval: {
+          startTime,
+          endTime,
+          civilStartTime: {
+            date: {
+              year: start.getFullYear(),
+              month: start.getMonth() + 1,
+              day: start.getDate()
+            },
+            time: { hours: start.getHours(), minutes: start.getMinutes() }
+          }
+        },
+        activeDuration: `${(Date.parse(endTime) - Date.parse(startTime)) / 1000}s`
+      }
+    }
+  }
+
   test('rejects health reads while Google is disconnected instead of substituting generated data', async () => {
     disconnectGoogle()
     resetHealthAccount()
@@ -124,6 +153,67 @@ describe('health request budgets', () => {
     expect(requests).toHaveLength(1)
     expect(requests[0]).toContain('/steps/dataPoints:rollUp')
     expect(requests[0]).not.toContain('dataPoints:reconcile')
+  })
+
+  test('loads only the workout heart-rate window when a full day is not cached', async () => {
+    const startTime = new Date(2026, 6, 1, 10).toISOString()
+    const endTime = new Date(2026, 6, 1, 11).toISOString()
+    const id = 'users/me/dataTypes/exercise/dataPoints/workout-1'
+    const bodies: Record<string, unknown>[] = []
+    globalThis.fetch = (async (input, init) => {
+      requests.push(String(input))
+      if (String(input).includes('/exercise/dataPoints:reconcile')) {
+        return new Response(JSON.stringify({
+          dataPoints: [workoutPoint(id, startTime, endTime)]
+        }), { status: 200 })
+      }
+      bodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>)
+      return new Response(JSON.stringify({ rollupDataPoints: [] }), { status: 200 })
+    }) as typeof fetch
+
+    await getWorkoutsRange('2026-07-01', '2026-07-01')
+    requests = []
+    await getWorkoutHeartRate('2026-07-01', id)
+
+    expect(requests).toHaveLength(1)
+    expect(requests[0]).toContain('/heart-rate/dataPoints:rollUp')
+    expect(bodies).toEqual([
+      expect.objectContaining({
+        range: { startTime, endTime },
+        windowSize: '60s',
+        pageSize: 60
+      })
+    ])
+  })
+
+  test('reuses cached full-day heart rate for a workout without another request', async () => {
+    const startTime = new Date(2026, 6, 1, 10).toISOString()
+    const endTime = new Date(2026, 6, 1, 11).toISOString()
+    const heartTime = new Date(2026, 6, 1, 10, 30).toISOString()
+    const id = 'users/me/dataTypes/exercise/dataPoints/workout-2'
+    globalThis.fetch = (async (input) => {
+      requests.push(String(input))
+      if (String(input).includes('/exercise/dataPoints:reconcile')) {
+        return new Response(JSON.stringify({
+          dataPoints: [workoutPoint(id, startTime, endTime)]
+        }), { status: 200 })
+      }
+      return new Response(JSON.stringify({
+        rollupDataPoints: [{
+          startTime: heartTime,
+          heartRate: { beatsPerMinuteAvg: 120 }
+        }]
+      }), { status: 200 })
+    }) as typeof fetch
+
+    await getWorkoutsRange('2026-07-01', '2026-07-01')
+    await getIntraday('2026-07-01', false, undefined, 'heart')
+    requests = []
+
+    await expect(getWorkoutHeartRate('2026-07-01', id)).resolves.toEqual([
+      { minute: 10 * 60 + 30, bpm: 120 }
+    ])
+    expect(requests).toHaveLength(0)
   })
 
   test('surfaces Google refresh failures instead of substituting generated data', async () => {

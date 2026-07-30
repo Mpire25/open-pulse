@@ -17,6 +17,7 @@ import type {
   HeartDetailMetric,
   HeartDetailResult,
   HeartDetailScope,
+  HeartRatePoint,
   IntradaySnapshot,
   IntradayScope,
   MetricKey,
@@ -1034,6 +1035,7 @@ async function ensureWorkoutsRange(
 }
 
 const workoutTrackCache = new Map<string, WorkoutTrackResult>()
+const workoutHeartRateCache = new Map<string, HeartRatePoint[]>()
 
 export async function getWorkoutTrack(workoutId: string, signal?: AbortSignal): Promise<WorkoutTrackResult> {
   const generation = healthAccountGeneration
@@ -1050,6 +1052,74 @@ export async function getWorkoutTrack(workoutId: string, signal?: AbortSignal): 
     if (error instanceof HealthApiError && [400, 403, 404].includes(error.status)) return { points: [] }
     throw error
   }
+}
+
+export async function getWorkoutHeartRate(
+  date: string,
+  workoutId: string,
+  signal?: AbortSignal
+): Promise<HeartRatePoint[]> {
+  const generation = healthAccountGeneration
+  const [d] = normalizeRange(date, date)
+  const token = await requireGoogleAccessToken()
+  assertCurrentAccount(generation)
+
+  let workout = peekDay(d)?.workouts?.find((candidate) => candidate.id === workoutId)
+  if (!workout) {
+    await ensureWorkoutsRange(token, d, d, false, generation, signal)
+    assertCurrentAccount(generation)
+    workout = peekDay(d)?.workouts?.find((candidate) => candidate.id === workoutId)
+  }
+  if (!workout) throw new Error('The selected workout is no longer available.')
+
+  const start = new Date(workout.startTime)
+  const durationMinutes = workout.elapsedDurationMin ?? workout.durationMin
+  const { dayEndTime } = physicalDayRange(d)
+  const end = new Date(Math.min(
+    start.getTime() + durationMinutes * 60_000,
+    Date.parse(dayEndTime),
+    Date.now()
+  ))
+  if (
+    !Number.isFinite(start.getTime()) ||
+    !Number.isFinite(durationMinutes) ||
+    durationMinutes <= 0 ||
+    end.getTime() <= start.getTime()
+  ) {
+    return []
+  }
+
+  const startMinute = workout.startMinute ?? start.getHours() * 60 + start.getMinutes()
+  const endMinute = Math.min(1440, startMinute + durationMinutes)
+  const inWorkoutWindow = (point: HeartRatePoint): boolean =>
+    point.minute >= startMinute && point.minute <= endMinute
+
+  const dayRecord = peekDay(d)
+  if (
+    dayRecord?.heartRate !== undefined &&
+    fetchedAt('intraday-heart-v2', d) != null
+  ) {
+    return dayRecord.heartRate.filter(inWorkoutWindow)
+  }
+
+  const cacheKey = `${d}:${workoutId}`
+  const cached = workoutHeartRateCache.get(cacheKey)
+  if (cached) return cached
+
+  const rollups = await physicalRollUp(
+    token,
+    'heart-rate',
+    start.toISOString(),
+    end.toISOString(),
+    HEART_RATE_ROLLUP_WINDOW_SECONDS,
+    'google-wearables',
+    0,
+    signal
+  )
+  assertCurrentAccount(generation)
+  const points = heartRatePointsFromRollups(rollups).filter(inWorkoutWindow)
+  workoutHeartRateCache.set(cacheKey, points)
+  return points
 }
 
 // ---------------------------------------------------------------------------
@@ -1467,6 +1537,7 @@ export function clearHealthCache(): void {
   markAllStale()
   devicesCache = null
   workoutTrackCache.clear()
+  workoutHeartRateCache.clear()
   nutritionRawCache.clear()
   weightRawCache.clear()
   heartThresholdRawCache.clear()
@@ -1484,6 +1555,7 @@ export function resetHealthAccount(): void {
   inFlight.clear()
   devicesCache = null
   workoutTrackCache.clear()
+  workoutHeartRateCache.clear()
   nutritionRawCache.clear()
   nutritionRawInFlight.clear()
   weightRawCache.clear()

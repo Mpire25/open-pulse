@@ -30,6 +30,7 @@ import {
   getNutritionLogs,
   getSeries,
   getSleepRange,
+  getWorkoutHeartRate,
   getWorkoutTrack,
   getWorkoutsRange,
   resetHealthAccount
@@ -215,6 +216,9 @@ export function registerIpc(): void {
     getWorkoutsRange(start, end, force, signal)
   )
   healthHandle('health:workout-track', (_e, signal, workoutId: string) => getWorkoutTrack(workoutId, signal))
+  healthHandle('health:workout-heart-rate', (_e, signal, date: string, workoutId: string) =>
+    getWorkoutHeartRate(date, workoutId, signal)
+  )
   healthHandle('health:intraday', (_e, signal, date: string, scopeOrForce?: IntradayScope | boolean, force?: boolean) => {
     const scope = typeof scopeOrForce === 'string' ? scopeOrForce : 'both'
     if (!['steps', 'heart', 'both'].includes(scope)) throw new Error('Unsupported intraday scope')
