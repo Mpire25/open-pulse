@@ -17,7 +17,6 @@ import type {
   HeartDetailMetric,
   HeartDetailResult,
   HeartDetailScope,
-  HourlySteps,
   IntradaySnapshot,
   IntradayScope,
   MetricKey,
@@ -85,6 +84,10 @@ import {
   HEART_RATE_ROLLUP_WINDOW_SECONDS,
   heartRatePointsFromRollups
 } from './heart-rate-rollup'
+import {
+  STEPS_ROLLUP_WINDOW_SECONDS,
+  hourlyStepsFromRollups
+} from './steps-rollup'
 import { mapSleep } from './sleep-detail'
 import { nutrientGrams, nutrientMineralGrams } from './nutrition'
 import { parseExerciseTcx } from './tcx'
@@ -1083,26 +1086,22 @@ async function ensureIntradaySteps(
   generation: number,
   signal?: AbortSignal
 ): Promise<void> {
-  if (!force && isFresh('intraday-steps', date)) return
-  const points = await listData(token, 'steps', 'interval', date, shiftIsoDate(date, 1), 'google-wearables', 0, signal)
+  const group = 'intraday-steps-v2'
+  if (!force && isFresh(group, date)) return
+  const { startTime, endTime } = physicalDayRange(date)
+  const points = await physicalRollUp(
+    token,
+    'steps',
+    startTime,
+    endTime,
+    STEPS_ROLLUP_WINDOW_SECONDS,
+    'google-wearables',
+    0,
+    signal
+  )
   assertCurrentAccount(generation)
-  const hourly = new Array(24).fill(0) as number[]
-  let saw = false
-  for (const p of points) {
-    const record = p.steps as
-      | { interval?: { civilStartTime?: CivilDateTime; startTime?: string }; count?: string }
-      | undefined
-    const minute = minuteFromCivil(record?.interval?.civilStartTime)
-    const fallback = record?.interval?.startTime
-      ? new Date(record.interval.startTime).getHours() * 60 + new Date(record.interval.startTime).getMinutes()
-      : null
-    const m = minute ?? fallback
-    if (m == null) continue
-    saw = true
-    hourly[Math.min(23, Math.floor(m / 60))] += num(record?.count) ?? 0
-  }
-  setIntradaySteps(date, saw ? hourly.map((value, hour) => ({ hour, steps: Math.round(value) })) : [])
-  markFetched('intraday-steps', [date])
+  setIntradaySteps(date, hourlyStepsFromRollups(points))
+  markFetched(group, [date])
 }
 
 async function ensureIntradayHeart(

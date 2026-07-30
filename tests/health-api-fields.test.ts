@@ -44,6 +44,36 @@ describe('Health API response projections', () => {
     })
   })
 
+  test('requests one-hour step-count rollups', async () => {
+    let requestedUrl = ''
+    let requestedBody: Record<string, unknown> = {}
+    globalThis.fetch = (async (input, init) => {
+      requestedUrl = String(input)
+      requestedBody = JSON.parse(String(init?.body)) as Record<string, unknown>
+      return new Response(JSON.stringify({ rollupDataPoints: [] }), { status: 200 })
+    }) as typeof fetch
+
+    await physicalRollUp(
+      'token',
+      'steps',
+      '2026-07-01T00:00:00Z',
+      '2026-07-02T00:00:00Z',
+      60 * 60,
+      'google-wearables'
+    )
+
+    const url = new URL(requestedUrl)
+    expect(url.pathname).toEndWith('/steps/dataPoints:rollUp')
+    expect(url.searchParams.get('fields')).toBe(
+      'nextPageToken,rollupDataPoints(startTime,steps/countSum)'
+    )
+    expect(requestedBody).toMatchObject({
+      windowSize: '3600s',
+      pageSize: 24,
+      dataSourceFamily: 'users/me/dataSourceFamilies/google-wearables'
+    })
+  })
+
   test('requests only the heart-rate data payload and pagination token', async () => {
     let requestedUrl = ''
     globalThis.fetch = (async (input) => {
