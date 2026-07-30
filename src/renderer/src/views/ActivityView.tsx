@@ -224,7 +224,7 @@ export function ActivityView({ date, goals, onOpenMetric, onOpenWorkout, onOpenW
               icon={<Footprints size={18} weight="fill" style={{ color: 'var(--color-activity)' }} />}
             />
             {intraday.isPending ? (
-              <SkeletonChart height={180} columns={12} />
+              <SkeletonChart height={180} columns={24} tickEvery={6} tickWidth={40} />
             ) : intraday.data && intraday.data.stepsHourly.length > 0 ? (
                 <ColumnChart
                   data={intraday.data.stepsHourly.map((h) => ({

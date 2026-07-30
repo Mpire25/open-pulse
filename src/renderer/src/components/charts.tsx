@@ -7,7 +7,7 @@ import { animate, motion, useMotionValue, useReducedMotion, useTransform } from 
 import { formatMinuteOfDay } from '@/lib/format'
 import { sampleHeartRateForChart } from '@/lib/heart-rate'
 import { lineAxis } from '@/lib/chart-scale'
-import { CHART_PLOT } from '@/lib/layout-contracts'
+import { CHART_PLOT, chartColumnWidth } from '@/lib/layout-contracts'
 import { cn } from '@/lib/utils'
 
 // ---------------------------------------------------------------------------
@@ -152,7 +152,7 @@ export function ColumnChart({
   const max = niceMax(rawMax)
   const band = data.length > 0 ? plotW / data.length : 0
   const keyboardSelectionEnabled = data.length <= MAX_KEYBOARD_SELECTABLE_POINTS
-  const barW = Math.min(24, Math.max(3, band - 2))
+  const barW = chartColumnWidth(band, data.length)
   const y = (v: number): number => pad.top + plotH * (1 - v / max)
 
   const gridValues = [0, max / 2, max]
@@ -380,7 +380,7 @@ export function StackedColumnChart({
   const totals = data.map((datum) => datum.segments.reduce((sum, segment) => sum + segment.value, 0))
   const max = niceMax(Math.max(0, ...totals))
   const band = data.length > 0 ? plotW / data.length : 0
-  const barW = Math.min(24, Math.max(3, band - 2))
+  const barW = chartColumnWidth(band, data.length)
   const keyboardSelectionEnabled = data.length <= MAX_KEYBOARD_SELECTABLE_POINTS
   const y = (value: number): number => pad.top + plotH * (1 - value / max)
   const gridValues = [0, max / 2, max]

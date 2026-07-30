@@ -145,6 +145,8 @@ export interface IntradaySnapshot {
 
 export type IntradayScope = 'steps' | 'heart' | 'both'
 
+export const ACTIVITY_INTRADAY_WINDOW_MINUTES = 30
+
 export const ACTIVITY_INTRADAY_METRICS = [
   'distanceKm',
   'caloriesOut',

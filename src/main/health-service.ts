@@ -31,7 +31,7 @@ import type {
   WorkoutTrackResult,
   WorkoutsResult
 } from '../shared/types'
-import { METRIC_KEYS } from '../shared/types'
+import { ACTIVITY_INTRADAY_WINDOW_MINUTES, METRIC_KEYS } from '../shared/types'
 import { getGoogleAccessToken } from './google-auth'
 import {
   dailyRollUp,
@@ -1048,8 +1048,6 @@ export async function getWorkoutTrack(workoutId: string, signal?: AbortSignal): 
 
 // ---------------------------------------------------------------------------
 // Intraday (selected day only — always priority 0)
-
-const ACTIVITY_INTRADAY_WINDOW_MINUTES = 30
 
 const ACTIVITY_INTRADAY_DATA_TYPES: Record<ActivityIntradayMetric, string> = {
   distanceKm: 'distance',

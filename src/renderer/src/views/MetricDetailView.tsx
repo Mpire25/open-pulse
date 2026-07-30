@@ -3,6 +3,7 @@
 // One data-driven page — the registry decides naming, color, chart type, and
 // aggregation, so every metric behaves identically.
 
+import { useEffect, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
 import { ArrowLeft } from '@phosphor-icons/react'
 import { Panel, SectionHeader } from '@/components/Panel'
@@ -25,9 +26,14 @@ import {
   type WeeklySeriesPoint
 } from '@/lib/metrics'
 import { formatHour, formatInt, formatMinuteOfDay, longDate, shortDate, weekdayShort } from '@/lib/format'
+import { isDelayedSkeletonVisible } from '@/lib/loading-state'
 import type { MetricRange } from '@/lib/metric-navigation'
 import { fade } from '@/lib/motion'
-import { isActivityIntradayMetric, isHeartDetailMetric } from '@shared/types'
+import {
+  ACTIVITY_INTRADAY_WINDOW_MINUTES,
+  isActivityIntradayMetric,
+  isHeartDetailMetric
+} from '@shared/types'
 import type {
   ActivityIntradayMetric,
   ActivityIntradayResult,
@@ -46,7 +52,64 @@ const RANGES: Array<{ id: MetricRange; label: string; days: number; fetchDays: n
   { id: 'Y', label: 'Y', days: 365, fetchDays: 365 }
 ]
 
+const HOURS_PER_DAY = 24
+const ACTIVITY_INTRADAY_COLUMN_COUNT = (HOURS_PER_DAY * 60) / ACTIVITY_INTRADAY_WINDOW_MINUTES
+const DAY_CONTEXT_COLUMN_COUNT = 14
+
 const SUMMARY_ONLY_DAILY_METRICS = new Set<MetricKey>(['hrvMs', 'spo2Pct', 'breathingRate', 'skinTempDeltaC'])
+
+type ActivityBreakdownLayout = Pick<ActivityIntradayResult['breakdown'][number], 'key' | 'unit'>
+
+const BREAKDOWN_LABELS: Record<ActivityBreakdownLayout['key'], string> = {
+  light: 'Light',
+  moderate: 'Moderate',
+  vigorous: 'Vigorous',
+  fatBurn: 'Fat burn',
+  cardio: 'Cardio',
+  peak: 'Peak',
+  activeEnergy: 'Active energy',
+  basalEnergy: 'Basal energy'
+}
+
+const ACTIVITY_BREAKDOWN_LAYOUTS: Partial<Record<ActivityIntradayMetric, ActivityBreakdownLayout[]>> = {
+  caloriesOut: [
+    { key: 'activeEnergy', unit: 'kcal' },
+    { key: 'basalEnergy', unit: 'kcal' }
+  ],
+  activeMinutes: [
+    { key: 'light', unit: 'min' },
+    { key: 'moderate', unit: 'min' },
+    { key: 'vigorous', unit: 'min' }
+  ],
+  activeZoneMinutes: [
+    { key: 'fatBurn', unit: 'min' },
+    { key: 'cardio', unit: 'min' },
+    { key: 'peak', unit: 'min' }
+  ]
+}
+
+function activityBreakdownLayout(metricKey: MetricKey): ActivityBreakdownLayout[] {
+  return isActivityIntradayMetric(metricKey) ? (ACTIVITY_BREAKDOWN_LAYOUTS[metricKey] ?? []) : []
+}
+
+function activityBreakdownCount(metricKey: MetricKey): number {
+  return activityBreakdownLayout(metricKey).length
+}
+
+function useDelayedSkeleton(key: string | null, delayMs: number): boolean {
+  const [revealedKey, setRevealedKey] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (key == null) {
+      setRevealedKey(null)
+      return
+    }
+    const timeout = window.setTimeout(() => setRevealedKey(key), delayMs)
+    return () => window.clearTimeout(timeout)
+  }, [delayMs, key])
+
+  return isDelayedSkeletonVisible(key, revealedKey)
+}
 
 interface MetricDetailViewProps {
   metricKey: MetricKey
@@ -83,10 +146,6 @@ export function MetricDetailView({
   const activityIntraday = useActivityIntraday(date, activityMetric ?? 'distanceKm', wantsActivityIntraday)
   const heartDetail = useHeartDetail(date, heartMetric ?? 'restingHeartRate', wantsHeartDetail)
 
-  if (series.isError) {
-    return <ErrorState message={series.error instanceof Error ? series.error.message : undefined} onRetry={() => void series.refetch()} />
-  }
-
   const days = series.data?.days
   const shown = rangeEnding(date, spec.days)
   const points = seriesPoints(days, metricKey, shown.start, shown.end)
@@ -100,6 +159,60 @@ export function MetricDetailView({
 
   const goal = def.goalKey ? goals[def.goalKey] : null
   const Icon = def.icon
+  const transitionPending =
+    series.isPending ||
+    (wantsIntraday && intraday.isPending) ||
+    (wantsActivityIntraday && activityIntraday.isPending) ||
+    (wantsHeartDetail && heartDetail.isPending)
+  const lastResolvedContent = useRef<{
+    date: string
+    range: MetricRange
+    content: React.JSX.Element
+  } | null>(null)
+  const canRetainPrevious =
+    transitionPending &&
+    range === 'D' &&
+    lastResolvedContent.current?.range === 'D' &&
+    lastResolvedContent.current.date !== date
+  const delayedSkeletonVisible = useDelayedSkeleton(canRetainPrevious ? date : null, 150)
+
+  const resolvedContent =
+    range === 'D' ? (
+      <DayDetail
+        metricKey={metricKey}
+        date={date}
+        points={contextPoints}
+        goal={goal}
+        intradayData={wantsIntraday ? intraday.data : undefined}
+        intradayPending={wantsIntraday && intraday.isPending}
+        activityIntradayData={wantsActivityIntraday ? activityIntraday.data : undefined}
+        activityIntradayPending={wantsActivityIntraday && activityIntraday.isPending}
+        activityIntradayError={wantsActivityIntraday && activityIntraday.isError}
+        heartDetailData={wantsHeartDetail ? heartDetail.data : undefined}
+        heartDetailPending={wantsHeartDetail && heartDetail.isPending}
+        heartDetailError={wantsHeartDetail && heartDetail.isError}
+        onSelectDate={onSelectDate}
+      />
+    ) : (
+      <PeriodDetail
+        metricKey={metricKey}
+        range={range}
+        date={date}
+        points={points}
+        prevPoints={prevPoints}
+        goal={goal}
+        onSelectDate={onSelectDate}
+      />
+    )
+
+  useEffect(() => {
+    if (transitionPending || series.isError) return
+    lastResolvedContent.current = { date, range, content: resolvedContent }
+  }, [date, range, resolvedContent, series.isError, transitionPending])
+
+  if (series.isError) {
+    return <ErrorState message={series.error instanceof Error ? series.error.message : undefined} onRetry={() => void series.refetch()} />
+  }
 
   return (
     <div className="mx-auto flex max-w-[1180px] flex-col gap-5 px-8 pb-12">
@@ -128,34 +241,12 @@ export function MetricDetailView({
         </div>
       </motion.header>
 
-      {series.isPending ? (
+      {canRetainPrevious && !delayedSkeletonVisible ? (
+        lastResolvedContent.current?.content
+      ) : series.isPending ? (
         <MetricDetailSkeleton metricKey={metricKey} range={range} hasGoal={goal != null} />
-      ) : range === 'D' ? (
-        <DayDetail
-          metricKey={metricKey}
-          date={date}
-          points={contextPoints}
-          goal={goal}
-          intradayData={wantsIntraday ? intraday.data : undefined}
-          intradayPending={wantsIntraday && intraday.isPending}
-          activityIntradayData={wantsActivityIntraday ? activityIntraday.data : undefined}
-          activityIntradayPending={wantsActivityIntraday && activityIntraday.isPending}
-          activityIntradayError={wantsActivityIntraday && activityIntraday.isError}
-          heartDetailData={wantsHeartDetail ? heartDetail.data : undefined}
-          heartDetailPending={wantsHeartDetail && heartDetail.isPending}
-          heartDetailError={wantsHeartDetail && heartDetail.isError}
-          onSelectDate={onSelectDate}
-        />
       ) : (
-        <PeriodDetail
-          metricKey={metricKey}
-          range={range}
-          date={date}
-          points={points}
-          prevPoints={prevPoints}
-          goal={goal}
-          onSelectDate={onSelectDate}
-        />
+        resolvedContent
       )}
     </div>
   )
@@ -170,16 +261,38 @@ function MetricDetailSkeleton({
   range: MetricRange
   hasGoal: boolean
 }): React.JSX.Element {
+  const spec = RANGES.find((candidate) => candidate.id === range)!
+
   if (range === 'D') {
+    const isActivityTimeline = isActivityIntradayMetric(metricKey)
     const hasTimeline =
       metricKey === 'steps' ||
       metricKey === 'restingHeartRate' ||
-      isActivityIntradayMetric(metricKey)
+      isActivityTimeline
     const skeletonVariant =
-      metricKey === 'restingHeartRate' || (!hasTimeline && METRICS[metricKey].chart === 'line')
-        ? 'line'
+      metricKey === 'restingHeartRate'
+        ? 'intraday-line'
+        : !hasTimeline && METRICS[metricKey].chart === 'line'
+          ? 'line'
         : 'bar'
-    const breakdownCount = metricKey === 'caloriesOut' ? 2 : ['activeMinutes', 'activeZoneMinutes'].includes(metricKey) ? 3 : 0
+    const columns =
+      metricKey === 'steps'
+        ? HOURS_PER_DAY
+        : metricKey === 'restingHeartRate'
+          ? HOURS_PER_DAY
+        : isActivityTimeline
+          ? ACTIVITY_INTRADAY_COLUMN_COUNT
+          : DAY_CONTEXT_COLUMN_COUNT
+    const breakdownCount = activityBreakdownCount(metricKey)
+    const timelineTickEvery = metricKey === 'steps' || isActivityTimeline ? 6 : undefined
+    const sectionHint =
+      metricKey === 'steps'
+        ? 'Steps per hour'
+        : isActivityTimeline
+          ? `${ACTIVITY_INTRADAY_WINDOW_MINUTES}-minute windows`
+          : metricKey === 'restingHeartRate'
+            ? 'Heart rate samples'
+            : 'The last 14 days, this day highlighted'
     return (
       <>
         <Panel className={`flex flex-wrap items-center justify-between gap-6 p-6 ${CARD_HEIGHT.summary}`}>
@@ -194,33 +307,25 @@ function MetricDetailSkeleton({
         <Panel className={`flex flex-col gap-3 p-5 ${CARD_HEIGHT.detail}`}>
           <SectionHeader
             title={hasTimeline ? 'Across the day' : 'In context'}
-            hint={hasTimeline ? 'Loading intraday data' : 'The last 14 days, this day highlighted'}
+            hint={sectionHint}
           />
           <SkeletonChart
             height={breakdownCount > 0 ? 170 : 210}
-            columns={hasTimeline ? 16 : 12}
+            columns={columns}
             variant={skeletonVariant}
+            tickEvery={timelineTickEvery}
+            tickWidth={timelineTickEvery != null ? 40 : undefined}
           />
-          {breakdownCount > 0 && (
-            <div
-              className="grid gap-4 border-t border-hairline pt-3"
-              style={{ gridTemplateColumns: `repeat(${breakdownCount}, minmax(0, 1fr))` }}
-              aria-hidden
-            >
-              {Array.from({ length: breakdownCount }, (_, index) => (
-                <div key={index} className="flex flex-col gap-2">
-                  <SkeletonText className="w-16" />
-                  <SkeletonText className="h-4 w-14" />
-                </div>
-              ))}
-            </div>
-          )}
+          {breakdownCount > 0 && <ActivityBreakdownSkeleton count={breakdownCount} />}
         </Panel>
         )}
         <HistoryListSkeleton />
       </>
     )
   }
+
+  const chartVariant = METRICS[metricKey].chart
+  const columns = range === 'Y' && chartVariant === 'bar' ? Math.ceil(spec.days / 7) : spec.days
 
   return (
     <>
@@ -236,8 +341,8 @@ function MetricDetailSkeleton({
         <SectionHeader title="Loading period" />
         <SkeletonChart
           height={240}
-          columns={range === 'Y' ? 12 : 7}
-          variant={METRICS[metricKey].chart}
+          columns={columns}
+          variant={chartVariant}
         />
       </Panel>
       <HistoryListSkeleton />
@@ -390,7 +495,12 @@ function DayDetail({
         {metricKey === 'steps' && intradayPending ? (
           <Panel className={`flex flex-col gap-3 p-5 ${CARD_HEIGHT.detail}`}>
             <SectionHeader title="Across the day" hint="Steps per hour" />
-            <SkeletonChart height={210} columns={12} />
+            <SkeletonChart
+              height={210}
+              columns={HOURS_PER_DAY}
+              tickEvery={6}
+              tickWidth={40}
+            />
           </Panel>
         ) : metricKey === 'steps' && intradayData && intradayData.stepsHourly.length > 0 ? (
           <Panel className={`flex flex-col gap-3 p-5 ${CARD_HEIGHT.detail}`}>
@@ -411,7 +521,7 @@ function DayDetail({
         ) : metricKey === 'restingHeartRate' && intradayPending ? (
           <Panel className={`flex flex-col gap-3 p-5 ${CARD_HEIGHT.detail}`}>
             <SectionHeader title="Across the day" hint="Heart rate samples" />
-            <SkeletonChart height={210} columns={12} variant="line" />
+            <SkeletonChart height={210} columns={HOURS_PER_DAY} variant="intraday-line" />
           </Panel>
         ) : metricKey === 'restingHeartRate' && intradayData && intradayData.heartRate.length > 1 ? (
           <Panel className={`flex flex-col gap-3 p-5 ${CARD_HEIGHT.detail}`}>
@@ -486,17 +596,6 @@ function DayDetail({
   )
 }
 
-const BREAKDOWN_LABELS: Record<ActivityIntradayResult['breakdown'][number]['key'], string> = {
-  light: 'Light',
-  moderate: 'Moderate',
-  vigorous: 'Vigorous',
-  fatBurn: 'Fat burn',
-  cardio: 'Cardio',
-  peak: 'Peak',
-  activeEnergy: 'Active energy',
-  basalEnergy: 'Basal energy'
-}
-
 function ActivityIntradayPanel({
   metricKey,
   data,
@@ -511,12 +610,22 @@ function ActivityIntradayPanel({
   const def = METRICS[metricKey]
   const recorded = data?.points.some((point) => point.value != null) ?? false
   const intervalLabel = `${data?.windowMinutes ?? 30}-minute windows`
+  const breakdownLayout = activityBreakdownLayout(metricKey)
+  const breakdownCount = breakdownLayout.length
 
   return (
     <Panel className={`flex flex-col gap-3 p-5 ${CARD_HEIGHT.detail}`}>
       <SectionHeader title="Across the day" hint={intervalLabel} />
       {pending ? (
-        <SkeletonChart height={210} columns={16} />
+        <>
+          <SkeletonChart
+            height={breakdownCount > 0 ? 170 : 210}
+            columns={ACTIVITY_INTRADAY_COLUMN_COUNT}
+            tickEvery={6}
+            tickWidth={40}
+          />
+          {breakdownCount > 0 && <ActivityBreakdownSkeleton count={breakdownCount} />}
+        </>
       ) : error ? (
         <div className="grid h-[190px] place-items-center text-[13px] text-ink-faint">
           Intraday data could not be loaded for this metric.
@@ -531,24 +640,30 @@ function ActivityIntradayPanel({
               tick: point.minute % 180 === 0 ? formatMinuteOfDay(point.minute) : undefined
             }))}
             color={def.color}
-            height={data.breakdown.length > 0 ? 170 : 210}
+            height={breakdownCount > 0 ? 170 : 210}
             format={def.format}
             unitLabel={def.unit}
             axisLabel={axisLabelFor(metricKey, def.unit)}
           />
-          {data.breakdown.length > 0 && (
+          {breakdownCount > 0 && (
             <div
               className="grid divide-x divide-hairline border-t border-hairline pt-3"
-              style={{ gridTemplateColumns: `repeat(${data.breakdown.length}, minmax(0, 1fr))` }}
+              style={{ gridTemplateColumns: `repeat(${breakdownCount}, minmax(0, 1fr))` }}
             >
-              {data.breakdown.map((item) => (
-                <div key={item.key} className="px-4 first:pl-0 last:pr-0">
-                  <div className="text-[10.5px] font-medium text-ink-faint">{BREAKDOWN_LABELS[item.key]}</div>
-                  <div className="mt-0.5 font-mono text-[15px] font-medium text-ink">
-                    {formatInt(item.value)} <span className="text-[10.5px] text-ink-dim">{item.unit}</span>
+              {breakdownLayout.map((layout) => {
+                const item = data.breakdown.find((candidate) => candidate.key === layout.key)
+                return (
+                  <div key={layout.key} className="px-4 first:pl-0 last:pr-0">
+                    <div className="text-[10.5px] font-medium text-ink-faint">
+                      {BREAKDOWN_LABELS[layout.key]}
+                    </div>
+                    <div className="mt-0.5 font-mono text-[15px] font-medium text-ink">
+                      {item ? formatInt(item.value) : '—'}{' '}
+                      <span className="text-[10.5px] text-ink-dim">{layout.unit}</span>
+                    </div>
                   </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           )}
         </>
@@ -558,6 +673,26 @@ function ActivityIntradayPanel({
         </div>
       )}
     </Panel>
+  )
+}
+
+function ActivityBreakdownSkeleton({ count }: { count: number }): React.JSX.Element {
+  return (
+    <div
+      className="grid divide-x divide-hairline border-t border-hairline pt-3"
+      style={{ gridTemplateColumns: `repeat(${count}, minmax(0, 1fr))` }}
+      aria-hidden
+    >
+      {Array.from({ length: count }, (_, index) => (
+        <div key={index} className="min-h-10 px-4 first:pl-0 last:pr-0">
+          <SkeletonBlock className="h-[11px] w-20" />
+          <div className="mt-1 flex items-center gap-2">
+            <SkeletonBlock className="h-[15px] w-14" />
+            <SkeletonBlock className="h-[10px] w-8" />
+          </div>
+        </div>
+      ))}
+    </div>
   )
 }
 

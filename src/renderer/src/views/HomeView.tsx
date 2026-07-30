@@ -199,7 +199,7 @@ export function HomeView({ date, goals, onOpenMetric, onOpenWorkout, onOpenWorko
             />
             {intraday.isPending ? (
               <div className="mt-auto">
-                <SkeletonChart />
+                <SkeletonChart columns={24} tickEvery={6} tickWidth={40} />
               </div>
             ) : intraday.data && intraday.data.stepsHourly.length > 0 ? (
               <div className="mt-auto">

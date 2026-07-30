@@ -5,9 +5,14 @@ import {
   activityRollupValue,
   calorieEnergyBreakdown
 } from '../src/main/activity-intraday'
+import { ACTIVITY_INTRADAY_WINDOW_MINUTES } from '../src/shared/types'
 import type { RollupPoint } from '../src/main/health-api'
 
 describe('activity intraday rollup normalization', () => {
+  test('uses 48 half-hour windows for a regular day', () => {
+    expect((24 * 60) / ACTIVITY_INTRADAY_WINDOW_MINUTES).toBe(48)
+  })
+
   test('reads distance, calories, floors, and sedentary windows', () => {
     expect(activityRollupValue('distanceKm', { distance: { millimetersSum: '1250000' } })).toBe(1.25)
     expect(activityRollupValue('caloriesOut', { totalCalories: { kcalSum: 84.5 } })).toBe(84.5)

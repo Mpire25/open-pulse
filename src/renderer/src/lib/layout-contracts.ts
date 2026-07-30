@@ -5,6 +5,18 @@ export const CHART_PLOT = {
   right: 46
 } as const
 
+const SHORT_RANGE_COLUMN_COUNT = 7
+const DEFAULT_MAX_COLUMN_WIDTH = 24
+const SHORT_RANGE_MAX_COLUMN_WIDTH = 40
+
+export function chartColumnMaxWidth(count: number): number {
+  return count <= SHORT_RANGE_COLUMN_COUNT ? SHORT_RANGE_MAX_COLUMN_WIDTH : DEFAULT_MAX_COLUMN_WIDTH
+}
+
+export function chartColumnWidth(band: number, count: number): number {
+  return Math.min(chartColumnMaxWidth(count), Math.max(3, band - 2))
+}
+
 export const SLEEP_STAGE_FRAME = {
   compact: {
     rowHeight: 18,

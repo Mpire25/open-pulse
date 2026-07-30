@@ -1,5 +1,5 @@
 import type { HTMLAttributes } from 'react'
-import { CHART_PLOT } from '@/lib/layout-contracts'
+import { CHART_PLOT, chartColumnMaxWidth } from '@/lib/layout-contracts'
 import { cn } from '@/lib/utils'
 
 /**
@@ -21,6 +21,21 @@ export const CARD_HEIGHT = {
 } as const
 
 const pulse = 'animate-pulse bg-white/[0.055]'
+
+const PERIOD_LINE_Y = [72, 62, 67, 42, 50, 31, 46, 25, 36]
+
+function skeletonLinePath(values: number[]): string {
+  return values
+    .map((value, index) => {
+      const x = values.length <= 1 ? 0 : (index / (values.length - 1)) * 100
+      return `${index === 0 ? 'M' : 'L'} ${x.toFixed(2)} ${value}`
+    })
+    .join(' ')
+}
+
+const PERIOD_LINE_PATH = skeletonLinePath(PERIOD_LINE_Y)
+const INTRADAY_LINE_PATH =
+  'M 0 50 H 42 L 44 50 L 45.5 18 L 47.5 84 L 49.5 36 L 51 61 L 53 50 H 55.5 L 57 50 L 58.5 24 L 60.5 72 L 62 43 L 63.5 65 L 65 41 L 66.5 50 H 100'
 
 export function SkeletonBlock({ className, ...props }: HTMLAttributes<HTMLSpanElement>): React.JSX.Element {
   return <span aria-hidden className={cn('block rounded-md', pulse, className)} {...props} />
@@ -69,17 +84,38 @@ export function SkeletonRing({
 export function SkeletonChart({
   height = 170,
   columns = 7,
-  variant = 'bar'
+  variant = 'bar',
+  tickEvery,
+  tickWidth
 }: {
   height?: number
   columns?: number
-  variant?: 'bar' | 'line'
+  variant?: 'bar' | 'line' | 'intraday-line'
+  tickEvery?: number
+  tickWidth?: number
 }): React.JSX.Element {
   const heights = [28, 48, 36, 68, 44, 78, 58, 34, 64, 42, 72, 52]
   const plotTop = CHART_PLOT.top
   const plotBottom = CHART_PLOT.bottom
   const axisGutter = CHART_PLOT.right
   const plotHeight = height - plotTop - plotBottom
+  const isIntradayLine = variant === 'intraday-line'
+  const defaultTickCount = Math.min(columns, 7)
+  const tickPositions = isIntradayLine
+    ? [25, 50, 75]
+    : tickEvery != null
+      ? Array.from(
+          { length: Math.ceil(columns / tickEvery) },
+          (_, index) => ((index * tickEvery + 0.5) / columns) * 100
+        )
+      : Array.from({ length: defaultTickCount }, (_, index) => {
+          const columnIndex =
+            defaultTickCount <= 1 ? 0 : Math.round((index / (defaultTickCount - 1)) * (columns - 1))
+          return ((columnIndex + 0.5) / columns) * 100
+        })
+  const resolvedTickWidth = tickWidth ?? (isIntradayLine ? 40 : 8)
+  const linePath = isIntradayLine ? INTRADAY_LINE_PATH : PERIOD_LINE_PATH
+  const lineEndY = PERIOD_LINE_Y[PERIOD_LINE_Y.length - 1]
   return (
     <div aria-hidden className="relative w-full overflow-hidden" style={{ height }}>
       {[plotTop, plotTop + plotHeight / 2, plotTop + plotHeight].map((top) => (
@@ -103,8 +139,11 @@ export function SkeletonChart({
           {Array.from({ length: columns }, (_, index) => (
             <span key={index} className="flex min-w-0 items-end justify-center px-px">
               <SkeletonBlock
-                className="w-full max-w-6 rounded-t-[5px] rounded-b-none"
-                style={{ height: `${heights[index % heights.length]}%` } as React.CSSProperties}
+                className="w-full min-w-[3px] rounded-t-[5px] rounded-b-none"
+                style={{
+                  height: `${heights[index % heights.length]}%`,
+                  maxWidth: chartColumnMaxWidth(columns)
+                }}
               />
             </span>
           ))}
@@ -121,7 +160,7 @@ export function SkeletonChart({
             aria-hidden
           >
             <path
-              d="M 0 72 L 12 62 L 24 67 L 37 42 L 49 50 L 62 31 L 74 46 L 86 25 L 100 36"
+              d={linePath}
               fill="none"
               stroke="rgb(255 255 255 / 0.09)"
               strokeWidth="3"
@@ -130,15 +169,24 @@ export function SkeletonChart({
               vectorEffect="non-scaling-stroke"
             />
           </svg>
-          <SkeletonBlock
-            className="absolute h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full"
-            style={{ left: '100%', top: '36%' }}
-          />
+          {!isIntradayLine && (
+            <SkeletonBlock
+              className="absolute h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full"
+              style={{ left: '100%', top: `${lineEndY}%` }}
+            />
+          )}
         </div>
       )}
-      <div className="absolute bottom-0 left-0 flex justify-between" style={{ right: axisGutter }}>
-        {Array.from({ length: Math.min(columns, 7) }, (_, index) => (
-          <SkeletonBlock key={index} className="h-2 w-2" />
+      <div className="absolute bottom-0 left-0 h-2" style={{ right: axisGutter }}>
+        {tickPositions.map((position) => (
+          <SkeletonBlock
+            key={position}
+            className="absolute top-0 h-2 -translate-x-1/2"
+            style={{
+              left: `${position}%`,
+              width: resolvedTickWidth
+            }}
+          />
         ))}
       </div>
     </div>
