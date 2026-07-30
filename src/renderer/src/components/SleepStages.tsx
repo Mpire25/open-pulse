@@ -188,7 +188,11 @@ export function SleepStages({ night, compact = false, loading = false }: SleepSt
       </div>
       <div
         className={`${compact ? 'mt-2 text-[10px]' : 'mt-3 text-[11px]'} flex items-center justify-between font-mono text-ink-faint`}
-        style={{ paddingLeft: frame.timeOffset }}
+        style={{
+          height: frame.timeHeight,
+          lineHeight: `${frame.timeHeight}px`,
+          paddingLeft: frame.timeOffset
+        }}
       >
         {loading ? (
           <>
@@ -205,7 +209,10 @@ export function SleepStages({ night, compact = false, loading = false }: SleepSt
       <div className={`${compact ? 'mt-3' : 'mt-4'} grid grid-cols-4 gap-2`}>
         {ROW_ORDER.map((t) => (
           <div key={t} className="flex flex-col gap-1">
-            <div className="flex items-center gap-1.5">
+            <div
+              className="flex items-center gap-1.5"
+              style={{ height: frame.summaryLabelHeight, lineHeight: `${frame.summaryLabelHeight}px` }}
+            >
               {loading ? (
                 <SkeletonBlock className="h-2.5 w-12" />
               ) : (
@@ -215,13 +222,18 @@ export function SleepStages({ night, compact = false, loading = false }: SleepSt
                 </>
               )}
             </div>
-            {loading ? (
-              <SkeletonBlock className="h-3.5 w-10" />
-            ) : (
-              <span className={`${compact ? 'text-[12px]' : 'text-[13px]'} font-semibold text-ink`}>
-                {night ? formatMinutes(night.stageMinutes[t] ?? 0) : '—'}
-              </span>
-            )}
+            <div
+              className="flex items-center"
+              style={{ height: frame.summaryValueHeight, lineHeight: `${frame.summaryValueHeight}px` }}
+            >
+              {loading ? (
+                <SkeletonBlock className="h-3.5 w-10" />
+              ) : (
+                <span className={`${compact ? 'text-[12px]' : 'text-[13px]'} font-semibold text-ink`}>
+                  {night ? formatMinutes(night.stageMinutes[t] ?? 0) : '—'}
+                </span>
+              )}
+            </div>
           </div>
         ))}
       </div>

@@ -9,12 +9,18 @@ export const SLEEP_STAGE_FRAME = {
   compact: {
     rowHeight: 18,
     rowGap: 6,
-    timeOffset: 47
+    timeOffset: 47,
+    timeHeight: 12,
+    summaryLabelHeight: 12,
+    summaryValueHeight: 15
   },
   regular: {
     rowHeight: 22,
     rowGap: 8,
-    timeOffset: 52
+    timeOffset: 52,
+    timeHeight: 14,
+    summaryLabelHeight: 14,
+    summaryValueHeight: 16
   }
 } as const
 

@@ -92,7 +92,7 @@ export function SectionHeader({ title, hint, icon, action }: SectionHeaderProps)
         {icon && <span className="text-ink-dim">{icon}</span>}
         <div>
           <h3 className="text-[15px] font-semibold tracking-tight text-ink">{title}</h3>
-          {hint && <p className="mt-0.5 text-[12px] text-ink-faint">{hint}</p>}
+          {hint && <p className="mt-0.5 min-h-[15px] text-[12px] leading-[15px] text-ink-faint">{hint}</p>}
         </div>
       </div>
       {action}
@@ -113,7 +113,7 @@ export function DrillHeader({ title, hint, icon, action, onOpen }: DrillHeaderPr
         {icon && <span className="text-ink-dim">{icon}</span>}
         <div>
           <h3 className="text-[15px] font-semibold tracking-tight text-ink">{title}</h3>
-          {hint && <p className="mt-0.5 text-[12px] text-ink-faint">{hint}</p>}
+          {hint && <p className="mt-0.5 min-h-[15px] text-[12px] leading-[15px] text-ink-faint">{hint}</p>}
         </div>
       </div>
       <div className="flex items-center gap-2">
