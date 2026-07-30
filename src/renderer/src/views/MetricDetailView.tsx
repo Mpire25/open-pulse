@@ -56,10 +56,42 @@ const DAY_CONTEXT_COLUMN_COUNT = 14
 
 const SUMMARY_ONLY_DAILY_METRICS = new Set<MetricKey>(['hrvMs', 'spo2Pct', 'breathingRate', 'skinTempDeltaC'])
 
+type ActivityBreakdownLayout = Pick<ActivityIntradayResult['breakdown'][number], 'key' | 'unit'>
+
+const BREAKDOWN_LABELS: Record<ActivityBreakdownLayout['key'], string> = {
+  light: 'Light',
+  moderate: 'Moderate',
+  vigorous: 'Vigorous',
+  fatBurn: 'Fat burn',
+  cardio: 'Cardio',
+  peak: 'Peak',
+  activeEnergy: 'Active energy',
+  basalEnergy: 'Basal energy'
+}
+
+const ACTIVITY_BREAKDOWN_LAYOUTS: Partial<Record<ActivityIntradayMetric, ActivityBreakdownLayout[]>> = {
+  caloriesOut: [
+    { key: 'activeEnergy', unit: 'kcal' },
+    { key: 'basalEnergy', unit: 'kcal' }
+  ],
+  activeMinutes: [
+    { key: 'light', unit: 'min' },
+    { key: 'moderate', unit: 'min' },
+    { key: 'vigorous', unit: 'min' }
+  ],
+  activeZoneMinutes: [
+    { key: 'fatBurn', unit: 'min' },
+    { key: 'cardio', unit: 'min' },
+    { key: 'peak', unit: 'min' }
+  ]
+}
+
+function activityBreakdownLayout(metricKey: MetricKey): ActivityBreakdownLayout[] {
+  return isActivityIntradayMetric(metricKey) ? (ACTIVITY_BREAKDOWN_LAYOUTS[metricKey] ?? []) : []
+}
+
 function activityBreakdownCount(metricKey: MetricKey): number {
-  if (metricKey === 'caloriesOut') return 2
-  if (metricKey === 'activeMinutes' || metricKey === 'activeZoneMinutes') return 3
-  return 0
+  return activityBreakdownLayout(metricKey).length
 }
 
 interface MetricDetailViewProps {
@@ -515,17 +547,6 @@ function DayDetail({
   )
 }
 
-const BREAKDOWN_LABELS: Record<ActivityIntradayResult['breakdown'][number]['key'], string> = {
-  light: 'Light',
-  moderate: 'Moderate',
-  vigorous: 'Vigorous',
-  fatBurn: 'Fat burn',
-  cardio: 'Cardio',
-  peak: 'Peak',
-  activeEnergy: 'Active energy',
-  basalEnergy: 'Basal energy'
-}
-
 function ActivityIntradayPanel({
   metricKey,
   data,
@@ -540,7 +561,8 @@ function ActivityIntradayPanel({
   const def = METRICS[metricKey]
   const recorded = data?.points.some((point) => point.value != null) ?? false
   const intervalLabel = `${data?.windowMinutes ?? 30}-minute windows`
-  const breakdownCount = activityBreakdownCount(metricKey)
+  const breakdownLayout = activityBreakdownLayout(metricKey)
+  const breakdownCount = breakdownLayout.length
 
   return (
     <Panel className={`flex flex-col gap-3 p-5 ${CARD_HEIGHT.detail}`}>
@@ -569,24 +591,30 @@ function ActivityIntradayPanel({
               tick: point.minute % 180 === 0 ? formatMinuteOfDay(point.minute) : undefined
             }))}
             color={def.color}
-            height={data.breakdown.length > 0 ? 170 : 210}
+            height={breakdownCount > 0 ? 170 : 210}
             format={def.format}
             unitLabel={def.unit}
             axisLabel={axisLabelFor(metricKey, def.unit)}
           />
-          {data.breakdown.length > 0 && (
+          {breakdownCount > 0 && (
             <div
               className="grid divide-x divide-hairline border-t border-hairline pt-3"
-              style={{ gridTemplateColumns: `repeat(${data.breakdown.length}, minmax(0, 1fr))` }}
+              style={{ gridTemplateColumns: `repeat(${breakdownCount}, minmax(0, 1fr))` }}
             >
-              {data.breakdown.map((item) => (
-                <div key={item.key} className="px-4 first:pl-0 last:pr-0">
-                  <div className="text-[10.5px] font-medium text-ink-faint">{BREAKDOWN_LABELS[item.key]}</div>
-                  <div className="mt-0.5 font-mono text-[15px] font-medium text-ink">
-                    {formatInt(item.value)} <span className="text-[10.5px] text-ink-dim">{item.unit}</span>
+              {breakdownLayout.map((layout) => {
+                const item = data.breakdown.find((candidate) => candidate.key === layout.key)
+                return (
+                  <div key={layout.key} className="px-4 first:pl-0 last:pr-0">
+                    <div className="text-[10.5px] font-medium text-ink-faint">
+                      {BREAKDOWN_LABELS[layout.key]}
+                    </div>
+                    <div className="mt-0.5 font-mono text-[15px] font-medium text-ink">
+                      {item ? formatInt(item.value) : '—'}{' '}
+                      <span className="text-[10.5px] text-ink-dim">{layout.unit}</span>
+                    </div>
                   </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           )}
         </>
