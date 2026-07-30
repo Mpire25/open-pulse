@@ -46,7 +46,7 @@ export function WorkoutDetailView({ workout, date, onBack }: WorkoutDetailViewPr
   const elapsedMinutes = workout.elapsedDurationMin ?? workout.durationMin
   const startDate = new Date(workout.startTime)
   const startMinute = workout.startMinute ?? startDate.getHours() * 60 + startDate.getMinutes()
-  const endMinute = Math.min(1440, startMinute + elapsedMinutes)
+  const endMinute = startMinute + elapsedMinutes
   const startLabel = formatMinuteOfDay(startMinute)
   const endLabel = formatMinuteOfDay(endMinute)
   const intradayHeartPoints = workoutHeartRate.data ?? []

@@ -1098,7 +1098,7 @@ export async function getWorkoutHeartRate(
   }
 
   const startMinute = workout.startMinute ?? start.getHours() * 60 + start.getMinutes()
-  const endMinute = Math.min(1440, startMinute + durationMinutes)
+  const endMinute = startMinute + durationMinutes
   const inWorkoutWindow = (point: HeartRatePoint): boolean =>
     point.minute >= startMinute && point.minute <= endMinute
 
@@ -1109,6 +1109,7 @@ export async function getWorkoutHeartRate(
     workoutOffsetSeconds != null &&
     workoutOffsetSeconds === -start.getTimezoneOffset() * 60
   if (
+    endMinute <= 1440 &&
     workoutUsesMachineTime &&
     dayRecord?.heartRate !== undefined &&
     dayHeartRateFetchedAt != null &&

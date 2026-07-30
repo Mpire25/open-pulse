@@ -363,6 +363,59 @@ describe('health request budgets', () => {
     expect(requests[0]).toContain('/heart-rate/dataPoints:rollUp')
   })
 
+  test('keeps workout heart rate after a workout crosses midnight', async () => {
+    const date = '2026-07-04'
+    const startTime = new Date(2026, 6, 4, 23, 30).toISOString()
+    const endTime = new Date(2026, 6, 5, 0, 30).toISOString()
+    const beforeMidnight = new Date(2026, 6, 4, 23, 45).toISOString()
+    const afterMidnight = new Date(2026, 6, 5, 0, 15).toISOString()
+    const id = 'users/me/dataTypes/exercise/dataPoints/midnight-workout'
+    globalThis.fetch = (async (input, init) => {
+      requests.push(String(input))
+      const url = new URL(String(input))
+      if (url.pathname.endsWith('/exercise/dataPoints:reconcile')) {
+        return new Response(JSON.stringify({
+          dataPoints: [workoutPoint(id, startTime, endTime)]
+        }), { status: 200 })
+      }
+      if (url.pathname.endsWith('/heart-rate/dataPoints:reconcile')) {
+        return new Response(JSON.stringify({
+          dataPoints: [{
+            heartRate: {
+              sampleTime: {
+                physicalTime: beforeMidnight,
+                utcOffset: `${-new Date(beforeMidnight).getTimezoneOffset() * 60}s`
+              }
+            }
+          }]
+        }), { status: 200 })
+      }
+      const body = JSON.parse(String(init?.body)) as {
+        range?: { startTime?: string }
+      }
+      const workoutRequest = body.range?.startTime === startTime
+      return new Response(JSON.stringify({
+        rollupDataPoints: workoutRequest
+          ? [
+              { startTime: beforeMidnight, heartRate: { beatsPerMinuteAvg: 120 } },
+              { startTime: afterMidnight, heartRate: { beatsPerMinuteAvg: 130 } }
+            ]
+          : [{ startTime: beforeMidnight, heartRate: { beatsPerMinuteAvg: 120 } }]
+      }), { status: 200 })
+    }) as typeof fetch
+
+    await getWorkoutsRange(date, date)
+    await getIntraday(date, false, undefined, 'heart')
+    requests = []
+
+    await expect(getWorkoutHeartRate(date, id)).resolves.toEqual([
+      { minute: 23 * 60 + 45, bpm: 120 },
+      { minute: 24 * 60 + 15, bpm: 130 }
+    ])
+    expect(requests).toHaveLength(1)
+    expect(requests[0]).toContain('/heart-rate/dataPoints:rollUp')
+  })
+
   test('reuses cached full-day heart rate for a workout without another request', async () => {
     const startTime = new Date(2026, 6, 1, 10).toISOString()
     const endTime = new Date(2026, 6, 1, 11).toISOString()
