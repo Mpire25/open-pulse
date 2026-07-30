@@ -1,4 +1,5 @@
 import type { HTMLAttributes } from 'react'
+import { CHART_PLOT } from '@/lib/layout-contracts'
 import { cn } from '@/lib/utils'
 
 /**
@@ -14,7 +15,9 @@ export const CARD_HEIGHT = {
   large: 'min-h-[286px]',
   detail: 'min-h-[298px]',
   detailLarge: 'min-h-[312px]',
-  device: 'min-h-[440px]'
+  device: 'min-h-[440px]',
+  list: 'min-h-[232px]',
+  measurementList: 'min-h-[268px]'
 } as const
 
 const pulse = 'animate-pulse bg-white/[0.055]'
@@ -55,9 +58,9 @@ export function SkeletonRing({
           strokeWidth={stroke}
         />
       </svg>
-      <div className={cn('relative flex flex-col items-center gap-2', contentClassName)}>
-        <SkeletonBlock className="h-5 w-14" />
-        <SkeletonBlock className="h-2.5 w-12" />
+      <div className={cn('absolute inset-0 flex flex-col items-center justify-center gap-[6%]', contentClassName)}>
+        <SkeletonBlock className="h-[12%] w-[44%]" />
+        <SkeletonBlock className="h-[6%] w-[38%]" />
       </div>
     </div>
   )
@@ -65,49 +68,78 @@ export function SkeletonRing({
 
 export function SkeletonChart({
   height = 170,
-  columns = 7
+  columns = 7,
+  variant = 'bar'
 }: {
   height?: number
   columns?: number
+  variant?: 'bar' | 'line'
 }): React.JSX.Element {
   const heights = [28, 48, 36, 68, 44, 78, 58, 34, 64, 42, 72, 52]
+  const plotTop = CHART_PLOT.top
+  const plotBottom = CHART_PLOT.bottom
+  const axisGutter = CHART_PLOT.right
+  const plotHeight = height - plotTop - plotBottom
   return (
     <div aria-hidden className="relative w-full overflow-hidden" style={{ height }}>
-      {[22, 55, 88].map((top) => (
-        <span key={top} className="absolute left-0 right-8 h-px bg-hairline" style={{ top: `${top}%` }} />
+      {[plotTop, plotTop + plotHeight / 2, plotTop + plotHeight].map((top) => (
+        <span
+          key={top}
+          className="absolute left-0 h-px bg-hairline"
+          style={{ top, right: axisGutter }}
+        />
       ))}
-      <div className="absolute inset-x-0 bottom-[18px] top-3 flex items-end gap-2 pr-9">
-        {Array.from({ length: columns }, (_, index) => (
+      {variant === 'bar' ? (
+        <div
+          className="absolute grid"
+          style={{
+            left: 0,
+            right: axisGutter,
+            top: plotTop,
+            bottom: plotBottom,
+            gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`
+          }}
+        >
+          {Array.from({ length: columns }, (_, index) => (
+            <span key={index} className="flex min-w-0 items-end justify-center px-px">
+              <SkeletonBlock
+                className="w-full max-w-6 rounded-t-[5px] rounded-b-none"
+                style={{ height: `${heights[index % heights.length]}%` } as React.CSSProperties}
+              />
+            </span>
+          ))}
+        </div>
+      ) : (
+        <div
+          className="absolute"
+          style={{ left: 0, right: axisGutter, top: plotTop, bottom: plotBottom }}
+        >
+          <svg
+            viewBox="0 0 100 100"
+            preserveAspectRatio="none"
+            className="h-full w-full animate-pulse overflow-visible"
+            aria-hidden
+          >
+            <path
+              d="M 0 72 L 12 62 L 24 67 L 37 42 L 49 50 L 62 31 L 74 46 L 86 25 L 100 36"
+              fill="none"
+              stroke="rgb(255 255 255 / 0.09)"
+              strokeWidth="3"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              vectorEffect="non-scaling-stroke"
+            />
+          </svg>
           <SkeletonBlock
-            key={index}
-            className="min-w-1 flex-1 rounded-t-[5px] rounded-b-none"
-            style={{ height: `${heights[index % heights.length]}%` } as React.CSSProperties}
+            className="absolute h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full"
+            style={{ left: '100%', top: '36%' }}
           />
-        ))}
-      </div>
-      <div className="absolute inset-x-0 bottom-0 flex justify-between pr-9">
+        </div>
+      )}
+      <div className="absolute bottom-0 left-0 flex justify-between" style={{ right: axisGutter }}>
         {Array.from({ length: Math.min(columns, 7) }, (_, index) => (
           <SkeletonBlock key={index} className="h-2 w-2" />
         ))}
-      </div>
-    </div>
-  )
-}
-
-export function SkeletonMetricStat({ sparkWidth = 72 }: { sparkWidth?: number }): React.JSX.Element {
-  return (
-    <div className="flex min-h-28 flex-col gap-2 px-5 py-4" aria-hidden>
-      <div className="flex items-center gap-2">
-        <SkeletonBlock className="h-3 w-3 rounded-full" />
-        <SkeletonBlock className="h-2.5 w-16" />
-      </div>
-      <div className="flex items-end justify-between gap-2">
-        <SkeletonBlock className="h-6 w-20" />
-        <SkeletonBlock className="h-6 min-w-0 max-w-[55%] shrink" style={{ width: sparkWidth }} />
-      </div>
-      <div className="flex items-center gap-2">
-        <SkeletonBlock className="h-4 w-10 rounded-full" />
-        <SkeletonBlock className="h-2.5 w-20" />
       </div>
     </div>
   )
@@ -131,36 +163,6 @@ export function SkeletonRows({ rows = 2 }: { rows?: number }): React.JSX.Element
           </div>
         </div>
       ))}
-    </div>
-  )
-}
-
-export function SkeletonSleepStages(): React.JSX.Element {
-  return (
-    <div className="flex flex-col gap-3" aria-hidden>
-      {Array.from({ length: 4 }, (_, row) => (
-        <div key={row} className="flex items-center gap-3">
-          <SkeletonBlock className="h-2.5 w-10" />
-          <div className="relative h-[22px] flex-1 overflow-hidden rounded-full bg-white/[0.025]">
-            <SkeletonBlock
-              className="absolute inset-y-0 rounded-[5px]"
-              style={{ left: `${8 + row * 12}%`, width: `${24 + (row % 2) * 18}%` } as React.CSSProperties}
-            />
-          </div>
-        </div>
-      ))}
-      <div className="ml-[52px] flex justify-between">
-        <SkeletonBlock className="h-2.5 w-12" />
-        <SkeletonBlock className="h-2.5 w-12" />
-      </div>
-      <div className="grid grid-cols-4 gap-2">
-        {Array.from({ length: 4 }, (_, index) => (
-          <div key={index} className="flex flex-col gap-2">
-            <SkeletonBlock className="h-2.5 w-12" />
-            <SkeletonBlock className="h-3.5 w-10" />
-          </div>
-        ))}
-      </div>
     </div>
   )
 }

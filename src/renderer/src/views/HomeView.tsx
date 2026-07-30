@@ -7,10 +7,8 @@ import { SleepStages } from '@/components/SleepStages'
 import {
   CARD_HEIGHT,
   SkeletonChart,
-  SkeletonMetricStat,
   SkeletonRing,
   SkeletonRows,
-  SkeletonSleepStages,
   SkeletonText
 } from '@/components/Skeleton'
 import { ErrorState } from '@/components/ErrorState'
@@ -84,33 +82,29 @@ export function HomeView({ date, goals, onOpenMetric, onOpenWorkout, onOpenWorko
       <motion.div custom={1} variants={fade} initial="hidden" animate="show">
         <Panel className={`home-hero ${CARD_HEIGHT.hero}`}>
           <div className="home-goal-rings">
-            {series.isMetricPending('steps') ? (
-              <GoalRingSkeleton />
-            ) : (
-              <GoalRing value={today.steps ?? null} goal={goals.steps} metricKey="steps" onOpen={onOpenMetric} />
-            )}
-            {series.isMetricPending('caloriesOut') ? (
-              <GoalRingSkeleton />
-            ) : (
-              <GoalRing
-                value={today.caloriesOut ?? null}
-                goal={goals.caloriesOut}
-                metricKey="caloriesOut"
-                label="Calories burned"
-                onOpen={onOpenMetric}
-              />
-            )}
-            {series.isMetricPending('caloriesIn') ? (
-              <GoalRingSkeleton />
-            ) : (
-              <GoalRing
-                value={today.caloriesIn ?? null}
-                goal={goals.caloriesIn}
-                metricKey="caloriesIn"
-                label="Calories eaten"
-                onOpen={onOpenMetric}
-              />
-            )}
+            <GoalRing
+              value={today.steps ?? null}
+              goal={goals.steps}
+              metricKey="steps"
+              pending={series.isMetricPending('steps')}
+              onOpen={onOpenMetric}
+            />
+            <GoalRing
+              value={today.caloriesOut ?? null}
+              goal={goals.caloriesOut}
+              metricKey="caloriesOut"
+              label="Calories burned"
+              pending={series.isMetricPending('caloriesOut')}
+              onOpen={onOpenMetric}
+            />
+            <GoalRing
+              value={today.caloriesIn ?? null}
+              goal={goals.caloriesIn}
+              metricKey="caloriesIn"
+              label="Calories eaten"
+              pending={series.isMetricPending('caloriesIn')}
+              onOpen={onOpenMetric}
+            />
           </div>
 
           <div className="home-hero-stats">
@@ -249,7 +243,7 @@ export function HomeView({ date, goals, onOpenMetric, onOpenWorkout, onOpenWorko
               icon={<Moon size={18} weight="fill" style={{ color: 'var(--color-sleep)' }} />}
             />
             {night.isPending ? (
-              <SkeletonSleepStages />
+              <SleepStages night={null} loading />
             ) : night.data ? (
               <SleepStages night={night.data} />
             ) : (
@@ -353,9 +347,7 @@ function SignalsPanel({
               : deltaPct != null && Math.abs(deltaPct) < 1
                 ? 'In line with 7-day baseline'
                 : undefined
-          return isPending(key) ? (
-            <SkeletonMetricStat key={key} />
-          ) : (
+          return (
             <MetricStat
               key={key}
               icon={def.icon}
@@ -368,6 +360,7 @@ function SignalsPanel({
               spark={pointValues(points)}
               sub={comparison}
               onOpen={() => onOpenMetric(key, 'D')}
+              loading={isPending(key)}
             />
           )
         })}
@@ -376,31 +369,19 @@ function SignalsPanel({
   )
 }
 
-function GoalRingSkeleton(): React.JSX.Element {
-  return (
-    <div className="flex flex-col items-center gap-2" aria-hidden>
-      <SkeletonRing
-        size={120}
-        stroke={14}
-        className="home-goal-ring"
-        contentClassName="home-goal-skeleton-content"
-      />
-      <SkeletonText className="home-goal-skeleton-label" />
-    </div>
-  )
-}
-
 function GoalRing({
   value,
   goal,
   metricKey,
   label,
+  pending,
   onOpen
 }: {
   value: number | null
   goal: number
   metricKey: MetricKey
   label?: string
+  pending: boolean
   onOpen: OpenMetric
 }): React.JSX.Element {
   const def = METRICS[metricKey]
@@ -408,30 +389,45 @@ function GoalRing({
   return (
     <button
       type="button"
-      onClick={() => onOpen(metricKey, 'D')}
+      onClick={pending ? undefined : () => onOpen(metricKey, 'D')}
+      disabled={pending}
+      aria-busy={pending}
       className="group -m-5 flex flex-col items-center gap-2 rounded-2xl p-5 outline-none transition-[background-color,box-shadow,transform] duration-200 hover:bg-white/[0.05] hover:shadow-[inset_0_0_0_1px_rgb(255_255_255/0.07)] focus-visible:bg-white/[0.05] focus-visible:ring-2 focus-visible:ring-accent/60 active:scale-[0.985]"
       aria-label={`Open ${def.label} details`}
     >
-      <ProgressRing
-        value={value ?? 0}
-        goal={goal}
-        color={def.color}
-        size={120}
-        stroke={14}
-        className="home-goal-ring"
-      >
-        <div className="text-center">
-          <div className="home-goal-value font-semibold leading-none tracking-tight text-ink">
-            {value != null ? def.format(value) : '—'}
+      {pending ? (
+        <SkeletonRing
+          size={120}
+          stroke={14}
+          className="home-goal-ring"
+          contentClassName="home-goal-skeleton-content"
+        />
+      ) : (
+        <ProgressRing
+          value={value ?? 0}
+          goal={goal}
+          color={def.color}
+          size={120}
+          stroke={14}
+          className="home-goal-ring"
+        >
+          <div className="text-center">
+            <div className="home-goal-value font-semibold leading-none tracking-tight text-ink">
+              {value != null ? def.format(value) : '—'}
+            </div>
+            <div className="home-goal-label mt-1 uppercase tracking-wide text-ink-faint">
+              {label ?? def.shortLabel ?? def.label}
+            </div>
           </div>
-          <div className="home-goal-label mt-1 uppercase tracking-wide text-ink-faint">
-            {label ?? def.shortLabel ?? def.label}
-          </div>
-        </div>
-      </ProgressRing>
-      <span className="home-goal-caption font-mono text-ink-dim transition-colors group-hover:text-ink">
-        {pct != null ? `${pct}% of ${formatInt(goal)}` : 'no goal data'}
-      </span>
+        </ProgressRing>
+      )}
+      {pending ? (
+        <SkeletonText className="home-goal-skeleton-label" />
+      ) : (
+        <span className="home-goal-caption font-mono text-ink-dim transition-colors group-hover:text-ink">
+          {pct != null ? `${pct}% of ${formatInt(goal)}` : 'no goal data'}
+        </span>
+      )}
     </button>
   )
 }
@@ -452,13 +448,17 @@ function HeroRow({
   return (
     <button
       onClick={onClick}
-      className="home-hero-stat -mx-2 flex items-start gap-2.5 rounded-xl px-2 py-1.5 text-left transition-colors hover:bg-white/[0.04]"
+      className="home-hero-stat -mx-2 flex min-h-[70px] items-start gap-2.5 rounded-xl px-2 py-1.5 text-left transition-colors hover:bg-white/[0.04]"
     >
       <span className="mt-0.5">{icon}</span>
-      <span className="min-w-0 flex flex-col">
-        <span className="text-[11px] font-medium text-ink-faint">{label}</span>
-        <span className="text-[14.5px] font-semibold text-ink">{value}</span>
-        {sub && <span className="mt-0.5 text-[11px] text-ink-dim">{sub}</span>}
+      <span className="grid min-w-0 grid-rows-[17px_22px_19px]">
+        <span className="truncate text-[11px] font-medium leading-[17px] text-ink-faint">{label}</span>
+        <span className="flex min-w-0 items-center overflow-hidden text-[14.5px] font-semibold leading-[22px] text-ink">
+          {value}
+        </span>
+        <span className="flex min-w-0 items-center overflow-hidden pt-0.5 text-ellipsis whitespace-nowrap text-[11px] leading-[17px] text-ink-dim">
+          {sub}
+        </span>
       </span>
     </button>
   )

@@ -180,7 +180,7 @@ export const METRICS: Record<MetricKey, MetricDef> = {
     chart: 'line',
     upIsGood: true,
     format: int,
-    hint: 'Read against your own baseline, not a universal number'
+    hint: 'Compare with your own baseline'
   },
   spo2Pct: {
     key: 'spo2Pct',

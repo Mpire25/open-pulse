@@ -149,8 +149,8 @@ body {
 }
 
 .activity-goal-ring {
-  width: 148px !important;
-  height: 148px !important;
+  width: clamp(148px, calc(25cqi + 28px), 172px) !important;
+  height: clamp(148px, calc(25cqi + 28px), 172px) !important;
 }
 
 .activity-summary {
@@ -232,13 +232,6 @@ body {
 
   .display-lg-span-2 {
     grid-column: span 2 / span 2;
-  }
-}
-
-@container display (min-width: 36rem) {
-  .activity-goal-ring {
-    width: 172px !important;
-    height: 172px !important;
   }
 }
 
@@ -378,6 +371,8 @@ body {
    rings retain a single row until the pane can no longer give them useful
    breathing room; supporting facts move below before the rings collapse. */
 .home-hero {
+  --home-goal-ring-size: clamp(120px, calc(12.5cqi + 56px), 200px);
+
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: 1.25rem;
@@ -398,20 +393,20 @@ body {
 }
 
 .home-goal-ring {
-  width: 120px !important;
-  height: 120px !important;
+  width: var(--home-goal-ring-size) !important;
+  height: var(--home-goal-ring-size) !important;
 }
 
 .home-goal-value {
-  font-size: 20px;
+  font-size: clamp(20px, calc(1.5625cqi + 12px), 30px);
 }
 
 .home-goal-label {
-  font-size: 9.5px;
+  font-size: clamp(9.5px, calc(0.46875cqi + 7.1px), 12.5px);
 }
 
 .home-goal-caption {
-  font-size: 10.5px;
+  font-size: clamp(10.5px, calc(0.46875cqi + 8.1px), 13.5px);
 }
 
 .home-goal-skeleton-label {
@@ -457,40 +452,6 @@ body {
   }
 }
 
-@container display (min-width: 36rem) {
-  .home-goal-ring {
-    width: 132px !important;
-    height: 132px !important;
-  }
-
-  .home-goal-skeleton-content {
-    scale: 1.05;
-  }
-}
-
-@container display (min-width: 42rem) {
-  .home-goal-ring {
-    width: 148px !important;
-    height: 148px !important;
-  }
-
-  .home-goal-value {
-    font-size: 22px;
-  }
-
-  .home-goal-label {
-    font-size: 10px;
-  }
-
-  .home-goal-caption {
-    font-size: 11px;
-  }
-
-  .home-goal-skeleton-content {
-    scale: 1.1;
-  }
-}
-
 @container display (min-width: 56rem) {
   .home-hero {
     grid-template-columns: minmax(0, 1fr) 230px;
@@ -504,71 +465,6 @@ body {
     border-left: 1px solid var(--color-hairline);
     padding-top: 0;
     padding-left: 1.5rem;
-  }
-}
-
-@container display (min-width: 60rem) {
-  .home-goal-ring {
-    width: 172px !important;
-    height: 172px !important;
-  }
-
-  .home-goal-value {
-    font-size: 25px;
-  }
-
-  .home-goal-label {
-    font-size: 11px;
-  }
-
-  .home-goal-caption {
-    font-size: 12px;
-  }
-}
-
-@container display (min-width: 64rem) {
-  .home-goal-ring {
-    width: 188px !important;
-    height: 188px !important;
-  }
-
-  .home-goal-value {
-    font-size: 28px;
-  }
-
-  .home-goal-label {
-    font-size: 12px;
-  }
-
-  .home-goal-caption {
-    font-size: 13px;
-  }
-
-  .home-goal-skeleton-content {
-    scale: 1.25;
-  }
-}
-
-@container display (min-width: 72rem) {
-  .home-goal-ring {
-    width: 200px !important;
-    height: 200px !important;
-  }
-
-  .home-goal-value {
-    font-size: 30px;
-  }
-
-  .home-goal-label {
-    font-size: 12.5px;
-  }
-
-  .home-goal-caption {
-    font-size: 13.5px;
-  }
-
-  .home-goal-skeleton-content {
-    scale: 1.35;
   }
 }
 

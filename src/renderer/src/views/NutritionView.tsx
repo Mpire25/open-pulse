@@ -139,18 +139,17 @@ export function NutritionView({ date, goals, onOpenMetric, onSelectDate }: Nutri
           <motion.div custom={1} variants={fade} initial="hidden" animate="show">
             <Panel className={`nutrition-hero ${CARD_HEIGHT.hero}`}>
               <div className="flex min-w-[180px] items-center justify-center">
-                {intakePending ? (
-                  <div className="flex flex-col items-center gap-2" aria-hidden>
+                <button
+                  type="button"
+                  onClick={intakePending ? undefined : () => onOpenMetric('caloriesIn', 'D')}
+                  disabled={intakePending}
+                  aria-busy={intakePending}
+                  className="group -m-2 flex flex-col items-center gap-2 rounded-2xl p-3 outline-none transition-[background-color,box-shadow,transform] duration-200 hover:bg-white/[0.05] hover:shadow-[inset_0_0_0_1px_rgb(255_255_255/0.07)] focus-visible:bg-white/[0.05] focus-visible:ring-2 focus-visible:ring-accent/60 active:scale-[0.98]"
+                  aria-label="Open calories eaten details"
+                >
+                  {intakePending ? (
                     <SkeletonRing size={146} stroke={15} />
-                    <SkeletonText className="w-28" />
-                  </div>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => onOpenMetric('caloriesIn', 'D')}
-                    className="group -m-2 flex flex-col items-center gap-2 rounded-2xl p-3 outline-none transition-[background-color,box-shadow,transform] duration-200 hover:bg-white/[0.05] hover:shadow-[inset_0_0_0_1px_rgb(255_255_255/0.07)] focus-visible:bg-white/[0.05] focus-visible:ring-2 focus-visible:ring-accent/60 active:scale-[0.98]"
-                    aria-label="Open calories eaten details"
-                  >
+                  ) : (
                     <ProgressRing
                       value={today.caloriesIn ?? 0}
                       goal={goals.caloriesIn}
@@ -167,13 +166,17 @@ export function NutritionView({ date, goals, onOpenMetric, onSelectDate }: Nutri
                         </div>
                       </div>
                     </ProgressRing>
+                  )}
+                  {intakePending ? (
+                    <SkeletonText className="h-[13px] w-28" />
+                  ) : (
                     <span className="font-mono text-[11px] text-ink-dim transition-colors group-hover:text-ink">
                       {intakePct != null
                         ? `${intakePct}% of ${formatInt(goals.caloriesIn)} kcal`
                         : `${formatInt(goals.caloriesIn)} kcal goal`}
                     </span>
-                  </button>
-                )}
+                  )}
+                </button>
               </div>
 
               <div className="nutrition-hero-macros">
@@ -201,19 +204,23 @@ export function NutritionView({ date, goals, onOpenMetric, onSelectDate }: Nutri
             </Panel>
           </motion.div>
 
-          {(nutritionLogs.isPending || nutritionLogs.isError || entries.length > 0) && (
-            <motion.div custom={2} variants={fade} initial="hidden" animate="show">
-              {nutritionLogs.isPending ? (
-                <NutritionLogsSkeleton />
-              ) : nutritionLogs.isError ? (
-                <Panel className="px-5 py-4 text-[12px] text-ink-faint">
-                  Individual food details could not be loaded.
-                </Panel>
-              ) : (
-                <NutritionLogsPanel entries={entries} />
-              )}
-            </motion.div>
-          )}
+          <motion.div custom={2} variants={fade} initial="hidden" animate="show">
+            {nutritionLogs.isPending ? (
+              <NutritionLogsSkeleton />
+            ) : nutritionLogs.isError ? (
+              <NutritionLogsStatus
+                hint="Food details unavailable"
+                message="Individual food details could not be loaded."
+              />
+            ) : entries.length > 0 ? (
+              <NutritionLogsPanel entries={entries} />
+            ) : (
+              <NutritionLogsStatus
+                hint="No entries for this day"
+                message="No meals were logged for this day."
+              />
+            )}
+          </motion.div>
 
           {/* Trends */}
           <div className="grid grid-cols-1 gap-5">
@@ -304,7 +311,7 @@ function NutritionLogsPanel({ entries }: { entries: NutritionLogEntry[] }): Reac
   })).filter((group) => group.entries.length > 0)
 
   return (
-    <Panel className="overflow-hidden">
+    <Panel className={`overflow-hidden ${CARD_HEIGHT.list}`}>
       <div className="border-b border-hairline px-5 pb-3 pt-4">
         <SectionHeader
           title="Logged meals"
@@ -316,6 +323,23 @@ function NutritionLogsPanel({ entries }: { entries: NutritionLogEntry[] }): Reac
         {groups.map((group) => (
           <MealGroupSection key={group.label} label={group.label} entries={group.entries} />
         ))}
+      </div>
+    </Panel>
+  )
+}
+
+function NutritionLogsStatus({ hint, message }: { hint: string; message: string }): React.JSX.Element {
+  return (
+    <Panel className={`overflow-hidden ${CARD_HEIGHT.list}`}>
+      <div className="border-b border-hairline px-5 pb-3 pt-4">
+        <SectionHeader
+          title="Logged meals"
+          hint={hint}
+          icon={<ForkKnife size={18} weight="fill" style={{ color: 'var(--color-recovery)' }} />}
+        />
+      </div>
+      <div className="grid min-h-[168px] place-items-center px-5 text-center text-[13px] text-ink-faint">
+        {message}
       </div>
     </Panel>
   )
@@ -450,10 +474,13 @@ function MealSummary({
 
 function NutritionLogsSkeleton(): React.JSX.Element {
   return (
-    <Panel className="overflow-hidden" aria-hidden>
+    <Panel className={`overflow-hidden ${CARD_HEIGHT.list}`} aria-hidden>
       <div className="border-b border-hairline px-5 pb-3 pt-4">
-        <SkeletonText className="h-4 w-28" />
-        <SkeletonText className="mt-2 w-36" />
+        <SectionHeader
+          title="Logged meals"
+          hint={<SkeletonText className="w-36" />}
+          icon={<ForkKnife size={18} weight="fill" style={{ color: 'var(--color-recovery)' }} />}
+        />
       </div>
       {Array.from({ length: 2 }, (_, groupIndex) => (
         <div key={groupIndex} className="border-b border-hairline last:border-b-0">
@@ -481,7 +508,7 @@ function MacroBreakdownSkeleton(): React.JSX.Element {
       <SkeletonBlock className="h-3 w-full rounded-full" />
       <div className="grid grid-cols-3 gap-3">
         {MACROS.map((macro) => (
-          <div key={macro.key} className="flex flex-col gap-2 px-2 py-1.5">
+          <div key={macro.key} className="-m-1 flex min-w-0 flex-col gap-2 rounded-xl p-3">
             <SkeletonText className="w-14" />
             <div className="flex items-center gap-3">
               <div className="flex flex-col gap-2">
@@ -495,9 +522,9 @@ function MacroBreakdownSkeleton(): React.JSX.Element {
       </div>
       <div className="display-sm-four-grid gap-3 border-t border-hairline pt-3">
         {SECONDARY_NUTRIENTS.map((nutrient) => (
-          <div key={nutrient.key} className="flex flex-col gap-1.5 px-2">
-            <SkeletonText className="w-16" />
-            <SkeletonBlock className="h-4 w-12" />
+          <div key={nutrient.key} className="min-w-0 rounded-xl px-2 py-1">
+            <SkeletonText className="h-4 w-16" />
+            <SkeletonBlock className="mt-1 h-5 w-12" />
           </div>
         ))}
       </div>

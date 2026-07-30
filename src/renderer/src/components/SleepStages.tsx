@@ -1,6 +1,9 @@
 import { useMemo, useState } from 'react'
+import { motion, useReducedMotion } from 'framer-motion'
 import type { AssistantSleepNight, SleepStageType } from '@shared/types'
+import { SkeletonBlock } from '@/components/Skeleton'
 import { formatClock, formatMinutes } from '@/lib/format'
+import { SLEEP_STAGE_FRAME, sleepStageChartHeight } from '@/lib/layout-contracts'
 
 export const STAGE_COLOR: Record<SleepStageType, string> = {
   AWAKE: 'var(--color-stage-awake)',
@@ -20,19 +23,22 @@ const ROW_ORDER: SleepStageType[] = ['AWAKE', 'REM', 'LIGHT', 'DEEP']
 interface SleepStagesProps {
   night: AssistantSleepNight | null
   compact?: boolean
+  loading?: boolean
 }
 
 const EMPTY_STAGES: AssistantSleepNight['stages'] = []
+const STAGE_REVEAL_EASE = [0.22, 1, 0.36, 1] as const
 
 // Hypnogram: each stage segment drawn as a rounded block on its own row,
 // with a per-segment hover readout.
-export function SleepStages({ night, compact = false }: SleepStagesProps): React.JSX.Element {
+export function SleepStages({ night, compact = false, loading = false }: SleepStagesProps): React.JSX.Element {
   const stages = night?.stages ?? EMPTY_STAGES
+  const reduceMotion = useReducedMotion()
   const start = night ? new Date(night.startTime).getTime() : 0
   const end = night ? new Date(night.endTime).getTime() : 1
   const total = Math.max(1, end - start)
-  const rowHeight = compact ? 18 : 22
-  const rowGap = compact ? 6 : 8
+  const frame = compact ? SLEEP_STAGE_FRAME.compact : SLEEP_STAGE_FRAME.regular
+  const { rowHeight, rowGap } = frame
   const [hover, setHover] = useState<{ i: number; text: string; left: number; top: number } | null>(null)
 
   const blocks = useMemo(
@@ -54,6 +60,10 @@ export function SleepStages({ night, compact = false }: SleepStagesProps): React
         }
       }),
     [rowGap, rowHeight, stages, start, total]
+  )
+  const animationKey = useMemo(
+    () => stages.map((stage) => `${stage.type}:${stage.startTime}:${stage.endTime}`).join('|'),
+    [stages]
   )
 
   const connectors = blocks.slice(1).flatMap((next, index) => {
@@ -80,10 +90,10 @@ export function SleepStages({ night, compact = false }: SleepStagesProps): React
     ]
   })
 
-  const chartHeight = ROW_ORDER.length * rowHeight + (ROW_ORDER.length - 1) * rowGap
+  const chartHeight = sleepStageChartHeight(compact)
 
   return (
-    <div>
+    <div aria-busy={loading} aria-hidden={loading || undefined}>
       <div className="flex gap-3">
         <div className="flex flex-col justify-between py-0.5" style={{ height: chartHeight }}>
           {ROW_ORDER.map((t) => (
@@ -92,7 +102,7 @@ export function SleepStages({ night, compact = false }: SleepStagesProps): React
               className={`${compact ? 'text-[10px]' : 'text-[11px]'} leading-none text-ink-faint`}
               style={{ height: rowHeight }}
             >
-              {STAGE_LABEL[t]}
+              {loading ? <SkeletonBlock className="h-2.5 w-10" /> : STAGE_LABEL[t]}
             </span>
           ))}
         </div>
@@ -104,44 +114,69 @@ export function SleepStages({ night, compact = false }: SleepStagesProps): React
               style={{ top: r * (rowHeight + rowGap), height: rowHeight }}
             />
           ))}
-          {connectors.map((connector) => (
-            <div
-              key={connector.key}
-              aria-hidden
-              className="pointer-events-none absolute w-[1.5px] -translate-x-1/2 rounded-full transition-opacity duration-150"
-              style={{
-                left: `${connector.left}%`,
-                top: connector.top,
-                height: connector.height,
-                background: `linear-gradient(to bottom, ${connector.topColor}, ${connector.bottomColor})`,
-                opacity:
-                  hover && hover.i !== connector.from && hover.i !== connector.to
-                    ? 0.35
-                    : 0.85
-              }}
-            />
-          ))}
-          {blocks.map((b) => {
-            const overlapLeft = b.left > 0.01 ? 1 : 0
-            const overlapRight = b.left + b.width < 99.99 ? 1 : 0
-            return (
-              <div
-                key={b.key}
-                className="absolute z-[1] rounded-[5px] transition-opacity"
-                style={{
-                  left: `calc(${b.left}% - ${overlapLeft}px)`,
-                  width: `calc(${b.width}% + ${overlapLeft + overlapRight}px)`,
-                  top: b.top,
-                  height: rowHeight,
-                  background: STAGE_COLOR[b.type],
-                  opacity: hover && hover.i !== b.key ? 0.55 : 1
-                }}
-                onPointerMove={() => setHover({ i: b.key, text: b.tip, left: b.left + b.width / 2, top: b.top })}
-                onPointerLeave={() => setHover(null)}
-              />
-            )
-          })}
-          {hover && (
+          {loading ? (
+            <div className="absolute inset-0">
+              {ROW_ORDER.map((stage, row) => (
+                <SkeletonBlock
+                  key={stage}
+                  className="absolute rounded-[5px]"
+                  style={{
+                    left: `${8 + row * 12}%`,
+                    width: `${24 + (row % 2) * 18}%`,
+                    top: row * (rowHeight + rowGap),
+                    height: rowHeight,
+                  } as React.CSSProperties}
+                />
+              ))}
+            </div>
+          ) : (
+            <motion.div
+              key={animationKey}
+              className="absolute inset-0"
+              initial={reduceMotion ? false : { clipPath: 'inset(0 100% 0 0)' }}
+              animate={{ clipPath: 'inset(0 0% 0 0)' }}
+              transition={{ duration: reduceMotion ? 0 : 0.9, ease: STAGE_REVEAL_EASE }}
+            >
+              {connectors.map((connector) => (
+                <div
+                  key={connector.key}
+                  aria-hidden
+                  className="pointer-events-none absolute w-[1.5px] -translate-x-1/2 rounded-full transition-opacity duration-150"
+                  style={{
+                    left: `${connector.left}%`,
+                    top: connector.top,
+                    height: connector.height,
+                    background: `linear-gradient(to bottom, ${connector.topColor}, ${connector.bottomColor})`,
+                    opacity:
+                      hover && hover.i !== connector.from && hover.i !== connector.to
+                        ? 0.35
+                        : 0.85
+                  }}
+                />
+              ))}
+              {blocks.map((b) => {
+                const overlapLeft = b.left > 0.01 ? 1 : 0
+                const overlapRight = b.left + b.width < 99.99 ? 1 : 0
+                return (
+                  <div
+                    key={b.key}
+                    className="absolute z-[1] rounded-[5px] transition-opacity"
+                    style={{
+                      left: `calc(${b.left}% - ${overlapLeft}px)`,
+                      width: `calc(${b.width}% + ${overlapLeft + overlapRight}px)`,
+                      top: b.top,
+                      height: rowHeight,
+                      background: STAGE_COLOR[b.type],
+                      opacity: hover && hover.i !== b.key ? 0.55 : 1
+                    }}
+                    onPointerMove={() => setHover({ i: b.key, text: b.tip, left: b.left + b.width / 2, top: b.top })}
+                    onPointerLeave={() => setHover(null)}
+                  />
+                )
+              })}
+            </motion.div>
+          )}
+          {!loading && hover && (
             <div
               className="pointer-events-none absolute z-20 -translate-x-1/2 -translate-y-[calc(100%+8px)] whitespace-nowrap rounded-lg border border-hairline bg-panel-2/95 px-2 py-1 text-[11px] font-medium text-ink shadow-lg backdrop-blur-md"
               style={{ left: `${Math.min(88, Math.max(12, hover.left))}%`, top: hover.top }}
@@ -152,21 +187,53 @@ export function SleepStages({ night, compact = false }: SleepStagesProps): React
         </div>
       </div>
       <div
-        className={`${compact ? 'mt-2 pl-[47px] text-[10px]' : 'mt-3 pl-[52px] text-[11px]'} flex items-center justify-between font-mono text-ink-faint`}
+        className={`${compact ? 'mt-2 text-[10px]' : 'mt-3 text-[11px]'} flex items-center justify-between font-mono text-ink-faint`}
+        style={{
+          height: frame.timeHeight,
+          lineHeight: `${frame.timeHeight}px`,
+          paddingLeft: frame.timeOffset
+        }}
       >
-        <span>{night ? formatClock(night.startTime) : '—'}</span>
-        <span>{night ? formatClock(night.endTime) : '—'}</span>
+        {loading ? (
+          <>
+            <SkeletonBlock className="h-2.5 w-12" />
+            <SkeletonBlock className="h-2.5 w-12" />
+          </>
+        ) : (
+          <>
+            <span>{night ? formatClock(night.startTime) : '—'}</span>
+            <span>{night ? formatClock(night.endTime) : '—'}</span>
+          </>
+        )}
       </div>
       <div className={`${compact ? 'mt-3' : 'mt-4'} grid grid-cols-4 gap-2`}>
         {ROW_ORDER.map((t) => (
           <div key={t} className="flex flex-col gap-1">
-            <div className="flex items-center gap-1.5">
-              <span className="h-2 w-2 rounded-full" style={{ background: STAGE_COLOR[t] }} />
-              <span className={`${compact ? 'text-[10px]' : 'text-[11px]'} text-ink-dim`}>{STAGE_LABEL[t]}</span>
+            <div
+              className="flex items-center gap-1.5"
+              style={{ height: frame.summaryLabelHeight, lineHeight: `${frame.summaryLabelHeight}px` }}
+            >
+              {loading ? (
+                <SkeletonBlock className="h-2.5 w-12" />
+              ) : (
+                <>
+                  <span className="h-2 w-2 rounded-full" style={{ background: STAGE_COLOR[t] }} />
+                  <span className={`${compact ? 'text-[10px]' : 'text-[11px]'} text-ink-dim`}>{STAGE_LABEL[t]}</span>
+                </>
+              )}
             </div>
-            <span className={`${compact ? 'text-[12px]' : 'text-[13px]'} font-semibold text-ink`}>
-              {night ? formatMinutes(night.stageMinutes[t] ?? 0) : '—'}
-            </span>
+            <div
+              className="flex items-center"
+              style={{ height: frame.summaryValueHeight, lineHeight: `${frame.summaryValueHeight}px` }}
+            >
+              {loading ? (
+                <SkeletonBlock className="h-3.5 w-10" />
+              ) : (
+                <span className={`${compact ? 'text-[12px]' : 'text-[13px]'} font-semibold text-ink`}>
+                  {night ? formatMinutes(night.stageMinutes[t] ?? 0) : '—'}
+                </span>
+              )}
+            </div>
           </div>
         ))}
       </div>

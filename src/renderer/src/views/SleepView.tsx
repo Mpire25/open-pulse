@@ -3,7 +3,7 @@ import { CaretRight, Moon, Timer } from '@phosphor-icons/react'
 import { Panel, DrillHeader, InteractivePanel } from '@/components/Panel'
 import { ColumnChart, ProgressRing, TrendLine } from '@/components/charts'
 import { SleepStages, STAGE_COLOR } from '@/components/SleepStages'
-import { CARD_HEIGHT, SkeletonChart, SkeletonRing, SkeletonSleepStages, SkeletonText } from '@/components/Skeleton'
+import { CARD_HEIGHT, SkeletonChart, SkeletonRing, SkeletonText } from '@/components/Skeleton'
 import { ErrorState } from '@/components/ErrorState'
 import { useSleepRange } from '@/hooks/useHealth'
 import { listDates, rangeEnding } from '@/lib/metrics'
@@ -54,40 +54,24 @@ export function SleepView({ date, goals, onOpenMetric, onOpenStages, onSelectDat
 
       {/* Selected night */}
       <motion.div custom={1} variants={fade} initial="hidden" animate="show">
-        {nights.isPending ? (
-          <Panel className="sleep-hero">
-            <div className="flex flex-col items-center justify-center gap-3 rounded-[18px] p-4" aria-hidden>
-              <SkeletonRing size={172} stroke={16} />
-              <div className="flex flex-col items-center gap-1.5">
-                <SkeletonText className="w-28" />
-                <SkeletonText className="h-2.5 w-16" />
-              </div>
-            </div>
-            <div className="flex flex-col justify-center rounded-[18px] p-4">
-              <DrillHeader
-                title="Stages"
-                hint={<SkeletonText className="w-32" />}
-                icon={<Moon size={18} weight="fill" style={{ color: 'var(--color-sleep)' }} />}
-              />
-              <div className="mt-5">
-                <SkeletonSleepStages />
-              </div>
-            </div>
-            <SleepNightSummarySkeleton />
-          </Panel>
-        ) : (
-          <Panel className="sleep-hero">
-            <button
-              type="button"
-              onClick={() => onOpenMetric('sleepMinutes', 'D')}
-              className="group/drill relative flex min-w-0 flex-col items-center justify-center gap-3 rounded-[18px] p-4 transition-colors hover:bg-white/[0.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
-              aria-label="Open sleep duration details"
-            >
+        <Panel className="sleep-hero" aria-busy={nights.isPending}>
+          <button
+            type="button"
+            onClick={nights.isPending ? undefined : () => onOpenMetric('sleepMinutes', 'D')}
+            disabled={nights.isPending}
+            className="group/drill relative flex min-w-0 flex-col items-center justify-center gap-3 rounded-[18px] p-4 transition-colors hover:bg-white/[0.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+            aria-label="Open sleep duration details"
+          >
+            {!nights.isPending && (
               <CaretRight
                 size={14}
                 weight="bold"
                 className="absolute right-4 top-4 text-ink-faint transition-all group-hover/drill:translate-x-0.5 group-hover/drill:text-ink"
               />
+            )}
+            {nights.isPending ? (
+              <SkeletonRing size={172} stroke={16} />
+            ) : (
               <ProgressRing
                 value={night?.minutesAsleep ?? 0}
                 goal={goals.sleepMinutes}
@@ -102,30 +86,43 @@ export function SleepView({ date, goals, onOpenMetric, onOpenStages, onSelectDat
                   <div className="mt-1 text-[10px] uppercase tracking-wide text-ink-faint">asleep</div>
                 </div>
               </ProgressRing>
+            )}
+            {nights.isPending ? (
+              <SkeletonText className="h-[13px] w-28" />
+            ) : (
               <span className="font-mono text-[11px] text-ink-dim">
                 {night
                   ? `${Math.round((night.minutesAsleep / goals.sleepMinutes) * 100)}% of ${formatMinutes(goals.sleepMinutes)} goal`
                   : `${formatMinutes(goals.sleepMinutes)} goal`}
               </span>
-            </button>
-            <button
-              type="button"
-              onClick={onOpenStages}
-              className="group/drill flex min-w-0 flex-col justify-center rounded-[18px] p-4 text-left transition-colors hover:bg-white/[0.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
-              aria-label="Open sleep stages details"
-            >
-              <DrillHeader
-                title="Stages"
-                hint={night ? 'Hover a block for its timing' : 'No stages recorded'}
-                icon={<Moon size={18} weight="fill" style={{ color: 'var(--color-sleep)' }} />}
-              />
-              <div className="mt-4">
-                <SleepStages night={night} compact />
-              </div>
-            </button>
-            <SleepNightSummary night={night} />
-          </Panel>
-        )}
+            )}
+          </button>
+          <button
+            type="button"
+            onClick={nights.isPending ? undefined : onOpenStages}
+            disabled={nights.isPending}
+            className="group/drill flex min-w-0 flex-col justify-center rounded-[18px] p-4 text-left transition-colors hover:bg-white/[0.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+            aria-label="Open sleep stages details"
+          >
+            <DrillHeader
+              title="Stages"
+              hint={
+                nights.isPending ? (
+                  <SkeletonText className="w-32" />
+                ) : night ? (
+                  'Hover a block for its timing'
+                ) : (
+                  'No stages recorded'
+                )
+              }
+              icon={<Moon size={18} weight="fill" style={{ color: 'var(--color-sleep)' }} />}
+            />
+            <div className="mt-4">
+              <SleepStages night={night} compact loading={nights.isPending} />
+            </div>
+          </button>
+          <SleepNightSummary night={night} loading={nights.isPending} />
+        </Panel>
       </motion.div>
 
       <div className="display-lg-pair-grid">
@@ -176,7 +173,7 @@ export function SleepView({ date, goals, onOpenMetric, onOpenStages, onSelectDat
               />
               <div className="mt-auto">
                 {nights.isPending ? (
-                  <SkeletonChart />
+                  <SkeletonChart variant="line" />
                 ) : (
                   <TrendLine
                     data={dates.map((d) => ({
@@ -215,20 +212,7 @@ export function SleepView({ date, goals, onOpenMetric, onOpenStages, onSelectDat
   )
 }
 
-function SleepNightSummarySkeleton(): React.JSX.Element {
-  return (
-    <div className="sleep-summary mx-4 mb-2 flex flex-wrap gap-x-8 gap-y-3 border-t border-hairline pt-4" aria-hidden>
-      {Array.from({ length: 3 }, (_, index) => (
-        <div key={index} className="flex items-center gap-2">
-          <SkeletonText className="w-16" />
-          <SkeletonText className="h-4 w-14" />
-        </div>
-      ))}
-    </div>
-  )
-}
-
-function SleepNightSummary({ night }: { night: SleepNight | null }): React.JSX.Element {
+function SleepNightSummary({ night, loading = false }: { night: SleepNight | null; loading?: boolean }): React.JSX.Element {
   const interruptions = night && night.stages.length > 0
     ? `${night.interruptionCount} ${night.interruptionCount === 1 ? 'moment' : 'moments'} · ${formatMinutes(night.interruptionMinutes)}`
     : '—'
@@ -239,11 +223,23 @@ function SleepNightSummary({ night }: { night: SleepNight | null }): React.JSX.E
   ]
 
   return (
-    <div className="sleep-summary mx-4 mb-2 flex flex-wrap items-center gap-x-8 gap-y-2 border-t border-hairline pt-4">
+    <div
+      className="sleep-summary mx-4 mb-2 flex flex-wrap items-center gap-x-8 gap-y-2 border-t border-hairline pt-4"
+      aria-busy={loading}
+    >
       {items.map((item) => (
         <div key={item.label} className="flex items-baseline gap-2">
-          <span className="text-[10.5px] font-medium text-ink-faint">{item.label}</span>
-          <span className="font-mono text-[13px] font-medium text-ink">{item.value}</span>
+          {loading ? (
+            <>
+              <SkeletonText className="w-16" />
+              <SkeletonText className="h-4 w-14" />
+            </>
+          ) : (
+            <>
+              <span className="text-[10.5px] font-medium text-ink-faint">{item.label}</span>
+              <span className="font-mono text-[13px] font-medium text-ink">{item.value}</span>
+            </>
+          )}
         </div>
       ))}
     </div>
