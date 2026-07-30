@@ -1,5 +1,5 @@
 import type { HTMLAttributes } from 'react'
-import { CHART_PLOT } from '@/lib/layout-contracts'
+import { CHART_PLOT, chartColumnMaxWidth } from '@/lib/layout-contracts'
 import { cn } from '@/lib/utils'
 
 /**
@@ -103,8 +103,11 @@ export function SkeletonChart({
           {Array.from({ length: columns }, (_, index) => (
             <span key={index} className="flex min-w-0 items-end justify-center px-px">
               <SkeletonBlock
-                className="w-full max-w-6 rounded-t-[5px] rounded-b-none"
-                style={{ height: `${heights[index % heights.length]}%` } as React.CSSProperties}
+                className="w-full min-w-[3px] rounded-t-[5px] rounded-b-none"
+                style={{
+                  height: `${heights[index % heights.length]}%`,
+                  maxWidth: chartColumnMaxWidth(columns)
+                }}
               />
             </span>
           ))}

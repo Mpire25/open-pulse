@@ -7,7 +7,7 @@ import { animate, motion, useMotionValue, useReducedMotion, useTransform } from 
 import { formatMinuteOfDay } from '@/lib/format'
 import { sampleHeartRateForChart } from '@/lib/heart-rate'
 import { lineAxis } from '@/lib/chart-scale'
-import { CHART_PLOT } from '@/lib/layout-contracts'
+import { CHART_PLOT, chartColumnWidth } from '@/lib/layout-contracts'
 import { cn } from '@/lib/utils'
 
 // ---------------------------------------------------------------------------
@@ -97,18 +97,10 @@ function axisNumber(n: number): string {
 
 const MAX_KEYBOARD_SELECTABLE_POINTS = 60
 const CHART_EASE = [0.22, 1, 0.36, 1] as const
-const SHORT_RANGE_COLUMN_COUNT = 7
-const DEFAULT_MAX_COLUMN_WIDTH = 24
-const SHORT_RANGE_MAX_COLUMN_WIDTH = 40
 
 function chartStaggerDelay(index: number, count: number): number {
   if (count <= 1) return 0
   return (index / (count - 1)) * 0.64
-}
-
-function columnWidth(band: number, count: number): number {
-  const maxWidth = count <= SHORT_RANGE_COLUMN_COUNT ? SHORT_RANGE_MAX_COLUMN_WIDTH : DEFAULT_MAX_COLUMN_WIDTH
-  return Math.min(maxWidth, Math.max(3, band - 2))
 }
 
 export interface ColumnDatum {
@@ -160,7 +152,7 @@ export function ColumnChart({
   const max = niceMax(rawMax)
   const band = data.length > 0 ? plotW / data.length : 0
   const keyboardSelectionEnabled = data.length <= MAX_KEYBOARD_SELECTABLE_POINTS
-  const barW = columnWidth(band, data.length)
+  const barW = chartColumnWidth(band, data.length)
   const y = (v: number): number => pad.top + plotH * (1 - v / max)
 
   const gridValues = [0, max / 2, max]
@@ -388,7 +380,7 @@ export function StackedColumnChart({
   const totals = data.map((datum) => datum.segments.reduce((sum, segment) => sum + segment.value, 0))
   const max = niceMax(Math.max(0, ...totals))
   const band = data.length > 0 ? plotW / data.length : 0
-  const barW = columnWidth(band, data.length)
+  const barW = chartColumnWidth(band, data.length)
   const keyboardSelectionEnabled = data.length <= MAX_KEYBOARD_SELECTABLE_POINTS
   const y = (value: number): number => pad.top + plotH * (1 - value / max)
   const gridValues = [0, max / 2, max]

@@ -447,6 +447,8 @@ function WorkoutRangeTabs({
 }
 
 function WorkoutsSkeleton({ range }: { range: MetricRange }): React.JSX.Element {
+  const columns = RANGES.find((candidate) => candidate.id === range)!.days
+
   return (
     <>
       <Panel className={`display-sm-four-grid divide-x divide-hairline overflow-hidden ${CARD_HEIGHT.periodStats}`}>
@@ -465,7 +467,7 @@ function WorkoutsSkeleton({ range }: { range: MetricRange }): React.JSX.Element 
               hint="Active minutes by workout type"
               icon={<CalendarCheck size={18} weight="fill" className="text-recovery" />}
             />
-            <SkeletonChart height={190} columns={range === 'W' ? 7 : 12} />
+            <SkeletonChart height={190} columns={columns} />
           </Panel>
         )}
         <Panel

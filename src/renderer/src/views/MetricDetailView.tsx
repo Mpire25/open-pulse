@@ -170,6 +170,8 @@ function MetricDetailSkeleton({
   range: MetricRange
   hasGoal: boolean
 }): React.JSX.Element {
+  const spec = RANGES.find((candidate) => candidate.id === range)!
+
   if (range === 'D') {
     const hasTimeline =
       metricKey === 'steps' ||
@@ -222,6 +224,9 @@ function MetricDetailSkeleton({
     )
   }
 
+  const chartVariant = METRICS[metricKey].chart
+  const columns = range === 'Y' && chartVariant === 'bar' ? Math.ceil(spec.days / 7) : spec.days
+
   return (
     <>
       <Panel className={`display-sm-four-grid divide-x divide-hairline overflow-hidden ${CARD_HEIGHT.periodStats}`}>
@@ -236,8 +241,8 @@ function MetricDetailSkeleton({
         <SectionHeader title="Loading period" />
         <SkeletonChart
           height={240}
-          columns={range === 'Y' ? 12 : 7}
-          variant={METRICS[metricKey].chart}
+          columns={columns}
+          variant={chartVariant}
         />
       </Panel>
       <HistoryListSkeleton />
