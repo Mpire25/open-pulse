@@ -23,6 +23,7 @@ const {
   getSleepRange,
   getWorkoutHeartRate,
   getWorkoutsRange,
+  isHealthCacheTimestampFresh,
   resetHealthAccount
 } = await import('../src/main/health-service')
 const {
@@ -34,6 +35,7 @@ const {
 const { disconnectCodex, getCodexTokens } = await import('../src/main/codex-auth')
 const { runHealthAgentTool } = await import('../src/main/health-agent-tools')
 const { shiftIsoDate } = await import('../src/main/health-api')
+const { markFetched } = await import('../src/main/metric-store')
 const { setSecret, updateSettings } = await import('../src/main/store')
 
 const HOME_METRICS: MetricKey[] = [
@@ -214,6 +216,63 @@ describe('health request budgets', () => {
       { minute: 10 * 60 + 30, bpm: 120 }
     ])
     expect(requests).toHaveLength(0)
+  })
+
+  test('refreshes stale recent full-day heart rate before using it for a workout', async () => {
+    const now = Date.now()
+    const recent = new Date(now)
+    recent.setDate(recent.getDate() - 1)
+    const date = [
+      recent.getFullYear(),
+      String(recent.getMonth() + 1).padStart(2, '0'),
+      String(recent.getDate()).padStart(2, '0')
+    ].join('-')
+    const startTime = new Date(recent.getFullYear(), recent.getMonth(), recent.getDate(), 10).toISOString()
+    const endTime = new Date(recent.getFullYear(), recent.getMonth(), recent.getDate(), 11).toISOString()
+    const heartTime = new Date(recent.getFullYear(), recent.getMonth(), recent.getDate(), 10, 30).toISOString()
+    const id = 'users/me/dataTypes/exercise/dataPoints/workout-stale-day'
+    globalThis.fetch = (async (input) => {
+      requests.push(String(input))
+      if (String(input).includes('/exercise/dataPoints:reconcile')) {
+        return new Response(JSON.stringify({
+          dataPoints: [workoutPoint(id, startTime, endTime)]
+        }), { status: 200 })
+      }
+      return new Response(JSON.stringify({
+        rollupDataPoints: [{
+          startTime: heartTime,
+          heartRate: { beatsPerMinuteAvg: 120 }
+        }]
+      }), { status: 200 })
+    }) as typeof fetch
+
+    await getWorkoutsRange(date, date)
+    await getIntraday(date, false, undefined, 'heart')
+    markFetched('intraday-heart-v2', [date], now - 31 * 60_000)
+    requests = []
+
+    await getWorkoutHeartRate(date, id)
+
+    expect(requests).toHaveLength(1)
+    expect(requests[0]).toContain('/heart-rate/dataPoints:rollUp')
+  })
+
+  test('applies the normal freshness windows to workout heart-rate cache timestamps', () => {
+    const now = Date.now()
+    const today = new Date(now)
+    const todayDate = [
+      today.getFullYear(),
+      String(today.getMonth() + 1).padStart(2, '0'),
+      String(today.getDate()).padStart(2, '0')
+    ].join('-')
+    const recentDate = shiftIsoDate(todayDate, -1)
+    const settledDate = shiftIsoDate(todayDate, -3)
+
+    expect(isHealthCacheTimestampFresh(todayDate, now - 60_000, now)).toBe(true)
+    expect(isHealthCacheTimestampFresh(todayDate, now - 2 * 60_000, now)).toBe(false)
+    expect(isHealthCacheTimestampFresh(recentDate, now - 29 * 60_000, now)).toBe(true)
+    expect(isHealthCacheTimestampFresh(recentDate, now - 30 * 60_000, now)).toBe(false)
+    expect(isHealthCacheTimestampFresh(settledDate, 0, now)).toBe(true)
   })
 
   test('surfaces Google refresh failures instead of substituting generated data', async () => {

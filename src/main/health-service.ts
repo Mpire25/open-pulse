@@ -154,14 +154,16 @@ function normalizeRange(start: string, end: string): [string, string] {
 const TTL_TODAY_MS = 2 * 60_000
 const TTL_RECENT_MS = 30 * 60_000 // late device syncs still land on recent days
 
+export function isHealthCacheTimestampFresh(date: string, at: number, now = Date.now()): boolean {
+  const today = isoDate(new Date(now))
+  if (date >= today) return now - at < TTL_TODAY_MS
+  if (date >= shiftIsoDate(today, -2)) return now - at < TTL_RECENT_MS
+  return true // settled history: only a forced refresh refetches
+}
+
 function isFresh(group: string, date: string, now = Date.now()): boolean {
   const at = fetchedAt(group, date)
-  if (at != null) {
-    const today = todayIso()
-    if (date >= today) return now - at < TTL_TODAY_MS
-    if (date >= shiftIsoDate(today, -2)) return now - at < TTL_RECENT_MS
-    return true // settled history: only a forced refresh refetches
-  }
+  if (at != null) return isHealthCacheTimestampFresh(date, at, now)
   return isPartialFetchCoolingDown(fetchedAt(partialFetchGroupId(group), date), now)
 }
 
@@ -256,11 +258,7 @@ const heartThresholdRawCache = new Map<string, RawDayCacheEntry>()
 const heartThresholdRawInFlight = new Map<string, SharedOperation<void>>()
 
 function rawDayFresh(entry: RawDayCacheEntry | undefined, date: string, now = Date.now()): boolean {
-  if (!entry) return false
-  const today = todayIso()
-  if (date >= today) return now - entry.fetchedAt < TTL_TODAY_MS
-  if (date >= shiftIsoDate(today, -2)) return now - entry.fetchedAt < TTL_RECENT_MS
-  return true
+  return entry ? isHealthCacheTimestampFresh(date, entry.fetchedAt, now) : false
 }
 
 function rawSampleDate(point: RawDataPoint, key: 'weight'): string | null {
@@ -1035,7 +1033,7 @@ async function ensureWorkoutsRange(
 }
 
 const workoutTrackCache = new Map<string, WorkoutTrackResult>()
-const workoutHeartRateCache = new Map<string, HeartRatePoint[]>()
+const workoutHeartRateCache = new Map<string, { points: HeartRatePoint[]; fetchedAt: number }>()
 
 export async function getWorkoutTrack(workoutId: string, signal?: AbortSignal): Promise<WorkoutTrackResult> {
   const generation = healthAccountGeneration
@@ -1095,16 +1093,18 @@ export async function getWorkoutHeartRate(
     point.minute >= startMinute && point.minute <= endMinute
 
   const dayRecord = peekDay(d)
+  const dayHeartRateFetchedAt = fetchedAt('intraday-heart-v2', d)
   if (
     dayRecord?.heartRate !== undefined &&
-    fetchedAt('intraday-heart-v2', d) != null
+    dayHeartRateFetchedAt != null &&
+    isHealthCacheTimestampFresh(d, dayHeartRateFetchedAt)
   ) {
     return dayRecord.heartRate.filter(inWorkoutWindow)
   }
 
   const cacheKey = `${d}:${workoutId}`
   const cached = workoutHeartRateCache.get(cacheKey)
-  if (cached) return cached
+  if (cached && isHealthCacheTimestampFresh(d, cached.fetchedAt)) return cached.points
 
   const rollups = await physicalRollUp(
     token,
@@ -1118,7 +1118,7 @@ export async function getWorkoutHeartRate(
   )
   assertCurrentAccount(generation)
   const points = heartRatePointsFromRollups(rollups).filter(inWorkoutWindow)
-  workoutHeartRateCache.set(cacheKey, points)
+  workoutHeartRateCache.set(cacheKey, { points, fetchedAt: Date.now() })
   return points
 }
 
