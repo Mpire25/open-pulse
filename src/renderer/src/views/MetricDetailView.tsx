@@ -26,6 +26,7 @@ import {
   type WeeklySeriesPoint
 } from '@/lib/metrics'
 import { formatHour, formatInt, formatMinuteOfDay, longDate, shortDate, weekdayShort } from '@/lib/format'
+import { isDelayedSkeletonVisible } from '@/lib/loading-state'
 import type { MetricRange } from '@/lib/metric-navigation'
 import { fade } from '@/lib/motion'
 import {
@@ -96,18 +97,18 @@ function activityBreakdownCount(metricKey: MetricKey): number {
 }
 
 function useDelayedSkeleton(key: string | null, delayMs: number): boolean {
-  const [visible, setVisible] = useState(false)
+  const [revealedKey, setRevealedKey] = useState<string | null>(null)
 
   useEffect(() => {
     if (key == null) {
-      setVisible(false)
+      setRevealedKey(null)
       return
     }
-    const timeout = window.setTimeout(() => setVisible(true), delayMs)
+    const timeout = window.setTimeout(() => setRevealedKey(key), delayMs)
     return () => window.clearTimeout(timeout)
   }, [delayMs, key])
 
-  return visible
+  return isDelayedSkeletonVisible(key, revealedKey)
 }
 
 interface MetricDetailViewProps {
