@@ -175,6 +175,10 @@ function MetricDetailSkeleton({
       metricKey === 'steps' ||
       metricKey === 'restingHeartRate' ||
       isActivityIntradayMetric(metricKey)
+    const skeletonVariant =
+      metricKey === 'restingHeartRate' || (!hasTimeline && METRICS[metricKey].chart === 'line')
+        ? 'line'
+        : 'bar'
     const breakdownCount = metricKey === 'caloriesOut' ? 2 : ['activeMinutes', 'activeZoneMinutes'].includes(metricKey) ? 3 : 0
     return (
       <>
@@ -192,7 +196,11 @@ function MetricDetailSkeleton({
             title={hasTimeline ? 'Across the day' : 'In context'}
             hint={hasTimeline ? 'Loading intraday data' : 'The last 14 days, this day highlighted'}
           />
-          <SkeletonChart height={breakdownCount > 0 ? 170 : 210} columns={hasTimeline ? 16 : 12} />
+          <SkeletonChart
+            height={breakdownCount > 0 ? 170 : 210}
+            columns={hasTimeline ? 16 : 12}
+            variant={skeletonVariant}
+          />
           {breakdownCount > 0 && (
             <div
               className="grid gap-4 border-t border-hairline pt-3"
@@ -226,7 +234,11 @@ function MetricDetailSkeleton({
       </Panel>
       <Panel className={`flex flex-col gap-3 p-5 ${CARD_HEIGHT.detailLarge}`}>
         <SectionHeader title="Loading period" />
-        <SkeletonChart height={240} columns={range === 'Y' ? 12 : 7} />
+        <SkeletonChart
+          height={240}
+          columns={range === 'Y' ? 12 : 7}
+          variant={METRICS[metricKey].chart}
+        />
       </Panel>
       <HistoryListSkeleton />
     </>
@@ -399,7 +411,7 @@ function DayDetail({
         ) : metricKey === 'restingHeartRate' && intradayPending ? (
           <Panel className={`flex flex-col gap-3 p-5 ${CARD_HEIGHT.detail}`}>
             <SectionHeader title="Across the day" hint="Heart rate samples" />
-            <SkeletonChart height={210} columns={12} />
+            <SkeletonChart height={210} columns={12} variant="line" />
           </Panel>
         ) : metricKey === 'restingHeartRate' && intradayData && intradayData.heartRate.length > 1 ? (
           <Panel className={`flex flex-col gap-3 p-5 ${CARD_HEIGHT.detail}`}>

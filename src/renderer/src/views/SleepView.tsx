@@ -173,7 +173,7 @@ export function SleepView({ date, goals, onOpenMetric, onOpenStages, onSelectDat
               />
               <div className="mt-auto">
                 {nights.isPending ? (
-                  <SkeletonChart />
+                  <SkeletonChart variant="line" />
                 ) : (
                   <TrendLine
                     data={dates.map((d) => ({

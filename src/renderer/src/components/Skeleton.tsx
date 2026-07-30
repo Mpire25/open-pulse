@@ -68,10 +68,12 @@ export function SkeletonRing({
 
 export function SkeletonChart({
   height = 170,
-  columns = 7
+  columns = 7,
+  variant = 'bar'
 }: {
   height?: number
   columns?: number
+  variant?: 'bar' | 'line'
 }): React.JSX.Element {
   const heights = [28, 48, 36, 68, 44, 78, 58, 34, 64, 42, 72, 52]
   const plotTop = CHART_PLOT.top
@@ -87,25 +89,53 @@ export function SkeletonChart({
           style={{ top, right: axisGutter }}
         />
       ))}
-      <div
-        className="absolute grid"
-        style={{
-          left: 0,
-          right: axisGutter,
-          top: plotTop,
-          bottom: plotBottom,
-          gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`
-        }}
-      >
-        {Array.from({ length: columns }, (_, index) => (
-          <span key={index} className="flex min-w-0 items-end justify-center px-px">
-            <SkeletonBlock
-              className="w-full max-w-6 rounded-t-[5px] rounded-b-none"
-              style={{ height: `${heights[index % heights.length]}%` } as React.CSSProperties}
+      {variant === 'bar' ? (
+        <div
+          className="absolute grid"
+          style={{
+            left: 0,
+            right: axisGutter,
+            top: plotTop,
+            bottom: plotBottom,
+            gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`
+          }}
+        >
+          {Array.from({ length: columns }, (_, index) => (
+            <span key={index} className="flex min-w-0 items-end justify-center px-px">
+              <SkeletonBlock
+                className="w-full max-w-6 rounded-t-[5px] rounded-b-none"
+                style={{ height: `${heights[index % heights.length]}%` } as React.CSSProperties}
+              />
+            </span>
+          ))}
+        </div>
+      ) : (
+        <div
+          className="absolute"
+          style={{ left: 0, right: axisGutter, top: plotTop, bottom: plotBottom }}
+        >
+          <svg
+            viewBox="0 0 100 100"
+            preserveAspectRatio="none"
+            className="h-full w-full animate-pulse overflow-visible"
+            aria-hidden
+          >
+            <path
+              d="M 0 72 L 12 62 L 24 67 L 37 42 L 49 50 L 62 31 L 74 46 L 86 25 L 100 36"
+              fill="none"
+              stroke="rgb(255 255 255 / 0.09)"
+              strokeWidth="3"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              vectorEffect="non-scaling-stroke"
             />
-          </span>
-        ))}
-      </div>
+          </svg>
+          <SkeletonBlock
+            className="absolute h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full"
+            style={{ left: '100%', top: '36%' }}
+          />
+        </div>
+      )}
       <div className="absolute bottom-0 left-0 flex justify-between" style={{ right: axisGutter }}>
         {Array.from({ length: Math.min(columns, 7) }, (_, index) => (
           <SkeletonBlock key={index} className="h-2 w-2" />

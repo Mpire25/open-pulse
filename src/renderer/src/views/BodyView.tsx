@@ -76,7 +76,7 @@ export function BodyView({ date, onOpenMetric }: BodyViewProps): React.JSX.Eleme
                   }
                 />
                 {pending ? (
-                  <SkeletonChart />
+                  <SkeletonChart variant="line" />
                 ) : hasData ? (
                   <TrendLine
                     data={points.map((p) => ({

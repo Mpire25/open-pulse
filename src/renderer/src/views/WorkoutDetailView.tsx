@@ -191,7 +191,7 @@ export function WorkoutDetailView({ workout, date, onBack }: WorkoutDetailViewPr
           )}
           <div className="mt-auto">
             {intraday.isPending ? (
-              <SkeletonChart height={190} columns={12} />
+              <SkeletonChart height={190} columns={12} variant="line" />
             ) : heartPoints.length > 1 ? (
               <IntradayLine
                 points={heartPoints}
@@ -238,7 +238,7 @@ export function WorkoutDetailView({ workout, date, onBack }: WorkoutDetailViewPr
                 />
                 <div className="mt-4">
                   {track.isPending ? (
-                    <SkeletonChart height={180} columns={10} />
+                    <SkeletonChart height={180} columns={10} variant="line" />
                   ) : routePoints.length > 1 ? (
                     <RoutePlot points={routePoints} color={tone.color} />
                   ) : (

@@ -66,7 +66,7 @@ export function HeartView({ date, onOpenMetric }: HeartViewProps): React.JSX.Ele
             }
           />
           {intraday.isPending ? (
-            <SkeletonChart height={180} columns={12} />
+            <SkeletonChart height={180} columns={12} variant="line" />
           ) : intraday.data && intraday.data.heartRate.length > 1 ? (
             <IntradayLine points={intraday.data.heartRate} color="var(--color-heart)" height={180} />
           ) : (
@@ -140,7 +140,7 @@ function VitalCard({
           }
         />
         {pending ? (
-          <SkeletonChart height={150} />
+          <SkeletonChart height={150} variant="line" />
         ) : hasData ? (
           <TrendLine
             data={points.map((p) => ({
