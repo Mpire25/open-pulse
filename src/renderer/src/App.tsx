@@ -89,6 +89,8 @@ export default function App(): React.JSX.Element {
   const [codex, setCodex] = useState<CodexAuthStatus>({ connected: false })
   const [selectedDate, setSelectedDate] = useState(isoToday)
   const [chatOpen, setChatOpen] = useState(false)
+  const [sidebarComposerDraft, setSidebarComposerDraft] = useState('')
+  const [assistantComposerDraft, setAssistantComposerDraft] = useState('')
   const [composerFocusRequest, setComposerFocusRequest] = useState(0)
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const backNavigationPending = useRef(false)
@@ -100,9 +102,23 @@ export default function App(): React.JSX.Element {
   useTrackpadHistoryNavigation()
 
   useEffect(() => {
+    setSidebarComposerDraft('')
+    setAssistantComposerDraft('')
+  }, [chat.activeChatId])
+
+  useEffect(() => {
+    if (view !== 'assistant') setAssistantComposerDraft('')
+  }, [view])
+
+  useEffect(() => {
     return window.pulse.app.onNewChat(() => {
       void chat.create()
-      if (view !== 'assistant') setChatOpen(true)
+      if (view === 'assistant') {
+        setAssistantComposerDraft('')
+      } else {
+        setSidebarComposerDraft('')
+        setChatOpen(true)
+      }
       setComposerFocusRequest((request) => request + 1)
     })
   }, [chat.create, view])
@@ -262,8 +278,15 @@ export default function App(): React.JSX.Element {
     setCodex(status)
   }, [])
 
+  const closeAssistantPanel = (): void => {
+    setChatOpen(false)
+    setSidebarComposerDraft('')
+  }
+
   const openAssistant = (preserveActiveChat: boolean): void => {
     if (!preserveActiveChat) void chat.create()
+    setAssistantComposerDraft(chatOpen ? sidebarComposerDraft : '')
+    setSidebarComposerDraft('')
     setChatOpen(false)
     setComposerFocusRequest((request) => request + 1)
     navigate({
@@ -278,11 +301,12 @@ export default function App(): React.JSX.Element {
 
   const toggleAssistantPanel = (): void => {
     if (chatOpen) {
-      setChatOpen(false)
+      closeAssistantPanel()
       return
     }
 
     void chat.create()
+    setSidebarComposerDraft('')
     setChatOpen(true)
     setComposerFocusRequest((request) => request + 1)
   }
@@ -407,7 +431,7 @@ export default function App(): React.JSX.Element {
   }
 
   const handleAssistantAction = (action: AssistantAction): void => {
-    setChatOpen(false)
+    closeAssistantPanel()
     if (action.type === 'open-nutrition') {
       navigate({
         ...currentNavigationEntry(),
@@ -595,6 +619,8 @@ export default function App(): React.JSX.Element {
                 {view === 'assistant' && (
                   <AssistantView
                     chat={chat}
+                    composerDraft={assistantComposerDraft}
+                    setComposerDraft={setAssistantComposerDraft}
                     codex={codex}
                     composerFocusRequest={composerFocusRequest}
                     onAssistantAction={handleAssistantAction}
@@ -617,14 +643,16 @@ export default function App(): React.JSX.Element {
 
           <AssistantPanel
             open={chatOpen && view !== 'assistant'}
-            onClose={() => setChatOpen(false)}
+            onClose={closeAssistantPanel}
             onOpenInAssistant={() => openAssistant(true)}
             chat={chat}
+            composerDraft={sidebarComposerDraft}
+            setComposerDraft={setSidebarComposerDraft}
             codexConnected={codex.connected}
             composerFocusRequest={composerFocusRequest}
             onAssistantAction={handleAssistantAction}
             onOpenSettings={() => {
-              setChatOpen(false)
+              closeAssistantPanel()
               selectView('settings')
             }}
           />

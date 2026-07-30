@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { ClockCounterClockwise, Plus, Sparkle, SquaresFour } from '@phosphor-icons/react'
-import { ChatPanel, type ChatState } from '@/components/ChatPanel'
+import { ChatPanel, type ChatDraftSetter, type ChatState } from '@/components/ChatPanel'
 import { ChatHistory } from '@/components/ChatHistory'
 import { cn } from '@/lib/utils'
 import type { AssistantAction, CodexAuthStatus } from '@shared/types'
@@ -16,6 +16,8 @@ const AssistantCardGallery = import.meta.env.DEV
 
 interface AssistantViewProps {
   chat: ChatState
+  composerDraft: string
+  setComposerDraft: ChatDraftSetter
   codex: CodexAuthStatus
   composerFocusRequest: number
   onOpenSettings: () => void
@@ -24,6 +26,8 @@ interface AssistantViewProps {
 
 export function AssistantView({
   chat,
+  composerDraft,
+  setComposerDraft,
   codex,
   composerFocusRequest,
   onOpenSettings,
@@ -143,6 +147,8 @@ export function AssistantView({
         ) : (
           <ChatPanel
             chat={chat}
+            draft={composerDraft}
+            setDraft={setComposerDraft}
             codexConnected={codex.connected}
             onOpenSettings={onOpenSettings}
             onAssistantAction={onAssistantAction}
