@@ -219,6 +219,7 @@ function maxRollupRangeDays(dataType: string): number {
 
 const ROLLUP_VALUE_FIELDS: Record<string, string> = {
   steps: 'steps/countSum',
+  'heart-rate': 'heartRate/beatsPerMinuteAvg',
   'total-calories': 'totalCalories/kcalSum',
   distance: 'distance/millimetersSum',
   floors: 'floors/countSum',
@@ -434,6 +435,37 @@ export async function listData(
     pages++
   } while (pageToken && pages < 50)
   return points
+}
+
+/**
+ * Reads one reconciled point from a civil range. Intraday rollups use this
+ * lightweight probe to compare the tracker's recorded UTC offset with the
+ * machine timezone before converting physical windows into chart positions.
+ */
+export async function getFirstDataPoint(
+  token: string,
+  dataType: string,
+  kind: RecordKind,
+  startDate: string,
+  endDateExclusive: string,
+  dataSourceFamily: 'all-sources' | 'google-wearables' = 'all-sources',
+  priority: Priority = 1,
+  signal?: AbortSignal,
+  responseFields?: string
+): Promise<RawDataPoint | null> {
+  const params = new URLSearchParams({
+    filter: dataFilter(dataType, kind, startDate, endDateExclusive),
+    pageSize: '1',
+    dataSourceFamily: `users/me/dataSourceFamilies/${dataSourceFamily}`,
+    fields: `dataPoints(${responseFields ?? responseFieldsFor(DATA_POINT_FIELDS, dataType)})`
+  })
+  const json = await request<{ dataPoints?: RawDataPoint[] }>(
+    token,
+    `/users/me/dataTypes/${dataType}/dataPoints:reconcile?${params}`,
+    { signal },
+    priority
+  )
+  return json.dataPoints?.[0] ?? null
 }
 
 /**

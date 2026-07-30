@@ -19,7 +19,7 @@ import { Panel, SectionHeader } from '@/components/Panel'
 import { IntradayLine } from '@/components/charts'
 import { SkeletonChart } from '@/components/Skeleton'
 import { WorkoutIcon } from '@/components/WorkoutIcon'
-import { useHeartDetail, useIntraday, useWorkoutTrack } from '@/hooks/useHealth'
+import { useHeartDetail, useWorkoutHeartRate, useWorkoutTrack } from '@/hooks/useHealth'
 import { formatClock, formatInt, formatMinuteOfDay, formatMinutes, longDate } from '@/lib/format'
 import { fade } from '@/lib/motion'
 import { workoutTone } from '@/lib/workouts'
@@ -40,18 +40,16 @@ interface DetailItem {
 export function WorkoutDetailView({ workout, date, onBack }: WorkoutDetailViewProps): React.JSX.Element {
   const [showHeartRateZones, setShowHeartRateZones] = useState(false)
   const tone = workoutTone(workout)
-  const intraday = useIntraday(date, true, 'heart')
+  const workoutHeartRate = useWorkoutHeartRate(date, workout.id)
   const track = useWorkoutTrack(workout.id, workout.hasGps !== false)
   const heartZoneDetail = useHeartDetail(date, 'restingHeartRate', workout.heartRateZones != null, 'thresholds')
   const elapsedMinutes = workout.elapsedDurationMin ?? workout.durationMin
   const startDate = new Date(workout.startTime)
   const startMinute = workout.startMinute ?? startDate.getHours() * 60 + startDate.getMinutes()
-  const endMinute = Math.min(1440, startMinute + elapsedMinutes)
+  const endMinute = startMinute + elapsedMinutes
   const startLabel = formatMinuteOfDay(startMinute)
   const endLabel = formatMinuteOfDay(endMinute)
-  const intradayHeartPoints = (intraday.data?.heartRate ?? []).filter(
-    (point) => point.minute >= startMinute && point.minute <= endMinute
-  )
+  const intradayHeartPoints = workoutHeartRate.data ?? []
   const trackHeartPoints = (track.data?.points ?? []).flatMap((point) => {
     if (point.time == null || point.heartRate == null) return []
     const elapsed = (new Date(point.time).getTime() - startDate.getTime()) / 60_000
@@ -190,7 +188,7 @@ export function WorkoutDetailView({ workout, date, onBack }: WorkoutDetailViewPr
             </div>
           )}
           <div className="mt-auto">
-            {intraday.isPending ? (
+            {workoutHeartRate.isPending ? (
               <SkeletonChart height={190} columns={12} variant="line" />
             ) : heartPoints.length > 1 ? (
               <IntradayLine

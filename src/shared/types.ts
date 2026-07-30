@@ -140,7 +140,7 @@ export interface IntradaySnapshot {
   source: DataSource
   stepsHourly: HourlySteps[]
   heartRate: HeartRatePoint[]
-  currentHeartRate: number | null // only set when date is today
+  currentHeartRate: number | null // latest one-minute average; only set when date is today
 }
 
 export type IntradayScope = 'steps' | 'heart' | 'both'
@@ -230,6 +230,7 @@ export interface Workout {
   name: string
   startTime: string // ISO
   startMinute?: number | null // civil minute of day where the workout was recorded
+  startUtcOffset?: string | null
   durationMin: number
   elapsedDurationMin?: number | null
   exerciseType?: string | null

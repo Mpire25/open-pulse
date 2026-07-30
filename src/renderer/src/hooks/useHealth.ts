@@ -21,6 +21,7 @@ import type {
   HeartDetailMetric,
   HeartDetailResult,
   HeartDetailScope,
+  HeartRatePoint,
   IntradaySnapshot,
   IntradayScope,
   MetricKey,
@@ -149,6 +150,16 @@ export function useWorkoutTrack(workoutId: string, enabled: boolean): UseQueryRe
     ),
     staleTime: Infinity,
     enabled
+  })
+}
+
+export function useWorkoutHeartRate(date: string, workoutId: string): UseQueryResult<HeartRatePoint[]> {
+  return useQuery({
+    queryKey: ['workout-heart-rate', date, workoutId],
+    queryFn: ({ signal }) => healthRequest(signal, (requestId) =>
+      window.pulse.health.workoutHeartRate(requestId, date, workoutId)
+    ),
+    staleTime: STALE_MS
   })
 }
 

@@ -56,7 +56,7 @@ export function HeartView({ date, onOpenMetric }: HeartViewProps): React.JSX.Ele
               ) : intraday.data?.currentHeartRate != null ? (
                 <div className="flex items-baseline gap-1">
                   <span className="text-[20px] font-semibold text-ink">{intraday.data.currentHeartRate}</span>
-                  <span className="text-[12px] text-ink-dim">bpm now</span>
+                  <span className="text-[12px] text-ink-dim">bpm 1-min avg</span>
                 </div>
               ) : days?.[date]?.restingHeartRate != null ? (
                 <div className="flex items-baseline gap-1">

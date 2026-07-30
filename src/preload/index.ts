@@ -15,6 +15,7 @@ import type {
   HeartDetailMetric,
   HeartDetailResult,
   HeartDetailScope,
+  HeartRatePoint,
   IntradaySnapshot,
   IntradayScope,
   MetricKey,
@@ -101,6 +102,8 @@ const api = {
       invokeHealth('health:workouts', [start, end, force], requestId),
     workoutTrack: (requestId: string, workoutId: string): Promise<WorkoutTrackResult> =>
       invokeHealth('health:workout-track', [workoutId], requestId),
+    workoutHeartRate: (requestId: string, date: string, workoutId: string): Promise<HeartRatePoint[]> =>
+      invokeHealth('health:workout-heart-rate', [date, workoutId], requestId),
     intraday: (requestId: string, date: string, scope: IntradayScope, force?: boolean): Promise<IntradaySnapshot> =>
       invokeHealth('health:intraday', [date, scope, force], requestId),
     activityIntraday: (
