@@ -3,7 +3,7 @@ import { Barbell, Footprints } from '@phosphor-icons/react'
 import { DrillHeader, DrillPanel, InteractivePanel, Panel } from '@/components/Panel'
 import { ColumnChart, ProgressRing } from '@/components/charts'
 import { MetricStat } from '@/components/MetricStat'
-import { CARD_HEIGHT, SkeletonChart, SkeletonMetricStat, SkeletonRing, SkeletonRows, SkeletonText } from '@/components/Skeleton'
+import { CARD_HEIGHT, SkeletonChart, SkeletonRing, SkeletonRows, SkeletonText } from '@/components/Skeleton'
 import { ErrorState } from '@/components/ErrorState'
 import { WorkoutList } from '@/components/WorkoutList'
 import { useIntraday, useSeries, useWorkouts } from '@/hooks/useHealth'
@@ -61,35 +61,36 @@ function ActivityGoalRing({
   const def = METRICS[metricKey]
   const pct = value != null && goal > 0 ? Math.round((value / goal) * 100) : null
 
-  if (pending) {
-    return (
-      <div className="flex flex-col items-center gap-2" aria-hidden>
-        <SkeletonRing size={172} stroke={18} className="activity-goal-ring" />
-        <SkeletonText className="w-28" />
-      </div>
-    )
-  }
-
   return (
     <button
       type="button"
-      onClick={() => onOpen(metricKey, 'D')}
+      onClick={pending ? undefined : () => onOpen(metricKey, 'D')}
+      disabled={pending}
+      aria-busy={pending}
       className="group -m-2 flex min-w-0 flex-col items-center gap-2.5 rounded-2xl p-4 outline-none transition-[background-color,box-shadow,transform] duration-200 hover:bg-white/[0.05] hover:shadow-[inset_0_0_0_1px_rgb(255_255_255/0.07)] focus-visible:bg-white/[0.05] focus-visible:ring-2 focus-visible:ring-accent/60 active:scale-[0.98]"
       aria-label={`Open ${def.label} details`}
     >
-      <ProgressRing value={value ?? 0} goal={goal} color={def.color} size={172} stroke={18} className="activity-goal-ring">
-        <div className="text-center">
-          <div className="text-[30px] font-semibold leading-none tracking-tight text-ink">
-            {value != null ? def.format(value) : '—'}
+      {pending ? (
+        <SkeletonRing size={172} stroke={18} className="activity-goal-ring" />
+      ) : (
+        <ProgressRing value={value ?? 0} goal={goal} color={def.color} size={172} stroke={18} className="activity-goal-ring">
+          <div className="text-center">
+            <div className="text-[30px] font-semibold leading-none tracking-tight text-ink">
+              {value != null ? def.format(value) : '—'}
+            </div>
+            <div className="mt-1.5 text-[11px] uppercase tracking-wide text-ink-faint">{def.label}</div>
           </div>
-          <div className="mt-1.5 text-[11px] uppercase tracking-wide text-ink-faint">{def.label}</div>
-        </div>
-      </ProgressRing>
-      <span className="font-mono text-[12px] text-ink-dim transition-colors group-hover:text-ink">
-        {pct != null
-          ? `${pct}% of ${formatInt(goal)}${def.unit ? ` ${def.unit}` : ''}`
-          : `${formatInt(goal)}${def.unit ? ` ${def.unit}` : ''} goal`}
-      </span>
+        </ProgressRing>
+      )}
+      {pending ? (
+        <SkeletonText className="w-28" />
+      ) : (
+        <span className="font-mono text-[12px] text-ink-dim transition-colors group-hover:text-ink">
+          {pct != null
+            ? `${pct}% of ${formatInt(goal)}${def.unit ? ` ${def.unit}` : ''}`
+            : `${formatInt(goal)}${def.unit ? ` ${def.unit}` : ''} goal`}
+        </span>
+      )}
     </button>
   )
 }
@@ -182,22 +183,19 @@ export function ActivityView({ date, goals, onOpenMetric, onOpenWorkout, onOpenW
               const value = today[key] ?? null
               return (
                 <div key={key} className={SUMMARY_CELL_CLASSES[index]}>
-                  {series.isMetricPending(key) ? (
-                    <SkeletonMetricStat sparkWidth={180} />
-                  ) : (
-                    <MetricStat
-                      icon={def.icon}
-                      label={def.shortLabel ?? def.label}
-                      value={value != null ? def.format(value) : '—'}
-                      unit={def.unit}
-                      accent={def.color}
-                      deltaPct={baselineDeltaPct(value, baseline(points, date))}
-                      upIsGood={def.upIsGood}
-                      spark={pointValues(points)}
-                      sparkWidth={180}
-                      onOpen={() => onOpenMetric(key, 'D')}
-                    />
-                  )}
+                  <MetricStat
+                    icon={def.icon}
+                    label={def.shortLabel ?? def.label}
+                    value={value != null ? def.format(value) : '—'}
+                    unit={def.unit}
+                    accent={def.color}
+                    deltaPct={baselineDeltaPct(value, baseline(points, date))}
+                    upIsGood={def.upIsGood}
+                    spark={pointValues(points)}
+                    sparkWidth={180}
+                    onOpen={() => onOpenMetric(key, 'D')}
+                    loading={series.isMetricPending(key)}
+                  />
                 </div>
               )
             })}

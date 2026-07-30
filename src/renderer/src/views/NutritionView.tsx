@@ -139,18 +139,17 @@ export function NutritionView({ date, goals, onOpenMetric, onSelectDate }: Nutri
           <motion.div custom={1} variants={fade} initial="hidden" animate="show">
             <Panel className={`nutrition-hero ${CARD_HEIGHT.hero}`}>
               <div className="flex min-w-[180px] items-center justify-center">
-                {intakePending ? (
-                  <div className="flex flex-col items-center gap-2" aria-hidden>
+                <button
+                  type="button"
+                  onClick={intakePending ? undefined : () => onOpenMetric('caloriesIn', 'D')}
+                  disabled={intakePending}
+                  aria-busy={intakePending}
+                  className="group -m-2 flex flex-col items-center gap-2 rounded-2xl p-3 outline-none transition-[background-color,box-shadow,transform] duration-200 hover:bg-white/[0.05] hover:shadow-[inset_0_0_0_1px_rgb(255_255_255/0.07)] focus-visible:bg-white/[0.05] focus-visible:ring-2 focus-visible:ring-accent/60 active:scale-[0.98]"
+                  aria-label="Open calories eaten details"
+                >
+                  {intakePending ? (
                     <SkeletonRing size={146} stroke={15} />
-                    <SkeletonText className="w-28" />
-                  </div>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => onOpenMetric('caloriesIn', 'D')}
-                    className="group -m-2 flex flex-col items-center gap-2 rounded-2xl p-3 outline-none transition-[background-color,box-shadow,transform] duration-200 hover:bg-white/[0.05] hover:shadow-[inset_0_0_0_1px_rgb(255_255_255/0.07)] focus-visible:bg-white/[0.05] focus-visible:ring-2 focus-visible:ring-accent/60 active:scale-[0.98]"
-                    aria-label="Open calories eaten details"
-                  >
+                  ) : (
                     <ProgressRing
                       value={today.caloriesIn ?? 0}
                       goal={goals.caloriesIn}
@@ -167,13 +166,17 @@ export function NutritionView({ date, goals, onOpenMetric, onSelectDate }: Nutri
                         </div>
                       </div>
                     </ProgressRing>
+                  )}
+                  {intakePending ? (
+                    <SkeletonText className="h-[13px] w-28" />
+                  ) : (
                     <span className="font-mono text-[11px] text-ink-dim transition-colors group-hover:text-ink">
                       {intakePct != null
                         ? `${intakePct}% of ${formatInt(goals.caloriesIn)} kcal`
                         : `${formatInt(goals.caloriesIn)} kcal goal`}
                     </span>
-                  </button>
-                )}
+                  )}
+                </button>
               </div>
 
               <div className="nutrition-hero-macros">
@@ -304,7 +307,7 @@ function NutritionLogsPanel({ entries }: { entries: NutritionLogEntry[] }): Reac
   })).filter((group) => group.entries.length > 0)
 
   return (
-    <Panel className="overflow-hidden">
+    <Panel className={`overflow-hidden ${CARD_HEIGHT.list}`}>
       <div className="border-b border-hairline px-5 pb-3 pt-4">
         <SectionHeader
           title="Logged meals"
@@ -450,10 +453,13 @@ function MealSummary({
 
 function NutritionLogsSkeleton(): React.JSX.Element {
   return (
-    <Panel className="overflow-hidden" aria-hidden>
+    <Panel className={`overflow-hidden ${CARD_HEIGHT.list}`} aria-hidden>
       <div className="border-b border-hairline px-5 pb-3 pt-4">
-        <SkeletonText className="h-4 w-28" />
-        <SkeletonText className="mt-2 w-36" />
+        <SectionHeader
+          title="Logged meals"
+          hint={<SkeletonText className="w-36" />}
+          icon={<ForkKnife size={18} weight="fill" style={{ color: 'var(--color-recovery)' }} />}
+        />
       </div>
       {Array.from({ length: 2 }, (_, groupIndex) => (
         <div key={groupIndex} className="border-b border-hairline last:border-b-0">

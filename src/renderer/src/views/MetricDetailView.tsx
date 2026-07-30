@@ -209,6 +209,7 @@ function MetricDetailSkeleton({
           )}
         </Panel>
         )}
+        <HistoryListSkeleton />
       </>
     )
   }
@@ -227,7 +228,26 @@ function MetricDetailSkeleton({
         <SectionHeader title="Loading period" />
         <SkeletonChart height={240} columns={range === 'Y' ? 12 : 7} />
       </Panel>
+      <HistoryListSkeleton />
     </>
+  )
+}
+
+function HistoryListSkeleton(): React.JSX.Element {
+  return (
+    <Panel className="min-h-[210px] overflow-hidden" aria-hidden>
+      <div className="border-b border-hairline px-5 pb-3 pt-4">
+        <SectionHeader title="History" hint="Most recent first" />
+      </div>
+      <div className="divide-y divide-hairline">
+        {Array.from({ length: 4 }, (_, index) => (
+          <div key={index} className="flex items-center justify-between px-5 py-2.5">
+            <SkeletonText className="w-24" />
+            <SkeletonText className="h-[13px] w-16" />
+          </div>
+        ))}
+      </div>
+    </Panel>
   )
 }
 
@@ -784,7 +804,7 @@ function HistoryList({
   if (withValues.length === 0) return null
   return (
     <motion.div custom={3} variants={fade} initial="hidden" animate="show">
-      <Panel className="overflow-hidden">
+      <Panel className="min-h-[210px] overflow-hidden">
         <div className="border-b border-hairline px-5 pb-3 pt-4">
           <SectionHeader title="History" hint={monthly ? 'By month' : 'Most recent first'} />
         </div>

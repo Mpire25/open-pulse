@@ -2,7 +2,7 @@ import { motion } from 'framer-motion'
 import { ArrowLeft, Moon } from '@phosphor-icons/react'
 import { ErrorState } from '@/components/ErrorState'
 import { Panel, SectionHeader } from '@/components/Panel'
-import { SkeletonBlock, SkeletonSleepStages, SkeletonText } from '@/components/Skeleton'
+import { SkeletonBlock, SkeletonText } from '@/components/Skeleton'
 import { SleepStages, STAGE_COLOR, STAGE_LABEL } from '@/components/SleepStages'
 import { useSleepNight } from '@/hooks/useHealth'
 import { formatMinutes, longDate } from '@/lib/format'
@@ -130,40 +130,83 @@ export function SleepStagesDetailView({ date, onBack }: SleepStagesDetailViewPro
   )
 }
 
-function StageCard({ stage, night }: { stage: SleepStageType; night: SleepNight }): React.JSX.Element {
-  const minutes = night.stageMinutes[stage] ?? 0
-  const stagedMinutes = STAGE_ORDER.reduce((sum, key) => sum + (night.stageMinutes[key] ?? 0), 0)
+function StageCard({
+  stage,
+  night,
+  loading = false
+}: {
+  stage: SleepStageType
+  night: SleepNight | null
+  loading?: boolean
+}): React.JSX.Element {
+  const minutes = night?.stageMinutes[stage] ?? 0
+  const stagedMinutes = STAGE_ORDER.reduce((sum, key) => sum + (night?.stageMinutes[key] ?? 0), 0)
   const share = stagedMinutes > 0 ? Math.round((minutes / stagedMinutes) * 100) : 0
-  const periods = night.stageCounts[stage] ?? 0
+  const periods = night?.stageCounts[stage] ?? 0
 
   return (
-    <Panel className="relative overflow-hidden p-5">
+    <Panel className="relative overflow-hidden p-5" aria-busy={loading}>
       <div
         aria-hidden
         className="absolute inset-x-0 top-0 h-[2px]"
         style={{ background: STAGE_COLOR[stage] }}
       />
       <div className="flex items-center gap-2">
-        <span className="h-2.5 w-2.5 rounded-full" style={{ background: STAGE_COLOR[stage] }} />
-        <h2 className="text-[12px] font-semibold text-ink-dim">{STAGE_LABEL[stage]}</h2>
+        {loading ? (
+          <>
+            <SkeletonBlock className="h-2.5 w-2.5 rounded-full" />
+            <SkeletonText className="w-16" />
+          </>
+        ) : (
+          <>
+            <span className="h-2.5 w-2.5 rounded-full" style={{ background: STAGE_COLOR[stage] }} />
+            <h2 className="text-[12px] font-semibold text-ink-dim">{STAGE_LABEL[stage]}</h2>
+          </>
+        )}
       </div>
-      <div className="mt-4 font-mono text-[24px] font-medium leading-none text-ink">{formatMinutes(minutes)}</div>
-      <div className="mt-2 text-[10.5px] text-ink-faint">
-        {share}% of staged time · {periods} {periods === 1 ? 'period' : 'periods'}
+      <div className="mt-4 min-h-7 font-mono text-[24px] font-medium leading-none text-ink">
+        {loading ? <SkeletonBlock className="h-7 w-20" /> : formatMinutes(minutes)}
       </div>
-      <p className="mt-4 border-t border-hairline pt-3 text-[10.5px] leading-relaxed text-ink-faint">
-        {STAGE_DESCRIPTION[stage]}
-      </p>
+      <div className="mt-2 min-h-[13px] text-[10.5px] text-ink-faint">
+        {loading ? (
+          <SkeletonText className="w-28" />
+        ) : (
+          `${share}% of staged time · ${periods} ${periods === 1 ? 'period' : 'periods'}`
+        )}
+      </div>
+      <div className="mt-4 min-h-[45px] border-t border-hairline pt-3 text-[10.5px] leading-relaxed text-ink-faint">
+        {loading ? <SkeletonBlock className="h-5 w-full" /> : STAGE_DESCRIPTION[stage]}
+      </div>
     </Panel>
   )
 }
 
-function ArchitectureMetric({ label, value, detail }: { label: string; value: string; detail?: string }): React.JSX.Element {
+function ArchitectureMetric({
+  label,
+  value,
+  detail,
+  loading = false
+}: {
+  label: string
+  value: string
+  detail?: string
+  loading?: boolean
+}): React.JSX.Element {
   return (
     <div>
-      <div className="text-[10.5px] font-medium text-ink-faint">{label}</div>
-      <div className="mt-1 font-mono text-[15px] font-medium text-ink">{value}</div>
-      {detail && <div className="mt-1 text-[10px] text-ink-faint">{detail}</div>}
+      {loading ? (
+        <>
+          <SkeletonText className="w-28" />
+          <SkeletonBlock className="mt-1 h-4 w-20" />
+          <SkeletonText className="mt-1 h-2.5 w-24" />
+        </>
+      ) : (
+        <>
+          <div className="text-[10.5px] font-medium text-ink-faint">{label}</div>
+          <div className="mt-1 font-mono text-[15px] font-medium text-ink">{value}</div>
+          <div className="mt-1 min-h-[12px] text-[10px] text-ink-faint">{detail}</div>
+        </>
+      )}
     </div>
   )
 }
@@ -176,21 +219,31 @@ function SleepStagesDetailSkeleton(): React.JSX.Element {
   return (
     <>
       <Panel className="p-6" aria-hidden>
-        <SkeletonText className="w-32" />
-        <SkeletonText className="mt-2 w-56" />
+        <SectionHeader
+          title="Night timeline"
+          hint="Hover any stage block to see its time and duration"
+          icon={<Moon size={18} weight="fill" style={{ color: 'var(--color-sleep)' }} />}
+        />
         <div className="mt-7">
-          <SkeletonSleepStages />
+          <SleepStages night={null} loading />
         </div>
       </Panel>
       <div className="display-stage-card-grid" aria-hidden>
-        {Array.from({ length: 4 }, (_, index) => (
-          <Panel key={index} className="flex flex-col gap-3 p-5">
-            <SkeletonText className="w-16" />
-            <SkeletonBlock className="h-7 w-20" />
-            <SkeletonText className="w-28" />
-          </Panel>
+        {STAGE_ORDER.map((stage) => (
+          <StageCard key={stage} stage={stage} night={null} loading />
         ))}
       </div>
+      <Panel className="p-6" aria-hidden>
+        <SectionHeader
+          title="Sleep architecture"
+          hint="Timing and continuity details for this night"
+        />
+        <div className="display-md-three-grid mt-5 grid grid-cols-2 gap-x-6 gap-y-5 border-t border-hairline pt-5">
+          {Array.from({ length: 6 }, (_, index) => (
+            <ArchitectureMetric key={index} label="" value="" loading />
+          ))}
+        </div>
+      </Panel>
     </>
   )
 }

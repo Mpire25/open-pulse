@@ -7,6 +7,7 @@ import { animate, motion, useMotionValue, useReducedMotion, useTransform } from 
 import { formatMinuteOfDay } from '@/lib/format'
 import { sampleHeartRateForChart } from '@/lib/heart-rate'
 import { lineAxis } from '@/lib/chart-scale'
+import { CHART_PLOT } from '@/lib/layout-contracts'
 import { cn } from '@/lib/utils'
 
 // ---------------------------------------------------------------------------
@@ -143,7 +144,7 @@ export function ColumnChart({
   const reduceMotion = useReducedMotion()
   const clipPrefix = useId().replaceAll(':', '')
 
-  const pad = { top: 14, bottom: 18, left: 0, right: 46 }
+  const pad = CHART_PLOT
   const plotW = Math.max(0, width - pad.left - pad.right)
   const plotH = height - pad.top - pad.bottom
 
@@ -373,7 +374,7 @@ export function StackedColumnChart({
   const [hovered, setHovered] = useState<number | null>(null)
   const reduceMotion = useReducedMotion()
   const clipPrefix = useId().replaceAll(':', '')
-  const pad = { top: 14, bottom: 18, left: 0, right: 46 }
+  const pad = CHART_PLOT
   const plotW = Math.max(0, width - pad.left - pad.right)
   const plotH = height - pad.top - pad.bottom
   const totals = data.map((datum) => datum.segments.reduce((sum, segment) => sum + segment.value, 0))
@@ -889,7 +890,7 @@ export function IntradayLine({ points, color, height = 170, domain, zones }: Int
   const reduceMotion = useReducedMotion()
   const revealId = `intraday-reveal-${useId().replaceAll(':', '')}`
 
-  const pad = { top: 14, bottom: 18, left: 0, right: 46 }
+  const pad = CHART_PLOT
   const plotW = Math.max(0, width - pad.left - pad.right)
   const plotH = height - pad.top - pad.bottom
   const domainStart = domain?.startMinute ?? 0

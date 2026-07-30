@@ -460,12 +460,25 @@ function WorkoutsSkeleton({ range }: { range: MetricRange }): React.JSX.Element 
       <div className={range === 'D' ? '' : 'display-lg-pair-grid display-lg-pair-grid--weighted-135'}>
         {range !== 'D' && (
           <Panel className={`flex flex-col gap-4 p-5 ${CARD_HEIGHT.large}`}>
-            <SkeletonText className="w-28" />
+            <SectionHeader
+              title="Training rhythm"
+              hint="Active minutes by workout type"
+              icon={<CalendarCheck size={18} weight="fill" className="text-recovery" />}
+            />
             <SkeletonChart height={190} columns={range === 'W' ? 7 : 12} />
           </Panel>
         )}
-        <Panel className={`training-split-panel flex flex-col gap-4 p-5 ${CARD_HEIGHT.large}`}>
-          <SkeletonText className="w-28" />
+        <Panel
+          className={cn(
+            'training-split-panel flex flex-col gap-4 p-5',
+            range === 'D' ? 'min-h-[220px]' : CARD_HEIGHT.large
+          )}
+        >
+          <SectionHeader
+            title="Training split"
+            hint="Share of active time"
+            icon={<ChartDonut size={18} weight="fill" className="text-recovery" />}
+          />
           {range === 'D' ? (
             <>
               <SkeletonBlock className="mt-4 h-2.5 w-full rounded-full" />
@@ -487,8 +500,17 @@ function WorkoutsSkeleton({ range }: { range: MetricRange }): React.JSX.Element 
           )}
         </Panel>
       </div>
-      <Panel className="min-h-[164px] p-3">
-        <SkeletonRows rows={2} />
+      <Panel className="min-h-[164px] overflow-hidden">
+        <div className="border-b border-hairline px-5 pb-3 pt-4">
+          <SectionHeader
+            title={range === 'D' ? 'Sessions' : 'Workout history'}
+            hint={<SkeletonText className="w-28" />}
+            icon={<Barbell size={18} weight="fill" className="text-recovery" />}
+          />
+        </div>
+        <div className="px-3 py-3">
+          <SkeletonRows rows={2} />
+        </div>
       </Panel>
     </>
   )

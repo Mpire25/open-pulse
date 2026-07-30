@@ -107,7 +107,7 @@ export function BodyView({ date, onOpenMetric }: BodyViewProps): React.JSX.Eleme
             Individual measurement details could not be loaded.
           </Panel>
         ) : measurements.data && measurements.data.measurements.length > 0 ? (
-          <Panel className="overflow-hidden">
+          <Panel className={`overflow-hidden ${CARD_HEIGHT.measurementList}`}>
             <div className="border-b border-hairline px-5 pb-3 pt-4">
               <SectionHeader
                 title="Recent measurements"
@@ -165,18 +165,21 @@ function MeasurementValue({ label, value, unit }: { label: string; value: string
 
 function BodyMeasurementsSkeleton(): React.JSX.Element {
   return (
-    <Panel className="overflow-hidden" aria-hidden>
+    <Panel className={`overflow-hidden ${CARD_HEIGHT.measurementList}`} aria-hidden>
       <div className="border-b border-hairline px-5 pb-3 pt-4">
-        <SkeletonText className="h-4 w-36" />
-        <SkeletonText className="mt-2 w-28" />
+        <SectionHeader
+          title="Recent measurements"
+          hint="Individual scale readings with calculated BMI"
+          icon={<Scales size={18} weight="fill" style={{ color: 'var(--color-body-metric)' }} />}
+        />
       </div>
       {Array.from({ length: 3 }, (_, index) => (
-        <div key={index} className="body-measurement-skeleton-row grid grid-cols-1 gap-3 border-b border-hairline px-5 py-3.5 last:border-b-0">
-          <div className="flex flex-col gap-2">
+        <div key={index} className="body-measurement-skeleton-row grid grid-cols-1 gap-2 border-b border-hairline px-5 py-3.5 last:border-b-0">
+          <div>
             <SkeletonText className="w-16" />
-            <SkeletonText className="h-2.5 w-12" />
+            <SkeletonText className="mt-0.5 h-2.5 w-12" />
           </div>
-          <div className="body-measurement-skeleton-values flex flex-wrap items-center gap-8">
+          <div className="body-measurement-skeleton-values flex flex-wrap items-baseline gap-x-8 gap-y-1">
             <SkeletonText className="h-4 w-24" />
             <SkeletonText className="h-4 w-24" />
           </div>
