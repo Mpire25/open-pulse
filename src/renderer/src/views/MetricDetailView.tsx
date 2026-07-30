@@ -3,6 +3,7 @@
 // One data-driven page — the registry decides naming, color, chart type, and
 // aggregation, so every metric behaves identically.
 
+import { useEffect, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
 import { ArrowLeft } from '@phosphor-icons/react'
 import { Panel, SectionHeader } from '@/components/Panel'
@@ -94,6 +95,21 @@ function activityBreakdownCount(metricKey: MetricKey): number {
   return activityBreakdownLayout(metricKey).length
 }
 
+function useDelayedSkeleton(key: string | null, delayMs: number): boolean {
+  const [visible, setVisible] = useState(false)
+
+  useEffect(() => {
+    if (key == null) {
+      setVisible(false)
+      return
+    }
+    const timeout = window.setTimeout(() => setVisible(true), delayMs)
+    return () => window.clearTimeout(timeout)
+  }, [delayMs, key])
+
+  return visible
+}
+
 interface MetricDetailViewProps {
   metricKey: MetricKey
   range: MetricRange
@@ -129,10 +145,6 @@ export function MetricDetailView({
   const activityIntraday = useActivityIntraday(date, activityMetric ?? 'distanceKm', wantsActivityIntraday)
   const heartDetail = useHeartDetail(date, heartMetric ?? 'restingHeartRate', wantsHeartDetail)
 
-  if (series.isError) {
-    return <ErrorState message={series.error instanceof Error ? series.error.message : undefined} onRetry={() => void series.refetch()} />
-  }
-
   const days = series.data?.days
   const shown = rangeEnding(date, spec.days)
   const points = seriesPoints(days, metricKey, shown.start, shown.end)
@@ -146,6 +158,60 @@ export function MetricDetailView({
 
   const goal = def.goalKey ? goals[def.goalKey] : null
   const Icon = def.icon
+  const transitionPending =
+    series.isPending ||
+    (wantsIntraday && intraday.isPending) ||
+    (wantsActivityIntraday && activityIntraday.isPending) ||
+    (wantsHeartDetail && heartDetail.isPending)
+  const lastResolvedContent = useRef<{
+    date: string
+    range: MetricRange
+    content: React.JSX.Element
+  } | null>(null)
+  const canRetainPrevious =
+    transitionPending &&
+    range === 'D' &&
+    lastResolvedContent.current?.range === 'D' &&
+    lastResolvedContent.current.date !== date
+  const delayedSkeletonVisible = useDelayedSkeleton(canRetainPrevious ? date : null, 150)
+
+  const resolvedContent =
+    range === 'D' ? (
+      <DayDetail
+        metricKey={metricKey}
+        date={date}
+        points={contextPoints}
+        goal={goal}
+        intradayData={wantsIntraday ? intraday.data : undefined}
+        intradayPending={wantsIntraday && intraday.isPending}
+        activityIntradayData={wantsActivityIntraday ? activityIntraday.data : undefined}
+        activityIntradayPending={wantsActivityIntraday && activityIntraday.isPending}
+        activityIntradayError={wantsActivityIntraday && activityIntraday.isError}
+        heartDetailData={wantsHeartDetail ? heartDetail.data : undefined}
+        heartDetailPending={wantsHeartDetail && heartDetail.isPending}
+        heartDetailError={wantsHeartDetail && heartDetail.isError}
+        onSelectDate={onSelectDate}
+      />
+    ) : (
+      <PeriodDetail
+        metricKey={metricKey}
+        range={range}
+        date={date}
+        points={points}
+        prevPoints={prevPoints}
+        goal={goal}
+        onSelectDate={onSelectDate}
+      />
+    )
+
+  useEffect(() => {
+    if (transitionPending || series.isError) return
+    lastResolvedContent.current = { date, range, content: resolvedContent }
+  }, [date, range, resolvedContent, series.isError, transitionPending])
+
+  if (series.isError) {
+    return <ErrorState message={series.error instanceof Error ? series.error.message : undefined} onRetry={() => void series.refetch()} />
+  }
 
   return (
     <div className="mx-auto flex max-w-[1180px] flex-col gap-5 px-8 pb-12">
@@ -174,34 +240,12 @@ export function MetricDetailView({
         </div>
       </motion.header>
 
-      {series.isPending ? (
+      {canRetainPrevious && !delayedSkeletonVisible ? (
+        lastResolvedContent.current?.content
+      ) : series.isPending ? (
         <MetricDetailSkeleton metricKey={metricKey} range={range} hasGoal={goal != null} />
-      ) : range === 'D' ? (
-        <DayDetail
-          metricKey={metricKey}
-          date={date}
-          points={contextPoints}
-          goal={goal}
-          intradayData={wantsIntraday ? intraday.data : undefined}
-          intradayPending={wantsIntraday && intraday.isPending}
-          activityIntradayData={wantsActivityIntraday ? activityIntraday.data : undefined}
-          activityIntradayPending={wantsActivityIntraday && activityIntraday.isPending}
-          activityIntradayError={wantsActivityIntraday && activityIntraday.isError}
-          heartDetailData={wantsHeartDetail ? heartDetail.data : undefined}
-          heartDetailPending={wantsHeartDetail && heartDetail.isPending}
-          heartDetailError={wantsHeartDetail && heartDetail.isError}
-          onSelectDate={onSelectDate}
-        />
       ) : (
-        <PeriodDetail
-          metricKey={metricKey}
-          range={range}
-          date={date}
-          points={points}
-          prevPoints={prevPoints}
-          goal={goal}
-          onSelectDate={onSelectDate}
-        />
+        resolvedContent
       )}
     </div>
   )
