@@ -204,19 +204,23 @@ export function NutritionView({ date, goals, onOpenMetric, onSelectDate }: Nutri
             </Panel>
           </motion.div>
 
-          {(nutritionLogs.isPending || nutritionLogs.isError || entries.length > 0) && (
-            <motion.div custom={2} variants={fade} initial="hidden" animate="show">
-              {nutritionLogs.isPending ? (
-                <NutritionLogsSkeleton />
-              ) : nutritionLogs.isError ? (
-                <Panel className="px-5 py-4 text-[12px] text-ink-faint">
-                  Individual food details could not be loaded.
-                </Panel>
-              ) : (
-                <NutritionLogsPanel entries={entries} />
-              )}
-            </motion.div>
-          )}
+          <motion.div custom={2} variants={fade} initial="hidden" animate="show">
+            {nutritionLogs.isPending ? (
+              <NutritionLogsSkeleton />
+            ) : nutritionLogs.isError ? (
+              <NutritionLogsStatus
+                hint="Food details unavailable"
+                message="Individual food details could not be loaded."
+              />
+            ) : entries.length > 0 ? (
+              <NutritionLogsPanel entries={entries} />
+            ) : (
+              <NutritionLogsStatus
+                hint="No entries for this day"
+                message="No meals were logged for this day."
+              />
+            )}
+          </motion.div>
 
           {/* Trends */}
           <div className="grid grid-cols-1 gap-5">
@@ -319,6 +323,23 @@ function NutritionLogsPanel({ entries }: { entries: NutritionLogEntry[] }): Reac
         {groups.map((group) => (
           <MealGroupSection key={group.label} label={group.label} entries={group.entries} />
         ))}
+      </div>
+    </Panel>
+  )
+}
+
+function NutritionLogsStatus({ hint, message }: { hint: string; message: string }): React.JSX.Element {
+  return (
+    <Panel className={`overflow-hidden ${CARD_HEIGHT.list}`}>
+      <div className="border-b border-hairline px-5 pb-3 pt-4">
+        <SectionHeader
+          title="Logged meals"
+          hint={hint}
+          icon={<ForkKnife size={18} weight="fill" style={{ color: 'var(--color-recovery)' }} />}
+        />
+      </div>
+      <div className="grid min-h-[168px] place-items-center px-5 text-center text-[13px] text-ink-faint">
+        {message}
       </div>
     </Panel>
   )
