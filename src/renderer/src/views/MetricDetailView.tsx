@@ -810,49 +810,57 @@ function HistoryList({
   selected: string
   monthly?: boolean
   onSelectDate?: (date: string) => void
-}): React.JSX.Element | null {
+}): React.JSX.Element {
   const def = METRICS[metricKey]
   const withValues = rows.filter((r) => r.value != null)
-  if (withValues.length === 0) return null
   return (
     <motion.div custom={3} variants={fade} initial="hidden" animate="show">
       <Panel className="min-h-[210px] overflow-hidden">
         <div className="border-b border-hairline px-5 pb-3 pt-4">
-          <SectionHeader title="History" hint={monthly ? 'By month' : 'Most recent first'} />
+          <SectionHeader
+            title="History"
+            hint={withValues.length === 0 ? 'No entries in this window' : monthly ? 'By month' : 'Most recent first'}
+          />
         </div>
-        <div className="divide-y divide-hairline">
-          {withValues.map((row) => {
-            const rowClassName = cn(
-              'flex w-full items-center justify-between px-5 py-2.5 text-left',
-              onSelectDate && 'transition-colors hover:bg-white/[0.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/50',
-              row.date === selected && 'bg-white/[0.03]'
-            )
-            const content = (
-              <>
-                <span className="text-[12.5px] text-ink-dim">
-                  {monthly
-                    ? new Date(`${row.date.slice(0, 7)}-15T12:00:00`).toLocaleDateString('en-US', {
-                        month: 'long',
-                        year: 'numeric'
-                      })
-                    : `${weekdayShort(row.date)} · ${shortDate(row.date)}`}
-                </span>
-                <span className="font-mono text-[13px] text-ink">
-                  {def.format(row.value as number)}
-                  {def.unit && <span className="ml-1 text-[10.5px] text-ink-faint">{def.unit}</span>}
-                </span>
-              </>
-            )
+        {withValues.length === 0 ? (
+          <div className="grid min-h-[148px] place-items-center px-5 text-center text-[13px] text-ink-faint">
+            No history available for this period.
+          </div>
+        ) : (
+          <div className="divide-y divide-hairline">
+            {withValues.map((row) => {
+              const rowClassName = cn(
+                'flex w-full items-center justify-between px-5 py-2.5 text-left',
+                onSelectDate && 'transition-colors hover:bg-white/[0.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/50',
+                row.date === selected && 'bg-white/[0.03]'
+              )
+              const content = (
+                <>
+                  <span className="text-[12.5px] text-ink-dim">
+                    {monthly
+                      ? new Date(`${row.date.slice(0, 7)}-15T12:00:00`).toLocaleDateString('en-US', {
+                          month: 'long',
+                          year: 'numeric'
+                        })
+                      : `${weekdayShort(row.date)} · ${shortDate(row.date)}`}
+                  </span>
+                  <span className="font-mono text-[13px] text-ink">
+                    {def.format(row.value as number)}
+                    {def.unit && <span className="ml-1 text-[10.5px] text-ink-faint">{def.unit}</span>}
+                  </span>
+                </>
+              )
 
-            return onSelectDate ? (
-              <button type="button" key={row.date} onClick={() => onSelectDate(row.date)} className={rowClassName}>
-                {content}
-              </button>
-            ) : (
-              <div key={row.date} className={rowClassName}>{content}</div>
-            )
-          })}
-        </div>
+              return onSelectDate ? (
+                <button type="button" key={row.date} onClick={() => onSelectDate(row.date)} className={rowClassName}>
+                  {content}
+                </button>
+              ) : (
+                <div key={row.date} className={rowClassName}>{content}</div>
+              )
+            })}
+          </div>
+        )}
       </Panel>
     </motion.div>
   )
