@@ -269,12 +269,16 @@ function MetricDetailSkeleton({
       metricKey === 'restingHeartRate' ||
       isActivityTimeline
     const skeletonVariant =
-      metricKey === 'restingHeartRate' || (!hasTimeline && METRICS[metricKey].chart === 'line')
-        ? 'line'
+      metricKey === 'restingHeartRate'
+        ? 'intraday-line'
+        : !hasTimeline && METRICS[metricKey].chart === 'line'
+          ? 'line'
         : 'bar'
     const columns =
       metricKey === 'steps'
         ? HOURS_PER_DAY
+        : metricKey === 'restingHeartRate'
+          ? HOURS_PER_DAY
         : isActivityTimeline
           ? ACTIVITY_INTRADAY_COLUMN_COUNT
           : DAY_CONTEXT_COLUMN_COUNT
@@ -516,7 +520,7 @@ function DayDetail({
         ) : metricKey === 'restingHeartRate' && intradayPending ? (
           <Panel className={`flex flex-col gap-3 p-5 ${CARD_HEIGHT.detail}`}>
             <SectionHeader title="Across the day" hint="Heart rate samples" />
-            <SkeletonChart height={210} columns={12} variant="line" />
+            <SkeletonChart height={210} columns={HOURS_PER_DAY} variant="intraday-line" />
           </Panel>
         ) : metricKey === 'restingHeartRate' && intradayData && intradayData.heartRate.length > 1 ? (
           <Panel className={`flex flex-col gap-3 p-5 ${CARD_HEIGHT.detail}`}>
