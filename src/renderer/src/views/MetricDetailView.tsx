@@ -291,7 +291,7 @@ function MetricDetailSkeleton({
         : isActivityTimeline
           ? `${ACTIVITY_INTRADAY_WINDOW_MINUTES}-minute windows`
           : metricKey === 'restingHeartRate'
-            ? 'Heart rate samples'
+            ? '1-minute averages'
             : 'The last 14 days, this day highlighted'
     return (
       <>
@@ -520,19 +520,19 @@ function DayDetail({
           </Panel>
         ) : metricKey === 'restingHeartRate' && intradayPending ? (
           <Panel className={`flex flex-col gap-3 p-5 ${CARD_HEIGHT.detail}`}>
-            <SectionHeader title="Across the day" hint="Heart rate samples" />
+            <SectionHeader title="Across the day" hint="1-minute averages" />
             <SkeletonChart height={210} columns={HOURS_PER_DAY} variant="intraday-line" />
           </Panel>
         ) : metricKey === 'restingHeartRate' && intradayData && intradayData.heartRate.length > 1 ? (
           <Panel className={`flex flex-col gap-3 p-5 ${CARD_HEIGHT.detail}`}>
             <SectionHeader
               title="Across the day"
-              hint="Heart rate samples"
+              hint="1-minute averages"
               action={
                 intradayData.currentHeartRate != null ? (
                   <div className="flex items-baseline gap-1">
                     <span className="text-[20px] font-semibold text-ink">{intradayData.currentHeartRate}</span>
-                    <span className="text-[12px] text-ink-dim">bpm now</span>
+                    <span className="text-[12px] text-ink-dim">bpm 1-min avg</span>
                   </div>
                 ) : undefined
               }

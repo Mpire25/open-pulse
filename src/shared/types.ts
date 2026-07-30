@@ -140,7 +140,7 @@ export interface IntradaySnapshot {
   source: DataSource
   stepsHourly: HourlySteps[]
   heartRate: HeartRatePoint[]
-  currentHeartRate: number | null // only set when date is today
+  currentHeartRate: number | null // latest one-minute average; only set when date is today
 }
 
 export type IntradayScope = 'steps' | 'heart' | 'both'

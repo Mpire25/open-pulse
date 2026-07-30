@@ -1,5 +1,11 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import { dailyRollUp, listData, listPairedDevices, listRawData } from '../src/main/health-api'
+import {
+  dailyRollUp,
+  listData,
+  listPairedDevices,
+  listRawData,
+  physicalRollUp
+} from '../src/main/health-api'
 
 const originalFetch = globalThis.fetch
 
@@ -8,6 +14,36 @@ afterEach(() => {
 })
 
 describe('Health API response projections', () => {
+  test('requests one-minute average heart-rate rollups', async () => {
+    let requestedUrl = ''
+    let requestedBody: Record<string, unknown> = {}
+    globalThis.fetch = (async (input, init) => {
+      requestedUrl = String(input)
+      requestedBody = JSON.parse(String(init?.body)) as Record<string, unknown>
+      return new Response(JSON.stringify({ rollupDataPoints: [] }), { status: 200 })
+    }) as typeof fetch
+
+    await physicalRollUp(
+      'token',
+      'heart-rate',
+      '2026-07-01T00:00:00Z',
+      '2026-07-02T00:00:00Z',
+      60,
+      'google-wearables'
+    )
+
+    const url = new URL(requestedUrl)
+    expect(url.pathname).toEndWith('/heart-rate/dataPoints:rollUp')
+    expect(url.searchParams.get('fields')).toBe(
+      'nextPageToken,rollupDataPoints(startTime,heartRate/beatsPerMinuteAvg)'
+    )
+    expect(requestedBody).toMatchObject({
+      windowSize: '60s',
+      pageSize: 1440,
+      dataSourceFamily: 'users/me/dataSourceFamilies/google-wearables'
+    })
+  })
+
   test('requests only the heart-rate data payload and pagination token', async () => {
     let requestedUrl = ''
     globalThis.fetch = (async (input) => {

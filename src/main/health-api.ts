@@ -219,6 +219,7 @@ function maxRollupRangeDays(dataType: string): number {
 
 const ROLLUP_VALUE_FIELDS: Record<string, string> = {
   steps: 'steps/countSum',
+  'heart-rate': 'heartRate/beatsPerMinuteAvg',
   'total-calories': 'totalCalories/kcalSum',
   distance: 'distance/millimetersSum',
   floors: 'floors/countSum',

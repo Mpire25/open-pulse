@@ -14,7 +14,6 @@ import type {
   DayMetrics,
   DayValues,
   HealthDay,
-  HeartRatePoint,
   HeartDetailMetric,
   HeartDetailResult,
   HeartDetailScope,
@@ -82,6 +81,10 @@ import {
   parseNutritionLogTotals
 } from './body-nutrition-detail'
 import { parseHeartZones } from './heart-detail'
+import {
+  HEART_RATE_ROLLUP_WINDOW_SECONDS,
+  heartRatePointsFromRollups
+} from './heart-rate-rollup'
 import { mapSleep } from './sleep-detail'
 import { nutrientGrams, nutrientMineralGrams } from './nutrition'
 import { parseExerciseTcx } from './tcx'
@@ -1109,38 +1112,23 @@ async function ensureIntradayHeart(
   generation: number,
   signal?: AbortSignal
 ): Promise<void> {
-  if (!force && isFresh('intraday-heart', date)) return
-  const points = await listData(token, 'heart-rate', 'sample', date, shiftIsoDate(date, 1), 'google-wearables', 0, signal)
+  const group = 'intraday-heart-v2'
+  if (!force && isFresh(group, date)) return
+  const { startTime, endTime } = physicalDayRange(date)
+  const points = await physicalRollUp(
+    token,
+    'heart-rate',
+    startTime,
+    endTime,
+    HEART_RATE_ROLLUP_WINDOW_SECONDS,
+    'google-wearables',
+    0,
+    signal
+  )
   assertCurrentAccount(generation)
-  const series: HeartRatePoint[] = points
-    .map((p) => {
-      const record = p.heartRate as
-        | { sampleTime?: { civilTime?: CivilDateTime; physicalTime?: string }; beatsPerMinute?: string }
-        | undefined
-      const civilTime = record?.sampleTime?.civilTime?.time
-      const physicalTime = record?.sampleTime?.physicalTime
-        ? new Date(record.sampleTime.physicalTime)
-        : null
-      const minute =
-        typeof civilTime?.hours === 'number'
-          ? civilTime.hours * 60 +
-            (civilTime.minutes ?? 0) +
-            (typeof civilTime.seconds === 'number'
-              ? civilTime.seconds / 60
-              : ((physicalTime?.getSeconds() ?? 0) + (physicalTime?.getMilliseconds() ?? 0) / 1000) / 60)
-          : physicalTime
-            ? physicalTime.getHours() * 60 +
-              physicalTime.getMinutes() +
-              physicalTime.getSeconds() / 60 +
-              physicalTime.getMilliseconds() / 60_000
-            : null
-      const bpm = num(record?.beatsPerMinute)
-      return minute != null && bpm ? { minute, bpm } : null
-    })
-    .filter((p): p is HeartRatePoint => p !== null)
-    .sort((a, b) => a.minute - b.minute)
+  const series = heartRatePointsFromRollups(points)
   setIntradayHeart(date, series)
-  markFetched('intraday-heart', [date])
+  markFetched(group, [date])
 }
 
 // ---------------------------------------------------------------------------

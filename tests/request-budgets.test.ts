@@ -110,6 +110,14 @@ describe('health request budgets', () => {
     expect(requests).toHaveLength(0)
   })
 
+  test('loads intraday heart rate through one rollup request', async () => {
+    await getIntraday('2026-07-01', false, undefined, 'heart')
+
+    expect(requests).toHaveLength(1)
+    expect(requests[0]).toContain('/heart-rate/dataPoints:rollUp')
+    expect(requests[0]).not.toContain('dataPoints:reconcile')
+  })
+
   test('surfaces Google refresh failures instead of substituting generated data', async () => {
     updateSettings({ googleClientId: 'client-id', googleClientSecret: 'client-secret' })
     setSecret('google-tokens', {
