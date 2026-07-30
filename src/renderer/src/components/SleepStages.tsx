@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { motion, useReducedMotion } from 'framer-motion'
 import type { AssistantSleepNight, SleepStageType } from '@shared/types'
 import { formatClock, formatMinutes } from '@/lib/format'
 
@@ -23,11 +24,13 @@ interface SleepStagesProps {
 }
 
 const EMPTY_STAGES: AssistantSleepNight['stages'] = []
+const STAGE_REVEAL_EASE = [0.22, 1, 0.36, 1] as const
 
 // Hypnogram: each stage segment drawn as a rounded block on its own row,
 // with a per-segment hover readout.
 export function SleepStages({ night, compact = false }: SleepStagesProps): React.JSX.Element {
   const stages = night?.stages ?? EMPTY_STAGES
+  const reduceMotion = useReducedMotion()
   const start = night ? new Date(night.startTime).getTime() : 0
   const end = night ? new Date(night.endTime).getTime() : 1
   const total = Math.max(1, end - start)
@@ -54,6 +57,10 @@ export function SleepStages({ night, compact = false }: SleepStagesProps): React
         }
       }),
     [rowGap, rowHeight, stages, start, total]
+  )
+  const animationKey = useMemo(
+    () => stages.map((stage) => `${stage.type}:${stage.startTime}:${stage.endTime}`).join('|'),
+    [stages]
   )
 
   const connectors = blocks.slice(1).flatMap((next, index) => {
@@ -104,43 +111,51 @@ export function SleepStages({ night, compact = false }: SleepStagesProps): React
               style={{ top: r * (rowHeight + rowGap), height: rowHeight }}
             />
           ))}
-          {connectors.map((connector) => (
-            <div
-              key={connector.key}
-              aria-hidden
-              className="pointer-events-none absolute w-[1.5px] -translate-x-1/2 rounded-full transition-opacity duration-150"
-              style={{
-                left: `${connector.left}%`,
-                top: connector.top,
-                height: connector.height,
-                background: `linear-gradient(to bottom, ${connector.topColor}, ${connector.bottomColor})`,
-                opacity:
-                  hover && hover.i !== connector.from && hover.i !== connector.to
-                    ? 0.35
-                    : 0.85
-              }}
-            />
-          ))}
-          {blocks.map((b) => {
-            const overlapLeft = b.left > 0.01 ? 1 : 0
-            const overlapRight = b.left + b.width < 99.99 ? 1 : 0
-            return (
+          <motion.div
+            key={animationKey}
+            className="absolute inset-0"
+            initial={reduceMotion ? false : { clipPath: 'inset(0 100% 0 0)' }}
+            animate={{ clipPath: 'inset(0 0% 0 0)' }}
+            transition={{ duration: reduceMotion ? 0 : 0.9, ease: STAGE_REVEAL_EASE }}
+          >
+            {connectors.map((connector) => (
               <div
-                key={b.key}
-                className="absolute z-[1] rounded-[5px] transition-opacity"
+                key={connector.key}
+                aria-hidden
+                className="pointer-events-none absolute w-[1.5px] -translate-x-1/2 rounded-full transition-opacity duration-150"
                 style={{
-                  left: `calc(${b.left}% - ${overlapLeft}px)`,
-                  width: `calc(${b.width}% + ${overlapLeft + overlapRight}px)`,
-                  top: b.top,
-                  height: rowHeight,
-                  background: STAGE_COLOR[b.type],
-                  opacity: hover && hover.i !== b.key ? 0.55 : 1
+                  left: `${connector.left}%`,
+                  top: connector.top,
+                  height: connector.height,
+                  background: `linear-gradient(to bottom, ${connector.topColor}, ${connector.bottomColor})`,
+                  opacity:
+                    hover && hover.i !== connector.from && hover.i !== connector.to
+                      ? 0.35
+                      : 0.85
                 }}
-                onPointerMove={() => setHover({ i: b.key, text: b.tip, left: b.left + b.width / 2, top: b.top })}
-                onPointerLeave={() => setHover(null)}
               />
-            )
-          })}
+            ))}
+            {blocks.map((b) => {
+              const overlapLeft = b.left > 0.01 ? 1 : 0
+              const overlapRight = b.left + b.width < 99.99 ? 1 : 0
+              return (
+                <div
+                  key={b.key}
+                  className="absolute z-[1] rounded-[5px] transition-opacity"
+                  style={{
+                    left: `calc(${b.left}% - ${overlapLeft}px)`,
+                    width: `calc(${b.width}% + ${overlapLeft + overlapRight}px)`,
+                    top: b.top,
+                    height: rowHeight,
+                    background: STAGE_COLOR[b.type],
+                    opacity: hover && hover.i !== b.key ? 0.55 : 1
+                  }}
+                  onPointerMove={() => setHover({ i: b.key, text: b.tip, left: b.left + b.width / 2, top: b.top })}
+                  onPointerLeave={() => setHover(null)}
+                />
+              )
+            })}
+          </motion.div>
           {hover && (
             <div
               className="pointer-events-none absolute z-20 -translate-x-1/2 -translate-y-[calc(100%+8px)] whitespace-nowrap rounded-lg border border-hairline bg-panel-2/95 px-2 py-1 text-[11px] font-medium text-ink shadow-lg backdrop-blur-md"

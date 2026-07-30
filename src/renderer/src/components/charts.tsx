@@ -95,6 +95,12 @@ function axisNumber(n: number): string {
 // Columns — hourly buckets and N-day trends
 
 const MAX_KEYBOARD_SELECTABLE_POINTS = 60
+const CHART_EASE = [0.22, 1, 0.36, 1] as const
+
+function chartStaggerDelay(index: number, count: number): number {
+  if (count <= 1) return 0
+  return (index / (count - 1)) * 0.64
+}
 
 export interface ColumnDatum {
   key: string
@@ -134,6 +140,8 @@ export function ColumnChart({
   const [ref, width] = useWidth()
   const [tip, setTip] = useState<TipState | null>(null)
   const [hovered, setHovered] = useState<number | null>(null)
+  const reduceMotion = useReducedMotion()
+  const clipPrefix = useId().replaceAll(':', '')
 
   const pad = { top: 14, bottom: 18, left: 0, right: 46 }
   const plotW = Math.max(0, width - pad.left - pad.right)
@@ -152,6 +160,30 @@ export function ColumnChart({
     <div ref={ref} className="relative w-full select-none" style={{ height }}>
       {width > 0 && (
         <svg width={width} height={height} className="block">
+          <defs>
+            {data.map((datum, index) => {
+              if (datum.value == null) return null
+              const columnHeight = Math.max(2, plotH * (datum.value / max))
+              const columnX = pad.left + band * index + band / 2 - barW / 2
+              const baseline = y(0)
+              return (
+                <clipPath key={datum.key} id={`${clipPrefix}-${index}`}>
+                  <motion.rect
+                    key={`${datum.key}-${datum.value}`}
+                    x={columnX}
+                    width={barW}
+                    initial={reduceMotion ? false : { y: baseline, height: 0 }}
+                    animate={{ y: baseline - columnHeight, height: columnHeight }}
+                    transition={{
+                      duration: reduceMotion ? 0 : 0.68,
+                      delay: reduceMotion ? 0 : chartStaggerDelay(index, data.length),
+                      ease: CHART_EASE
+                    }}
+                  />
+                </clipPath>
+              )
+            })}
+          </defs>
           {gridValues.map((v) => (
             <g key={v}>
               <line
@@ -197,6 +229,7 @@ export function ColumnChart({
                 d={roundedColumn(cx - barW / 2, y(0) - h, barW, h)}
                 fill={color}
                 opacity={hovered === i ? 1 : recede ? 0.38 : 0.85}
+                clipPath={`url(#${clipPrefix}-${i})`}
               />
             )
           })}
@@ -338,6 +371,7 @@ export function StackedColumnChart({
   const [ref, width] = useWidth()
   const [tip, setTip] = useState<TipState | null>(null)
   const [hovered, setHovered] = useState<number | null>(null)
+  const reduceMotion = useReducedMotion()
   const clipPrefix = useId().replaceAll(':', '')
   const pad = { top: 14, bottom: 18, left: 0, right: 46 }
   const plotW = Math.max(0, width - pad.left - pad.right)
@@ -358,14 +392,21 @@ export function StackedColumnChart({
             {data.map((datum, index) => {
               const total = totals[index]
               const columnHeight = total > 0 ? Math.max(2, plotH * (total / max)) : 0
+              const baseline = y(0)
               return (
                 <clipPath key={datum.key} id={`${clipPrefix}-${index}`}>
-                  <rect
+                  <motion.rect
+                    key={`${datum.key}-${datum.segments.map((segment) => segment.value).join('-')}`}
                     x={pad.left + band * index + band / 2 - barW / 2}
-                    y={y(0) - columnHeight}
                     width={barW}
-                    height={columnHeight}
                     rx={Math.min(4, barW / 2)}
+                    initial={reduceMotion ? false : { y: baseline, height: 0 }}
+                    animate={{ y: baseline - columnHeight, height: columnHeight }}
+                    transition={{
+                      duration: reduceMotion ? 0 : 0.68,
+                      delay: reduceMotion ? 0 : chartStaggerDelay(index, data.length),
+                      ease: CHART_EASE
+                    }}
                   />
                 </clipPath>
               )
@@ -543,6 +584,7 @@ export function TrendLine({
   const [ref, width] = useWidth()
   const [tip, setTip] = useState<TipState | null>(null)
   const [cursor, setCursor] = useState<number | null>(null)
+  const reduceMotion = useReducedMotion()
 
   const pad = { top: 14, bottom: 18, left: 0, right: 48 }
   const plotW = Math.max(0, width - pad.left - pad.right)
@@ -574,6 +616,10 @@ export function TrendLine({
     return d
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [axis.max, axis.min, data, height, width])
+  const animationKey = useMemo(
+    () => data.map((point) => `${point.date}:${point.value ?? ''}`).join('|'),
+    [data]
+  )
 
   const last = [...data].reverse().find((d) => d.value != null)
   const lastIndex = last ? data.lastIndexOf(last) : -1
@@ -666,14 +712,28 @@ export function TrendLine({
 
           {/* Area wash under the line */}
           {path && present.length > 1 && (
-            <path
+            <motion.path
+              key={`area-${animationKey}`}
               d={`${path} L ${x(lastIndex)} ${pad.top + plotH} L ${x(data.indexOf(present[0] as LinePoint))} ${pad.top + plotH} Z`}
               fill={color}
-              opacity={0.08}
+              initial={reduceMotion ? false : { opacity: 0 }}
+              animate={{ opacity: 0.08 }}
+              transition={{ duration: reduceMotion ? 0 : 0.55, delay: reduceMotion ? 0 : 0.18 }}
             />
           )}
           {path && (
-            <path d={path} fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+            <motion.path
+              key={`line-${animationKey}`}
+              d={path}
+              fill="none"
+              stroke={color}
+              strokeWidth={2}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              initial={reduceMotion ? false : { pathLength: 0, opacity: 0 }}
+              animate={{ pathLength: 1, opacity: 1 }}
+              transition={{ duration: reduceMotion ? 0 : 0.88, ease: CHART_EASE }}
+            />
           )}
 
           {cursor != null && data[cursor]?.value != null && (
@@ -689,13 +749,22 @@ export function TrendLine({
 
           {/* End marker with a surface ring */}
           {last && lastIndex >= 0 && (
-            <circle
+            <motion.circle
+              key={`end-${animationKey}`}
               cx={x(lastIndex)}
               cy={y(last.value!)}
               r={4}
               fill={color}
               stroke="var(--color-panel)"
               strokeWidth={2}
+              initial={reduceMotion ? false : { opacity: 0, scale: 0 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{
+                duration: reduceMotion ? 0 : 0.28,
+                delay: reduceMotion ? 0 : 0.68,
+                ease: CHART_EASE
+              }}
+              style={{ transformBox: 'fill-box', transformOrigin: 'center' }}
             />
           )}
           {cursor != null && data[cursor]?.value != null && (
@@ -817,6 +886,8 @@ export function IntradayLine({ points, color, height = 170, domain, zones }: Int
   const [ref, width] = useWidth()
   const [tip, setTip] = useState<TipState | null>(null)
   const [cursorX, setCursorX] = useState<number | null>(null)
+  const reduceMotion = useReducedMotion()
+  const revealId = `intraday-reveal-${useId().replaceAll(':', '')}`
 
   const pad = { top: 14, bottom: 18, left: 0, right: 46 }
   const plotW = Math.max(0, width - pad.left - pad.right)
@@ -829,6 +900,13 @@ export function IntradayLine({ points, color, height = 170, domain, zones }: Int
     () => sampleHeartRateForChart(points, MAX_HEART_RATE_CHART_POINTS, domainStart, domainEnd),
     [domainEnd, domainStart, points]
   )
+  const animationKey = useMemo(() => {
+    if (!points.length) return 'empty'
+    const middle = points[Math.floor(points.length / 2)]
+    const first = points[0]
+    const last = points[points.length - 1]
+    return `${points.length}:${first.minute}-${first.bpm}:${middle.minute}-${middle.bpm}:${last.minute}-${last.bpm}`
+  }, [points])
 
   const rawLo = sampled.length ? Math.min(...sampled.map((p) => p.bpm)) : 40
   const rawHi = sampled.length ? Math.max(...sampled.map((p) => p.bpm)) : 120
@@ -911,6 +989,19 @@ export function IntradayLine({ points, color, height = 170, domain, zones }: Int
     <div ref={ref} className="relative w-full select-none" style={{ height }}>
       {width > 0 && (
         <svg width={width} height={height} className="block">
+          <defs>
+            <clipPath id={revealId}>
+              <motion.rect
+                key={animationKey}
+                x={0}
+                y={0}
+                height={height}
+                initial={reduceMotion ? false : { width: 0 }}
+                animate={{ width: plotW }}
+                transition={{ duration: reduceMotion ? 0 : 0.92, ease: CHART_EASE }}
+              />
+            </clipPath>
+          </defs>
           {axis.ticks.map((value) => (
             <g key={value}>
               <line
@@ -988,19 +1079,30 @@ export function IntradayLine({ points, color, height = 170, domain, zones }: Int
               </text>
             </g>
           ))}
-          {zones?.length
-            ? zonePaths.map((segment, index) => (
-                <path
-                  key={`${segment.color}-${index}`}
-                  d={segment.path}
-                  fill="none"
-                  stroke={segment.color}
-                  strokeWidth={2}
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              ))
-            : path && <path d={path} fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />}
+          <g clipPath={`url(#${revealId})`}>
+            {zones?.length
+              ? zonePaths.map((segment, index) => (
+                  <path
+                    key={`${segment.color}-${index}`}
+                    d={segment.path}
+                    fill="none"
+                    stroke={segment.color}
+                    strokeWidth={2}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                ))
+              : path && (
+                  <path
+                    d={path}
+                    fill="none"
+                    stroke={color}
+                    strokeWidth={2}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                )}
+          </g>
 
           {cursorX != null && (
             <line
@@ -1036,6 +1138,7 @@ export function IntradayLine({ points, color, height = 170, domain, zones }: Int
 // Sparkline — stat-tile trend, de-emphasized with an accent endpoint
 
 export function Spark({ values, color, width = 72, height = 24 }: { values: Array<number | null>; color: string; width?: number; height?: number }): React.JSX.Element | null {
+  const reduceMotion = useReducedMotion()
   const present = values.filter((v): v is number => v != null)
   if (present.length < 2) return null
   const lo = Math.min(...present)
@@ -1053,11 +1156,39 @@ export function Spark({ values, color, width = 72, height = 24 }: { values: Arra
   })
   const lastIdx = values.length - 1 - [...values].reverse().findIndex((v) => v != null)
   const lastVal = values[lastIdx]
+  const animationKey = values.join(',')
 
   return (
     <svg width={width} height={height} className="block shrink-0" aria-hidden>
-      <path d={d} fill="none" stroke="var(--color-ink-faint)" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" />
-      {lastVal != null && <circle cx={x(lastIdx)} cy={y(lastVal)} r={2.5} fill={color} />}
+      <motion.path
+        key={`spark-${animationKey}`}
+        d={d}
+        fill="none"
+        stroke="var(--color-ink-faint)"
+        strokeWidth={1.5}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        initial={reduceMotion ? false : { pathLength: 0, opacity: 0 }}
+        animate={{ pathLength: 1, opacity: 1 }}
+        transition={{ duration: reduceMotion ? 0 : 0.68, ease: CHART_EASE }}
+      />
+      {lastVal != null && (
+        <motion.circle
+          key={`spark-end-${animationKey}`}
+          cx={x(lastIdx)}
+          cy={y(lastVal)}
+          r={2.5}
+          fill={color}
+          initial={reduceMotion ? false : { opacity: 0, scale: 0 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{
+            duration: reduceMotion ? 0 : 0.24,
+            delay: reduceMotion ? 0 : 0.5,
+            ease: CHART_EASE
+          }}
+          style={{ transformBox: 'fill-box', transformOrigin: 'center' }}
+        />
+      )}
     </svg>
   )
 }
