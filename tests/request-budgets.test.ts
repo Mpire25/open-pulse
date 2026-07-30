@@ -158,7 +158,7 @@ describe('health request budgets', () => {
     expect(requests.some((url) => url.includes('/steps/dataPoints:reconcile'))).toBe(true)
   })
 
-  test('recovers hourly steps through the civil fallback when the timezone probe returns no point', async () => {
+  test('keeps hourly step rollups when the optional timezone probe returns no point', async () => {
     const date = '2026-07-02'
     const physicalTime = new Date(2026, 6, 2, 6).toISOString()
     globalThis.fetch = (async (input) => {
@@ -172,51 +172,37 @@ describe('health request budgets', () => {
           }]
         }), { status: 200 })
       }
-      if (url.searchParams.get('pageSize') === '1') {
-        return new Response(JSON.stringify({ dataPoints: [] }), { status: 200 })
-      }
-      return new Response(JSON.stringify({
-        dataPoints: [{
-          steps: {
-            interval: {
-              startTime: physicalTime,
-              civilStartTime: {
-                date: { year: 2026, month: 7, day: 2 },
-                time: { hours: 6 }
-              }
-            },
-            count: '500'
-          }
-        }]
-      }), { status: 200 })
+      return new Response(JSON.stringify({ dataPoints: [] }), { status: 200 })
     }) as typeof fetch
 
     const result = await getIntraday(date, false, undefined, 'steps')
 
     expect(result.stepsHourly[6]).toEqual({ hour: 6, steps: 500 })
-    expect(requests).toHaveLength(3)
+    expect(requests).toHaveLength(2)
+    expect(requests.some((request) => new URL(request).searchParams.get('pageSize') === '10000')).toBe(false)
   })
 
-  test('does not borrow hourly steps from an adjacent tracker day', async () => {
+  test('keeps one-minute heart-rate rollups when the optional timezone probe returns no point', async () => {
     const date = '2026-07-05'
-    const physicalTime = new Date(2026, 6, 5, 6).toISOString()
+    const physicalTime = new Date(2026, 6, 5, 6, 30).toISOString()
     globalThis.fetch = (async (input) => {
       requests.push(String(input))
-      if (String(input).includes('/steps/dataPoints:rollUp')) {
+      if (String(input).includes('/heart-rate/dataPoints:rollUp')) {
         return new Response(JSON.stringify({
           rollupDataPoints: [{
             startTime: physicalTime,
-            steps: { countSum: 900 }
+            heartRate: { beatsPerMinuteAvg: 80 }
           }]
         }), { status: 200 })
       }
       return new Response(JSON.stringify({ dataPoints: [] }), { status: 200 })
     }) as typeof fetch
 
-    const result = await getIntraday(date, false, undefined, 'steps')
+    const result = await getIntraday(date, false, undefined, 'heart')
 
-    expect(result.stepsHourly).toEqual([])
-    expect(requests).toHaveLength(3)
+    expect(result.heartRate).toEqual([{ minute: 6 * 60 + 30, bpm: 80 }])
+    expect(requests).toHaveLength(2)
+    expect(requests.some((request) => new URL(request).searchParams.get('pageSize') === '10000')).toBe(false)
   })
 
   test('keeps hourly steps when the optional timezone probe fails', async () => {
@@ -539,7 +525,7 @@ describe('health request budgets', () => {
 
     await getWorkoutsRange(date, date)
     await getIntraday(date, false, undefined, 'heart')
-    markFetched('intraday-heart-v4', [date], now - 31 * 60_000)
+    markFetched('intraday-heart-v5', [date], now - 31 * 60_000)
     requests = []
 
     await getWorkoutHeartRate(date, id)

@@ -102,7 +102,7 @@ import {
 
 let healthAccountGeneration = 0
 const INTRADAY_STEPS_GROUP = 'intraday-steps-v4'
-const INTRADAY_HEART_GROUP = 'intraday-heart-v4'
+const INTRADAY_HEART_GROUP = 'intraday-heart-v5'
 
 class HealthAccountChangedError extends Error {
   constructor() {
@@ -1225,7 +1225,7 @@ async function intradayRollupSource(
 ): Promise<IntradayRollupSource> {
   const { startTime, endTime } = physicalDayRange(date)
   const kind = dataType === 'steps' ? 'interval' : 'sample'
-  const [probe, rollups] = await Promise.all([
+  const [anchorPoint, rollups] = await Promise.all([
     getFirstDataPoint(
       token,
       dataType,
@@ -1235,13 +1235,11 @@ async function intradayRollupSource(
       'google-wearables',
       0,
       signal
-    )
-      .then((point) => ({ point, failed: false }))
-      .catch((error) => {
-        rethrowIfAborted(error)
-        console.warn(`[health] ${dataType} timezone probe failed for ${date}; using rollup timestamps:`, error)
-        return { point: null, failed: true }
-      }),
+    ).catch((error) => {
+      rethrowIfAborted(error)
+      console.warn(`[health] ${dataType} timezone probe failed for ${date}; using rollup timestamps:`, error)
+      return null
+    }),
     physicalRollUp(
       token,
       dataType,
@@ -1255,29 +1253,11 @@ async function intradayRollupSource(
   ])
   assertCurrentAccount(generation)
 
-  // A failed probe is only a lost timezone-correctness enhancement, so retain
-  // the valid rollup. A successful empty probe is different: the machine-local
-  // physical range may overlap an adjacent tracker day. Confirm it with the
-  // exact civil query before deciding whether the selected day has data.
-  if (probe.failed) return { rollups, rawPoints: null }
-  if (!probe.point) {
-    if (rollups.length === 0) return { rollups, rawPoints: null }
-    const rawPoints = await listData(
-      token,
-      dataType,
-      kind,
-      date,
-      shiftIsoDate(date, 1),
-      'google-wearables',
-      0,
-      signal
-    )
-    assertCurrentAccount(generation)
-    return { rollups: [], rawPoints }
-  }
-
-  const anchor = physicalTimeAnchor(probe.point, dataType)
-  if (anchor && anchorMatchesMachineTime(anchor)) {
+  // The probe is only a timezone-correctness enhancement. Missing, failed, or
+  // malformed probe data must not replace a valid rollup with the full raw
+  // sample stream. Only a real, differing tracker offset justifies that cost.
+  const anchor = anchorPoint ? physicalTimeAnchor(anchorPoint, dataType) : null
+  if (!anchor || anchorMatchesMachineTime(anchor)) {
     return { rollups, rawPoints: null }
   }
 
