@@ -607,7 +607,7 @@ function ActivityBreakdownSkeleton({ count }: { count: number }): React.JSX.Elem
       aria-hidden
     >
       {Array.from({ length: count }, (_, index) => (
-        <div key={index} className="px-4 first:pl-0 last:pr-0">
+        <div key={index} className="min-h-10 px-4 first:pl-0 last:pr-0">
           <SkeletonBlock className="h-[11px] w-20" />
           <div className="mt-1 flex items-center gap-2">
             <SkeletonBlock className="h-[15px] w-14" />
