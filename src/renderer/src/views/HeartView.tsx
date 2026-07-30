@@ -120,13 +120,7 @@ function VitalCard({
       <InteractivePanel className={`flex flex-col gap-3 p-5 ${CARD_HEIGHT.chart}`} onOpen={onOpen}>
         <DrillHeader
           title={def.label}
-          hint={
-            metricKey === 'hrvMs' ? (
-              <span className="whitespace-nowrap text-[10px]">{def.hint}</span>
-            ) : (
-              def.hint
-            )
-          }
+          hint={def.hint}
           icon={<Icon size={18} weight="fill" style={{ color: def.color }} />}
           action={
             <div className="flex w-[140px] shrink-0 justify-end">
