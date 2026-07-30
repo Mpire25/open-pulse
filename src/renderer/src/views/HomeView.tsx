@@ -448,13 +448,17 @@ function HeroRow({
   return (
     <button
       onClick={onClick}
-      className="home-hero-stat -mx-2 flex items-start gap-2.5 rounded-xl px-2 py-1.5 text-left transition-colors hover:bg-white/[0.04]"
+      className="home-hero-stat -mx-2 flex min-h-[70px] items-start gap-2.5 rounded-xl px-2 py-1.5 text-left transition-colors hover:bg-white/[0.04]"
     >
       <span className="mt-0.5">{icon}</span>
-      <span className="min-w-0 flex flex-col">
-        <span className="text-[11px] font-medium text-ink-faint">{label}</span>
-        <span className="min-h-[22px] text-[14.5px] font-semibold text-ink">{value}</span>
-        <span className="mt-0.5 min-h-[14px] text-[11px] text-ink-dim">{sub}</span>
+      <span className="grid min-w-0 grid-rows-[17px_22px_19px]">
+        <span className="truncate text-[11px] font-medium leading-[17px] text-ink-faint">{label}</span>
+        <span className="flex min-w-0 items-center overflow-hidden text-[14.5px] font-semibold leading-[22px] text-ink">
+          {value}
+        </span>
+        <span className="flex min-w-0 items-center overflow-hidden pt-0.5 text-ellipsis whitespace-nowrap text-[11px] leading-[17px] text-ink-dim">
+          {sub}
+        </span>
       </span>
     </button>
   )
