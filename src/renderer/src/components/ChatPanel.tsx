@@ -2,7 +2,16 @@
 // slide-over sheet. The chat state itself lives in App so both surfaces
 // show the same conversation.
 
-import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type Dispatch,
+  type SetStateAction
+} from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import {
   ArrowUp,
@@ -58,9 +67,12 @@ const SUGGESTIONS: Array<{ text: string; icon: Icon; iconClass: string; tintClas
 ]
 
 export type ChatState = ChatController
+export type ChatDraftSetter = Dispatch<SetStateAction<string>>
 
 interface ChatPanelProps {
   chat: ChatState
+  draft: string
+  setDraft: ChatDraftSetter
   codexConnected: boolean
   onOpenSettings: () => void
   onAssistantAction: (action: AssistantAction) => void
@@ -73,6 +85,8 @@ interface ChatPanelProps {
 
 export function ChatPanel({
   chat,
+  draft,
+  setDraft,
   codexConnected,
   onOpenSettings,
   onAssistantAction,
@@ -83,7 +97,6 @@ export function ChatPanel({
   onTypeToFocus
 }: ChatPanelProps): React.JSX.Element {
   const { turns, busy, loading, activeChatId, send, stop } = chat
-  const [draft, setDraft] = useState('')
   const scrollRef = useRef<HTMLDivElement>(null)
   const responseSpaceRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
@@ -168,12 +181,20 @@ export function ChatPanel({
   }, [])
 
   useEffect(() => {
-    if (codexConnected && autoFocus) inputRef.current?.focus()
+    if (!codexConnected || !autoFocus) return
+    const input = inputRef.current
+    if (!input) return
+    input.focus()
+    const end = input.value.length
+    input.setSelectionRange(end, end)
   }, [activeChatId, autoFocus, codexConnected, focusRequest])
 
-  useEffect(() => {
-    setDraft('')
-  }, [activeChatId])
+  useLayoutEffect(() => {
+    const input = inputRef.current
+    if (!input) return
+    input.style.height = 'auto'
+    input.style.height = `${Math.min(input.scrollHeight, 160)}px`
+  }, [draft])
 
   useEffect(() => {
     if (!typeToFocus || !codexConnected || loading || !activeChatId) return
@@ -260,11 +281,6 @@ export function ChatPanel({
             placeholder="Ask about your health data…"
             className="max-h-40 flex-1 resize-none bg-transparent py-1.5 text-[13.5px] leading-relaxed text-ink outline-none placeholder:text-ink-faint select-text"
             style={{ height: 'auto' }}
-            onInput={(e) => {
-              const el = e.currentTarget
-              el.style.height = 'auto'
-              el.style.height = `${Math.min(el.scrollHeight, 160)}px`
-            }}
           />
           <Button
             size="sm"

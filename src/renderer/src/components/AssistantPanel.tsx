@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { ArrowSquareOut, ClockCounterClockwise, Plus, Sparkle, X } from '@phosphor-icons/react'
-import { ChatPanel, type ChatState } from '@/components/ChatPanel'
+import { ChatPanel, type ChatDraftSetter, type ChatState } from '@/components/ChatPanel'
 import { ChatHistory } from '@/components/ChatHistory'
 import { cn } from '@/lib/utils'
 import type { AssistantAction } from '@shared/types'
@@ -11,6 +11,8 @@ interface AssistantPanelProps {
   onClose: () => void
   onOpenInAssistant: () => void
   chat: ChatState
+  composerDraft: string
+  setComposerDraft: ChatDraftSetter
   codexConnected: boolean
   composerFocusRequest: number
   onOpenSettings: () => void
@@ -29,6 +31,8 @@ export function AssistantPanel({
   onClose,
   onOpenInAssistant,
   chat,
+  composerDraft,
+  setComposerDraft,
   codexConnected,
   composerFocusRequest,
   onOpenSettings,
@@ -118,6 +122,8 @@ export function AssistantPanel({
               ) : (
                 <ChatPanel
                   chat={chat}
+                  draft={composerDraft}
+                  setDraft={setComposerDraft}
                   codexConnected={codexConnected}
                   onOpenSettings={onOpenSettings}
                   onAssistantAction={onAssistantAction}
