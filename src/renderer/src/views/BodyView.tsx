@@ -103,9 +103,10 @@ export function BodyView({ date, onOpenMetric }: BodyViewProps): React.JSX.Eleme
         {measurements.isPending ? (
           <BodyMeasurementsSkeleton />
         ) : measurements.isError ? (
-          <Panel className="px-5 py-4 text-[12px] text-ink-faint">
-            Individual measurement details could not be loaded.
-          </Panel>
+          <BodyMeasurementsStatus
+            hint="Measurement details unavailable"
+            message="Individual measurement details could not be loaded."
+          />
         ) : measurements.data && measurements.data.measurements.length > 0 ? (
           <Panel className={`overflow-hidden ${CARD_HEIGHT.measurementList}`}>
             <div className="border-b border-hairline px-5 pb-3 pt-4">
@@ -142,7 +143,12 @@ export function BodyView({ date, onOpenMetric }: BodyViewProps): React.JSX.Eleme
               ))}
             </div>
           </Panel>
-        ) : null}
+        ) : (
+          <BodyMeasurementsStatus
+            hint="No entries in this window"
+            message="No body measurements were recorded in the last 30 days."
+          />
+        )}
       </motion.div>
     </div>
   )
@@ -163,16 +169,31 @@ function MeasurementValue({ label, value, unit }: { label: string; value: string
   )
 }
 
-function BodyMeasurementsSkeleton(): React.JSX.Element {
+function BodyMeasurementsStatus({ hint, message }: { hint: string; message: string }): React.JSX.Element {
   return (
-    <Panel className={`overflow-hidden ${CARD_HEIGHT.measurementList}`} aria-hidden>
+    <Panel className={`overflow-hidden ${CARD_HEIGHT.measurementList}`}>
       <div className="border-b border-hairline px-5 pb-3 pt-4">
         <SectionHeader
           title="Recent measurements"
-          hint="Individual scale readings with calculated BMI"
+          hint={hint}
           icon={<Scales size={18} weight="fill" style={{ color: 'var(--color-body-metric)' }} />}
         />
       </div>
+      <div className="relative">
+        <div className="invisible" aria-hidden>
+          <BodyMeasurementSkeletonRows />
+        </div>
+        <div className="absolute inset-0 grid place-items-center px-5 text-center text-[13px] text-ink-faint">
+          {message}
+        </div>
+      </div>
+    </Panel>
+  )
+}
+
+function BodyMeasurementSkeletonRows(): React.JSX.Element {
+  return (
+    <>
       {Array.from({ length: 3 }, (_, index) => (
         <div key={index} className="body-measurement-skeleton-row grid grid-cols-1 gap-2 border-b border-hairline px-5 py-3.5 last:border-b-0">
           <div>
@@ -185,6 +206,21 @@ function BodyMeasurementsSkeleton(): React.JSX.Element {
           </div>
         </div>
       ))}
+    </>
+  )
+}
+
+function BodyMeasurementsSkeleton(): React.JSX.Element {
+  return (
+    <Panel className={`overflow-hidden ${CARD_HEIGHT.measurementList}`} aria-hidden>
+      <div className="border-b border-hairline px-5 pb-3 pt-4">
+        <SectionHeader
+          title="Recent measurements"
+          hint="Individual scale readings with calculated BMI"
+          icon={<Scales size={18} weight="fill" style={{ color: 'var(--color-body-metric)' }} />}
+        />
+      </div>
+      <BodyMeasurementSkeletonRows />
     </Panel>
   )
 }
