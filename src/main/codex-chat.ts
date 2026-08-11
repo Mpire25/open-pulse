@@ -502,10 +502,18 @@ export async function runChat(
         if (!resp.ok || !resp.body) {
           const detail = await resp.text().catch(() => '')
           if (resp.status === 401) throw new Error('ChatGPT session expired. Reconnect in Settings.')
-          if (resp.status === 400 && /model/i.test(detail)) {
-            throw new Error(
-              `${assistant.model} was rejected by this ChatGPT account. The request was sent correctly, but the account cannot use that model — pick a different one in Settings.`
-            )
+          if (resp.status === 400) {
+            // Check effort first: an invalid-effort 400 also mentions the model.
+            if (/effort|reasoning/i.test(detail)) {
+              throw new Error(
+                `${assistant.model} does not support "${assistant.reasoningEffort}" reasoning effort. Pick a different effort in Settings.`
+              )
+            }
+            if (/model/i.test(detail)) {
+              throw new Error(
+                `${assistant.model} was rejected by this ChatGPT account. The request was sent correctly, but the account cannot use that model — pick a different one in Settings.`
+              )
+            }
           }
           throw new Error(`Codex request failed (${resp.status}): ${detail.slice(0, 300)}`)
         }

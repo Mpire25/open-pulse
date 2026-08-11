@@ -8,6 +8,7 @@ import { GoogleSetup } from '@/components/GoogleSetup'
 import { cn } from '@/lib/utils'
 import {
   ASSISTANT_MODEL_PRESETS,
+  DEFAULT_ASSISTANT,
   REASONING_EFFORTS,
   type AppSettings,
   type AssistantSettings,
@@ -61,10 +62,17 @@ export function SettingsView({
 
 const PRESET_IDS = new Set<string>(ASSISTANT_MODEL_PRESETS.map((m) => m.id))
 const EFFORT_LABELS: Record<ReasoningEffort, string> = {
-  minimal: 'Minimal',
   low: 'Low',
   medium: 'Medium',
-  high: 'High'
+  high: 'High',
+  xhigh: 'Extra high',
+  max: 'Max',
+  ultra: 'Ultra'
+}
+
+/** A custom model's ladder is unknown, so offer the full set and let it 400. */
+function effortsForModel(model: string): ReasoningEffort[] {
+  return ASSISTANT_MODEL_PRESETS.find((m) => m.id === model)?.efforts ?? REASONING_EFFORTS
 }
 
 function Pill({
@@ -109,6 +117,18 @@ function AssistantCard({
   const [custom, setCustom] = useState(() => !PRESET_IDS.has(settings.assistant.model))
   const dirty = JSON.stringify(draft) !== JSON.stringify(settings.assistant)
   const valid = draft.model.trim().length > 0
+  const efforts = effortsForModel(draft.model)
+
+  // Keep the pair valid when a model drops a tier (Luna has no ultra).
+  const selectModel = (model: string): void => {
+    const supported = effortsForModel(model)
+    setDraft({
+      model,
+      reasoningEffort: supported.includes(draft.reasoningEffort)
+        ? draft.reasoningEffort
+        : DEFAULT_ASSISTANT.reasoningEffort
+    })
+  }
 
   const save = async (): Promise<void> => {
     const next = await window.pulse.settings.update({
@@ -137,7 +157,7 @@ function AssistantCard({
               layoutId="assistant-model-active"
               onClick={() => {
                 setCustom(false)
-                setDraft({ ...draft, model: m.id })
+                selectModel(m.id)
               }}
             >
               {m.label}
@@ -168,7 +188,7 @@ function AssistantCard({
       <div className="flex flex-col gap-2">
         <span className="text-[11px] font-medium text-ink-faint">Reasoning effort</span>
         <div className="flex w-fit rounded-xl border border-hairline bg-white/[0.03] p-0.5">
-          {REASONING_EFFORTS.map((effort) => (
+          {efforts.map((effort) => (
             <Pill
               key={effort}
               active={draft.reasoningEffort === effort}
