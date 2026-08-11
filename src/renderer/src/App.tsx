@@ -637,9 +637,9 @@ export default function App(): React.JSX.Element {
                     onSettingsChange={(next) => {
                       const retentionChanged = next.chatRetention !== settings.chatRetention
                       setSettings(next)
-                      // Reloading discards in-flight runs, so let a stream finish
-                      // first — cleanup still happens on the next history load.
-                      if (retentionChanged && !chat.streamingChatIds.length) void chat.reload()
+                      // Refreshing applies the new policy at once without
+                      // disturbing drafts or a streaming answer.
+                      if (retentionChanged) void chat.refresh()
                     }}
                     onGoogleChange={handleGoogleChange}
                     onCodexChange={handleCodexChange}

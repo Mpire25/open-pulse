@@ -42,6 +42,7 @@ export interface ChatController {
   pin: (id: string, pinned: boolean) => Promise<void>
   keep: (id: string, kept: boolean) => Promise<void>
   delete: (id: string) => Promise<void>
+  refresh: () => Promise<void>
   reload: () => Promise<void>
 }
 
@@ -153,6 +154,21 @@ export function useChat(): ChatController {
     publish([draft, ...chatsRef.current])
     chooseActive(draft.id)
   }, [chooseActive, publish])
+
+  /**
+   * Re-reads history in place, which also applies retention cleanup in the main
+   * process. Unlike `reload` this keeps drafts, the active chat and in-flight
+   * runs, so it is safe to call while an answer is streaming. Streaming chats
+   * always survive cleanup: `send` persists the user turn before the run starts,
+   * so their `updatedAt` is newer than any cutoff.
+   */
+  const refresh = useCallback(async (): Promise<void> => {
+    const epoch = accountEpochRef.current
+    const snapshot = await window.pulse.chats.list()
+    if (epoch !== accountEpochRef.current) return
+    applySnapshot(snapshot, true)
+    if (!chatsRef.current.length) await create()
+  }, [applySnapshot, create])
 
   const reload = useCallback(async (): Promise<void> => {
     const epoch = accountEpochRef.current + 1
@@ -399,6 +415,7 @@ export function useChat(): ChatController {
     pin,
     keep,
     delete: deleteChat,
+    refresh,
     reload
   }
 }
