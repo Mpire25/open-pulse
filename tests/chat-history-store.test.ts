@@ -483,6 +483,20 @@ describe('retention across every stored account', () => {
     expect(() => store.purgeAllExpired('24-hours', Date.now())).toThrow('unavailable')
   })
 
+  test('always allows turning retention off, however broken storage is', () => {
+    const unreadable = new ChatHistoryStore(multiAccount(), {
+      ...encryptedAdapter(),
+      decrypt: () => { throw new Error('Keychain is locked') }
+    })
+
+    expect(unreadable.previewExpiring('forever', Date.now())).toBe(0)
+    expect(() => unreadable.purgeAllExpired('forever', Date.now())).not.toThrow()
+
+    const unavailable = new ChatHistoryStore(temporaryPath(), encryptedAdapter(false))
+    expect(unavailable.previewExpiring('forever', Date.now())).toBe(0)
+    expect(() => unavailable.purgeAllExpired('forever', Date.now())).not.toThrow()
+  })
+
   test('counts only chats history actually shows', () => {
     const store = new ChatHistoryStore(seedHistory([agedSession(40 * DAY_MS, { messages: [] })]), encryptedAdapter())
 

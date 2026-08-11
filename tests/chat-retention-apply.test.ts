@@ -3,6 +3,9 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
+// `mock.module` and the module registry are process-wide, so whichever electron
+// mock evaluates first owns the shared main-process modules. Keep assertions here
+// to defaults that hold regardless of which file ran before this one.
 const userData = mkdtempSync(join(tmpdir(), 'open-pulse-retention-apply-'))
 const historyPath = join(userData, 'chat-history.enc.json')
 

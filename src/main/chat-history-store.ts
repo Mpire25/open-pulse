@@ -122,6 +122,9 @@ export class ChatHistoryStore {
    * would understate what the user is agreeing to.
    */
   previewExpiring(retention: ChatRetention, sessionStartedAt: number): number {
+    // Turning retention off deletes nothing, so it must stay available even when
+    // history cannot be read — it is how someone disarms a policy they regret.
+    if (retention === 'forever') return 0
     this.assertReadable()
     return Object.values(this.load().accounts).reduce(
       (total, sessions) =>
