@@ -4,6 +4,7 @@ import type {
   ActivityIntradayMetric,
   AppSettings,
   ChatMessage,
+  ChatRetention,
   ChatSessionMessage,
   HeartDetailMetric,
   HeartDetailScope,
@@ -11,7 +12,7 @@ import type {
   MetricKey
 } from '../shared/types'
 import { HEALTH_CANCELLED, healthError, splitHealthWireArgs } from '../shared/health-ipc'
-import { isActivityIntradayMetric, isHeartDetailMetric } from '../shared/types'
+import { CHAT_RETENTIONS, isActivityIntradayMetric, isHeartDetailMetric } from '../shared/types'
 import {
   connectGoogle,
   disconnectGoogle,
@@ -39,13 +40,23 @@ import { setApiActivityListener } from './health-api'
 import { getSettings, updateSettings } from './store'
 import { cancelAllChats, cancelChat, runChat } from './codex-chat'
 import {
+  applyChatRetention,
   createChatSession,
   deleteChatSession,
   getChatHistory,
+  previewChatRetention,
   setChatSessionKept,
   setChatSessionPinned,
   updateChatSession
 } from './chat-history'
+
+/** The renderer is trusted, but a retention value still decides what gets deleted. */
+function assertRetention(value: unknown): ChatRetention {
+  if (typeof value === 'string' && (CHAT_RETENTIONS as readonly string[]).includes(value)) {
+    return value as ChatRetention
+  }
+  throw new Error('Unknown chat retention.')
+}
 
 interface TrustedRenderer {
   webContents: WebContents
@@ -206,6 +217,12 @@ export function registerIpc(): void {
     setChatSessionKept(id, kept === true)
   )
   handle('chats:delete', (_event, id: string) => deleteChatSession(id))
+  handle('chats:retention-preview', (_event, retention: ChatRetention) =>
+    previewChatRetention(assertRetention(retention))
+  )
+  handle('chats:apply-retention', (_event, retention: ChatRetention) =>
+    applyChatRetention(assertRetention(retention))
+  )
 
   handle('health:cancel', (event, requestId: string) => {
     healthControllers.get(healthRequestKey(event, requestId))?.abort()

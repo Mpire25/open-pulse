@@ -2,7 +2,6 @@ import { useRef, useState } from 'react'
 import { motion } from 'framer-motion'
 import * as Dialog from '@radix-ui/react-dialog'
 import { Brain, ChatCircleDots, CheckCircle, GoogleLogo, Sparkle, Target, ArrowClockwise, Trash, Warning } from '@phosphor-icons/react'
-import { expiringChatCount } from '@shared/chat'
 import { Panel, SectionHeader } from '@/components/Panel'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -16,7 +15,6 @@ import {
   type AppSettings,
   type AssistantSettings,
   type ChatRetention,
-  type ChatSession,
   type CodexAuthStatus,
   type Goals,
   type GoogleAuthStatus,
@@ -27,7 +25,6 @@ interface SettingsViewProps {
   settings: AppSettings
   google: GoogleAuthStatus
   codex: CodexAuthStatus
-  chatSessions: ChatSession[]
   onSettingsChange: (settings: AppSettings) => void
   onGoogleChange: (status: GoogleAuthStatus) => void
   onCodexChange: (status: CodexAuthStatus) => void
@@ -37,7 +34,6 @@ export function SettingsView({
   settings,
   google,
   codex,
-  chatSessions,
   onSettingsChange,
   onGoogleChange,
   onCodexChange
@@ -62,7 +58,7 @@ export function SettingsView({
       />
       <CodexCard codex={codex} onCodexChange={onCodexChange} />
       <AssistantCard settings={settings} onSettingsChange={onSettingsChange} />
-      <ChatRetentionCard settings={settings} sessions={chatSessions} onSettingsChange={onSettingsChange} />
+      <ChatRetentionCard settings={settings} onSettingsChange={onSettingsChange} />
       <GoalsCard settings={settings} onSettingsChange={onSettingsChange} />
     </div>
   )
@@ -76,32 +72,43 @@ const RETENTION_OPTIONS: Array<{ value: ChatRetention; label: string; phrase: st
   { value: 'forever', label: 'Forever', phrase: '' }
 ]
 
-// Cleanup runs when history loads, so "until next launch" is measured from the
-// moment the app opened — close enough to the main process's own start time.
-const APP_OPENED_AT = Date.now()
-
 function ChatRetentionCard({
   settings,
-  sessions,
   onSettingsChange
 }: {
   settings: AppSettings
-  sessions: ChatSession[]
   onSettingsChange: (s: AppSettings) => void
 }): React.JSX.Element {
   const [pending, setPending] = useState<{ retention: ChatRetention; count: number } | null>(null)
+  const [busy, setBusy] = useState(false)
 
-  const apply = async (chatRetention: ChatRetention): Promise<void> => {
-    setPending(null)
-    onSettingsChange(await window.pulse.settings.update({ chatRetention }))
+  const apply = async (retention: ChatRetention): Promise<void> => {
+    setBusy(true)
+    try {
+      // Main saves the policy and applies it together, so what the dialog
+      // counted is exactly what gets deleted.
+      onSettingsChange(await window.pulse.chats.applyRetention(retention))
+      setPending(null)
+    } finally {
+      setBusy(false)
+    }
   }
 
-  const selectRetention = (retention: ChatRetention): void => {
-    if (retention === settings.chatRetention) return
-    // Deleting chats is irreversible, so confirm before a stricter policy bites.
-    const count = expiringChatCount(sessions, retention, APP_OPENED_AT)
-    if (count > 0) setPending({ retention, count })
-    else void apply(retention)
+  const selectRetention = async (retention: ChatRetention): Promise<void> => {
+    if (busy || retention === settings.chatRetention) return
+    setBusy(true)
+    try {
+      // The count has to come from the store: it spans every signed-in account,
+      // not just the one loaded here, and it is right even mid-reload.
+      const count = await window.pulse.chats.retentionPreview(retention)
+      if (count > 0) {
+        setPending({ retention, count })
+        return
+      }
+    } finally {
+      setBusy(false)
+    }
+    await apply(retention)
   }
 
   const pendingOption = RETENTION_OPTIONS.find((option) => option.value === pending?.retention)
@@ -119,7 +126,8 @@ function ChatRetentionCard({
             key={option.value}
             active={settings.chatRetention === option.value}
             layoutId="chat-retention-active"
-            onClick={() => selectRetention(option.value)}
+            disabled={busy}
+            onClick={() => void selectRetention(option.value)}
           >
             {option.label}
           </Pill>
@@ -148,6 +156,7 @@ function ChatRetentionCard({
               <Button
                 variant="destructive"
                 size="sm"
+                disabled={busy}
                 onClick={() => {
                   if (pending) void apply(pending.retention)
                 }}
@@ -180,19 +189,23 @@ function Pill({
   active,
   layoutId,
   onClick,
+  disabled = false,
   children
 }: {
   active: boolean
   layoutId: string
   onClick: () => void
+  disabled?: boolean
   children: React.ReactNode
 }): React.JSX.Element {
   return (
     <button
       onClick={onClick}
+      disabled={disabled}
       className={cn(
         'relative rounded-[10px] px-3.5 py-1.5 text-[12px] font-semibold transition-colors',
-        active ? 'text-ink' : 'text-ink-dim hover:text-ink'
+        active ? 'text-ink' : 'text-ink-dim hover:text-ink',
+        disabled && 'pointer-events-none opacity-60'
       )}
     >
       {active && (

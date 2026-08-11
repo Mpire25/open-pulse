@@ -1,6 +1,12 @@
 import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { randomUUID } from 'node:crypto'
-import { generateChatTitle, isChatRetained, retentionCutoff, DEFAULT_CHAT_TITLE } from '../shared/chat'
+import {
+  expiringChatCount,
+  generateChatTitle,
+  isChatRetained,
+  retentionCutoff,
+  DEFAULT_CHAT_TITLE
+} from '../shared/chat'
 import { normalizeAssistantParts } from '../shared/assistant-parts'
 import type { ChatHistorySnapshot, ChatRetention, ChatSession, ChatSessionMessage } from '../shared/types'
 
@@ -98,7 +104,7 @@ export class ChatHistoryStore {
     }
   }
 
-  /** Permanently drops chats the retention policy no longer covers. */
+  /** Permanently drops chats in one account that the retention policy no longer covers. */
   purgeExpired(accountScope: string, retention: ChatRetention, sessionStartedAt: number): void {
     const cutoff = retentionCutoff(retention, sessionStartedAt)
     if (cutoff == null) return
@@ -108,6 +114,33 @@ export class ChatHistoryStore {
     if (retained.length === sessions.length) return
     history.accounts[accountScope] = retained
     this.persist()
+  }
+
+  /**
+   * How many chats a policy would delete across every stored account. Retention
+   * is a single global setting, so a count limited to the signed-in account
+   * would understate what the user is agreeing to.
+   */
+  previewExpiring(retention: ChatRetention, sessionStartedAt: number): number {
+    return Object.values(this.load().accounts).reduce(
+      (total, sessions) => total + expiringChatCount(sessions, retention, sessionStartedAt),
+      0
+    )
+  }
+
+  /** Applies the policy to every stored account, so nothing expires unannounced later. */
+  purgeAllExpired(retention: ChatRetention, sessionStartedAt: number): void {
+    const cutoff = retentionCutoff(retention, sessionStartedAt)
+    if (cutoff == null) return
+    const history = this.load()
+    let changed = false
+    for (const [scope, sessions] of Object.entries(history.accounts)) {
+      const retained = sessions.filter((session) => isChatRetained(session, cutoff))
+      if (retained.length === sessions.length) continue
+      history.accounts[scope] = retained
+      changed = true
+    }
+    if (changed) this.persist()
   }
 
   create(accountScope: string, requestedId?: string): ChatSession {

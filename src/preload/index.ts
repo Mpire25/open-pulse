@@ -8,6 +8,7 @@ import type {
   BodyMeasurementsResult,
   ChatHistorySnapshot,
   ChatMessage,
+  ChatRetention,
   ChatSession,
   ChatSessionMessage,
   CodexAuthStatus,
@@ -89,6 +90,10 @@ const api = {
     setKept: (id: string, kept: boolean): Promise<ChatSession> =>
       ipcRenderer.invoke('chats:set-kept', id, kept),
     delete: (id: string): Promise<ChatHistorySnapshot> => ipcRenderer.invoke('chats:delete', id),
+    retentionPreview: (retention: ChatRetention): Promise<number> =>
+      ipcRenderer.invoke('chats:retention-preview', retention),
+    applyRetention: (retention: ChatRetention): Promise<AppSettings> =>
+      ipcRenderer.invoke('chats:apply-retention', retention),
     onAccountChanged: (callback: () => void): (() => void) => {
       const listener = (): void => callback()
       ipcRenderer.on('chats:account-changed', listener)

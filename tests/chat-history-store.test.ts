@@ -47,9 +47,10 @@ function purgedSnapshot(store: ChatHistoryStore, retention: ChatRetention, sessi
 }
 
 /** Writes history straight to disk so chats can be backdated past a cutoff. */
-function seedHistory(sessions: ChatSession[]): string {
+function seedHistory(sessions: ChatSession[] | Record<string, ChatSession[]>): string {
   const path = temporaryPath()
-  const plain = JSON.stringify({ version: 1, accounts: { 'account-a': sessions } })
+  const accounts = Array.isArray(sessions) ? { 'account-a': sessions } : sessions
+  const plain = JSON.stringify({ version: 1, accounts })
   const cipherText = Buffer.from(`encrypted:${plain}`, 'utf8').toString('base64')
   writeFileSync(path, JSON.stringify({ version: 1, cipherText }), 'utf8')
   return path
@@ -431,6 +432,45 @@ describe('encrypted chat history store', () => {
       values: { calories: 520 },
       action: { type: 'open-nutrition', date: '2026-07-11' }
     })
+  })
+})
+
+describe('retention across every stored account', () => {
+  const multiAccount = (): string =>
+    seedHistory({
+      alice: [agedSession(60 * 1000), agedSession(40 * DAY_MS, { pinned: true })],
+      bob: [agedSession(40 * DAY_MS), agedSession(40 * DAY_MS), agedSession(40 * DAY_MS)],
+      disconnected: [agedSession(40 * DAY_MS)]
+    })
+
+  test('previews chats in accounts the signed-in user cannot see', () => {
+    const store = new ChatHistoryStore(multiAccount(), encryptedAdapter())
+
+    // Alice alone would report zero, which is what let the confirmation be skipped.
+    expect(store.previewExpiring('24-hours', Date.now())).toBe(4)
+    expect(store.previewExpiring('forever', Date.now())).toBe(0)
+  })
+
+  test('applying a policy clears every account at once, sparing pinned and kept', () => {
+    const store = new ChatHistoryStore(multiAccount(), encryptedAdapter())
+
+    store.purgeAllExpired('24-hours', Date.now())
+
+    expect(store.snapshot('alice').sessions).toHaveLength(2)
+    expect(store.snapshot('bob').sessions).toEqual([])
+    expect(store.snapshot('disconnected').sessions).toEqual([])
+    expect(store.previewExpiring('24-hours', Date.now())).toBe(0)
+  })
+
+  test('leaves every account untouched under forever', () => {
+    const path = multiAccount()
+    const before = readFileSync(path, 'utf8')
+    const store = new ChatHistoryStore(path, encryptedAdapter())
+
+    store.purgeAllExpired('forever', Date.now())
+
+    expect(store.snapshot('bob').sessions).toHaveLength(3)
+    expect(readFileSync(path, 'utf8')).toBe(before)
   })
 })
 

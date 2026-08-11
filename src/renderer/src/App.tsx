@@ -633,7 +633,6 @@ export default function App(): React.JSX.Element {
                     settings={settings}
                     google={google}
                     codex={codex}
-                    chatSessions={chat.sessions}
                     onSettingsChange={(next) => {
                       const retentionChanged = next.chatRetention !== settings.chatRetention
                       setSettings(next)

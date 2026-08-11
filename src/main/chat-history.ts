@@ -1,9 +1,9 @@
 import { app, safeStorage } from 'electron'
 import { join } from 'node:path'
-import type { ChatSessionMessage } from '../shared/types'
+import type { AppSettings, ChatRetention, ChatSessionMessage } from '../shared/types'
 import { getGoogleAccountScope } from './google-auth'
 import { ChatHistoryStore } from './chat-history-store'
-import { getSettings } from './store'
+import { getSettings, updateSettings } from './store'
 
 let store: ChatHistoryStore | null = null
 const sessionStartedAt = Date.now()
@@ -22,6 +22,21 @@ export function getChatHistory() {
   const accountScope = getGoogleAccountScope()
   store.purgeExpired(accountScope, getSettings().chatRetention, sessionStartedAt)
   return store.snapshot(accountScope)
+}
+
+/** Total chats a policy would delete now, across every stored account. */
+export function previewChatRetention(retention: ChatRetention): number {
+  return historyStore().previewExpiring(retention, sessionStartedAt)
+}
+
+/**
+ * Saves the policy and applies it in the same step, so the number the user
+ * confirmed is exactly what gets deleted — no account quietly expiring later.
+ */
+export function applyChatRetention(retention: ChatRetention): AppSettings {
+  const settings = updateSettings({ chatRetention: retention })
+  historyStore().purgeAllExpired(retention, sessionStartedAt)
+  return settings
 }
 
 export function createChatSession(id?: string) {
