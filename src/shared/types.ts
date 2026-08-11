@@ -396,16 +396,11 @@ export const DEFAULT_GOALS: Goals = {
   sleepMinutes: 8 * 60
 }
 
-export type ReasoningEffort = 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'ultra'
+// The endpoint also accepts "ultra", but it is an agentic mode built for the
+// Codex app's delegation machinery, which this app does not wire up.
+export type ReasoningEffort = 'low' | 'medium' | 'high' | 'xhigh' | 'max'
 
-export const REASONING_EFFORTS: ReasoningEffort[] = [
-  'low',
-  'medium',
-  'high',
-  'xhigh',
-  'max',
-  'ultra'
-]
+export const REASONING_EFFORTS: ReasoningEffort[] = ['low', 'medium', 'high', 'xhigh', 'max']
 
 export interface AssistantSettings {
   model: string
@@ -419,7 +414,8 @@ export const DEFAULT_ASSISTANT: AssistantSettings = {
 
 // Availability depends on the signed-in ChatGPT plan; the endpoint has no
 // list-models call, so a rejected model only surfaces as a 400 at send time.
-// Efforts mirror each model's supported_reasoning_levels — Luna has no ultra.
+// Efforts mirror each model's supported_reasoning_levels; they match today, but
+// older models (gpt-5.5, gpt-5.4) stop at xhigh if these presets ever grow.
 export const ASSISTANT_MODEL_PRESETS: {
   id: string
   label: string
@@ -433,12 +429,12 @@ export const ASSISTANT_MODEL_PRESETS: {
   {
     id: 'gpt-5.6-terra',
     label: 'GPT-5.6 Terra',
-    efforts: ['low', 'medium', 'high', 'xhigh', 'max', 'ultra']
+    efforts: ['low', 'medium', 'high', 'xhigh', 'max']
   },
   {
     id: 'gpt-5.6-sol',
     label: 'GPT-5.6 Sol',
-    efforts: ['low', 'medium', 'high', 'xhigh', 'max', 'ultra']
+    efforts: ['low', 'medium', 'high', 'xhigh', 'max']
   }
 ]
 

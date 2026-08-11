@@ -66,8 +66,7 @@ const EFFORT_LABELS: Record<ReasoningEffort, string> = {
   medium: 'Medium',
   high: 'High',
   xhigh: 'Extra high',
-  max: 'Max',
-  ultra: 'Ultra'
+  max: 'Max'
 }
 
 /** A custom model's ladder is unknown, so offer the full set and let it 400. */
