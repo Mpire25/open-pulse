@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { motion } from 'framer-motion'
 import { Brain, CheckCircle, GoogleLogo, Sparkle, Target, ArrowClockwise, Warning } from '@phosphor-icons/react'
 import { Panel, SectionHeader } from '@/components/Panel'
@@ -112,30 +112,45 @@ function AssistantCard({
   settings: AppSettings
   onSettingsChange: (s: AppSettings) => void
 }): React.JSX.Element {
-  const [draft, setDraft] = useState<AssistantSettings>(settings.assistant)
+  const [assistant, setAssistant] = useState<AssistantSettings>(settings.assistant)
   const [custom, setCustom] = useState(() => !PRESET_IDS.has(settings.assistant.model))
-  const dirty = JSON.stringify(draft) !== JSON.stringify(settings.assistant)
-  const valid = draft.model.trim().length > 0
-  const efforts = effortsForModel(draft.model)
+  const [customModel, setCustomModel] = useState(() =>
+    PRESET_IDS.has(settings.assistant.model) ? '' : settings.assistant.model
+  )
+  const saveSequence = useRef(0)
+  const trimmedCustomModel = customModel.trim()
+  const customDirty = trimmedCustomModel !== assistant.model
+  const efforts = custom ? REASONING_EFFORTS : effortsForModel(assistant.model)
+
+  const persist = async (nextAssistant: AssistantSettings): Promise<void> => {
+    const sequence = ++saveSequence.current
+    setAssistant(nextAssistant)
+
+    const next = await window.pulse.settings.update({ assistant: nextAssistant })
+    if (sequence !== saveSequence.current) return
+
+    onSettingsChange(next)
+    setAssistant(next.assistant)
+  }
 
   // Keep the pair valid when a model drops a tier (Luna has no ultra).
   const selectModel = (model: string): void => {
     const supported = effortsForModel(model)
-    setDraft({
+    void persist({
       model,
-      reasoningEffort: supported.includes(draft.reasoningEffort)
-        ? draft.reasoningEffort
+      reasoningEffort: supported.includes(assistant.reasoningEffort)
+        ? assistant.reasoningEffort
         : DEFAULT_ASSISTANT.reasoningEffort
     })
   }
 
-  const save = async (): Promise<void> => {
-    const next = await window.pulse.settings.update({
-      assistant: { ...draft, model: draft.model.trim() }
-    })
-    onSettingsChange(next)
-    setDraft(next.assistant)
-    setCustom(!PRESET_IDS.has(next.assistant.model))
+  const selectEffort = (reasoningEffort: ReasoningEffort): void => {
+    void persist({ ...assistant, reasoningEffort })
+  }
+
+  const applyCustomModel = (): void => {
+    if (!trimmedCustomModel || !customDirty) return
+    void persist({ ...assistant, model: trimmedCustomModel })
   }
 
   return (
@@ -152,7 +167,7 @@ function AssistantCard({
           {ASSISTANT_MODEL_PRESETS.map((m) => (
             <Pill
               key={m.id}
-              active={!custom && draft.model === m.id}
+              active={!custom && assistant.model === m.id}
               layoutId="assistant-model-active"
               onClick={() => {
                 setCustom(false)
@@ -167,20 +182,33 @@ function AssistantCard({
             layoutId="assistant-model-active"
             onClick={() => {
               setCustom(true)
-              setDraft({ ...draft, model: '' })
+              setCustomModel(PRESET_IDS.has(assistant.model) ? '' : assistant.model)
             }}
           >
             Custom…
           </Pill>
         </div>
         {custom && (
-          <Input
-            autoFocus
-            placeholder="model-id"
-            spellCheck={false}
-            value={draft.model}
-            onChange={(e) => setDraft({ ...draft, model: e.target.value })}
-          />
+          <div className="flex w-full max-w-md">
+            <Input
+              autoFocus
+              className="rounded-r-none"
+              placeholder="model-id"
+              spellCheck={false}
+              value={customModel}
+              onChange={(e) => setCustomModel(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') applyCustomModel()
+              }}
+            />
+            <Button
+              className="rounded-l-none border-l-0"
+              disabled={!trimmedCustomModel || !customDirty}
+              onClick={applyCustomModel}
+            >
+              Apply
+            </Button>
+          </div>
         )}
       </div>
 
@@ -190,9 +218,9 @@ function AssistantCard({
           {efforts.map((effort) => (
             <Pill
               key={effort}
-              active={draft.reasoningEffort === effort}
+              active={assistant.reasoningEffort === effort}
               layoutId="assistant-effort-active"
-              onClick={() => setDraft({ ...draft, reasoningEffort: effort })}
+              onClick={() => selectEffort(effort)}
             >
               {EFFORT_LABELS[effort]}
             </Pill>
@@ -202,14 +230,6 @@ function AssistantCard({
           Higher effort digs deeper on complex questions and takes longer to answer.
         </p>
       </div>
-
-      {dirty && (
-        <div>
-          <Button size="sm" disabled={!valid} onClick={save}>
-            Save assistant
-          </Button>
-        </div>
-      )}
     </Card>
   )
 }
