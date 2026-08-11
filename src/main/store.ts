@@ -26,7 +26,8 @@ const DEFAULTS: AppSettings = {
   googleClientSecretConfigured: false,
   goals: { ...DEFAULT_GOALS },
   assistant: { ...DEFAULT_ASSISTANT },
-  chatRetention: '24-hours'
+  // Retention is opt-in: an upgrade must never silently delete existing chats.
+  chatRetention: 'forever'
 }
 const GOOGLE_CLIENT_SECRET_KEY = 'google-client-secret'
 

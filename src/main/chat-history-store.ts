@@ -1,6 +1,6 @@
 import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { randomUUID } from 'node:crypto'
-import { generateChatTitle, DEFAULT_CHAT_TITLE } from '../shared/chat'
+import { generateChatTitle, isChatRetained, retentionCutoff, DEFAULT_CHAT_TITLE } from '../shared/chat'
 import { normalizeAssistantParts } from '../shared/assistant-parts'
 import type { ChatHistorySnapshot, ChatRetention, ChatSession, ChatSessionMessage } from '../shared/types'
 
@@ -167,22 +167,11 @@ export class ChatHistoryStore {
   }
 
   private removeExpired(accountScope: string, retention: ChatRetention, sessionStartedAt: number): void {
-    if (retention === 'forever') return
+    const cutoff = retentionCutoff(retention, sessionStartedAt)
+    if (cutoff == null) return
     const history = this.load()
     const sessions = history.accounts[accountScope] ?? []
-    const duration = retention === '24-hours'
-      ? 86_400_000
-      : retention === '7-days'
-        ? 7 * 86_400_000
-        : retention === '30-days'
-          ? 30 * 86_400_000
-          : 0
-    const cutoff = retention === 'session' ? sessionStartedAt : Date.now() - duration
-    // Pinning is also an explicit signal that a chat matters. This protects
-    // legacy pinned chats created before the separate Keep action existed.
-    const retained = sessions.filter(
-      (session) => session.pinned || session.kept || Date.parse(session.updatedAt) >= cutoff
-    )
+    const retained = sessions.filter((session) => isChatRetained(session, cutoff))
     if (retained.length === sessions.length) return
     history.accounts[accountScope] = retained
     this.persist()

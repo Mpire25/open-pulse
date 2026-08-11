@@ -3,12 +3,12 @@ import * as Dialog from '@radix-ui/react-dialog'
 import { BookmarkSimple, ChatsCircle, PushPin, PushPinSlash, Trash } from '@phosphor-icons/react'
 import { Button } from '@/components/ui/button'
 import type { ChatController } from '@/hooks/useChat'
-import type { ChatSession } from '@shared/types'
+import type { ChatRetention, ChatSession } from '@shared/types'
 import { cn } from '@/lib/utils'
 
 interface ChatHistoryProps {
   chat: ChatController
-  retention: import('@shared/types').ChatRetention
+  retention: ChatRetention
   onNavigate?: () => void
   onDeleteDialogClose?: () => void
 }
@@ -157,7 +157,10 @@ function SessionRow({ session, selected, streaming, onSelect, onPin, onKeep, sho
       <button
         type="button"
         onClick={onSelect}
-        className="flex min-w-0 flex-1 items-center gap-2 rounded-[10px] px-3 py-2.5 pr-20 text-left outline-none focus-visible:ring-1 focus-visible:ring-accent/50"
+        className={cn(
+          'flex min-w-0 flex-1 items-center gap-2 rounded-[10px] px-3 py-2.5 text-left outline-none focus-visible:ring-1 focus-visible:ring-accent/50',
+          showKeep ? 'pr-20' : 'pr-14'
+        )}
       >
         {streaming && <span className="size-1.5 shrink-0 animate-pulse rounded-full bg-accent" />}
         <span className="min-w-0 flex-1 truncate text-[12px] font-medium">{session.title}</span>

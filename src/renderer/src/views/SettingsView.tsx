@@ -1,6 +1,8 @@
 import { useRef, useState } from 'react'
 import { motion } from 'framer-motion'
-import { Brain, ChatCircleDots, CheckCircle, GoogleLogo, Sparkle, Target, ArrowClockwise, Warning } from '@phosphor-icons/react'
+import * as Dialog from '@radix-ui/react-dialog'
+import { Brain, ChatCircleDots, CheckCircle, GoogleLogo, Sparkle, Target, ArrowClockwise, Trash, Warning } from '@phosphor-icons/react'
+import { expiringChatCount } from '@shared/chat'
 import { Panel, SectionHeader } from '@/components/Panel'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -14,6 +16,7 @@ import {
   type AppSettings,
   type AssistantSettings,
   type ChatRetention,
+  type ChatSession,
   type CodexAuthStatus,
   type Goals,
   type GoogleAuthStatus,
@@ -24,6 +27,7 @@ interface SettingsViewProps {
   settings: AppSettings
   google: GoogleAuthStatus
   codex: CodexAuthStatus
+  chatSessions: ChatSession[]
   onSettingsChange: (settings: AppSettings) => void
   onGoogleChange: (status: GoogleAuthStatus) => void
   onCodexChange: (status: CodexAuthStatus) => void
@@ -33,6 +37,7 @@ export function SettingsView({
   settings,
   google,
   codex,
+  chatSessions,
   onSettingsChange,
   onGoogleChange,
   onCodexChange
@@ -57,30 +62,49 @@ export function SettingsView({
       />
       <CodexCard codex={codex} onCodexChange={onCodexChange} />
       <AssistantCard settings={settings} onSettingsChange={onSettingsChange} />
-      <ChatRetentionCard settings={settings} onSettingsChange={onSettingsChange} />
+      <ChatRetentionCard settings={settings} sessions={chatSessions} onSettingsChange={onSettingsChange} />
       <GoalsCard settings={settings} onSettingsChange={onSettingsChange} />
     </div>
   )
 }
 
-const RETENTION_OPTIONS: Array<{ value: ChatRetention; label: string }> = [
-  { value: 'session', label: 'When app closes' },
-  { value: '24-hours', label: '24 hours' },
-  { value: '7-days', label: '7 days' },
-  { value: '30-days', label: '30 days' },
-  { value: 'forever', label: 'Forever' }
+const RETENTION_OPTIONS: Array<{ value: ChatRetention; label: string; phrase: string }> = [
+  { value: 'session', label: 'Until next launch', phrase: 'started before this launch' },
+  { value: '24-hours', label: '24 hours', phrase: 'older than 24 hours' },
+  { value: '7-days', label: '7 days', phrase: 'older than 7 days' },
+  { value: '30-days', label: '30 days', phrase: 'older than 30 days' },
+  { value: 'forever', label: 'Forever', phrase: '' }
 ]
+
+// Cleanup runs when history loads, so "until next launch" is measured from the
+// moment the app opened — close enough to the main process's own start time.
+const APP_OPENED_AT = Date.now()
 
 function ChatRetentionCard({
   settings,
+  sessions,
   onSettingsChange
 }: {
   settings: AppSettings
+  sessions: ChatSession[]
   onSettingsChange: (s: AppSettings) => void
 }): React.JSX.Element {
-  const selectRetention = async (chatRetention: ChatRetention): Promise<void> => {
+  const [pending, setPending] = useState<{ retention: ChatRetention; count: number } | null>(null)
+
+  const apply = async (chatRetention: ChatRetention): Promise<void> => {
+    setPending(null)
     onSettingsChange(await window.pulse.settings.update({ chatRetention }))
   }
+
+  const selectRetention = (retention: ChatRetention): void => {
+    if (retention === settings.chatRetention) return
+    // Deleting chats is irreversible, so confirm before a stricter policy bites.
+    const count = expiringChatCount(sessions, retention, APP_OPENED_AT)
+    if (count > 0) setPending({ retention, count })
+    else void apply(retention)
+  }
+
+  const pendingOption = RETENTION_OPTIONS.find((option) => option.value === pending?.retention)
 
   return (
     <Card index={3}>
@@ -95,15 +119,45 @@ function ChatRetentionCard({
             key={option.value}
             active={settings.chatRetention === option.value}
             layoutId="chat-retention-active"
-            onClick={() => void selectRetention(option.value)}
+            onClick={() => selectRetention(option.value)}
           >
             {option.label}
           </Pill>
         ))}
       </div>
       <p className="text-[11px] text-ink-faint">
-        Pinned and kept chats are never removed. When set to Forever, all chats are kept automatically.
+        Pinned and kept chats are never removed. Expired chats are cleared when you change this setting and
+        each time the app opens.
       </p>
+
+      <Dialog.Root open={pending != null} onOpenChange={(open) => !open && setPending(null)}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="fixed inset-0 z-40 bg-black/55 backdrop-blur-sm" />
+          <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-[min(380px,calc(100vw-32px))] -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-hairline bg-panel p-5 shadow-2xl outline-none">
+            <Dialog.Title className="display text-[16px] font-semibold text-ink">
+              Delete {pending?.count} {pending?.count === 1 ? 'chat' : 'chats'}?
+            </Dialog.Title>
+            <Dialog.Description className="mt-2 text-[12.5px] leading-relaxed text-ink-dim">
+              Chats {pendingOption?.phrase} that aren&rsquo;t pinned or kept will be permanently deleted. This
+              cannot be undone.
+            </Dialog.Description>
+            <div className="mt-5 flex justify-end gap-2">
+              <Dialog.Close asChild>
+                <Button variant="ghost" size="sm">Cancel</Button>
+              </Dialog.Close>
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={() => {
+                  if (pending) void apply(pending.retention)
+                }}
+              >
+                <Trash size={13} /> Delete
+              </Button>
+            </div>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
     </Card>
   )
 }

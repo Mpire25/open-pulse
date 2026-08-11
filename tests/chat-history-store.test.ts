@@ -1,9 +1,12 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { ChatHistoryStore } from '../src/main/chat-history-store'
-import type { ChatSessionMessage } from '../src/shared/types'
+import { expiringChatCount } from '../src/shared/chat'
+import type { ChatSession, ChatSessionMessage } from '../src/shared/types'
+
+const DAY_MS = 86_400_000
 
 const temporaryDirectories: string[] = []
 
@@ -23,6 +26,27 @@ function encryptedAdapter(available = true) {
 
 function userMessage(text: string): ChatSessionMessage {
   return { id: crypto.randomUUID(), role: 'user', text, createdAt: new Date().toISOString() }
+}
+
+function agedSession(ageMs: number, extra: Partial<ChatSession> = {}): ChatSession {
+  const at = new Date(Date.now() - ageMs).toISOString()
+  return {
+    id: crypto.randomUUID(),
+    title: 'Aged chat',
+    createdAt: at,
+    updatedAt: at,
+    messages: [userMessage('Written a while ago')],
+    ...extra
+  }
+}
+
+/** Writes history straight to disk so chats can be backdated past a cutoff. */
+function seedHistory(sessions: ChatSession[]): string {
+  const path = temporaryPath()
+  const plain = JSON.stringify({ version: 1, accounts: { 'account-a': sessions } })
+  const cipherText = Buffer.from(`encrypted:${plain}`, 'utf8').toString('base64')
+  writeFileSync(path, JSON.stringify({ version: 1, cipherText }), 'utf8')
+  return path
 }
 
 afterEach(() => {
@@ -122,6 +146,42 @@ describe('encrypted chat history store', () => {
     expect(restored.snapshot('account-a').sessions[0].kept).toBe(true)
     expect(restored.setKept('account-a', keptChat.id, false).kept).toBeUndefined()
     expect(restored.snapshot('account-a', 'session', Date.now() + 1_000).sessions).toEqual([])
+  })
+
+  test('time-based retention expires only chats past its own window', () => {
+    const stale = agedSession(25 * 60 * 60 * 1000)
+    const fresh = agedSession(60 * 60 * 1000)
+
+    const dayStore = new ChatHistoryStore(seedHistory([stale, fresh]), encryptedAdapter())
+    expect(dayStore.snapshot('account-a', '24-hours').sessions.map((s) => s.id)).toEqual([fresh.id])
+
+    const weekStore = new ChatHistoryStore(seedHistory([stale, fresh]), encryptedAdapter())
+    expect(weekStore.snapshot('account-a', '7-days').sessions).toHaveLength(2)
+
+    const monthStore = new ChatHistoryStore(seedHistory([agedSession(31 * DAY_MS), stale]), encryptedAdapter())
+    expect(monthStore.snapshot('account-a', '30-days').sessions.map((s) => s.id)).toEqual([stale.id])
+  })
+
+  test('pinned and kept chats survive a time-based window', () => {
+    const path = seedHistory([
+      agedSession(40 * DAY_MS, { pinned: true }),
+      agedSession(40 * DAY_MS, { kept: true }),
+      agedSession(40 * DAY_MS)
+    ])
+    const store = new ChatHistoryStore(path, encryptedAdapter())
+
+    const sessions = store.snapshot('account-a', '24-hours').sessions
+    expect(sessions).toHaveLength(2)
+    expect(sessions.every((session) => session.pinned || session.kept)).toBe(true)
+  })
+
+  test('forever retention deletes nothing and leaves the file untouched', () => {
+    const path = seedHistory([agedSession(400 * DAY_MS), agedSession(10 * DAY_MS)])
+    const before = readFileSync(path, 'utf8')
+    const store = new ChatHistoryStore(path, encryptedAdapter())
+
+    expect(store.snapshot('account-a', 'forever').sessions).toHaveLength(2)
+    expect(readFileSync(path, 'utf8')).toBe(before)
   })
 
   test('legacy pinned chats are always exempt from retention cleanup', () => {
@@ -356,5 +416,22 @@ describe('encrypted chat history store', () => {
       values: { calories: 520 },
       action: { type: 'open-nutrition', date: '2026-07-11' }
     })
+  })
+})
+
+describe('retention preview', () => {
+  test('counts the chats a policy would delete, ignoring pinned and kept', () => {
+    const sessions = [
+      agedSession(40 * DAY_MS),
+      agedSession(40 * DAY_MS, { pinned: true }),
+      agedSession(40 * DAY_MS, { kept: true }),
+      agedSession(60 * 1000)
+    ]
+
+    expect(expiringChatCount(sessions, 'forever', Date.now())).toBe(0)
+    expect(expiringChatCount(sessions, '24-hours', Date.now())).toBe(1)
+    expect(expiringChatCount(sessions, '7-days', Date.now())).toBe(1)
+    expect(expiringChatCount(sessions, '30-days', Date.now())).toBe(1)
+    expect(expiringChatCount(sessions, 'session', Date.now() + 1_000)).toBe(2)
   })
 })
