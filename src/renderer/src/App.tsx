@@ -625,6 +625,7 @@ export default function App(): React.JSX.Element {
                     composerFocusRequest={composerFocusRequest}
                     onAssistantAction={handleAssistantAction}
                     onOpenSettings={() => selectView('settings')}
+                    chatRetention={settings.chatRetention}
                   />
                 )}
                 {view === 'settings' && (
@@ -632,7 +633,13 @@ export default function App(): React.JSX.Element {
                     settings={settings}
                     google={google}
                     codex={codex}
-                    onSettingsChange={setSettings}
+                    onSettingsChange={(next) => {
+                      const retentionChanged = next.chatRetention !== settings.chatRetention
+                      setSettings(next)
+                      // Refreshing applies the new policy at once without
+                      // disturbing drafts or a streaming answer.
+                      if (retentionChanged) void chat.refresh()
+                    }}
                     onGoogleChange={handleGoogleChange}
                     onCodexChange={handleCodexChange}
                   />
@@ -651,6 +658,7 @@ export default function App(): React.JSX.Element {
             codexConnected={codex.connected}
             composerFocusRequest={composerFocusRequest}
             onAssistantAction={handleAssistantAction}
+            chatRetention={settings.chatRetention}
             onOpenSettings={() => {
               closeAssistantPanel()
               selectView('settings')

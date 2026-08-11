@@ -17,7 +17,7 @@ export interface ChatTurn extends ChatSessionMessage {
   transient?: boolean
 }
 
-interface ViewChat extends Omit<ChatSession, 'messages'> {
+export interface ViewChat extends Omit<ChatSession, 'messages'> {
   turns: ChatTurn[]
   persisted: boolean
 }
@@ -40,7 +40,9 @@ export interface ChatController {
   create: () => Promise<void>
   select: (id: string) => void
   pin: (id: string, pinned: boolean) => Promise<void>
+  keep: (id: string, kept: boolean) => Promise<void>
   delete: (id: string) => Promise<void>
+  refresh: () => Promise<void>
   reload: () => Promise<void>
 }
 
@@ -85,6 +87,33 @@ function asSession(chat: ViewChat): ChatSession {
   return { ...session, messages: persistedMessages(turns) }
 }
 
+/**
+ * Reconciles stored history with what the view already holds. Chats missing
+ * from the snapshot are dropped — they were deleted or expired — except drafts,
+ * which have nothing on disk yet, and chats mid-answer, whose first save may not
+ * have landed before retention cleanup ran.
+ */
+export function mergeHistorySnapshot(
+  current: ViewChat[],
+  sessions: ChatSession[],
+  isRunning: (id: string) => boolean,
+  preserveRunning: boolean
+): ViewChat[] {
+  const currentById = new Map(current.map((chat) => [chat.id, chat]))
+  const stored = sessions.map((session) => {
+    const existing = currentById.get(session.id)
+    return preserveRunning && existing && isRunning(session.id)
+      ? { ...session, turns: existing.turns, persisted: true }
+      : toViewChat(session)
+  })
+  const carried = current.filter(
+    (chat) =>
+      (!chat.persisted || (preserveRunning && isRunning(chat.id))) &&
+      !stored.some((session) => session.id === chat.id)
+  )
+  return [...carried, ...stored]
+}
+
 function sortChats(chats: ViewChat[]): ViewChat[] {
   return [...chats].sort((left, right) => Date.parse(right.updatedAt) - Date.parse(left.updatedAt))
 }
@@ -122,17 +151,12 @@ export function useChat(): ChatController {
 
   const applySnapshot = useCallback(
     (snapshot: ChatHistorySnapshot, preserveRunning: boolean): void => {
-      const currentById = new Map(chatsRef.current.map((chat) => [chat.id, chat]))
-      const stored = snapshot.sessions.map((session) => {
-        const current = currentById.get(session.id)
-        return preserveRunning && current && runsRef.current.has(session.id)
-          ? { ...session, turns: current.turns, persisted: true }
-          : toViewChat(session)
-      })
-      const drafts = chatsRef.current.filter(
-        (chat) => !chat.persisted && !stored.some((session) => session.id === chat.id)
+      const next = mergeHistorySnapshot(
+        chatsRef.current,
+        snapshot.sessions,
+        (id) => runsRef.current.has(id),
+        preserveRunning
       )
-      const next = [...drafts, ...stored]
       publish(next)
       const selected = next.find((chat) => chat.id === activeChatIdRef.current)
       if (!selected) chooseActive(next[0]?.id ?? null)
@@ -152,6 +176,21 @@ export function useChat(): ChatController {
     publish([draft, ...chatsRef.current])
     chooseActive(draft.id)
   }, [chooseActive, publish])
+
+  /**
+   * Re-reads history in place, which also applies retention cleanup in the main
+   * process. Unlike `reload` this keeps drafts, the active chat and in-flight
+   * runs, so it is safe to call while an answer is streaming. Streaming chats
+   * always survive cleanup: `send` persists the user turn before the run starts,
+   * so their `updatedAt` is newer than any cutoff.
+   */
+  const refresh = useCallback(async (): Promise<void> => {
+    const epoch = accountEpochRef.current
+    const snapshot = await window.pulse.chats.list()
+    if (epoch !== accountEpochRef.current) return
+    applySnapshot(snapshot, true)
+    if (!chatsRef.current.length) await create()
+  }, [applySnapshot, create])
 
   const reload = useCallback(async (): Promise<void> => {
     const epoch = accountEpochRef.current + 1
@@ -347,6 +386,22 @@ export function useChat(): ChatController {
     [mergeSession, publish]
   )
 
+  const keep = useCallback(
+    async (id: string, kept: boolean): Promise<void> => {
+      const epoch = accountEpochRef.current
+      publish(chatsRef.current.map((chat) => (chat.id === id ? { ...chat, kept } : chat)))
+      try {
+        const session = await window.pulse.chats.setKept(id, kept)
+        if (epoch === accountEpochRef.current) mergeSession(session)
+      } catch {
+        if (epoch === accountEpochRef.current) {
+          publish(chatsRef.current.map((chat) => (chat.id === id ? { ...chat, kept: !kept } : chat)))
+        }
+      }
+    },
+    [mergeSession, publish]
+  )
+
   const cancelRun = useCallback((id: string): void => {
     const run = runsRef.current.get(id)
     if (!run) return
@@ -380,7 +435,9 @@ export function useChat(): ChatController {
     create,
     select,
     pin,
+    keep,
     delete: deleteChat,
+    refresh,
     reload
   }
 }

@@ -1,4 +1,12 @@
 {
   "files": [],
-  "references": [{ "path": "./tsconfig.node.json" }, { "path": "./tsconfig.web.json" }]
+  "references": [{ "path": "./tsconfig.node.json" }, { "path": "./tsconfig.web.json" }],
+  // Not used for builds — this mirrors the web aliases so `bun test` can resolve
+  // renderer modules that import through @/ and @shared/.
+  "compilerOptions": {
+    "paths": {
+      "@/*": ["./src/renderer/src/*"],
+      "@shared/*": ["./src/shared/*"]
+    }
+  }
 }

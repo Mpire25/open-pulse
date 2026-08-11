@@ -1,8 +1,14 @@
 import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { randomUUID } from 'node:crypto'
-import { generateChatTitle, DEFAULT_CHAT_TITLE } from '../shared/chat'
+import {
+  expiringChatCount,
+  generateChatTitle,
+  isChatRetained,
+  retentionCutoff,
+  DEFAULT_CHAT_TITLE
+} from '../shared/chat'
 import { normalizeAssistantParts } from '../shared/assistant-parts'
-import type { ChatHistorySnapshot, ChatSession, ChatSessionMessage } from '../shared/types'
+import type { ChatHistorySnapshot, ChatRetention, ChatSession, ChatSessionMessage } from '../shared/types'
 
 interface EncryptionAdapter {
   available: () => boolean
@@ -70,6 +76,7 @@ function normalizeSession(value: unknown): ChatSession | null {
     createdAt,
     updatedAt: validDate(candidate.updatedAt, createdAt),
     ...(candidate.pinned === true ? { pinned: true } : {}),
+    ...(candidate.kept === true ? { kept: true } : {}),
     messages
   }
 }
@@ -87,6 +94,7 @@ export class ChatHistoryStore {
     private readonly encryption: EncryptionAdapter
   ) {}
 
+  /** Reads history without changing it — call `purgeExpired` to apply retention. */
   snapshot(accountScope: string): ChatHistorySnapshot {
     return {
       sessions: sortSessions(this.load().accounts[accountScope] ?? [])
@@ -94,6 +102,58 @@ export class ChatHistoryStore {
         .map((session) => structuredClone(session)),
       persistence: this.encryption.available() ? 'encrypted' : 'memory'
     }
+  }
+
+  /** Permanently drops chats in one account that the retention policy no longer covers. */
+  purgeExpired(accountScope: string, retention: ChatRetention, sessionStartedAt: number): void {
+    const cutoff = retentionCutoff(retention, sessionStartedAt)
+    if (cutoff == null) return
+    const history = this.load()
+    const sessions = history.accounts[accountScope] ?? []
+    const retained = sessions.filter((session) => isChatRetained(session, cutoff))
+    if (retained.length === sessions.length) return
+    history.accounts[accountScope] = retained
+    this.persist()
+  }
+
+  /**
+   * How many chats a policy would delete across every stored account. Retention
+   * is a single global setting, so a count limited to the signed-in account
+   * would understate what the user is agreeing to.
+   */
+  previewExpiring(retention: ChatRetention, sessionStartedAt: number): number {
+    // Turning retention off deletes nothing, so it must stay available even when
+    // history cannot be read — it is how someone disarms a policy they regret.
+    if (retention === 'forever') return 0
+    this.assertReadable()
+    return Object.values(this.load().accounts).reduce(
+      (total, sessions) =>
+        total +
+        expiringChatCount(
+          // Empty drafts never appear in history, so counting them would promise
+          // more deletions than the user can see.
+          sessions.filter((session) => session.messages.length > 0),
+          retention,
+          sessionStartedAt
+        ),
+      0
+    )
+  }
+
+  /** Applies the policy to every stored account, so nothing expires unannounced later. */
+  purgeAllExpired(retention: ChatRetention, sessionStartedAt: number): void {
+    const cutoff = retentionCutoff(retention, sessionStartedAt)
+    if (cutoff == null) return
+    this.assertReadable()
+    const history = this.load()
+    let changed = false
+    for (const [scope, sessions] of Object.entries(history.accounts)) {
+      const retained = sessions.filter((session) => isChatRetained(session, cutoff))
+      if (retained.length === sessions.length) continue
+      history.accounts[scope] = retained
+      changed = true
+    }
+    if (changed) this.persist()
   }
 
   create(accountScope: string, requestedId?: string): ChatSession {
@@ -137,6 +197,15 @@ export class ChatHistoryStore {
     return structuredClone(session)
   }
 
+  setKept(accountScope: string, id: string, kept: boolean): ChatSession {
+    const session = this.find(accountScope, id)
+    // Keeping is a retention override, not activity, so it must not alter recency.
+    if (kept) session.kept = true
+    else delete session.kept
+    this.persist()
+    return structuredClone(session)
+  }
+
   delete(accountScope: string, id: string): ChatHistorySnapshot {
     const history = this.load()
     this.assertWritable()
@@ -154,6 +223,7 @@ export class ChatHistoryStore {
     if (!session) throw new Error('Chat not found.')
     return session
   }
+
 
   private load(): PersistedChatHistory {
     if (this.cache) return this.cache
@@ -188,6 +258,19 @@ export class ChatHistoryStore {
 
   private assertWritable(): void {
     if (this.persistenceFailure) throw this.persistenceFailure
+  }
+
+  /**
+   * Guards operations that decide what to delete from the whole file. An
+   * unreadable store looks empty, and acting on that would arm a retention
+   * policy the user was told affects nothing.
+   */
+  private assertReadable(): void {
+    this.load()
+    this.assertWritable()
+    if (!this.encryption.available()) {
+      throw new Error('Chat history is unavailable until encrypted storage can be used again.')
+    }
   }
 
   private persist(): void {

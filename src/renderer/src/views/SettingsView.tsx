@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react'
 import { motion } from 'framer-motion'
-import { Brain, CheckCircle, GoogleLogo, Sparkle, Target, ArrowClockwise, Warning } from '@phosphor-icons/react'
+import * as Dialog from '@radix-ui/react-dialog'
+import { Brain, ChatCircleDots, CheckCircle, GoogleLogo, Sparkle, Target, ArrowClockwise, Trash, Warning } from '@phosphor-icons/react'
 import { Panel, SectionHeader } from '@/components/Panel'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -13,6 +14,7 @@ import {
   REASONING_EFFORTS,
   type AppSettings,
   type AssistantSettings,
+  type ChatRetention,
   type CodexAuthStatus,
   type Goals,
   type GoogleAuthStatus,
@@ -56,8 +58,134 @@ export function SettingsView({
       />
       <CodexCard codex={codex} onCodexChange={onCodexChange} />
       <AssistantCard settings={settings} onSettingsChange={onSettingsChange} />
+      <ChatRetentionCard settings={settings} onSettingsChange={onSettingsChange} />
       <GoalsCard settings={settings} onSettingsChange={onSettingsChange} />
     </div>
+  )
+}
+
+const RETENTION_OPTIONS: Array<{ value: ChatRetention; label: string; phrase: string }> = [
+  { value: 'session', label: 'Until next launch', phrase: 'started before this launch' },
+  { value: '24-hours', label: '24 hours', phrase: 'older than 24 hours' },
+  { value: '7-days', label: '7 days', phrase: 'older than 7 days' },
+  { value: '30-days', label: '30 days', phrase: 'older than 30 days' },
+  { value: 'forever', label: 'Forever', phrase: '' }
+]
+
+function ChatRetentionCard({
+  settings,
+  onSettingsChange
+}: {
+  settings: AppSettings
+  onSettingsChange: (s: AppSettings) => void
+}): React.JSX.Element {
+  const [pending, setPending] = useState<{ retention: ChatRetention; count: number } | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [failure, setFailure] = useState<string | null>(null)
+
+  const failureText = (error: unknown): string =>
+    error instanceof Error && error.message.trim()
+      ? error.message.replace(/^Error invoking remote method '[^']*':\s*(Error:\s*)?/, '')
+      : 'Chat retention could not be changed.'
+
+  const apply = async (retention: ChatRetention): Promise<void> => {
+    setBusy(true)
+    try {
+      // Main clears the chats first and only then saves the policy, so a failure
+      // here leaves retention exactly as it was.
+      onSettingsChange(await window.pulse.chats.applyRetention(retention))
+      setPending(null)
+      setFailure(null)
+    } catch (error) {
+      setPending(null)
+      setFailure(failureText(error))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const selectRetention = async (retention: ChatRetention): Promise<void> => {
+    if (busy || retention === settings.chatRetention) return
+    setBusy(true)
+    setFailure(null)
+    let count: number
+    try {
+      // The count has to come from the store: it spans every signed-in account,
+      // not just the one loaded here, and it is right even mid-reload.
+      count = await window.pulse.chats.retentionPreview(retention)
+    } catch (error) {
+      setFailure(failureText(error))
+      return
+    } finally {
+      setBusy(false)
+    }
+    if (count > 0) setPending({ retention, count })
+    else await apply(retention)
+  }
+
+  const pendingOption = RETENTION_OPTIONS.find((option) => option.value === pending?.retention)
+
+  return (
+    <Card index={3}>
+      <SectionHeader
+        title="Chat retention"
+        hint="Applies globally to chats that you haven't kept"
+        icon={<ChatCircleDots size={18} weight="fill" className="text-accent" />}
+      />
+      <div className="flex w-fit flex-wrap rounded-xl border border-hairline bg-white/[0.03] p-0.5">
+        {RETENTION_OPTIONS.map((option) => (
+          <Pill
+            key={option.value}
+            active={settings.chatRetention === option.value}
+            layoutId="chat-retention-active"
+            disabled={busy}
+            onClick={() => void selectRetention(option.value)}
+          >
+            {option.label}
+          </Pill>
+        ))}
+      </div>
+      <p className="text-[11px] text-ink-faint">
+        Pinned and kept chats are never removed. Expired chats are cleared when you change this setting and
+        each time the app opens.
+      </p>
+      {failure && (
+        <div className="flex items-start gap-2 rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-[12px] text-danger">
+          <Warning size={15} weight="fill" className="mt-0.5 shrink-0" />
+          {failure}
+        </div>
+      )}
+
+      <Dialog.Root open={pending != null} onOpenChange={(open) => !open && setPending(null)}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="fixed inset-0 z-40 bg-black/55 backdrop-blur-sm" />
+          <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-[min(380px,calc(100vw-32px))] -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-hairline bg-panel p-5 shadow-2xl outline-none">
+            <Dialog.Title className="display text-[16px] font-semibold text-ink">
+              Delete {pending?.count} {pending?.count === 1 ? 'chat' : 'chats'}?
+            </Dialog.Title>
+            <Dialog.Description className="mt-2 text-[12.5px] leading-relaxed text-ink-dim">
+              Chats {pendingOption?.phrase} that aren&rsquo;t pinned or kept will be permanently deleted. This
+              cannot be undone.
+            </Dialog.Description>
+            <div className="mt-5 flex justify-end gap-2">
+              <Dialog.Close asChild>
+                <Button variant="ghost" size="sm">Cancel</Button>
+              </Dialog.Close>
+              <Button
+                variant="destructive"
+                size="sm"
+                disabled={busy}
+                onClick={() => {
+                  if (pending) void apply(pending.retention)
+                }}
+              >
+                <Trash size={13} /> Delete
+              </Button>
+            </div>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
+    </Card>
   )
 }
 
@@ -79,19 +207,23 @@ function Pill({
   active,
   layoutId,
   onClick,
+  disabled = false,
   children
 }: {
   active: boolean
   layoutId: string
   onClick: () => void
+  disabled?: boolean
   children: React.ReactNode
 }): React.JSX.Element {
   return (
     <button
       onClick={onClick}
+      disabled={disabled}
       className={cn(
         'relative rounded-[10px] px-3.5 py-1.5 text-[12px] font-semibold transition-colors',
-        active ? 'text-ink' : 'text-ink-dim hover:text-ink'
+        active ? 'text-ink' : 'text-ink-dim hover:text-ink',
+        disabled && 'pointer-events-none opacity-60'
       )}
     >
       {active && (
@@ -274,7 +406,7 @@ function GoalsCard({
   )
 
   return (
-    <Card index={3}>
+    <Card index={4}>
       <SectionHeader
         title="Daily goals"
         hint="Used for the rings and the goal lines on charts"
