@@ -462,6 +462,34 @@ describe('retention across every stored account', () => {
     expect(store.previewExpiring('24-hours', Date.now())).toBe(0)
   })
 
+  test('refuses to preview or apply while history cannot be decrypted', () => {
+    const path = multiAccount()
+    const original = readFileSync(path, 'utf8')
+    const unreadable = new ChatHistoryStore(path, {
+      ...encryptedAdapter(),
+      decrypt: () => { throw new Error('Keychain is locked') }
+    })
+
+    // Reporting zero here is what previously armed a policy with no confirmation.
+    expect(() => unreadable.previewExpiring('24-hours', Date.now())).toThrow('could not be read')
+    expect(() => unreadable.purgeAllExpired('24-hours', Date.now())).toThrow('could not be read')
+    expect(readFileSync(path, 'utf8')).toBe(original)
+  })
+
+  test('refuses to preview or apply when encryption is unavailable', () => {
+    const store = new ChatHistoryStore(temporaryPath(), encryptedAdapter(false))
+
+    expect(() => store.previewExpiring('24-hours', Date.now())).toThrow('unavailable')
+    expect(() => store.purgeAllExpired('24-hours', Date.now())).toThrow('unavailable')
+  })
+
+  test('counts only chats history actually shows', () => {
+    const store = new ChatHistoryStore(seedHistory([agedSession(40 * DAY_MS, { messages: [] })]), encryptedAdapter())
+
+    expect(store.snapshot('account-a').sessions).toEqual([])
+    expect(store.previewExpiring('24-hours', Date.now())).toBe(0)
+  })
+
   test('leaves every account untouched under forever', () => {
     const path = multiAccount()
     const before = readFileSync(path, 'utf8')

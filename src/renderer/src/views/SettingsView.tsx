@@ -81,14 +81,24 @@ function ChatRetentionCard({
 }): React.JSX.Element {
   const [pending, setPending] = useState<{ retention: ChatRetention; count: number } | null>(null)
   const [busy, setBusy] = useState(false)
+  const [failure, setFailure] = useState<string | null>(null)
+
+  const failureText = (error: unknown): string =>
+    error instanceof Error && error.message.trim()
+      ? error.message.replace(/^Error invoking remote method '[^']*':\s*(Error:\s*)?/, '')
+      : 'Chat retention could not be changed.'
 
   const apply = async (retention: ChatRetention): Promise<void> => {
     setBusy(true)
     try {
-      // Main saves the policy and applies it together, so what the dialog
-      // counted is exactly what gets deleted.
+      // Main clears the chats first and only then saves the policy, so a failure
+      // here leaves retention exactly as it was.
       onSettingsChange(await window.pulse.chats.applyRetention(retention))
       setPending(null)
+      setFailure(null)
+    } catch (error) {
+      setPending(null)
+      setFailure(failureText(error))
     } finally {
       setBusy(false)
     }
@@ -97,18 +107,20 @@ function ChatRetentionCard({
   const selectRetention = async (retention: ChatRetention): Promise<void> => {
     if (busy || retention === settings.chatRetention) return
     setBusy(true)
+    setFailure(null)
+    let count: number
     try {
       // The count has to come from the store: it spans every signed-in account,
       // not just the one loaded here, and it is right even mid-reload.
-      const count = await window.pulse.chats.retentionPreview(retention)
-      if (count > 0) {
-        setPending({ retention, count })
-        return
-      }
+      count = await window.pulse.chats.retentionPreview(retention)
+    } catch (error) {
+      setFailure(failureText(error))
+      return
     } finally {
       setBusy(false)
     }
-    await apply(retention)
+    if (count > 0) setPending({ retention, count })
+    else await apply(retention)
   }
 
   const pendingOption = RETENTION_OPTIONS.find((option) => option.value === pending?.retention)
@@ -137,6 +149,12 @@ function ChatRetentionCard({
         Pinned and kept chats are never removed. Expired chats are cleared when you change this setting and
         each time the app opens.
       </p>
+      {failure && (
+        <div className="flex items-start gap-2 rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-[12px] text-danger">
+          <Warning size={15} weight="fill" className="mt-0.5 shrink-0" />
+          {failure}
+        </div>
+      )}
 
       <Dialog.Root open={pending != null} onOpenChange={(open) => !open && setPending(null)}>
         <Dialog.Portal>

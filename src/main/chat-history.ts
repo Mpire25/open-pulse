@@ -32,11 +32,14 @@ export function previewChatRetention(retention: ChatRetention): number {
 /**
  * Saves the policy and applies it in the same step, so the number the user
  * confirmed is exactly what gets deleted — no account quietly expiring later.
+ *
+ * Cleanup runs first on purpose. If the history write fails the policy is never
+ * saved, so a later launch cannot silently delete what this call could not; the
+ * reverse order would leave a policy armed against chats still on disk.
  */
 export function applyChatRetention(retention: ChatRetention): AppSettings {
-  const settings = updateSettings({ chatRetention: retention })
   historyStore().purgeAllExpired(retention, sessionStartedAt)
-  return settings
+  return updateSettings({ chatRetention: retention })
 }
 
 export function createChatSession(id?: string) {

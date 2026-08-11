@@ -122,8 +122,17 @@ export class ChatHistoryStore {
    * would understate what the user is agreeing to.
    */
   previewExpiring(retention: ChatRetention, sessionStartedAt: number): number {
+    this.assertReadable()
     return Object.values(this.load().accounts).reduce(
-      (total, sessions) => total + expiringChatCount(sessions, retention, sessionStartedAt),
+      (total, sessions) =>
+        total +
+        expiringChatCount(
+          // Empty drafts never appear in history, so counting them would promise
+          // more deletions than the user can see.
+          sessions.filter((session) => session.messages.length > 0),
+          retention,
+          sessionStartedAt
+        ),
       0
     )
   }
@@ -132,6 +141,7 @@ export class ChatHistoryStore {
   purgeAllExpired(retention: ChatRetention, sessionStartedAt: number): void {
     const cutoff = retentionCutoff(retention, sessionStartedAt)
     if (cutoff == null) return
+    this.assertReadable()
     const history = this.load()
     let changed = false
     for (const [scope, sessions] of Object.entries(history.accounts)) {
@@ -245,6 +255,19 @@ export class ChatHistoryStore {
 
   private assertWritable(): void {
     if (this.persistenceFailure) throw this.persistenceFailure
+  }
+
+  /**
+   * Guards operations that decide what to delete from the whole file. An
+   * unreadable store looks empty, and acting on that would arm a retention
+   * policy the user was told affects nothing.
+   */
+  private assertReadable(): void {
+    this.load()
+    this.assertWritable()
+    if (!this.encryption.available()) {
+      throw new Error('Chat history is unavailable until encrypted storage can be used again.')
+    }
   }
 
   private persist(): void {
