@@ -10,7 +10,13 @@ interface TraceUsage {
 }
 
 export type AgentTracePayload =
-  | { type: 'run_started'; model: string; messages: number; maxTurns: number }
+  | {
+      type: 'run_started'
+      model: string
+      reasoningEffort: string
+      messages: number
+      maxTurns: number
+    }
   | { type: 'auth_ready'; accountScoped: boolean }
   | {
       type: 'research_policy'
@@ -136,7 +142,7 @@ export function formatAgentTraceEvent(event: AgentTraceEvent): string {
   const prefix = `[AI ${event.traceId} +${formatDuration(event.elapsedMs)}]`
   switch (event.type) {
     case 'run_started':
-      return `${prefix} Run started · ${event.model} · ${event.messages} messages · budget ${event.maxTurns} turns`
+      return `${prefix} Run started · ${event.model} · ${event.reasoningEffort} effort · ${event.messages} messages · budget ${event.maxTurns} turns`
     case 'auth_ready':
       return `${prefix} Auth ready · ${event.accountScoped ? 'ChatGPT account scoped' : 'no account header'}`
     case 'research_policy':

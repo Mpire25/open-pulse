@@ -1,7 +1,16 @@
 import { app, safeStorage } from 'electron'
 import { join } from 'node:path'
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
-import { DEFAULT_GOALS, type AppSettings, type Goals } from '../shared/types'
+import {
+  ASSISTANT_MODEL_PATTERN,
+  DEFAULT_ASSISTANT,
+  DEFAULT_GOALS,
+  REASONING_EFFORTS,
+  type AppSettings,
+  type AssistantSettings,
+  type Goals,
+  type ReasoningEffort
+} from '../shared/types'
 
 interface StoreFile {
   settings: AppSettings
@@ -13,7 +22,8 @@ const DEFAULTS: AppSettings = {
   googleClientId: '',
   googleClientSecret: '',
   googleClientSecretConfigured: false,
-  goals: { ...DEFAULT_GOALS }
+  goals: { ...DEFAULT_GOALS },
+  assistant: { ...DEFAULT_ASSISTANT }
 }
 const GOOGLE_CLIENT_SECRET_KEY = 'google-client-secret'
 
@@ -36,12 +46,23 @@ function normalizeGoals(raw?: Partial<Goals>): Goals {
   }
 }
 
+function normalizeAssistant(raw?: Partial<AssistantSettings>): AssistantSettings {
+  const model = String(raw?.model ?? '').trim()
+  const effort = raw?.reasoningEffort as ReasoningEffort | undefined
+  return {
+    model: ASSISTANT_MODEL_PATTERN.test(model) ? model : DEFAULT_ASSISTANT.model,
+    reasoningEffort:
+      effort && REASONING_EFFORTS.includes(effort) ? effort : DEFAULT_ASSISTANT.reasoningEffort
+  }
+}
+
 function normalizeSettings(raw?: Partial<AppSettings>): AppSettings {
   return {
     googleClientId: raw?.googleClientId ?? DEFAULTS.googleClientId,
     googleClientSecret: '',
     googleClientSecretConfigured: false,
-    goals: normalizeGoals(raw?.goals)
+    goals: normalizeGoals(raw?.goals),
+    assistant: normalizeAssistant(raw?.assistant)
   }
 }
 

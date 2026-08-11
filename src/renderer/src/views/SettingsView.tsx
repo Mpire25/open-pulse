@@ -1,11 +1,21 @@
 import { useState } from 'react'
 import { motion } from 'framer-motion'
-import { CheckCircle, GoogleLogo, Sparkle, Target, ArrowClockwise, Warning } from '@phosphor-icons/react'
+import { Brain, CheckCircle, GoogleLogo, Sparkle, Target, ArrowClockwise, Warning } from '@phosphor-icons/react'
 import { Panel, SectionHeader } from '@/components/Panel'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { GoogleSetup } from '@/components/GoogleSetup'
-import type { AppSettings, CodexAuthStatus, Goals, GoogleAuthStatus } from '@shared/types'
+import { cn } from '@/lib/utils'
+import {
+  ASSISTANT_MODEL_PRESETS,
+  REASONING_EFFORTS,
+  type AppSettings,
+  type AssistantSettings,
+  type CodexAuthStatus,
+  type Goals,
+  type GoogleAuthStatus,
+  type ReasoningEffort
+} from '@shared/types'
 
 interface SettingsViewProps {
   settings: AppSettings
@@ -43,8 +53,145 @@ export function SettingsView({
         onGoogleChange={onGoogleChange}
       />
       <CodexCard codex={codex} onCodexChange={onCodexChange} />
+      <AssistantCard settings={settings} onSettingsChange={onSettingsChange} />
       <GoalsCard settings={settings} onSettingsChange={onSettingsChange} />
     </div>
+  )
+}
+
+const PRESET_IDS = new Set<string>(ASSISTANT_MODEL_PRESETS.map((m) => m.id))
+const EFFORT_LABELS: Record<ReasoningEffort, string> = {
+  minimal: 'Minimal',
+  low: 'Low',
+  medium: 'Medium',
+  high: 'High'
+}
+
+function Pill({
+  active,
+  layoutId,
+  onClick,
+  children
+}: {
+  active: boolean
+  layoutId: string
+  onClick: () => void
+  children: React.ReactNode
+}): React.JSX.Element {
+  return (
+    <button
+      onClick={onClick}
+      className={cn(
+        'relative rounded-[10px] px-3.5 py-1.5 text-[12px] font-semibold transition-colors',
+        active ? 'text-ink' : 'text-ink-dim hover:text-ink'
+      )}
+    >
+      {active && (
+        <motion.span
+          layoutId={layoutId}
+          className="absolute inset-0 rounded-[10px] border border-hairline bg-white/[0.08]"
+          transition={{ type: 'spring', stiffness: 400, damping: 34 }}
+        />
+      )}
+      <span className="relative z-10">{children}</span>
+    </button>
+  )
+}
+
+function AssistantCard({
+  settings,
+  onSettingsChange
+}: {
+  settings: AppSettings
+  onSettingsChange: (s: AppSettings) => void
+}): React.JSX.Element {
+  const [draft, setDraft] = useState<AssistantSettings>(settings.assistant)
+  const [custom, setCustom] = useState(() => !PRESET_IDS.has(settings.assistant.model))
+  const dirty = JSON.stringify(draft) !== JSON.stringify(settings.assistant)
+  const valid = draft.model.trim().length > 0
+
+  const save = async (): Promise<void> => {
+    const next = await window.pulse.settings.update({
+      assistant: { ...draft, model: draft.model.trim() }
+    })
+    onSettingsChange(next)
+    setDraft(next.assistant)
+    setCustom(!PRESET_IDS.has(next.assistant.model))
+  }
+
+  return (
+    <Card index={2}>
+      <SectionHeader
+        title="Assistant model"
+        hint="Availability depends on your ChatGPT plan — an unavailable model only fails when you send a message"
+        icon={<Brain size={18} weight="fill" className="text-sleep" />}
+      />
+
+      <div className="flex flex-col gap-2">
+        <span className="text-[11px] font-medium text-ink-faint">Model</span>
+        <div className="flex w-fit flex-wrap rounded-xl border border-hairline bg-white/[0.03] p-0.5">
+          {ASSISTANT_MODEL_PRESETS.map((m) => (
+            <Pill
+              key={m.id}
+              active={!custom && draft.model === m.id}
+              layoutId="assistant-model-active"
+              onClick={() => {
+                setCustom(false)
+                setDraft({ ...draft, model: m.id })
+              }}
+            >
+              {m.label}
+            </Pill>
+          ))}
+          <Pill
+            active={custom}
+            layoutId="assistant-model-active"
+            onClick={() => {
+              setCustom(true)
+              setDraft({ ...draft, model: '' })
+            }}
+          >
+            Custom…
+          </Pill>
+        </div>
+        {custom && (
+          <Input
+            autoFocus
+            placeholder="model-id"
+            spellCheck={false}
+            value={draft.model}
+            onChange={(e) => setDraft({ ...draft, model: e.target.value })}
+          />
+        )}
+      </div>
+
+      <div className="flex flex-col gap-2">
+        <span className="text-[11px] font-medium text-ink-faint">Reasoning effort</span>
+        <div className="flex w-fit rounded-xl border border-hairline bg-white/[0.03] p-0.5">
+          {REASONING_EFFORTS.map((effort) => (
+            <Pill
+              key={effort}
+              active={draft.reasoningEffort === effort}
+              layoutId="assistant-effort-active"
+              onClick={() => setDraft({ ...draft, reasoningEffort: effort })}
+            >
+              {EFFORT_LABELS[effort]}
+            </Pill>
+          ))}
+        </div>
+        <p className="text-[11px] text-ink-faint">
+          Higher effort digs deeper on complex questions and takes longer to answer.
+        </p>
+      </div>
+
+      {dirty && (
+        <div>
+          <Button size="sm" disabled={!valid} onClick={save}>
+            Save assistant
+          </Button>
+        </div>
+      )}
+    </Card>
   )
 }
 
@@ -83,7 +230,7 @@ function GoalsCard({
   )
 
   return (
-    <Card index={2}>
+    <Card index={3}>
       <SectionHeader
         title="Daily goals"
         hint="Used for the rings and the goal lines on charts"

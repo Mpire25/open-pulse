@@ -396,11 +396,37 @@ export const DEFAULT_GOALS: Goals = {
   sleepMinutes: 8 * 60
 }
 
+export type ReasoningEffort = 'minimal' | 'low' | 'medium' | 'high'
+
+export const REASONING_EFFORTS: ReasoningEffort[] = ['minimal', 'low', 'medium', 'high']
+
+export interface AssistantSettings {
+  model: string
+  reasoningEffort: ReasoningEffort
+}
+
+export const DEFAULT_ASSISTANT: AssistantSettings = {
+  model: 'gpt-5.6-terra',
+  reasoningEffort: 'medium'
+}
+
+// Availability depends on the signed-in ChatGPT plan; the endpoint has no
+// list-models call, so a rejected model only surfaces as a 400 at send time.
+export const ASSISTANT_MODEL_PRESETS = [
+  { id: 'gpt-5.6-luna', label: 'GPT-5.6 Luna' },
+  { id: 'gpt-5.6-terra', label: 'GPT-5.6 Terra' },
+  { id: 'gpt-5.6-sol', label: 'GPT-5.6 Sol' }
+] as const
+
+/** Rejects pasted prose before it becomes a guaranteed 400 at send time. */
+export const ASSISTANT_MODEL_PATTERN = /^[a-zA-Z0-9._:-]{1,100}$/
+
 export interface AppSettings {
   googleClientId: string
   googleClientSecret: string
   googleClientSecretConfigured: boolean
   goals: Goals
+  assistant: AssistantSettings
 }
 
 export interface GoogleAuthStatus {
