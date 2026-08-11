@@ -106,6 +106,39 @@ describe('encrypted chat history store', () => {
     expect(() => restored.setPinned('account-b', chat.id, true)).toThrow('Chat not found.')
   })
 
+  test('kept chats survive global cleanup and unkept chats follow it again', () => {
+    const path = temporaryPath()
+    const store = new ChatHistoryStore(path, encryptedAdapter())
+    const keptChat = store.create('account-a')
+    store.update('account-a', keptChat.id, [userMessage('Keep this conversation')])
+    const temporaryChat = store.create('account-a')
+    store.update('account-a', temporaryChat.id, [userMessage('This can expire')])
+
+    expect(store.setKept('account-a', keptChat.id, true).kept).toBe(true)
+    const afterCleanup = store.snapshot('account-a', 'session', Date.now() + 1_000)
+    expect(afterCleanup.sessions.map((session) => session.id)).toEqual([keptChat.id])
+
+    const restored = new ChatHistoryStore(path, encryptedAdapter())
+    expect(restored.snapshot('account-a').sessions[0].kept).toBe(true)
+    expect(restored.setKept('account-a', keptChat.id, false).kept).toBeUndefined()
+    expect(restored.snapshot('account-a', 'session', Date.now() + 1_000).sessions).toEqual([])
+  })
+
+  test('legacy pinned chats are always exempt from retention cleanup', () => {
+    const path = temporaryPath()
+    const store = new ChatHistoryStore(path, encryptedAdapter())
+    const pinnedChat = store.create('account-a')
+    store.update('account-a', pinnedChat.id, [userMessage('Pinned before retention existed')])
+    store.setPinned('account-a', pinnedChat.id, true)
+
+    const afterCleanup = store.snapshot('account-a', 'session', Date.now() + 1_000)
+    expect(afterCleanup.sessions).toHaveLength(1)
+    expect(afterCleanup.sessions[0]).toMatchObject({ id: pinnedChat.id, pinned: true })
+
+    store.setPinned('account-a', pinnedChat.id, false)
+    expect(store.snapshot('account-a', 'session', Date.now() + 1_000).sessions).toEqual([])
+  })
+
   test('permanently deletes within one account', () => {
     const store = new ChatHistoryStore(temporaryPath(), encryptedAdapter())
     const chat = store.create('account-a')

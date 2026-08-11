@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import * as Dialog from '@radix-ui/react-dialog'
-import { ChatsCircle, PushPin, PushPinSlash, Trash } from '@phosphor-icons/react'
+import { BookmarkSimple, ChatsCircle, PushPin, PushPinSlash, Trash } from '@phosphor-icons/react'
 import { Button } from '@/components/ui/button'
 import type { ChatController } from '@/hooks/useChat'
 import type { ChatSession } from '@shared/types'
@@ -8,6 +8,7 @@ import { cn } from '@/lib/utils'
 
 interface ChatHistoryProps {
   chat: ChatController
+  retention: import('@shared/types').ChatRetention
   onNavigate?: () => void
   onDeleteDialogClose?: () => void
 }
@@ -53,7 +54,7 @@ function groupSessions(sessions: ChatSession[]): SessionGroup[] {
   return groups
 }
 
-export function ChatHistory({ chat, onNavigate, onDeleteDialogClose }: ChatHistoryProps): React.JSX.Element {
+export function ChatHistory({ chat, retention, onNavigate, onDeleteDialogClose }: ChatHistoryProps): React.JSX.Element {
   const [deleteTarget, setDeleteTarget] = useState<ChatSession | null>(null)
 
   const closeDeleteDialog = (): void => {
@@ -82,6 +83,8 @@ export function ChatHistory({ chat, onNavigate, onDeleteDialogClose }: ChatHisto
                       onNavigate?.()
                     }}
                     onPin={() => void chat.pin(session.id, !session.pinned)}
+                    onKeep={() => void chat.keep(session.id, !session.kept)}
+                    showKeep={retention !== 'forever'}
                     onDelete={() => setDeleteTarget(session)}
                   />
                 ))}
@@ -136,10 +139,12 @@ interface SessionRowProps {
   streaming: boolean
   onSelect: () => void
   onPin: () => void
+  onKeep: () => void
+  showKeep: boolean
   onDelete: () => void
 }
 
-function SessionRow({ session, selected, streaming, onSelect, onPin, onDelete }: SessionRowProps): React.JSX.Element {
+function SessionRow({ session, selected, streaming, onSelect, onPin, onKeep, showKeep, onDelete }: SessionRowProps): React.JSX.Element {
   return (
     <div
       className={cn(
@@ -152,7 +157,7 @@ function SessionRow({ session, selected, streaming, onSelect, onPin, onDelete }:
       <button
         type="button"
         onClick={onSelect}
-        className="flex min-w-0 flex-1 items-center gap-2 rounded-[10px] px-3 py-2.5 pr-14 text-left outline-none focus-visible:ring-1 focus-visible:ring-accent/50"
+        className="flex min-w-0 flex-1 items-center gap-2 rounded-[10px] px-3 py-2.5 pr-20 text-left outline-none focus-visible:ring-1 focus-visible:ring-accent/50"
       >
         {streaming && <span className="size-1.5 shrink-0 animate-pulse rounded-full bg-accent" />}
         <span className="min-w-0 flex-1 truncate text-[12px] font-medium">{session.title}</span>
@@ -163,6 +168,20 @@ function SessionRow({ session, selected, streaming, onSelect, onPin, onDelete }:
         {relativeTime(session.updatedAt)}
       </span>
       <div className="pointer-events-none absolute right-1 flex items-center opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100">
+        {showKeep && (
+          <button
+            type="button"
+            title={session.kept ? 'Unkeep chat' : 'Keep chat'}
+            aria-label={`${session.kept ? 'Unkeep' : 'Keep'} ${session.title}`}
+            onClick={onKeep}
+            className={cn(
+              'grid size-7 place-items-center rounded-lg transition-colors hover:bg-white/[0.08] hover:text-ink',
+              session.kept ? 'text-accent' : 'text-ink-faint'
+            )}
+          >
+            <BookmarkSimple size={13} weight={session.kept ? 'fill' : 'regular'} />
+          </button>
+        )}
         <button
           type="button"
           title={session.pinned ? 'Unpin chat' : 'Pin chat'}

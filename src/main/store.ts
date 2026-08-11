@@ -3,11 +3,13 @@ import { join } from 'node:path'
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import {
   ASSISTANT_MODEL_PATTERN,
+  CHAT_RETENTIONS,
   DEFAULT_ASSISTANT,
   DEFAULT_GOALS,
   REASONING_EFFORTS,
   type AppSettings,
   type AssistantSettings,
+  type ChatRetention,
   type Goals,
   type ReasoningEffort
 } from '../shared/types'
@@ -23,7 +25,8 @@ const DEFAULTS: AppSettings = {
   googleClientSecret: '',
   googleClientSecretConfigured: false,
   goals: { ...DEFAULT_GOALS },
-  assistant: { ...DEFAULT_ASSISTANT }
+  assistant: { ...DEFAULT_ASSISTANT },
+  chatRetention: '24-hours'
 }
 const GOOGLE_CLIENT_SECRET_KEY = 'google-client-secret'
 
@@ -57,12 +60,16 @@ function normalizeAssistant(raw?: Partial<AssistantSettings>): AssistantSettings
 }
 
 function normalizeSettings(raw?: Partial<AppSettings>): AppSettings {
+  const chatRetention = raw?.chatRetention as ChatRetention | undefined
   return {
     googleClientId: raw?.googleClientId ?? DEFAULTS.googleClientId,
     googleClientSecret: '',
     googleClientSecretConfigured: false,
     goals: normalizeGoals(raw?.goals),
-    assistant: normalizeAssistant(raw?.assistant)
+    assistant: normalizeAssistant(raw?.assistant),
+    chatRetention: chatRetention && CHAT_RETENTIONS.includes(chatRetention)
+      ? chatRetention
+      : DEFAULTS.chatRetention
   }
 }
 

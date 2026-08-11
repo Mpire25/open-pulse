@@ -86,6 +86,8 @@ const api = {
       ipcRenderer.invoke('chats:update', id, messages),
     setPinned: (id: string, pinned: boolean): Promise<ChatSession> =>
       ipcRenderer.invoke('chats:set-pinned', id, pinned),
+    setKept: (id: string, kept: boolean): Promise<ChatSession> =>
+      ipcRenderer.invoke('chats:set-kept', id, kept),
     delete: (id: string): Promise<ChatHistorySnapshot> => ipcRenderer.invoke('chats:delete', id),
     onAccountChanged: (callback: () => void): (() => void) => {
       const listener = (): void => callback()

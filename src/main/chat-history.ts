@@ -3,8 +3,10 @@ import { join } from 'node:path'
 import type { ChatSessionMessage } from '../shared/types'
 import { getGoogleAccountScope } from './google-auth'
 import { ChatHistoryStore } from './chat-history-store'
+import { getSettings } from './store'
 
 let store: ChatHistoryStore | null = null
+const sessionStartedAt = Date.now()
 
 function historyStore(): ChatHistoryStore {
   store ??= new ChatHistoryStore(join(app.getPath('userData'), 'chat-history.enc.json'), {
@@ -16,7 +18,7 @@ function historyStore(): ChatHistoryStore {
 }
 
 export function getChatHistory() {
-  return historyStore().snapshot(getGoogleAccountScope())
+  return historyStore().snapshot(getGoogleAccountScope(), getSettings().chatRetention, sessionStartedAt)
 }
 
 export function createChatSession(id?: string) {
@@ -29,6 +31,10 @@ export function updateChatSession(id: string, messages: ChatSessionMessage[]) {
 
 export function setChatSessionPinned(id: string, pinned: boolean) {
   return historyStore().setPinned(getGoogleAccountScope(), id, pinned)
+}
+
+export function setChatSessionKept(id: string, kept: boolean) {
+  return historyStore().setKept(getGoogleAccountScope(), id, kept)
 }
 
 export function deleteChatSession(id: string) {

@@ -2,7 +2,7 @@ import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { randomUUID } from 'node:crypto'
 import { generateChatTitle, DEFAULT_CHAT_TITLE } from '../shared/chat'
 import { normalizeAssistantParts } from '../shared/assistant-parts'
-import type { ChatHistorySnapshot, ChatSession, ChatSessionMessage } from '../shared/types'
+import type { ChatHistorySnapshot, ChatRetention, ChatSession, ChatSessionMessage } from '../shared/types'
 
 interface EncryptionAdapter {
   available: () => boolean
@@ -70,6 +70,7 @@ function normalizeSession(value: unknown): ChatSession | null {
     createdAt,
     updatedAt: validDate(candidate.updatedAt, createdAt),
     ...(candidate.pinned === true ? { pinned: true } : {}),
+    ...(candidate.kept === true ? { kept: true } : {}),
     messages
   }
 }
@@ -87,7 +88,8 @@ export class ChatHistoryStore {
     private readonly encryption: EncryptionAdapter
   ) {}
 
-  snapshot(accountScope: string): ChatHistorySnapshot {
+  snapshot(accountScope: string, retention: ChatRetention = 'forever', sessionStartedAt = Date.now()): ChatHistorySnapshot {
+    this.removeExpired(accountScope, retention, sessionStartedAt)
     return {
       sessions: sortSessions(this.load().accounts[accountScope] ?? [])
         .filter((session) => session.messages.length > 0)
@@ -137,6 +139,15 @@ export class ChatHistoryStore {
     return structuredClone(session)
   }
 
+  setKept(accountScope: string, id: string, kept: boolean): ChatSession {
+    const session = this.find(accountScope, id)
+    // Keeping is a retention override, not activity, so it must not alter recency.
+    if (kept) session.kept = true
+    else delete session.kept
+    this.persist()
+    return structuredClone(session)
+  }
+
   delete(accountScope: string, id: string): ChatHistorySnapshot {
     const history = this.load()
     this.assertWritable()
@@ -153,6 +164,28 @@ export class ChatHistoryStore {
     const session = (history.accounts[accountScope] ?? []).find((candidate) => candidate.id === id)
     if (!session) throw new Error('Chat not found.')
     return session
+  }
+
+  private removeExpired(accountScope: string, retention: ChatRetention, sessionStartedAt: number): void {
+    if (retention === 'forever') return
+    const history = this.load()
+    const sessions = history.accounts[accountScope] ?? []
+    const duration = retention === '24-hours'
+      ? 86_400_000
+      : retention === '7-days'
+        ? 7 * 86_400_000
+        : retention === '30-days'
+          ? 30 * 86_400_000
+          : 0
+    const cutoff = retention === 'session' ? sessionStartedAt : Date.now() - duration
+    // Pinning is also an explicit signal that a chat matters. This protects
+    // legacy pinned chats created before the separate Keep action existed.
+    const retained = sessions.filter(
+      (session) => session.pinned || session.kept || Date.parse(session.updatedAt) >= cutoff
+    )
+    if (retained.length === sessions.length) return
+    history.accounts[accountScope] = retained
+    this.persist()
   }
 
   private load(): PersistedChatHistory {

@@ -625,6 +625,7 @@ export default function App(): React.JSX.Element {
                     composerFocusRequest={composerFocusRequest}
                     onAssistantAction={handleAssistantAction}
                     onOpenSettings={() => selectView('settings')}
+                    chatRetention={settings.chatRetention}
                   />
                 )}
                 {view === 'settings' && (
@@ -632,7 +633,11 @@ export default function App(): React.JSX.Element {
                     settings={settings}
                     google={google}
                     codex={codex}
-                    onSettingsChange={setSettings}
+                    onSettingsChange={(next) => {
+                      const retentionChanged = next.chatRetention !== settings.chatRetention
+                      setSettings(next)
+                      if (retentionChanged) void chat.reload()
+                    }}
                     onGoogleChange={handleGoogleChange}
                     onCodexChange={handleCodexChange}
                   />
@@ -651,6 +656,7 @@ export default function App(): React.JSX.Element {
             codexConnected={codex.connected}
             composerFocusRequest={composerFocusRequest}
             onAssistantAction={handleAssistantAction}
+            chatRetention={settings.chatRetention}
             onOpenSettings={() => {
               closeAssistantPanel()
               selectView('settings')

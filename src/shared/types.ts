@@ -447,7 +447,11 @@ export interface AppSettings {
   googleClientSecretConfigured: boolean
   goals: Goals
   assistant: AssistantSettings
+  chatRetention: ChatRetention
 }
+
+export const CHAT_RETENTIONS = ['session', '24-hours', '7-days', '30-days', 'forever'] as const
+export type ChatRetention = (typeof CHAT_RETENTIONS)[number]
 
 export interface GoogleAuthStatus {
   connected: boolean
@@ -650,8 +654,10 @@ export interface ChatSession {
   title: string
   createdAt: string
   updatedAt: string
-  /** Pinned chats surface in their own group at the top of the history list. */
+  /** Pinned chats surface at the top and are exempt from retention cleanup. */
   pinned?: boolean
+  /** Kept chats are exempt from the global chat-retention policy. */
+  kept?: boolean
   messages: ChatSessionMessage[]
 }
 

@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
 import { motion } from 'framer-motion'
-import { Brain, CheckCircle, GoogleLogo, Sparkle, Target, ArrowClockwise, Warning } from '@phosphor-icons/react'
+import { Brain, ChatCircleDots, CheckCircle, GoogleLogo, Sparkle, Target, ArrowClockwise, Warning } from '@phosphor-icons/react'
 import { Panel, SectionHeader } from '@/components/Panel'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -13,6 +13,7 @@ import {
   REASONING_EFFORTS,
   type AppSettings,
   type AssistantSettings,
+  type ChatRetention,
   type CodexAuthStatus,
   type Goals,
   type GoogleAuthStatus,
@@ -56,8 +57,54 @@ export function SettingsView({
       />
       <CodexCard codex={codex} onCodexChange={onCodexChange} />
       <AssistantCard settings={settings} onSettingsChange={onSettingsChange} />
+      <ChatRetentionCard settings={settings} onSettingsChange={onSettingsChange} />
       <GoalsCard settings={settings} onSettingsChange={onSettingsChange} />
     </div>
+  )
+}
+
+const RETENTION_OPTIONS: Array<{ value: ChatRetention; label: string }> = [
+  { value: 'session', label: 'When app closes' },
+  { value: '24-hours', label: '24 hours' },
+  { value: '7-days', label: '7 days' },
+  { value: '30-days', label: '30 days' },
+  { value: 'forever', label: 'Forever' }
+]
+
+function ChatRetentionCard({
+  settings,
+  onSettingsChange
+}: {
+  settings: AppSettings
+  onSettingsChange: (s: AppSettings) => void
+}): React.JSX.Element {
+  const selectRetention = async (chatRetention: ChatRetention): Promise<void> => {
+    onSettingsChange(await window.pulse.settings.update({ chatRetention }))
+  }
+
+  return (
+    <Card index={3}>
+      <SectionHeader
+        title="Chat retention"
+        hint="Applies globally to chats that you haven't kept"
+        icon={<ChatCircleDots size={18} weight="fill" className="text-accent" />}
+      />
+      <div className="flex w-fit flex-wrap rounded-xl border border-hairline bg-white/[0.03] p-0.5">
+        {RETENTION_OPTIONS.map((option) => (
+          <Pill
+            key={option.value}
+            active={settings.chatRetention === option.value}
+            layoutId="chat-retention-active"
+            onClick={() => void selectRetention(option.value)}
+          >
+            {option.label}
+          </Pill>
+        ))}
+      </div>
+      <p className="text-[11px] text-ink-faint">
+        Pinned and kept chats are never removed. When set to Forever, all chats are kept automatically.
+      </p>
+    </Card>
   )
 }
 
@@ -274,7 +321,7 @@ function GoalsCard({
   )
 
   return (
-    <Card index={3}>
+    <Card index={4}>
       <SectionHeader
         title="Daily goals"
         hint="Used for the rings and the goal lines on charts"

@@ -42,6 +42,7 @@ import {
   createChatSession,
   deleteChatSession,
   getChatHistory,
+  setChatSessionKept,
   setChatSessionPinned,
   updateChatSession
 } from './chat-history'
@@ -200,6 +201,9 @@ export function registerIpc(): void {
   )
   handle('chats:set-pinned', (_event, id: string, pinned: boolean) =>
     setChatSessionPinned(id, pinned === true)
+  )
+  handle('chats:set-kept', (_event, id: string, kept: boolean) =>
+    setChatSessionKept(id, kept === true)
   )
   handle('chats:delete', (_event, id: string) => deleteChatSession(id))
 
