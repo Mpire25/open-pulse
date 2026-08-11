@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input'
 import { GoogleSetup } from '@/components/GoogleSetup'
 import { cn } from '@/lib/utils'
 import {
+  ASSISTANT_MODEL_PATTERN,
   ASSISTANT_MODEL_PRESETS,
   DEFAULT_ASSISTANT,
   REASONING_EFFORTS,
@@ -120,6 +121,7 @@ function AssistantCard({
   const saveSequence = useRef(0)
   const trimmedCustomModel = customModel.trim()
   const customDirty = trimmedCustomModel !== assistant.model
+  const customValid = ASSISTANT_MODEL_PATTERN.test(trimmedCustomModel)
   const efforts = custom ? REASONING_EFFORTS : effortsForModel(assistant.model)
 
   const persist = async (nextAssistant: AssistantSettings): Promise<void> => {
@@ -131,6 +133,9 @@ function AssistantCard({
 
     onSettingsChange(next)
     setAssistant(next.assistant)
+    const savedIsCustom = !PRESET_IDS.has(next.assistant.model)
+    setCustom(savedIsCustom)
+    setCustomModel(savedIsCustom ? next.assistant.model : '')
   }
 
   // Keep the pair valid when a model drops a tier (Luna has no ultra).
@@ -149,7 +154,7 @@ function AssistantCard({
   }
 
   const applyCustomModel = (): void => {
-    if (!trimmedCustomModel || !customDirty) return
+    if (!customValid || !customDirty) return
     void persist({ ...assistant, model: trimmedCustomModel })
   }
 
@@ -203,7 +208,7 @@ function AssistantCard({
             />
             <Button
               className="rounded-l-none border-l-0"
-              disabled={!trimmedCustomModel || !customDirty}
+              disabled={!customValid || !customDirty}
               onClick={applyCustomModel}
             >
               Apply
