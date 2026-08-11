@@ -88,14 +88,26 @@ export class ChatHistoryStore {
     private readonly encryption: EncryptionAdapter
   ) {}
 
-  snapshot(accountScope: string, retention: ChatRetention = 'forever', sessionStartedAt = Date.now()): ChatHistorySnapshot {
-    this.removeExpired(accountScope, retention, sessionStartedAt)
+  /** Reads history without changing it — call `purgeExpired` to apply retention. */
+  snapshot(accountScope: string): ChatHistorySnapshot {
     return {
       sessions: sortSessions(this.load().accounts[accountScope] ?? [])
         .filter((session) => session.messages.length > 0)
         .map((session) => structuredClone(session)),
       persistence: this.encryption.available() ? 'encrypted' : 'memory'
     }
+  }
+
+  /** Permanently drops chats the retention policy no longer covers. */
+  purgeExpired(accountScope: string, retention: ChatRetention, sessionStartedAt: number): void {
+    const cutoff = retentionCutoff(retention, sessionStartedAt)
+    if (cutoff == null) return
+    const history = this.load()
+    const sessions = history.accounts[accountScope] ?? []
+    const retained = sessions.filter((session) => isChatRetained(session, cutoff))
+    if (retained.length === sessions.length) return
+    history.accounts[accountScope] = retained
+    this.persist()
   }
 
   create(accountScope: string, requestedId?: string): ChatSession {
@@ -166,16 +178,6 @@ export class ChatHistoryStore {
     return session
   }
 
-  private removeExpired(accountScope: string, retention: ChatRetention, sessionStartedAt: number): void {
-    const cutoff = retentionCutoff(retention, sessionStartedAt)
-    if (cutoff == null) return
-    const history = this.load()
-    const sessions = history.accounts[accountScope] ?? []
-    const retained = sessions.filter((session) => isChatRetained(session, cutoff))
-    if (retained.length === sessions.length) return
-    history.accounts[accountScope] = retained
-    this.persist()
-  }
 
   private load(): PersistedChatHistory {
     if (this.cache) return this.cache

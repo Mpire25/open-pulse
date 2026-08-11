@@ -18,7 +18,10 @@ function historyStore(): ChatHistoryStore {
 }
 
 export function getChatHistory() {
-  return historyStore().snapshot(getGoogleAccountScope(), getSettings().chatRetention, sessionStartedAt)
+  const store = historyStore()
+  const accountScope = getGoogleAccountScope()
+  store.purgeExpired(accountScope, getSettings().chatRetention, sessionStartedAt)
+  return store.snapshot(accountScope)
 }
 
 export function createChatSession(id?: string) {
