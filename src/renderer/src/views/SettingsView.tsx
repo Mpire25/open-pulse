@@ -167,7 +167,7 @@ function ChatRetentionCard({
               Chats {pendingOption?.phrase} that aren&rsquo;t pinned or kept will be permanently deleted. This
               cannot be undone.
               <span className="mt-2 block">
-                Cancel if you want to open chat history first and bookmark the ones worth keeping.
+                Cancel if you want to open chat history first and keep the chats that matter.
               </span>
             </Dialog.Description>
             <div className="mt-5 flex justify-end gap-2">

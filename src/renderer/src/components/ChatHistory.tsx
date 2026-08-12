@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import * as Dialog from '@radix-ui/react-dialog'
-import { BookmarkSimple, ChatsCircle, PushPin, PushPinSlash, Trash } from '@phosphor-icons/react'
+import { ChatsCircle, PushPin, PushPinSlash, ShieldCheck, Trash } from '@phosphor-icons/react'
 import { Button } from '@/components/ui/button'
 import type { ChatController } from '@/hooks/useChat'
 import type { ChatSession } from '@shared/types'
@@ -172,15 +172,15 @@ function SessionRow({ session, selected, streaming, onSelect, onPin, onKeep, onD
             change starts deleting things. */}
         <button
           type="button"
-          title={session.kept ? 'Unkeep chat' : 'Keep chat'}
-          aria-label={`${session.kept ? 'Unkeep' : 'Keep'} ${session.title}`}
+          title={session.kept ? 'Stop keeping chat' : 'Keep chat'}
+          aria-label={`${session.kept ? 'Stop keeping' : 'Keep'} ${session.title}`}
           onClick={onKeep}
           className={cn(
             'grid size-7 place-items-center rounded-lg transition-colors hover:bg-white/[0.08] hover:text-ink',
             session.kept ? 'text-accent' : 'text-ink-faint'
           )}
         >
-          <BookmarkSimple size={13} weight={session.kept ? 'fill' : 'regular'} />
+          <ShieldCheck size={13} weight={session.kept ? 'fill' : 'regular'} />
         </button>
         <button
           type="button"
