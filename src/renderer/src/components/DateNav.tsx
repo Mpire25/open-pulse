@@ -14,6 +14,9 @@ interface DateNavProps {
  * The width never changes with the label ("Today" vs "Wed, Jun 24"), so the
  * control never shifts its neighbors. A fixed shortcut slot keeps the rest of
  * the title bar stable when the historical-date "Today" action appears.
+ *
+ * `no-drag` goes on the individual controls rather than the row, so the empty
+ * shortcut slot and the gaps between the arrows stay window-draggable.
  */
 export function DateNav({ date, onChange }: DateNavProps): React.JSX.Element {
   const [open, setOpen] = useState(false)
@@ -21,7 +24,7 @@ export function DateNav({ date, onChange }: DateNavProps): React.JSX.Element {
   const atToday = date >= today
 
   return (
-    <div className="no-drag relative flex items-center gap-0.5">
+    <div className="relative flex items-center gap-0.5">
       <div className="mr-1 grid h-[22px] w-[88px] place-items-center">
         <AnimatePresence initial={false}>
           {!atToday && (
@@ -38,7 +41,7 @@ export function DateNav({ date, onChange }: DateNavProps): React.JSX.Element {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -2 }}
               transition={{ duration: 0.15, ease: [0.16, 1, 0.3, 1] }}
-              className="flex h-[22px] w-[88px] items-center justify-center whitespace-nowrap rounded-[6px] px-2 text-[10.5px] font-semibold text-accent outline-none transition-colors hover:bg-accent-soft hover:text-[#a5a3ff] focus-visible:ring-2 focus-visible:ring-accent/60 active:scale-[0.97]"
+              className="no-drag flex h-[22px] w-[88px] items-center justify-center whitespace-nowrap rounded-[6px] px-2 text-[10.5px] font-semibold text-accent outline-none transition-colors hover:bg-accent-soft hover:text-[#a5a3ff] focus-visible:ring-2 focus-visible:ring-accent/60 active:scale-[0.97]"
             >
               Back to Today
             </motion.button>
@@ -53,7 +56,7 @@ export function DateNav({ date, onChange }: DateNavProps): React.JSX.Element {
       <button
         onClick={() => setOpen((o) => !o)}
         className={cn(
-          'flex h-[22px] w-[108px] items-center justify-center gap-1.5 rounded-[6px] border border-transparent text-[11.5px] font-semibold text-ink transition-colors',
+          'no-drag flex h-[22px] w-[108px] items-center justify-center gap-1.5 rounded-[6px] border border-transparent text-[11.5px] font-semibold text-ink transition-colors',
           open ? 'border-hairline bg-white/[0.07]' : 'hover:bg-white/[0.05]'
         )}
       >
@@ -74,7 +77,7 @@ export function DateNav({ date, onChange }: DateNavProps): React.JSX.Element {
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: -6, scale: 0.98 }}
               transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
-              className="absolute left-1/2 top-[30px] z-50 w-[264px] -translate-x-1/2 rounded-2xl border border-hairline bg-panel-2/95 p-3 shadow-[0_24px_60px_-20px_rgb(0_0_0/0.9)] backdrop-blur-2xl"
+              className="no-drag absolute left-1/2 top-[30px] z-50 w-[264px] -translate-x-1/2 rounded-2xl border border-hairline bg-panel-2/95 p-3 shadow-[0_24px_60px_-20px_rgb(0_0_0/0.9)] backdrop-blur-2xl"
             >
               <Presets
                 date={date}
@@ -117,7 +120,7 @@ function NavArrow({
       disabled={disabled}
       onClick={onClick}
       className={cn(
-        'grid h-7 w-7 place-items-center rounded-lg text-ink-dim transition-colors',
+        'no-drag grid h-7 w-7 place-items-center rounded-lg text-ink-dim transition-colors',
         disabled ? 'opacity-30' : 'hover:bg-white/[0.06] hover:text-ink'
       )}
     >
