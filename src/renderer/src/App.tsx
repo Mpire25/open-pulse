@@ -625,7 +625,6 @@ export default function App(): React.JSX.Element {
                     composerFocusRequest={composerFocusRequest}
                     onAssistantAction={handleAssistantAction}
                     onOpenSettings={() => selectView('settings')}
-                    chatRetention={settings.chatRetention}
                   />
                 )}
                 {view === 'settings' && (
@@ -658,7 +657,6 @@ export default function App(): React.JSX.Element {
             codexConnected={codex.connected}
             composerFocusRequest={composerFocusRequest}
             onAssistantAction={handleAssistantAction}
-            chatRetention={settings.chatRetention}
             onOpenSettings={() => {
               closeAssistantPanel()
               selectView('settings')

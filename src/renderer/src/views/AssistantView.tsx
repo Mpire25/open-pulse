@@ -4,7 +4,7 @@ import { ClockCounterClockwise, Plus, Sparkle, SquaresFour } from '@phosphor-ico
 import { ChatPanel, type ChatDraftSetter, type ChatState } from '@/components/ChatPanel'
 import { ChatHistory } from '@/components/ChatHistory'
 import { cn } from '@/lib/utils'
-import type { AssistantAction, ChatRetention, CodexAuthStatus } from '@shared/types'
+import type { AssistantAction, CodexAuthStatus } from '@shared/types'
 
 const cardGalleryEnabled = import.meta.env.DEV && import.meta.env.VITE_OPENPULSE_CARD_GALLERY === '1'
 const AssistantCardGallery = import.meta.env.DEV
@@ -22,7 +22,6 @@ interface AssistantViewProps {
   composerFocusRequest: number
   onOpenSettings: () => void
   onAssistantAction: (action: AssistantAction) => void
-  chatRetention: ChatRetention
 }
 
 export function AssistantView({
@@ -32,8 +31,7 @@ export function AssistantView({
   codex,
   composerFocusRequest,
   onOpenSettings,
-  onAssistantAction,
-  chatRetention
+  onAssistantAction
 }: AssistantViewProps): React.JSX.Element {
   // History is a transient sheet that slides in from the right — never
   // permanent chrome. Hovering the clock button summons it; it stays while
@@ -196,7 +194,6 @@ export function AssistantView({
             </div>
             <ChatHistory
               chat={chat}
-              retention={chatRetention}
               onNavigate={() => setHistoryOpen(false)}
               onDeleteDialogClose={() => setHistoryOpen(false)}
             />
