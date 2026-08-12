@@ -4,7 +4,7 @@ import { ArrowSquareOut, ClockCounterClockwise, Plus, Sparkle, X } from '@phosph
 import { ChatPanel, type ChatDraftSetter, type ChatState } from '@/components/ChatPanel'
 import { ChatHistory } from '@/components/ChatHistory'
 import { cn } from '@/lib/utils'
-import type { AssistantAction, ChatRetention } from '@shared/types'
+import type { AssistantAction } from '@shared/types'
 
 interface AssistantPanelProps {
   open: boolean
@@ -17,7 +17,6 @@ interface AssistantPanelProps {
   composerFocusRequest: number
   onOpenSettings: () => void
   onAssistantAction: (action: AssistantAction) => void
-  chatRetention: ChatRetention
 }
 
 const PANEL_WIDTH = 384
@@ -37,8 +36,7 @@ export function AssistantPanel({
   codexConnected,
   composerFocusRequest,
   onOpenSettings,
-  onAssistantAction,
-  chatRetention
+  onAssistantAction
 }: AssistantPanelProps): React.JSX.Element {
   const [historyOpen, setHistoryOpen] = useState(false)
 
@@ -120,7 +118,7 @@ export function AssistantPanel({
               className="h-full"
             >
               {historyOpen ? (
-                <ChatHistory chat={chat} retention={chatRetention} onNavigate={() => setHistoryOpen(false)} />
+                <ChatHistory chat={chat} onNavigate={() => setHistoryOpen(false)} />
               ) : (
                 <ChatPanel
                   chat={chat}
