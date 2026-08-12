@@ -151,10 +151,12 @@ function SessionRow({ session, selected, streaming, onSelect, onPin, onKeep, onD
           : 'border-transparent text-ink-dim hover:bg-white/[0.035] hover:text-ink'
       )}
     >
+      {/* At rest the title only has to clear the timestamp; it gives up the
+          wider gutter to the action cluster once that is actually on screen. */}
       <button
         type="button"
         onClick={onSelect}
-        className="flex min-w-0 flex-1 items-center gap-2 rounded-[10px] px-3 py-2.5 pr-20 text-left outline-none focus-visible:ring-1 focus-visible:ring-accent/50"
+        className="flex min-w-0 flex-1 items-center gap-2 rounded-[10px] px-3 py-2.5 pr-16 text-left outline-none transition-[padding] focus-visible:ring-1 focus-visible:ring-accent/50 group-hover:pr-20 group-focus-within:pr-20"
       >
         {streaming && <span className="size-1.5 shrink-0 animate-pulse rounded-full bg-accent" />}
         <span className="min-w-0 flex-1 truncate text-[12px] font-medium">{session.title}</span>
