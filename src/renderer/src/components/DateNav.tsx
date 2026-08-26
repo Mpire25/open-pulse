@@ -1,11 +1,13 @@
 import { useMemo, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { CaretLeft, CaretRight, CalendarBlank } from '@phosphor-icons/react'
-import { isoToday, navDateLabel, shiftDate } from '@/lib/format'
+import { dateNavigationState } from '@/lib/date-navigation'
+import { navDateLabel, shiftDate } from '@/lib/format'
 import { cn } from '@/lib/utils'
 
 interface DateNavProps {
   date: string
+  today: string
   onChange: (date: string) => void
 }
 
@@ -18,16 +20,15 @@ interface DateNavProps {
  * `no-drag` goes on the individual controls rather than the row, so the empty
  * shortcut slot and the gaps between the arrows stay window-draggable.
  */
-export function DateNav({ date, onChange }: DateNavProps): React.JSX.Element {
+export function DateNav({ date, today, onChange }: DateNavProps): React.JSX.Element {
   const [open, setOpen] = useState(false)
-  const today = isoToday()
-  const atToday = date >= today
+  const { showTodayShortcut, canGoForward } = dateNavigationState(date, today)
 
   return (
     <div className="relative flex items-center gap-0.5">
       <div className="mr-1 grid h-[22px] w-[88px] place-items-center">
         <AnimatePresence initial={false}>
-          {!atToday && (
+          {showTodayShortcut && (
             <motion.button
               key="today-shortcut"
               type="button"
@@ -61,10 +62,10 @@ export function DateNav({ date, onChange }: DateNavProps): React.JSX.Element {
         )}
       >
         <CalendarBlank size={11} weight="bold" className="text-ink-dim" />
-        <span className="truncate">{navDateLabel(date)}</span>
+        <span className="truncate">{navDateLabel(date, today)}</span>
       </button>
 
-      <NavArrow label="Next day" disabled={atToday} onClick={() => onChange(shiftDate(date, 1))}>
+      <NavArrow label="Next day" disabled={!canGoForward} onClick={() => onChange(shiftDate(date, 1))}>
         <CaretRight size={14} weight="bold" />
       </NavArrow>
 
@@ -81,6 +82,7 @@ export function DateNav({ date, onChange }: DateNavProps): React.JSX.Element {
             >
               <Presets
                 date={date}
+                today={today}
                 onPick={(d) => {
                   onChange(d)
                   setOpen(false)
@@ -129,8 +131,7 @@ function NavArrow({
   )
 }
 
-function Presets({ date, onPick }: { date: string; onPick: (d: string) => void }): React.JSX.Element {
-  const today = isoToday()
+function Presets({ date, today, onPick }: { date: string; today: string; onPick: (d: string) => void }): React.JSX.Element {
   const presets = [
     { label: 'Today', value: today },
     { label: 'Yesterday', value: shiftDate(today, -1) },

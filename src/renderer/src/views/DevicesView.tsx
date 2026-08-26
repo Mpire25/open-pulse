@@ -18,7 +18,7 @@ import { ErrorState } from '@/components/ErrorState'
 import { useDevices, useSeries } from '@/hooks/useHealth'
 import { METRICS } from '@/lib/metric-registry'
 import { metricAbsent, rangeEnding, seriesPoints } from '@/lib/metrics'
-import { isoToday, relativeTime } from '@/lib/format'
+import { relativeTime } from '@/lib/format'
 import { fade } from '@/lib/motion'
 import type { MetricKey, PairedDevice } from '@shared/types'
 import { cn } from '@/lib/utils'
@@ -37,11 +37,11 @@ const COVERAGE_KEYS = COVERAGE.flatMap((c) => c.keys)
 
 interface DevicesViewProps {
   connected: boolean
+  today: string
 }
 
-export function DevicesView({ connected }: DevicesViewProps): React.JSX.Element {
+export function DevicesView({ connected, today }: DevicesViewProps): React.JSX.Element {
   const devices = useDevices()
-  const today = isoToday()
   const { start, end } = rangeEnding(today, 7)
   const series = useSeries(COVERAGE_KEYS, start, end)
 

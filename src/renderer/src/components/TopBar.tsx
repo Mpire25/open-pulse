@@ -10,7 +10,9 @@ import { cn } from '@/lib/utils'
 interface TopBarProps {
   showDateNav: boolean
   date: string
+  today: string
   onDateChange: (date: string) => void
+  onRefreshDate: () => void
   showAsk: boolean
   chatOpen: boolean
   onToggleChat: () => void
@@ -22,7 +24,9 @@ interface TopBarProps {
 export function TopBar({
   showDateNav,
   date,
+  today,
   onDateChange,
+  onRefreshDate,
   showAsk,
   chatOpen,
   onToggleChat,
@@ -41,7 +45,7 @@ export function TopBar({
         <SidebarSimple size={16} weight="bold" />
       </button>
 
-      {showDateNav && <DateNav date={date} onChange={onDateChange} />}
+      {showDateNav && <DateNav date={date} today={today} onChange={onDateChange} />}
 
       <BatteryPill enabled={connected} />
 
@@ -59,7 +63,7 @@ export function TopBar({
         </button>
       )}
 
-      <RefreshButton />
+      <RefreshButton onRefreshDate={onRefreshDate} />
     </div>
   )
 }
@@ -85,12 +89,15 @@ function BatteryPill({ enabled }: { enabled: boolean }): React.JSX.Element | nul
   )
 }
 
-function RefreshButton(): React.JSX.Element {
+function RefreshButton({ onRefreshDate }: { onRefreshDate: () => void }): React.JSX.Element {
   const refresh = useRefresh()
   const busy = useSyncBusy()
   return (
     <button
-      onClick={() => void refresh()}
+      onClick={() => {
+        onRefreshDate()
+        void refresh()
+      }}
       disabled={busy}
       aria-label={busy ? 'Syncing…' : 'Refresh data'}
       title={busy ? 'Syncing…' : 'Refresh data'}

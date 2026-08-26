@@ -19,8 +19,8 @@ import { DevicesView } from '@/views/DevicesView'
 import { AssistantView } from '@/views/AssistantView'
 import { SettingsView } from '@/views/SettingsView'
 import { useChat } from '@/hooks/useChat'
+import { useCurrentDay } from '@/hooks/useCurrentDay'
 import { useTrackpadHistoryNavigation } from '@/hooks/useTrackpadHistoryNavigation'
-import { isoToday } from '@/lib/format'
 import type { MetricRange, OpenMetric } from '@/lib/metric-navigation'
 import type { AssistantAction, AppSettings, CodexAuthStatus, GoogleAuthStatus, MetricKey, Workout } from '@shared/types'
 
@@ -87,7 +87,8 @@ export default function App(): React.JSX.Element {
   const [settings, setSettings] = useState<AppSettings | null>(null)
   const [google, setGoogle] = useState<GoogleAuthStatus>({ connected: false })
   const [codex, setCodex] = useState<CodexAuthStatus>({ connected: false })
-  const [selectedDate, setSelectedDate] = useState(isoToday)
+  const [today, syncToday] = useCurrentDay()
+  const [selectedDate, setSelectedDate] = useState(today)
   const [chatOpen, setChatOpen] = useState(false)
   const [sidebarComposerDraft, setSidebarComposerDraft] = useState('')
   const [assistantComposerDraft, setAssistantComposerDraft] = useState('')
@@ -235,7 +236,7 @@ export default function App(): React.JSX.Element {
       key: NAVIGATION_STATE_KEY,
       accountEpoch: accountEpochRef.current,
       view: 'home',
-      selectedDate: isoToday(),
+      selectedDate,
       detailMetric: null,
       sleepStagesOpen: false,
       workoutsOpen: false,
@@ -511,7 +512,9 @@ export default function App(): React.JSX.Element {
         <TopBar
           showDateNav={isDataView}
           date={selectedDate}
+          today={today}
           onDateChange={selectDate}
+          onRefreshDate={syncToday}
           showAsk={view !== 'assistant'}
           chatOpen={chatOpen}
           onToggleChat={toggleAssistantPanel}
@@ -576,6 +579,7 @@ export default function App(): React.JSX.Element {
                         {view === 'home' && (
                           <HomeView
                             date={selectedDate}
+                            today={today}
                             goals={settings.goals}
                             onOpenMetric={openMetric}
                             onOpenWorkout={openWorkout}
@@ -611,7 +615,7 @@ export default function App(): React.JSX.Element {
                             onSelectDate={selectDate}
                           />
                         )}
-                        {view === 'devices' && <DevicesView connected={google.connected} />}
+                        {view === 'devices' && <DevicesView connected={google.connected} today={today} />}
                       </>
                     )}
                   </ConnectGate>
