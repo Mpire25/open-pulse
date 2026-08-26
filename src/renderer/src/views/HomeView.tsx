@@ -17,7 +17,7 @@ import type { View } from '@/components/Sidebar'
 import { useIntraday, useSeries, useSleepNight, useWorkouts } from '@/hooks/useHealth'
 import { METRICS } from '@/lib/metric-registry'
 import { baseline, baselineDeltaPct, latestPoint, pointValues, rangeEnding, seriesPoints } from '@/lib/metrics'
-import { formatClock, formatHour, formatInt, formatMinutes, greeting, isoToday, longDate, shiftDate, shortDate } from '@/lib/format'
+import { formatClock, formatHour, formatInt, formatMinutes, greeting, longDate, shiftDate, shortDate } from '@/lib/format'
 import type { MetricRange, OpenMetric } from '@/lib/metric-navigation'
 import { fade } from '@/lib/motion'
 import type { Goals, MetricKey, Workout } from '@shared/types'
@@ -38,6 +38,7 @@ const WEIGHT_METRICS: MetricKey[] = ['weightKg']
 
 interface HomeViewProps {
   date: string
+  today: string
   goals: Goals
   onOpenMetric: OpenMetric
   onOpenWorkout: (workout: Workout) => void
@@ -45,7 +46,7 @@ interface HomeViewProps {
   onNavigate: (view: View) => void
 }
 
-export function HomeView({ date, goals, onOpenMetric, onOpenWorkout, onOpenWorkouts, onNavigate }: HomeViewProps): React.JSX.Element {
+export function HomeView({ date, today, goals, onOpenMetric, onOpenWorkout, onOpenWorkouts, onNavigate }: HomeViewProps): React.JSX.Element {
   const { start, end } = rangeEnding(date, 7)
   const weightRange = rangeEnding(date, 30)
   const series = useSeries(HOME_METRICS, start, end)
@@ -54,14 +55,14 @@ export function HomeView({ date, goals, onOpenMetric, onOpenWorkout, onOpenWorko
   const workouts = useWorkouts(date, date)
   const intraday = useIntraday(date, true, 'steps')
 
-  const isToday = date === isoToday()
+  const isToday = date === today
 
   if (series.isError) {
     return <ErrorState message={series.error instanceof Error ? series.error.message : undefined} onRetry={() => void series.refetch()} />
   }
 
   const days = series.data?.days
-  const today = days?.[date] ?? {}
+  const dayValues = days?.[date] ?? {}
   const pointsFor = (key: MetricKey) => seriesPoints(days, key, start, end)
   const rhrBase = baseline(pointsFor('restingHeartRate'), date)
   const weightPoints = seriesPoints(weightSeries.data?.days, 'weightKg', weightRange.start, weightRange.end)
@@ -83,14 +84,14 @@ export function HomeView({ date, goals, onOpenMetric, onOpenWorkout, onOpenWorko
         <Panel className={`home-hero ${CARD_HEIGHT.hero}`}>
           <div className="home-goal-rings">
             <GoalRing
-              value={today.steps ?? null}
+              value={dayValues.steps ?? null}
               goal={goals.steps}
               metricKey="steps"
               pending={series.isMetricPending('steps')}
               onOpen={onOpenMetric}
             />
             <GoalRing
-              value={today.caloriesOut ?? null}
+              value={dayValues.caloriesOut ?? null}
               goal={goals.caloriesOut}
               metricKey="caloriesOut"
               label="Calories burned"
@@ -98,7 +99,7 @@ export function HomeView({ date, goals, onOpenMetric, onOpenWorkout, onOpenWorko
               onOpen={onOpenMetric}
             />
             <GoalRing
-              value={today.caloriesIn ?? null}
+              value={dayValues.caloriesIn ?? null}
               goal={goals.caloriesIn}
               metricKey="caloriesIn"
               label="Calories eaten"
@@ -135,8 +136,8 @@ export function HomeView({ date, goals, onOpenMetric, onOpenWorkout, onOpenWorko
               value={
                 series.isMetricPending('restingHeartRate') ? (
                   <SkeletonText className="h-3.5 w-20" />
-                ) : today.restingHeartRate != null ? (
-                  `${today.restingHeartRate} bpm`
+                ) : dayValues.restingHeartRate != null ? (
+                  `${dayValues.restingHeartRate} bpm`
                 ) : (
                   'No data'
                 )
@@ -144,11 +145,11 @@ export function HomeView({ date, goals, onOpenMetric, onOpenWorkout, onOpenWorko
               sub={
                 series.isMetricPending('restingHeartRate') ? (
                   <SkeletonText className="w-28" />
-                ) : today.restingHeartRate != null && rhrBase != null ? (
-                  today.restingHeartRate === Math.round(rhrBase) ? (
+                ) : dayValues.restingHeartRate != null && rhrBase != null ? (
+                  dayValues.restingHeartRate === Math.round(rhrBase) ? (
                     'Same as your average'
                   ) : (
-                    `${today.restingHeartRate > Math.round(rhrBase) ? '+' : ''}${today.restingHeartRate - Math.round(rhrBase)} vs your average`
+                    `${dayValues.restingHeartRate > Math.round(rhrBase) ? '+' : ''}${dayValues.restingHeartRate - Math.round(rhrBase)} vs your average`
                   )
                 ) : undefined
               }

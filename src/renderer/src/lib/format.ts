@@ -90,8 +90,7 @@ export function shiftDate(isoDate: string, days: number): string {
 }
 
 /** Friendly label for the date nav: Today / Yesterday / weekday, month day. */
-export function navDateLabel(isoDate: string): string {
-  const today = isoToday()
+export function navDateLabel(isoDate: string, today = isoToday()): string {
   if (isoDate === today) return 'Today'
   if (isoDate === shiftDate(today, -1)) return 'Yesterday'
   const d = new Date(`${isoDate}T12:00:00`)
