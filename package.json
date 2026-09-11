@@ -8,6 +8,7 @@
   "type": "module",
   "private": true,
   "scripts": {
+    "postinstall": "install-electron",
     "dev": "electron-vite dev",
     "dev:cards": "VITE_OPENPULSE_CARD_GALLERY=1 electron-vite dev",
     "dev:trace": "OPENPULSE_AI_TRACE=summary electron-vite dev",
