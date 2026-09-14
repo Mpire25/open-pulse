@@ -99,7 +99,7 @@ function action(value: unknown): AssistantAction | null {
   }
   if (item?.type === 'open-sleep-stages') {
     const selectedDate = date(item.date)
-    return selectedDate ? { type: 'open-sleep-stages', date: selectedDate } : null
+    return selectedDate ? { type: 'open-sleep-stages', date: selectedDate, ...(typeof item.sessionId === 'string' && item.sessionId.length <= 500 ? { sessionId: item.sessionId } : {}) } : null
   }
   if (item?.type === 'open-nutrition') {
     const selectedDate = date(item.date)
@@ -168,6 +168,7 @@ function sleepNight(value: unknown): AssistantSleepNight | null {
     if (typeof amount === 'number' && amount >= 0) stageMinutes[type] = amount
   }
   return {
+    ...(typeof item.id === 'string' && item.id.length <= 500 ? { id: item.id } : {}),
     date: selectedDate,
     startTime,
     endTime,
@@ -377,7 +378,8 @@ export function normalizeAssistantParts(value: unknown): AssistantVisualPart[] {
       const night = sleepNight(item.night)
       const selectedSource = source(item.source)
       const selectedAction = action(item.action)
-      return night && selectedSource && selectedAction?.type === 'open-sleep-stages' && selectedAction.date === night.date
+      return night && selectedSource && selectedAction?.type === 'open-sleep-stages' && selectedAction.date === night.date &&
+        (selectedAction.sessionId === undefined || selectedAction.sessionId === night.id)
         ? [{ id, type: 'sleep-card', night, source: selectedSource, action: selectedAction }]
         : []
     }

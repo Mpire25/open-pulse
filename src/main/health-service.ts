@@ -6,6 +6,7 @@
 // Requests are priority-ordered: the selected day's numbers arrive before
 // history backfills.
 
+import { cachedSleepDay, groupSleepDays } from '../shared/sleep'
 import type {
   ActivityIntradayMetric,
   ActivityIntradayResult,
@@ -25,6 +26,7 @@ import type {
   PairedDevice,
   SeriesResult,
   SleepNight,
+  SleepDay,
   SleepRangeResult,
   Workout,
   WorkoutTrackResult,
@@ -90,7 +92,7 @@ import {
   STEPS_ROLLUP_WINDOW_SECONDS,
   hourlyStepsFromRollups
 } from './steps-rollup'
-import { mapSleep } from './sleep-detail'
+import { mapSleep, SLEEP_SUMMARY_FIELDS } from './sleep-detail'
 import { nutrientGrams, nutrientMineralGrams } from './nutrition'
 import { parseExerciseTcx } from './tcx'
 import {
@@ -698,21 +700,12 @@ function ensureGroupOnce(
 // ---------------------------------------------------------------------------
 // Sleep summaries and sessions
 
-const SLEEP_SUMMARY_GROUP = 'sleep-summary-v1'
-const SLEEP_DETAIL_GROUP = 'sleep-detail-v5'
+const SLEEP_SUMMARY_GROUP = 'sleep-summary-v2'
+const SLEEP_DETAIL_GROUP = 'sleep-detail-v6'
 
-function sleepByDate(points: RawDataPoint[]): Map<string, SleepNight> {
-  const byDate = new Map<string, SleepNight>()
-  for (const point of points) {
-    const night = mapSleep(point)
-    if (!night) continue
-    const existing = byDate.get(night.date)
-    // Prefer the main sleep, then the longest session per date.
-    if (!existing || (night.isMainSleep && !existing.isMainSleep) || night.minutesAsleep > existing.minutesAsleep) {
-      if (!existing || night.isMainSleep || !existing.isMainSleep) byDate.set(night.date, night)
-    }
-  }
-  return byDate
+function sleepByDate(points: RawDataPoint[]): Map<string, SleepDay> {
+  const sessions = points.map(mapSleep).filter((night): night is SleepNight => night !== null)
+  return new Map(groupSleepDays(sessions).map((day) => [day.date, day]))
 }
 
 async function ensureSleepSummaryRange(
@@ -735,7 +728,7 @@ async function ensureSleepSummaryRange(
       'google-wearables',
       spanPriority(span.dates.length),
       signal,
-      'sleep(interval(startTime,endTime,civilEndTime),summary(minutesAsleep,minutesInSleepPeriod),metadata(nap))'
+      SLEEP_SUMMARY_FIELDS
     )
     assertCurrentAccount(generation)
     const byDate = sleepByDate(points)
@@ -1450,10 +1443,10 @@ export async function getSleepRange(
     console.error(`[health] sleep range failed for ${s}..${e}:`, err)
   }
   assertCurrentAccount(generation)
-  const nights = listDates(s, e)
-    .map((d) => peekDay(d)?.sleep)
-    .filter((n): n is SleepNight => n != null)
-  return { source: 'live', nights }
+  const days = listDates(s, e)
+    .map((d) => cachedSleepDay(peekDay(d)))
+    .filter((day): day is SleepDay => day != null)
+  return { source: 'live', days }
 }
 
 export async function getWorkoutsRange(
@@ -1775,7 +1768,7 @@ export async function getHealthDay(date: string): Promise<HealthDay> {
     stepsHourly: intraday.stepsHourly,
     heartRate: intraday.heartRate,
     currentHeartRate: intraday.currentHeartRate,
-    sleep: sleep.nights.find((n) => n.date === end) ?? null,
+    sleep: sleep.days.find((n) => n.date === end) ?? null,
     workouts: workouts.workouts,
     trend
   }
@@ -1784,5 +1777,5 @@ export async function getHealthDay(date: string): Promise<HealthDay> {
 export async function getSleepHistory(nights: number, endDate = todayIso()): Promise<SleepNight[]> {
   const [, end] = normalizeRange(endDate, endDate)
   const result = await getSleepRange(shiftIsoDate(end, -(Math.max(1, nights) - 1)), end)
-  return result.nights
+  return result.days.flatMap((day) => day.sessions)
 }

@@ -129,8 +129,8 @@ export const PRESENTATION_TOOL: AgentToolSpec = {
         maxItems: 2,
         items: {
           type: 'object',
-          properties: { datasetId: DATASET_ID, date: DATE_SCHEMA },
-          required: ['datasetId', 'date'],
+          properties: { datasetId: DATASET_ID, date: DATE_SCHEMA, sessionId: { type: ['string', 'null'], maxLength: 500, description: 'Session id from query_sleep; null selects the main session.' } },
+          required: ['datasetId', 'date', 'sessionId'],
           additionalProperties: false
         }
       },
@@ -283,7 +283,7 @@ function dailyDataset(datasetId: string, datasets: Map<string, AgentDataset>): D
     const end = requiredDate(requestedRange.end, 'dataset end')
     if (!source) throw new Error(`Dataset ${datasetId} has no valid source.`)
     const days: DailyDataset['days'] = {}
-    for (const rawNight of data.nights) {
+    for (const rawNight of (Array.isArray(data.days) ? data.days : data.nights)) {
       const night = record(rawNight)
       if (!night || typeof night.date !== 'string') continue
       const date = requiredDate(night.date, 'sleep date')
@@ -462,12 +462,13 @@ export function resolveAutomaticPresentation(
       if (source.tool !== 'query_sleep') continue
       try {
         const dataset = sleepDataset(datasetId, datasets)
-        const night = dataset.nights
-          .filter((candidate) => candidate.stages.length)
-          .sort((left, right) => right.date.localeCompare(left.date))[0]
-        if (!night) continue
+        // Session intent belongs to the model's explicit presentation call.
+        // Count all sessions before checking stages, and do not substitute an
+        // older query or another session when this result is ambiguous/empty.
+        const [night] = dataset.nights
+        if (dataset.nights.length !== 1 || !night.stages.length) return []
         return resolvePresentation(
-          { sleepCards: [{ datasetId, date: night.date }] },
+          { sleepCards: [{ datasetId, date: night.date, sessionId: night.id ?? null }] },
           datasets
         ).slice(0, 1)
       } catch {
@@ -800,7 +801,7 @@ function sleepDataset(
         return typeof value === 'number' && Number.isFinite(value) ? [[stage, value]] : []
       })
     )
-    return [{ date, startTime, endTime, minutesAsleep, minutesInSleepPeriod, efficiency, stages, stageMinutes }]
+    return [{ ...(typeof night.id === 'string' ? { id: night.id } : {}), date, startTime, endTime, minutesAsleep, minutesInSleepPeriod, efficiency, stages, stageMinutes }]
   })
   return { source, start, end, nights }
 }
@@ -1057,7 +1058,8 @@ export function resolvePresentation(
     if (date < selected.start || date > selected.end) {
       throw new Error('The requested sleep card falls outside its dataset range.')
     }
-    const night = selected.nights.find((candidate) => candidate.date === date)
+    const sessionId = item?.sessionId == null ? undefined : requiredText(item.sessionId, 'sessionId', 500)
+    const night = selected.nights.find((candidate) => candidate.date === date && (sessionId === undefined || candidate.id === sessionId))
     if (!night) throw new Error(`Sleep night ${date} is not in dataset ${datasetId}.`)
     if (!night.stages.length) throw new Error(`Sleep night ${date} has no recorded stage timeline.`)
     parts.push({
@@ -1065,7 +1067,7 @@ export function resolvePresentation(
       type: 'sleep-card',
       night,
       source: selected.source,
-      action: { type: 'open-sleep-stages', date }
+      action: { type: 'open-sleep-stages', date, ...(night.id ? { sessionId: night.id } : {}) }
     })
   }
 

@@ -88,6 +88,8 @@ export interface SleepRespiratorySummary {
 }
 
 export interface SleepNight {
+  /** Stable session identity; absent on older saved Assistant cards. */
+  id?: string
   date: string // YYYY-MM-DD the night ended on
   startTime: string
   endTime: string
@@ -117,9 +119,20 @@ export interface SleepNight {
   respiratory: SleepRespiratorySummary | null
 }
 
+export interface SleepDay {
+  date: string
+  sessions: SleepNight[]
+  mainSessionId: string
+  minutesAsleep: number
+  minutesInSleepPeriod: number
+  efficiency: number | null
+  /** False when displaying a legacy cache that has not yet been refreshed. */
+  complete: boolean
+}
+
 export interface SleepRangeResult {
+  days: SleepDay[]
   source: DataSource
-  nights: SleepNight[]
 }
 
 // ---------------------------------------------------------------------------
@@ -358,7 +371,7 @@ export interface HealthDay {
   stepsHourly: HourlySteps[]
   heartRate: HeartRatePoint[]
   currentHeartRate: number | null
-  sleep: SleepNight | null
+  sleep: SleepDay | null
   workouts: Workout[]
   /** Daily metrics for the 14 days ending on `date`, oldest first. */
   trend: DayMetrics[]
@@ -491,7 +504,7 @@ export type AssistantAction =
       range: AssistantMetricRange
     }
   | { type: 'open-workout'; workout: Workout; date: string }
-  | { type: 'open-sleep-stages'; date: string }
+  | { type: 'open-sleep-stages'; date: string; sessionId?: string }
   | { type: 'open-nutrition'; date: string }
 
 export interface AssistantMetricCardPart {
@@ -559,6 +572,7 @@ export interface AssistantWorkoutPart {
 
 export type AssistantSleepNight = Pick<
   SleepNight,
+  | 'id'
   | 'date'
   | 'startTime'
   | 'endTime'

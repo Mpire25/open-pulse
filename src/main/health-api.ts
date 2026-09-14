@@ -238,7 +238,7 @@ const ROLLUP_VALUE_FIELDS: Record<string, string> = {
 const DATA_POINT_FIELDS: Record<string, string> = {
   steps: 'steps',
   'heart-rate': 'heartRate',
-  sleep: 'sleep',
+  sleep: 'dataPointName,sleep',
   exercise: 'dataPointName,exercise',
   'daily-resting-heart-rate': 'dailyRestingHeartRate',
   'daily-heart-rate-variability': 'dailyHeartRateVariability',

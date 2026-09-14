@@ -7,6 +7,8 @@ import type {
 } from '../shared/types'
 import { dateFromCivil, minuteFromCivil, type CivilDateTime, type RawDataPoint } from './health-api'
 
+export const SLEEP_SUMMARY_FIELDS = 'dataPointName,sleep(interval(startTime,endTime,civilEndTime),summary(minutesAsleep,minutesInSleepPeriod),metadata(nap))'
+
 const STAGE_MAP: Record<string, SleepStageType> = {
   AWAKE: 'AWAKE',
   RESTLESS: 'AWAKE',
@@ -134,6 +136,7 @@ export function mapSleep(point: RawDataPoint): SleepNight | null {
   const period = numberValue(sleep.summary?.minutesInSleepPeriod) ?? 0
   const date = dateFromCivil(sleep.interval.civilEndTime) ?? localIsoDate(new Date(sleep.interval.endTime))
   return {
+    id: point.dataPointName ?? point.name ?? `${Date.parse(sleep.interval.startTime)}:${Date.parse(sleep.interval.endTime)}`,
     date,
     startTime: sleep.interval.startTime,
     endTime: sleep.interval.endTime,

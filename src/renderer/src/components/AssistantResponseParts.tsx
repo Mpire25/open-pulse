@@ -281,7 +281,7 @@ function AssistantResponsePartsBase({
                 <DrillHeader
                   icon={<Moon size={18} weight="fill" className="text-sleep" />}
                   title="Sleep stages"
-                  hint={`${shortDate(night.date)} · ${formatMinutes(night.minutesAsleep)} asleep${night.efficiency == null ? '' : ` · ${formatInt(night.efficiency)}% efficiency`}`}
+                  hint={`${shortDate(night.date)} · ${formatClock(night.startTime)}–${formatClock(night.endTime)} · ${formatMinutes(night.minutesAsleep)} asleep${night.efficiency == null ? '' : ` · ${formatInt(night.efficiency)}% efficiency`}`}
                   onOpen={() => onAction(part.action)}
                 />
               </div>

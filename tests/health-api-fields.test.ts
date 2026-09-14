@@ -1,3 +1,4 @@
+import { SLEEP_SUMMARY_FIELDS } from '../src/main/sleep-detail'
 import { afterEach, describe, expect, test } from 'bun:test'
 import {
   dailyRollUp,
@@ -157,12 +158,13 @@ describe('Health API response projections', () => {
       'google-wearables',
       1,
       undefined,
-      'sleep(interval(startTime,endTime,civilEndTime),summary(minutesAsleep,minutesInSleepPeriod),metadata(nap))'
+      SLEEP_SUMMARY_FIELDS
     )
 
     const fields = new URL(requestedUrl).searchParams.get('fields')
     expect(fields).toContain('metadata(nap)')
-    expect(fields).not.toContain('metadata(nap,main)')
+    expect(fields).not.toContain('main')
+    expect(fields).toContain('dataPointName')
   })
 
   test('excludes persistent device identifiers from paired-device responses', async () => {

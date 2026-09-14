@@ -1,10 +1,12 @@
+import { selectedSleepSession, sleepSessionId } from '@shared/sleep'
+import { SleepSessionSelector } from '@/components/SleepSessionSelector'
 import { motion } from 'framer-motion'
 import { ArrowLeft, Moon } from '@phosphor-icons/react'
 import { ErrorState } from '@/components/ErrorState'
 import { Panel, SectionHeader } from '@/components/Panel'
 import { SkeletonBlock, SkeletonText } from '@/components/Skeleton'
 import { SleepStages, STAGE_COLOR, STAGE_LABEL } from '@/components/SleepStages'
-import { useSleepNight } from '@/hooks/useHealth'
+import { useSleepDay } from '@/hooks/useHealth'
 import { formatMinutes, longDate } from '@/lib/format'
 import { fade } from '@/lib/motion'
 import type { SleepNight, SleepStageType } from '@shared/types'
@@ -20,12 +22,15 @@ const STAGE_DESCRIPTION: Record<SleepStageType, string> = {
 
 interface SleepStagesDetailViewProps {
   date: string
+  sessionId?: string
+  onSelectSession: (id: string) => void
   onBack: () => void
 }
 
-export function SleepStagesDetailView({ date, onBack }: SleepStagesDetailViewProps): React.JSX.Element {
-  const nightQuery = useSleepNight(date)
-  const night = nightQuery.data ?? null
+export function SleepStagesDetailView({ date, sessionId, onSelectSession, onBack }: SleepStagesDetailViewProps): React.JSX.Element {
+  const nightQuery = useSleepDay(date)
+  const day = nightQuery.data ?? null
+  const night = selectedSleepSession(day, sessionId)
 
   if (nightQuery.isError) {
     return (
@@ -53,11 +58,12 @@ export function SleepStagesDetailView({ date, onBack }: SleepStagesDetailViewPro
           </div>
           <div>
             <h1 className="display text-[27px] font-bold leading-tight text-ink">Sleep stages</h1>
-            <p className="text-[13px] text-ink-dim">Night ending {longDate(date)}</p>
+            <p className="text-[13px] text-ink-dim">Sleep ending {longDate(date)}</p>
           </div>
         </div>
       </motion.header>
 
+      <SleepSessionSelector day={day} selectedId={night ? sleepSessionId(night) : undefined} onSelect={onSelectSession} />
       {nightQuery.isPending ? (
         <SleepStagesDetailSkeleton />
       ) : night && night.stages.length > 0 ? (
@@ -65,12 +71,12 @@ export function SleepStagesDetailView({ date, onBack }: SleepStagesDetailViewPro
           <motion.div custom={1} variants={fade} initial="hidden" animate="show">
             <Panel className="p-6">
               <SectionHeader
-                title="Night timeline"
+                title="Sleep timeline"
                 hint="Hover any stage block to see its time and duration"
                 icon={<Moon size={18} weight="fill" style={{ color: 'var(--color-sleep)' }} />}
               />
               <div className="mt-7">
-                <SleepStages night={night} />
+                <SleepStages key={night ? sleepSessionId(night) : "empty"} night={night} />
               </div>
             </Panel>
           </motion.div>
@@ -91,7 +97,7 @@ export function SleepStagesDetailView({ date, onBack }: SleepStagesDetailViewPro
             <Panel className="p-6">
               <SectionHeader
                 title="Sleep architecture"
-                hint="Timing and continuity details for this night"
+                hint="Timing and continuity details for this session"
               />
               <div className="display-md-three-grid mt-5 grid grid-cols-2 gap-x-6 gap-y-5 border-t border-hairline pt-5">
                 <ArchitectureMetric
@@ -123,7 +129,7 @@ export function SleepStagesDetailView({ date, onBack }: SleepStagesDetailViewPro
         </>
       ) : (
         <Panel className="grid min-h-48 place-items-center p-12 text-[13px] text-ink-faint">
-          No sleep stages recorded for this night.
+          {night ? `No stages recorded for this session. ${Math.round(night.minutesAsleep)} minutes of sleep are included in the daily total.` : 'No sleep recorded for this date.'}
         </Panel>
       )}
     </div>
@@ -220,7 +226,7 @@ function SleepStagesDetailSkeleton(): React.JSX.Element {
     <>
       <Panel className="p-6" aria-hidden>
         <SectionHeader
-          title="Night timeline"
+          title="Sleep timeline"
           hint="Hover any stage block to see its time and duration"
           icon={<Moon size={18} weight="fill" style={{ color: 'var(--color-sleep)' }} />}
         />
@@ -236,7 +242,7 @@ function SleepStagesDetailSkeleton(): React.JSX.Element {
       <Panel className="p-6" aria-hidden>
         <SectionHeader
           title="Sleep architecture"
-          hint="Timing and continuity details for this night"
+          hint="Timing and continuity details for this session"
         />
         <div className="display-md-three-grid mt-5 grid grid-cols-2 gap-x-6 gap-y-5 border-t border-hairline pt-5">
           {Array.from({ length: 6 }, (_, index) => (

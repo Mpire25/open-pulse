@@ -318,7 +318,10 @@ export async function runHealthAgentTool(
         source: result.source,
         requestedRange: { start, end },
         detail: args.detail,
-        nights: result.nights
+        days: result.days.map(({ sessions, ...summary }) => ({ ...summary, sessionCount: sessions.length })),
+        nights: result.days.flatMap((day) => [...day.sessions].sort((a, b) =>
+          Number(b.id === day.mainSessionId) - Number(a.id === day.mainSessionId)
+        ))
       })
     }
     case 'query_workouts': {

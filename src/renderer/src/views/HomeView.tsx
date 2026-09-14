@@ -1,3 +1,4 @@
+import { selectedSleepSession } from '@shared/sleep'
 import { motion } from 'framer-motion'
 import { Barbell, Footprints, Heartbeat, Moon, Scales } from '@phosphor-icons/react'
 import { DrillHeader, DrillPanel, InteractivePanel, Panel, SectionHeader } from '@/components/Panel'
@@ -14,7 +15,7 @@ import {
 import { ErrorState } from '@/components/ErrorState'
 import { WorkoutList } from '@/components/WorkoutList'
 import type { View } from '@/components/Sidebar'
-import { useIntraday, useSeries, useSleepNight, useWorkouts } from '@/hooks/useHealth'
+import { useIntraday, useSeries, useSleepDay, useWorkouts } from '@/hooks/useHealth'
 import { METRICS } from '@/lib/metric-registry'
 import { baseline, baselineDeltaPct, latestPoint, pointValues, rangeEnding, seriesPoints } from '@/lib/metrics'
 import { formatClock, formatHour, formatInt, formatMinutes, greeting, longDate, shiftDate, shortDate } from '@/lib/format'
@@ -51,7 +52,8 @@ export function HomeView({ date, today, goals, onOpenMetric, onOpenWorkout, onOp
   const weightRange = rangeEnding(date, 30)
   const series = useSeries(HOME_METRICS, start, end)
   const weightSeries = useSeries(WEIGHT_METRICS, weightRange.start, weightRange.end)
-  const night = useSleepNight(date)
+  const night = useSleepDay(date)
+  const mainSession = selectedSleepSession(night.data)
   const workouts = useWorkouts(date, date)
   const intraday = useIntraday(date, true, 'steps')
 
@@ -236,7 +238,7 @@ export function HomeView({ date, today, goals, onOpenMetric, onOpenWorkout, onOp
                 night.isPending ? (
                   <SkeletonText className="w-36" />
                 ) : night.data ? (
-                  `${formatMinutes(night.data.minutesAsleep)} asleep · ${formatClock(night.data.startTime)}–${formatClock(night.data.endTime)}`
+                  `${formatMinutes(night.data.minutesAsleep)} ${!night.data.complete ? 'cached' : night.data.sessions.length > 1 ? 'total' : 'asleep'} · ${night.data.sessions.length > 1 ? `${night.data.sessions.length} sessions · Main sleep shown` : `${formatClock(mainSession!.startTime)}–${formatClock(mainSession!.endTime)}`}`
                 ) : (
                   'No sleep recorded'
                 )
@@ -246,7 +248,7 @@ export function HomeView({ date, today, goals, onOpenMetric, onOpenWorkout, onOp
             {night.isPending ? (
               <SleepStages night={null} loading />
             ) : night.data ? (
-              <SleepStages night={night.data} />
+              <SleepStages night={mainSession} />
             ) : (
               <div className="grid flex-1 place-items-center text-[13px] text-ink-faint">
                 Wear your Fitbit Air to bed to see sleep stages.
