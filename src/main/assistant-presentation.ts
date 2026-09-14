@@ -462,10 +462,11 @@ export function resolveAutomaticPresentation(
       if (source.tool !== 'query_sleep') continue
       try {
         const dataset = sleepDataset(datasetId, datasets)
-        const night = dataset.nights
-          .filter((candidate) => candidate.stages.length)
-          .sort((left, right) => right.date.localeCompare(left.date))[0]
-        if (!night) continue
+        // Session intent belongs to the model's explicit presentation call.
+        // Count all sessions before checking stages, and do not substitute an
+        // older query or another session when this result is ambiguous/empty.
+        const [night] = dataset.nights
+        if (dataset.nights.length !== 1 || !night.stages.length) return []
         return resolvePresentation(
           { sleepCards: [{ datasetId, date: night.date, sessionId: night.id ?? null }] },
           datasets

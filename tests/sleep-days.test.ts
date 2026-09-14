@@ -3,7 +3,7 @@ import { cachedSleepDay, groupSleepDays, selectedSleepSession } from '../src/sha
 import { mapSleep } from '../src/main/sleep-detail'
 import { healthAgentModelData } from '../src/main/health-agent-analysis'
 import { normalizeAssistantParts } from '../src/shared/assistant-parts'
-import { resolvePresentation, type AgentDataset } from '../src/main/assistant-presentation'
+import { resolveAutomaticPresentation, resolvePresentation, type AgentDataset } from '../src/main/assistant-presentation'
 import type { SleepNight } from '../src/shared/types'
 
 function session(id: string, start: string, end: string, asleep: number, period: number, nap = false): SleepNight {
@@ -98,6 +98,38 @@ describe('daily sleep and individual sessions', () => {
     expect(parts[0]).toMatchObject({ night: { id: 'extra', minutesAsleep: 120 }, action: { sessionId: 'extra' } })
     expect(normalizeAssistantParts(JSON.parse(JSON.stringify(parts)))).toEqual(parts)
     expect(() => resolvePresentation({ sleepCards: [{ datasetId: 'sleep', date: '2026-09-14', sessionId: 'missing' }] }, dataset())).toThrow()
+  })
+
+  test('automatic sleep cards do not guess between sessions, even if only one has stages', () => {
+    for (const second of [extra, { ...extra, stages: [] }]) {
+      const data = dataset([main, second])
+      expect(resolveAutomaticPresentation('Show the sleep stages for my second sleep today', data)).toEqual([])
+      expect(resolveAutomaticPresentation('How was my sleep yesterday?', data, 'exact-value')).toEqual([])
+    }
+  })
+
+  test('an ambiguous latest sleep query cannot fall back to an older single-session query', () => {
+    const data = new Map([
+      ['older', dataset([main]).get('sleep')!],
+      ['latest', dataset([main, extra]).get('sleep')!]
+    ])
+    expect(resolveAutomaticPresentation('Show the sleep stages for my second sleep today', data)).toEqual([])
+  })
+
+  test('missing stages cannot substitute another date or an older query', () => {
+    const newer = { ...extra, date: '2026-09-15', startTime: '2026-09-15T14:00:00Z', endTime: '2026-09-15T16:00:00Z', stages: [] }
+    expect(resolveAutomaticPresentation('Show my sleep stages', dataset([main, newer]))).toEqual([])
+    const data = new Map([
+      ['older', dataset([main]).get('sleep')!],
+      ['latest', dataset([{ ...extra, stages: [] }]).get('sleep')!]
+    ])
+    expect(resolveAutomaticPresentation('Show my sleep stages', data)).toEqual([])
+  })
+
+  test('automatic sleep cards still show a single session and retain its navigation id', () => {
+    expect(resolveAutomaticPresentation('Show my sleep stages', dataset([main]))[0]).toMatchObject({
+      type: 'sleep-card', night: { id: 'main' }, action: { sessionId: 'main' }
+    })
   })
 
   test('saved cards without session ids still render', () => {
