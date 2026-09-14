@@ -28,7 +28,7 @@ import type {
   NutritionLogEntry,
   PairedDevice,
   SeriesResult,
-  SleepNight,
+  SleepDay,
   Workout,
   WorkoutTrackResult
 } from '@shared/types'
@@ -111,22 +111,22 @@ export function useSeries(metrics: MetricKey[], start: string, end: string): Pro
   }
 }
 
-export function useSleepRange(start: string, end: string): UseQueryResult<SleepNight[]> {
+export function useSleepRange(start: string, end: string): UseQueryResult<SleepDay[]> {
   return useQuery({
     queryKey: ['sleep', start, end],
     queryFn: ({ signal }) => healthRequest(signal, async (requestId) =>
-      (await window.pulse.health.sleepRange(requestId, start, end)).nights
+      (await window.pulse.health.sleepRange(requestId, start, end)).days
     ),
     staleTime: STALE_MS
   })
 }
 
-export function useSleepNight(date: string): UseQueryResult<SleepNight | null> {
+export function useSleepDay(date: string): UseQueryResult<SleepDay | null> {
   return useQuery({
-    queryKey: ['sleep-night', date],
+    queryKey: ['sleep-day', date],
     queryFn: ({ signal }) => healthRequest(signal, async (requestId) => {
       const result = await window.pulse.health.sleepRange(requestId, date, date)
-      return result.nights.find((n) => n.date === date) ?? null
+      return result.days.find((n) => n.date === date) ?? null
     }),
     staleTime: STALE_MS
   })

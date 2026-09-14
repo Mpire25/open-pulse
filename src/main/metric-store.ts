@@ -16,13 +16,16 @@ import type {
   HeartDetailResult,
   HourlySteps,
   SleepNight,
+  SleepDay,
   Workout
 } from '../shared/types'
 
 export interface DayRecord {
   values: DayValues
-  /** Main sleep ending this date. undefined = never synced; null = synced, none found. */
+  /** Legacy single-session cache, retained until the first successful sleep refresh. */
   sleep?: SleepNight | null
+  /** All sleep ending this date. undefined = never synced; null = synced, none found. */
+  sleepDay?: SleepDay | null
   workouts?: Workout[]
   stepsHourly?: HourlySteps[]
   heartRate?: HeartRatePoint[]
@@ -107,8 +110,10 @@ export function mergeValues(date: string, values: DayValues): void {
   scheduleSave()
 }
 
-export function setSleep(date: string, night: SleepNight | null): void {
-  dayRecord(date).sleep = night
+export function setSleep(date: string, day: SleepDay | null): void {
+  const record = dayRecord(date)
+  record.sleepDay = day
+  delete record.sleep
   scheduleSave()
 }
 

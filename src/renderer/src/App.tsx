@@ -39,6 +39,7 @@ interface NavigationEntry {
   view: View
   selectedDate: string
   detailMetric: MetricDetailSelection | null
+  sleepSessionId?: string
   sleepStagesOpen: boolean
   workoutsOpen: boolean
   workoutRange: MetricRange
@@ -63,6 +64,7 @@ function sameNavigationEntry(a: NavigationEntry, b: NavigationEntry): boolean {
     a.selectedDate === b.selectedDate &&
     a.detailMetric?.metric === b.detailMetric?.metric &&
     a.detailMetric?.range === b.detailMetric?.range &&
+    a.sleepSessionId === b.sleepSessionId &&
     a.sleepStagesOpen === b.sleepStagesOpen &&
     a.workoutsOpen === b.workoutsOpen &&
     a.workoutRange === b.workoutRange &&
@@ -80,6 +82,7 @@ export default function App(): React.JSX.Element {
   const [view, setView] = useState<View>('home')
   // Non-null = a metric detail page is open on top of the current data view.
   const [detailMetric, setDetailMetric] = useState<MetricDetailSelection | null>(null)
+  const [sleepSessionId, setSleepSessionId] = useState<string | undefined>()
   const [sleepStagesOpen, setSleepStagesOpen] = useState(false)
   const [workoutsOpen, setWorkoutsOpen] = useState(false)
   const [workoutRange, setWorkoutRange] = useState<MetricRange>('D')
@@ -96,6 +99,7 @@ export default function App(): React.JSX.Element {
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const backNavigationPending = useRef(false)
   const accountEpochRef = useRef(0)
+  const appliedNavigationRef = useRef<NavigationEntry | null>(null)
 
   // One multi-chat controller shared by the Assistant page and side panel.
   const chat = useChat()
@@ -133,6 +137,8 @@ export default function App(): React.JSX.Element {
     accountEpochRef.current = accountEpoch
     setDetailMetric(null)
     setSleepStagesOpen(false)
+    setSleepSessionId(undefined)
+    appliedNavigationRef.current = null
     setWorkoutsOpen(false)
     setSelectedWorkout(null)
 
@@ -142,6 +148,7 @@ export default function App(): React.JSX.Element {
         {
           ...historyEntry,
           accountEpoch,
+          sleepSessionId: undefined,
           detailMetric: null,
           sleepStagesOpen: false,
           workoutsOpen: false,
@@ -157,6 +164,7 @@ export default function App(): React.JSX.Element {
     return {
       ...entry,
       accountEpoch: accountEpochRef.current,
+      sleepSessionId: undefined,
       detailMetric: null,
       sleepStagesOpen: false,
       workoutsOpen: false,
@@ -166,9 +174,11 @@ export default function App(): React.JSX.Element {
 
   const applyNavigationEntry = (entry: NavigationEntry): void => {
     const currentEntry = forCurrentAccount(entry)
+    appliedNavigationRef.current = currentEntry
     setView(currentEntry.view)
     setSelectedDate(currentEntry.selectedDate)
     setDetailMetric(currentEntry.detailMetric)
+    setSleepSessionId(currentEntry.sleepSessionId)
     setSleepStagesOpen(currentEntry.sleepStagesOpen)
     setWorkoutsOpen(currentEntry.workoutsOpen)
     setWorkoutRange(currentEntry.workoutRange)
@@ -182,6 +192,7 @@ export default function App(): React.JSX.Element {
     selectedDate,
     detailMetric,
     sleepStagesOpen,
+    sleepSessionId,
     workoutsOpen,
     workoutRange,
     selectedWorkout
@@ -255,7 +266,12 @@ export default function App(): React.JSX.Element {
     const handleHistoryNavigation = (event: PopStateEvent): void => {
       backNavigationPending.current = false
       if (!isNavigationEntry(event.state)) return
-      const entry = forCurrentAccount(event.state)
+      let entry = forCurrentAccount(event.state)
+      const previous = appliedNavigationRef.current
+      if (previous?.sleepStagesOpen && entry.view === 'sleep' && !entry.sleepStagesOpen &&
+          previous.selectedDate === entry.selectedDate && previous.accountEpoch === entry.accountEpoch) {
+        entry = { ...entry, sleepSessionId: previous.sleepSessionId }
+      }
       if (entry !== event.state) window.history.replaceState(entry, '')
       applyNavigationEntry(entry)
     }
@@ -332,6 +348,7 @@ export default function App(): React.JSX.Element {
     const nextEntry: NavigationEntry = {
       ...entry,
       selectedDate: date,
+      sleepSessionId: undefined,
       selectedWorkout: null
     }
 
@@ -370,6 +387,7 @@ export default function App(): React.JSX.Element {
     const nextEntry: NavigationEntry = {
       ...entry,
       selectedDate: date,
+      sleepSessionId: undefined,
       detailMetric: { ...entry.detailMetric, range: 'D' }
     }
 
@@ -380,11 +398,16 @@ export default function App(): React.JSX.Element {
     }
   }
 
-  const openSleepStages = (): void => {
+  const selectSleepSession = (id: string): void => {
+    replaceNavigation({ ...currentNavigationEntry(), sleepSessionId: id })
+  }
+
+  const openSleepStages = (id?: string): void => {
     navigate({
       ...currentNavigationEntry(),
       detailMetric: null,
       sleepStagesOpen: true,
+      sleepSessionId: id,
       workoutsOpen: false,
       selectedWorkout: null
     })
@@ -414,6 +437,7 @@ export default function App(): React.JSX.Element {
     const nextEntry: NavigationEntry = {
       ...entry,
       selectedDate: date,
+      sleepSessionId: undefined,
       workoutRange: 'D'
     }
 
@@ -452,6 +476,7 @@ export default function App(): React.JSX.Element {
         selectedDate: action.date,
         detailMetric: null,
         sleepStagesOpen: true,
+        sleepSessionId: action.sessionId,
         workoutsOpen: false,
         selectedWorkout: null
       })
@@ -562,6 +587,8 @@ export default function App(): React.JSX.Element {
                     ) : showSleepStagesDetail ? (
                       <SleepStagesDetailView
                         date={selectedDate}
+                        sessionId={sleepSessionId}
+                        onSelectSession={selectSleepSession}
                         onBack={navigateBack}
                       />
                     ) : showDetail ? (
@@ -602,6 +629,8 @@ export default function App(): React.JSX.Element {
                             date={selectedDate}
                             goals={settings.goals}
                             onOpenMetric={openMetric}
+                            sessionId={sleepSessionId}
+                            onSelectSession={selectSleepSession}
                             onOpenStages={openSleepStages}
                             onSelectDate={selectDate}
                           />
