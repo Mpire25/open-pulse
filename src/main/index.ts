@@ -2,6 +2,9 @@ import { app, BrowserWindow, Menu, nativeImage, screen, session, shell, Tray } f
 import type { MenuItemConstructorOptions } from 'electron'
 import { menuBarBounds, type MenuBarDestination } from '../shared/menu-bar'
 import { join } from 'node:path'
+import { readFileSync } from 'node:fs'
+import menuBarIcon from '../../build/menu-barTemplate.png?asset'
+import menuBarIconRetina from '../../build/menu-barTemplate@2x.png?asset'
 import { registerIpc, registerTrustedRenderer } from './ipc'
 import { createRendererTarget, safeExternalUrl, type RendererTarget } from './renderer-security'
 
@@ -142,18 +145,11 @@ function openDestination(target: RendererTarget, destination: MenuBarDestination
 }
 
 function installMenuBar(target: RendererTarget): void {
-  // A 2x template icon, drawn locally as RGBA so packaging needs no extra asset path.
-  const pixels = Buffer.alloc(36 * 36 * 4)
-  for (let y = 0; y < 36; y++) for (let x = 0; x < 36; x++) {
-    const radius = Math.hypot(x - 17.5, y - 17.5)
-    const ring = radius >= 13 && radius <= 16
-    const pulse = (x >= 7 && x <= 12 && Math.abs(y - 18) <= 1) ||
-      (x >= 12 && x <= 17 && Math.abs(y - (18 - (x - 12) * 2)) <= 2) ||
-      (x >= 17 && x <= 22 && Math.abs(y - (8 + (x - 17) * 4)) <= 2) ||
-      (x >= 22 && x <= 27 && Math.abs(y - (28 - (x - 22) * 2)) <= 2)
-    if (ring || pulse) pixels[(y * 36 + x) * 4 + 3] = 255
-  }
-  const icon = nativeImage.createFromBitmap(pixels, { width: 36, height: 36, scaleFactor: 2 })
+  // Use the app's heart with a transparent ECG cutout. Explicit representations
+  // keep the mark sharp on both standard and Retina displays after packaging.
+  const icon = nativeImage.createEmpty()
+  icon.addRepresentation({ scaleFactor: 1, buffer: readFileSync(menuBarIcon) })
+  icon.addRepresentation({ scaleFactor: 2, buffer: readFileSync(menuBarIconRetina) })
   icon.setTemplateImage(true)
   tray = new Tray(icon)
   tray.setToolTip('OpenPulse — today at a glance')
