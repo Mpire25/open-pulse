@@ -176,6 +176,14 @@ async function memoryRun(main, openPanel) {
   await delay(1800)
   const dimensions = await panel.webContents.executeJavaScript("({ width: innerWidth, height: innerHeight, scroll: document.querySelector('.menu-dashboard').scrollHeight })")
   assert.equal(dimensions.width, 452)
+  const footerLayout = await panel.webContents.executeJavaScript(`(() => {
+    const footer = document.querySelector('.menu-footer').getBoundingClientRect()
+    const quit = document.querySelector('.menu-quit').getBoundingClientRect()
+    const text = document.querySelector('.menu-footer-text').getBoundingClientRect()
+    return { bottomGap: innerHeight - footer.bottom, sameRow: quit.left >= text.right && quit.top < text.bottom && quit.bottom <= footer.bottom }
+  })()`)
+  assert.ok(footerLayout.bottomGap >= 0 && footerLayout.bottomGap <= 14, JSON.stringify(footerLayout))
+  assert.ok(footerLayout.sameRow, 'Quit shares the footer row with sync information')
   writeFileSync(screenshotPath, (await panel.webContents.capturePage()).toPNG())
   console.log('PASS: panel renders and fits')
   assert.ok(dimensions.scroll <= dimensions.height, `Panel overflow: ${JSON.stringify(dimensions)}`)

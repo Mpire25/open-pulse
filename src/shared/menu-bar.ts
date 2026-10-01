@@ -18,9 +18,9 @@ export function isMenuBarDestination(value: unknown): value is MenuBarDestinatio
 }
 
 /** Keep the panel within the display containing the tray, including small displays. */
-export function menuBarBounds(anchor: { x: number; y: number; width: number; height: number }, area: { x: number; y: number; width: number; height: number }): { x: number; y: number; width: number; height: number } {
+export function menuBarBounds(anchor: { x: number; y: number; width: number; height: number }, area: { x: number; y: number; width: number; height: number }, contentHeight = 650): { x: number; y: number; width: number; height: number } {
   const width = Math.min(452, area.width)
-  const height = Math.min(650, area.height)
+  const height = Math.min(Math.max(1, Math.ceil(contentHeight)), area.height)
   return {
     width, height,
     x: Math.round(Math.max(area.x, Math.min(anchor.x + anchor.width / 2 - width / 2, area.x + area.width - width))),

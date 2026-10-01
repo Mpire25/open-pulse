@@ -35,6 +35,21 @@ export default function MenuBarDashboard(): React.JSX.Element {
   const [error, setError] = useState(false)
   const [visible, setVisible] = useState(false)
   const panelRef = useRef<HTMLElement>(null)
+  const contentRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const content = contentRef.current
+    if (!content) return
+    let previousHeight = 0
+    const observer = new ResizeObserver(() => {
+      const height = Math.ceil(content.getBoundingClientRect().height)
+      if (height !== previousHeight) {
+        previousHeight = height
+        void window.pulse.app.resizePanel(height)
+      }
+    })
+    observer.observe(content)
+    return () => observer.disconnect()
+  }, [])
   useEffect(() => {
     // Opening via the native tray must not restore focus to the first button.
     // Tab still moves into the controls and retains their keyboard focus rings.
@@ -69,25 +84,31 @@ export default function MenuBarDashboard(): React.JSX.Element {
   }, [client])
 
   return <main className="menu-dashboard" ref={panelRef} tabIndex={-1}>
-    <header className="menu-header">
-      <button className="menu-brand" onClick={() => open('home')} aria-label="Open OpenPulse">OpenPulse <ArrowUpRight size={13} /></button>
-      <div className="menu-header-actions">
-        {state?.google.connected && <BatteryPill enabled={visible} onClick={() => open('devices')} />}
-        {state?.google.connected && <button className="menu-icon-button" disabled={busy} aria-label="Refresh health data" onClick={() => {
-          setRefreshFailed(false)
-          void refresh().catch(() => setRefreshFailed(true))
-        }}><ArrowClockwise size={17} className={busy ? 'animate-spin' : ''} /></button>}
-        <button className="menu-icon-button" onClick={() => open('settings')} aria-label="Open settings"><GearSix size={17} /></button>
-      </div>
-    </header>
-    {state?.google.connected ? <DashboardContent settings={state.settings} visible={visible} busy={busy} refreshFailed={refreshFailed} /> : <section className="menu-connect">
-      <Moon size={30} />
-      <h1>{error ? 'Unable to load your summary' : state ? 'Your day, at a glance' : 'Loading your summary…'}</h1>
-      <p>{error ? 'Open OpenPulse to check your connection.' : state ? 'Connect your Fitbit account in OpenPulse to see your daily rings and health summary here.' : 'Checking your connection.'}</p>
-      {(state || error) && <button onClick={() => open('settings')}>Open OpenPulse <ArrowUpRight size={14} /></button>}
-    </section>}
-    <button className="menu-quit" onClick={() => void window.pulse.app.quit()}>Quit</button>
+    <div className="menu-content" ref={contentRef}>
+      <header className="menu-header">
+        <button className="menu-brand" onClick={() => open('home')} aria-label="Open OpenPulse">OpenPulse <ArrowUpRight size={13} /></button>
+        <div className="menu-header-actions">
+          {state?.google.connected && <BatteryPill enabled={visible} onClick={() => open('devices')} />}
+          {state?.google.connected && <button className="menu-icon-button" disabled={busy} aria-label="Refresh health data" onClick={() => {
+            setRefreshFailed(false)
+            void refresh().catch(() => setRefreshFailed(true))
+          }}><ArrowClockwise size={17} className={busy ? 'animate-spin' : ''} /></button>}
+          <button className="menu-icon-button" onClick={() => open('settings')} aria-label="Open settings"><GearSix size={17} /></button>
+        </div>
+      </header>
+      {state?.google.connected ? <DashboardContent settings={state.settings} visible={visible} busy={busy} refreshFailed={refreshFailed} /> : <section className="menu-connect">
+        <Moon size={30} />
+        <h1>{error ? 'Unable to load your summary' : state ? 'Your day, at a glance' : 'Loading your summary…'}</h1>
+        <p>{error ? 'Open OpenPulse to check your connection.' : state ? 'Connect your Fitbit account in OpenPulse to see your daily rings and health summary here.' : 'Checking your connection.'}</p>
+        {(state || error) && <button onClick={() => open('settings')}>Open OpenPulse <ArrowUpRight size={14} /></button>}
+      </section>}
+      {!state?.google.connected && <QuitButton />}
+    </div>
   </main>
+}
+
+function QuitButton(): React.JSX.Element {
+  return <button className="menu-quit" onClick={() => void window.pulse.app.quit()}>Quit</button>
 }
 
 function DashboardContent({ settings, visible, busy, refreshFailed }: { settings: AppSettings; visible: boolean; busy: boolean; refreshFailed: boolean }): React.JSX.Element {
@@ -189,8 +210,11 @@ function DashboardContent({ settings, visible, busy, refreshFailed }: { settings
       </> : <p className="menu-muted">{sleep.isPending ? 'Loading sleep stages…' : 'Sleep stages unavailable'}</p>}
     </button>
     <footer className="menu-footer">
-      <button className="menu-device-sync" onClick={() => open('devices', today)} title={device?.lastSync ?? undefined}>{devices.isPending ? 'Loading device sync…' : syncLabel}</button>
-      <p className="menu-freshness" role="status">{anyError ? 'Some data could not be updated. Open the app for details.' : busy ? 'Checking available data…' : checkedAt ? `Checked at ${checkedAt} · values depend on device sync` : 'Showing available data'}</p>
+      <div className="menu-footer-text">
+        <button className="menu-device-sync" onClick={() => open('devices', today)} title={device?.lastSync ?? undefined}>{devices.isPending ? 'Loading device sync…' : syncLabel}</button>
+        <p className="menu-freshness" role="status">{anyError ? 'Some data could not be updated. Open the app for details.' : busy ? 'Checking available data…' : checkedAt ? `Checked at ${checkedAt} · values depend on device sync` : 'Showing available data'}</p>
+      </div>
+      <QuitButton />
     </footer>
   </>
 }

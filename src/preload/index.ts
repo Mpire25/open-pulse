@@ -74,6 +74,7 @@ const api = {
       return () => panelVisibilityCallbacks.delete(callback)
     },
     open: (destination: MenuBarDestination): Promise<void> => ipcRenderer.invoke('app:open', destination),
+    resizePanel: (height: number): Promise<void> => ipcRenderer.invoke('app:resize-panel', height),
     closePanel: (): Promise<void> => ipcRenderer.invoke('app:close-panel'),
     quit: (): Promise<void> => ipcRenderer.invoke('app:quit'),
     onNavigate: (callback: (destination: MenuBarDestination) => void): (() => void) => {

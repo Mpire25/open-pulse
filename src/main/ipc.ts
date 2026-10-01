@@ -167,10 +167,14 @@ function sendToTrustedRenderers(channel: string, ...args: unknown[]): void {
   }
 }
 
-export function registerIpc(commands: { open: (destination: MenuBarDestination) => void; close: () => void; quit: () => void; settingsChanged: (settings: AppSettings) => void }): void {
+export function registerIpc(commands: { open: (destination: MenuBarDestination) => void; close: () => void; resizePanel: (height: number, senderId: number) => void; quit: () => void; settingsChanged: (settings: AppSettings) => void }): void {
   handle('app:open', (_event, destination: unknown) => {
     if (!isMenuBarDestination(destination)) throw new Error('Invalid navigation destination')
     commands.open(destination)
+  })
+  handle('app:resize-panel', (event, height: unknown) => {
+    if (typeof height !== 'number' || !Number.isFinite(height) || height <= 0) throw new Error('Invalid panel height')
+    commands.resizePanel(height, event.sender.id)
   })
   handle('app:close-panel', () => commands.close())
   handle('app:quit', () => commands.quit())

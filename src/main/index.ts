@@ -51,6 +51,7 @@ function applyContentSecurityPolicy(target: RendererTarget): void {
 let mainWindow: BrowserWindow | null = null
 let menuPanel: BrowserWindow | null = null
 let tray: Tray | null = null
+let panelContentHeight = 650
 let panelReady = false
 let panelRequested = false
 let quitting = false
@@ -198,7 +199,7 @@ function installMenuBar(target: RendererTarget): void {
     panelRequested = true
     const anchor = tray!.getBounds()
     const panel = prepareMenuPanel(target)
-    panel.setBounds(menuBarBounds(anchor, screen.getDisplayMatching(anchor).workArea))
+    panel.setBounds(menuBarBounds(anchor, screen.getDisplayMatching(anchor).workArea, panelContentHeight))
     if (panelReady) { panel.show(); panel.focus() }
   })
   // Preload the local UI once. Health requests remain disabled until shown.
@@ -253,6 +254,12 @@ app.whenReady().then(() => {
   registerIpc({
     open: (destination) => openDestination(target, destination),
     close: closeMenuPanel,
+    resizePanel: (height, senderId) => {
+      if (!menuPanel || menuPanel.webContents.id !== senderId || !tray) return
+      panelContentHeight = height
+      const anchor = tray.getBounds()
+      menuPanel.setBounds(menuBarBounds(anchor, screen.getDisplayMatching(anchor).workArea, height))
+    },
     quit: () => app.quit(),
     settingsChanged: (settings) => applyMenuBarPreference(target, settings.menuBarEnabled)
   })
