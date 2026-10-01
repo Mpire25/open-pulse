@@ -70,7 +70,7 @@ function createWindow(target: RendererTarget, panel = false): BrowserWindow {
     backgroundColor: '#00000000',
     vibrancy: 'sidebar',
     visualEffectState: 'active',
-    ...(panel ? { width: 452, height: 650, minWidth: 0, minHeight: 0, frame: false, resizable: false, maximizable: false, minimizable: false, fullscreenable: false, skipTaskbar: true, alwaysOnTop: true, vibrancy: undefined, backgroundColor: '#0e0f12' } : {}),
+    ...(panel ? { type: 'panel', width: 452, height: 650, minWidth: 0, minHeight: 0, frame: false, resizable: false, maximizable: false, minimizable: false, fullscreenable: false, skipTaskbar: true, alwaysOnTop: true, vibrancy: undefined, backgroundColor: '#0e0f12' } : {}),
     webPreferences: {
       preload: join(import.meta.dirname, '../preload/index.mjs'),
       // electron-vite emits this preload as ESM. Electron's sandboxed preload
@@ -170,7 +170,15 @@ function prepareMenuPanel(target: RendererTarget): BrowserWindow {
     panelReady = true
     if (panelRequested) { panel.show(); panel.focus() }
   })
-  panel.on('blur', closeMenuPanel)
+  panel.on('blur', () => {
+    // A tray press may blur the panel before its click event arrives. Let that
+    // click close it, rather than clearing the toggle state and reopening it.
+    const cursor = screen.getCursorScreenPoint()
+    const bounds = tray?.getBounds()
+    if (bounds && cursor.x >= bounds.x && cursor.x < bounds.x + bounds.width &&
+      cursor.y >= bounds.y && cursor.y < bounds.y + bounds.height) return
+    closeMenuPanel()
+  })
   panel.on('close', (event) => {
     if (!quitting) { event.preventDefault(); closeMenuPanel() }
   })
@@ -194,6 +202,8 @@ function installMenuBar(target: RendererTarget): void {
   icon.setTemplateImage(true)
   tray = new Tray(icon)
   tray.setToolTip('OpenPulse — today at a glance')
+  // Treat both presses of a double-click as ordinary popup toggles.
+  tray.setIgnoreDoubleClickEvents(true)
   tray.on('click', () => {
     if (panelRequested) { closeMenuPanel(); return }
     panelRequested = true

@@ -2,7 +2,7 @@
 // bunx electron scripts/menu-bar-smoke.cjs [--memory] [--entry /path/to/out/main/index.js]
 // Uses generated fixture data in a temporary profile, without showing/focusing windows or signing in.
 const electron = require('electron')
-const { app, BrowserWindow, ipcMain } = electron
+const { app, BrowserWindow, ipcMain, screen } = electron
 const { mkdtempSync, writeFileSync, readFileSync, existsSync, rmSync } = require('node:fs')
 const { tmpdir } = require('node:os')
 const { join, resolve } = require('node:path')
@@ -172,6 +172,29 @@ async function memoryRun(main, openPanel) {
   if (measureMemory) { await memoryRun(main, openPanel); return }
   let panel = await openPanel()
   const initialPanelId = panel.id
+  assert.equal(tray.getIgnoreDoubleClickEvents(), true, 'Rapid clicks must use the same toggle')
+  const originalCursorPoint = screen.getCursorScreenPoint
+  const trayBounds = tray.getBounds()
+  try {
+    screen.getCursorScreenPoint = () => ({ x: trayBounds.x + trayBounds.width / 2, y: trayBounds.y + trayBounds.height / 2 })
+    const traceStart = visibilityTrace.length
+    blurHandlers.get(panel.id)()
+    tray.emit('click')
+    assert.equal(panel.isVisible(), false, 'Second tray press closes even when blur precedes click')
+    tray.emit('click')
+    assert.equal(panel.isVisible(), true, 'Next press opens the panel')
+    tray.emit('click')
+    assert.equal(panel.isVisible(), false, 'Rapid second press closes the panel')
+    assert.ok(visibilityTrace.slice(traceStart).every(([, id]) => id === panel.id), 'Tray toggles must not show the main window')
+    screen.getCursorScreenPoint = () => ({ x: trayBounds.x - 100, y: trayBounds.y + 100 })
+    tray.emit('click')
+    blurHandlers.get(panel.id)()
+    assert.equal(panel.isVisible(), false, 'Clicking away still dismisses the panel')
+  } finally {
+    screen.getCursorScreenPoint = originalCursorPoint
+  }
+  panel = await openPanel()
+  console.log('PASS: repeated tray clicks only toggle the popup')
   await until(() => panel.webContents.executeJavaScript("document.body.innerText.includes('12,145') && document.querySelector('[role=\"meter\"]')?.getAttribute('aria-valuenow') === '76'"), 'fixture values')
   await delay(1800)
   const dimensions = await panel.webContents.executeJavaScript("({ width: innerWidth, height: innerHeight, scroll: document.querySelector('.menu-dashboard').scrollHeight })")
