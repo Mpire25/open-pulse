@@ -182,3 +182,10 @@ Sleep duration is the daily total, while the stage breakdown is for the main sle
 Click outside the panel or press Escape to dismiss it. Closing the main window
 keeps the menu bar available; Quit (in the panel or the icon's right-click menu)
 exits OpenPulse. There is no automatic launch-at-login behaviour.
+
+For a native fixture smoke test, run `bun run build` followed by
+`bunx electron scripts/menu-bar-smoke.cjs`. This briefly opens and focuses test
+windows, uses a temporary profile with mock health/account responses, and exits
+when done. It checks chart navigation after closing the main window, account
+changes, empty/error states, refresh, dismissal, and panel fit. A fixture preview
+is saved to `out/menu-bar-preview.png`.

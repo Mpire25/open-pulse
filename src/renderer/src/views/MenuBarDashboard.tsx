@@ -142,7 +142,7 @@ function DashboardContent({ settings }: { settings: AppSettings }): React.JSX.El
       <button className="menu-section-title" onClick={() => open('activity', today, 'steps', 'W')}><h2>Steps this week</h2><span>7 days <ArrowUpRight size={12} /></span></button>
       {series.isMetricPending('steps') ? <div className="menu-chart-empty">Loading steps…</div> : steps.every((p) => p.value === null) ? <div className="menu-chart-empty">No steps recorded this week</div> : <ColumnChart
         data={steps.map((p) => ({ key: p.date, value: p.value, label: p.date, tick: new Date(`${p.date}T12:00:00`).toLocaleDateString([], { weekday: 'narrow' }) }))}
-        color="var(--color-activity)" height={120} emphasisIndex={6}
+        color="var(--color-activity)" height={105} emphasisIndex={6}
         goal={settings.goals.steps > 0 ? { value: settings.goals.steps, label: 'Goal' } : null}
         format={formatInt} unitLabel="steps" onSelect={(p) => open('activity', p.key, 'steps')}
       />}
