@@ -165,3 +165,20 @@ for WHOOP and also took ideas from
 OpenPulse is available under the [MIT License](LICENSE). Third-party names,
 trademarks, and product imagery are excluded; see
 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
+### macOS menu bar
+
+Click the OpenPulse pulse icon in the macOS menu bar for today's goal rings,
+health summary, seven-day steps chart, main-sleep stage breakdown, and device
+battery/sync information. Rings and summary tiles open the corresponding app
+page; selecting a steps bar opens that day's steps. The week heading opens the
+weekly detail view. Weight opens the date of the latest displayed reading.
+
+The panel checks data on opening and every five minutes while visible, using the
+existing health cache. Refresh requests an update; device sync time is shown
+separately from the time OpenPulse checked its data. Missing values remain empty.
+Sleep duration is the daily total, while the stage breakdown is for the main sleep.
+
+Click outside the panel or press Escape to dismiss it. Closing the main window
+keeps the menu bar available; Quit (in the panel or the icon's right-click menu)
+exits OpenPulse. There is no automatic launch-at-login behaviour.

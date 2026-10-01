@@ -1,5 +1,6 @@
-import { app, BrowserWindow, Menu, session, shell } from 'electron'
+import { app, BrowserWindow, Menu, nativeImage, screen, session, shell, Tray } from 'electron'
 import type { MenuItemConstructorOptions } from 'electron'
+import { menuBarBounds, type MenuBarDestination } from '../shared/menu-bar'
 import { join } from 'node:path'
 import { registerIpc, registerTrustedRenderer } from './ipc'
 import { createRendererTarget, safeExternalUrl, type RendererTarget } from './renderer-security'
@@ -43,7 +44,11 @@ function applyContentSecurityPolicy(target: RendererTarget): void {
   })
 }
 
-function createWindow(target: RendererTarget): BrowserWindow {
+let mainWindow: BrowserWindow | null = null
+let menuPanel: BrowserWindow | null = null
+let tray: Tray | null = null
+
+function createWindow(target: RendererTarget, panel = false): BrowserWindow {
   const win = new BrowserWindow({
     width: 1280,
     height: 840,
@@ -55,6 +60,7 @@ function createWindow(target: RendererTarget): BrowserWindow {
     backgroundColor: '#00000000',
     vibrancy: 'sidebar',
     visualEffectState: 'active',
+    ...(panel ? { width: 452, height: 650, minWidth: 0, minHeight: 0, frame: false, resizable: false, maximizable: false, minimizable: false, fullscreenable: false, skipTaskbar: true, alwaysOnTop: true, vibrancy: undefined, backgroundColor: '#0e0f12' } : {}),
     webPreferences: {
       preload: join(import.meta.dirname, '../preload/index.mjs'),
       // electron-vite emits this preload as ESM. Electron's sandboxed preload
@@ -70,7 +76,11 @@ function createWindow(target: RendererTarget): BrowserWindow {
 
   registerTrustedRenderer(win.webContents, target.isExpectedUrl)
 
-  win.on('ready-to-show', () => win.show())
+  if (!panel) {
+    mainWindow = win
+    win.once('closed', () => { if (mainWindow === win) mainWindow = null })
+  }
+  win.on('ready-to-show', () => { win.show(); if (panel) win.focus() })
 
   // Any external link opens in the default browser, never inside the app.
   win.webContents.setWindowOpenHandler(({ url }) => {
@@ -91,13 +101,15 @@ function createWindow(target: RendererTarget): BrowserWindow {
 
   win.webContents.on('will-attach-webview', (event) => event.preventDefault())
 
-  void win.loadURL(target.url.toString())
+  const url = new URL(target.url)
+  if (panel) url.hash = 'menu-bar'
+  void win.loadURL(url.toString())
   return win
 }
 
 function sendNewChatCommand(target: RendererTarget): void {
   const win =
-    BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0] ?? createWindow(target)
+    mainWindow ?? createWindow(target)
   const send = (): void => {
     if (!win.webContents.isDestroyed()) win.webContents.send('app:new-chat')
   }
@@ -107,8 +119,61 @@ function sendNewChatCommand(target: RendererTarget): void {
   } else {
     send()
   }
+  if (win.isMinimized()) win.restore()
   win.show()
   win.focus()
+}
+
+function closeMenuPanel(): void {
+  menuPanel?.close()
+}
+
+function openDestination(target: RendererTarget, destination: MenuBarDestination): void {
+  const win = mainWindow ?? createWindow(target)
+  const send = (): void => {
+    if (!win.isDestroyed()) win.webContents.send('app:navigate', destination)
+  }
+  if (win.webContents.isLoadingMainFrame()) win.webContents.once('did-finish-load', send)
+  else send()
+  if (win.isMinimized()) win.restore()
+  win.show()
+  win.focus()
+  closeMenuPanel()
+}
+
+function installMenuBar(target: RendererTarget): void {
+  // A 2x template icon, drawn locally as RGBA so packaging needs no extra asset path.
+  const pixels = Buffer.alloc(36 * 36 * 4)
+  for (let y = 0; y < 36; y++) for (let x = 0; x < 36; x++) {
+    const radius = Math.hypot(x - 17.5, y - 17.5)
+    const ring = radius >= 13 && radius <= 16
+    const pulse = (x >= 7 && x <= 12 && Math.abs(y - 18) <= 1) ||
+      (x >= 12 && x <= 17 && Math.abs(y - (18 - (x - 12) * 2)) <= 2) ||
+      (x >= 17 && x <= 22 && Math.abs(y - (8 + (x - 17) * 4)) <= 2) ||
+      (x >= 22 && x <= 27 && Math.abs(y - (28 - (x - 22) * 2)) <= 2)
+    if (ring || pulse) pixels[(y * 36 + x) * 4 + 3] = 255
+  }
+  const icon = nativeImage.createFromBitmap(pixels, { width: 36, height: 36, scaleFactor: 2 })
+  icon.setTemplateImage(true)
+  tray = new Tray(icon)
+  tray.setToolTip('OpenPulse — today at a glance')
+  tray.on('click', () => {
+    if (menuPanel) { closeMenuPanel(); return }
+    const anchor = tray!.getBounds()
+    const panel = createWindow(target, true)
+    menuPanel = panel
+    panel.setBounds(menuBarBounds(anchor, screen.getDisplayMatching(anchor).workArea))
+    panel.on('blur', () => { if (!panel.isDestroyed()) panel.close() })
+    panel.webContents.on('before-input-event', (event, input) => {
+      if (input.key === 'Escape') { event.preventDefault(); panel.close() }
+    })
+    panel.once('closed', () => { if (menuPanel === panel) menuPanel = null })
+  })
+  tray.on('right-click', () => tray?.popUpContextMenu(Menu.buildFromTemplate([
+    { label: 'Open OpenPulse', click: () => { const win = mainWindow ?? createWindow(target); if (win.isMinimized()) win.restore(); win.show(); win.focus() } },
+    { type: 'separator' }, { role: 'quit', label: 'Quit OpenPulse' }
+  ])))
+  app.once('before-quit', () => { tray?.destroy(); tray = null })
 }
 
 function installApplicationMenu(target: RendererTarget): void {
@@ -139,11 +204,15 @@ function installApplicationMenu(target: RendererTarget): void {
 app.whenReady().then(() => {
   const target = rendererTarget()
   applyContentSecurityPolicy(target)
-  registerIpc()
+  registerIpc({ open: (destination) => openDestination(target, destination), close: closeMenuPanel, quit: () => app.quit() })
   installApplicationMenu(target)
   createWindow(target)
+  if (process.platform === 'darwin') installMenuBar(target)
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow(target)
+    const win = mainWindow ?? createWindow(target)
+    if (win.isMinimized()) win.restore()
+    win.show()
+    win.focus()
   })
 })
 

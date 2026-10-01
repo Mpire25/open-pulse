@@ -1,3 +1,4 @@
+import { isMenuBarDestination, type MenuBarDestination } from '../shared/menu-bar'
 import { ipcMain } from 'electron'
 import type { IpcMainInvokeEvent, WebContents } from 'electron'
 import type {
@@ -166,7 +167,13 @@ function sendToTrustedRenderers(channel: string, ...args: unknown[]): void {
   }
 }
 
-export function registerIpc(): void {
+export function registerIpc(commands: { open: (destination: MenuBarDestination) => void; close: () => void; quit: () => void }): void {
+  handle('app:open', (_event, destination: unknown) => {
+    if (!isMenuBarDestination(destination)) throw new Error('Invalid navigation destination')
+    commands.open(destination)
+  })
+  handle('app:close-panel', () => commands.close())
+  handle('app:quit', () => commands.quit())
   onGoogleAuthInvalidated(notifyGoogleDisconnected)
   handle('settings:get', () => getSettings())
   handle('settings:update', (_e, patch: Partial<AppSettings>) => updateSettings(patch))

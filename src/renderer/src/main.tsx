@@ -5,6 +5,7 @@ import '@fontsource-variable/archivo'
 import '@fontsource/ibm-plex-mono/400.css'
 import '@fontsource/ibm-plex-mono/500.css'
 import App from './App'
+import MenuBarDashboard from './views/MenuBarDashboard'
 import './globals.css'
 
 // One retry only: the main process already retries 429s with backoff, and
@@ -22,7 +23,7 @@ const queryClient = new QueryClient({
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <QueryClientProvider client={queryClient}>
-      <App />
+      {window.location.hash === '#menu-bar' ? <MenuBarDashboard /> : <App />}
     </QueryClientProvider>
   </React.StrictMode>
 )

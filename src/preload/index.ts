@@ -1,3 +1,4 @@
+import type { MenuBarDestination } from '../shared/menu-bar'
 import { contextBridge, ipcRenderer } from 'electron'
 import { healthWireArgs, unwrapHealthResult } from '../shared/health-ipc'
 import type {
@@ -50,8 +51,31 @@ ipcRenderer.on('app:new-chat', () => {
   for (const callback of newChatCallbacks) callback()
 })
 
+const navigationCallbacks = new Set<(destination: MenuBarDestination) => void>()
+let pendingNavigation: MenuBarDestination | null = null
+ipcRenderer.on('app:navigate', (_event, destination: MenuBarDestination) => {
+  if (!navigationCallbacks.size) pendingNavigation = destination
+  else for (const callback of navigationCallbacks) callback(destination)
+})
+
 const api = {
   app: {
+    open: (destination: MenuBarDestination): Promise<void> => ipcRenderer.invoke('app:open', destination),
+    closePanel: (): Promise<void> => ipcRenderer.invoke('app:close-panel'),
+    quit: (): Promise<void> => ipcRenderer.invoke('app:quit'),
+    onNavigate: (callback: (destination: MenuBarDestination) => void): (() => void) => {
+      navigationCallbacks.add(callback)
+      if (pendingNavigation) {
+        queueMicrotask(() => {
+          if (navigationCallbacks.has(callback) && pendingNavigation) {
+            const destination = pendingNavigation
+            pendingNavigation = null
+            callback(destination)
+          }
+        })
+      }
+      return () => navigationCallbacks.delete(callback)
+    },
     onNewChat: (callback: () => void): (() => void) => {
       newChatCallbacks.add(callback)
       if (newChatPending) {
