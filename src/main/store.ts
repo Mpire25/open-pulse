@@ -21,6 +21,7 @@ interface StoreFile {
 }
 
 const DEFAULTS: AppSettings = {
+  menuBarEnabled: true,
   googleClientId: '',
   googleClientSecret: '',
   googleClientSecretConfigured: false,
@@ -63,6 +64,7 @@ function normalizeAssistant(raw?: Partial<AssistantSettings>): AssistantSettings
 function normalizeSettings(raw?: Partial<AppSettings>): AppSettings {
   const chatRetention = raw?.chatRetention as ChatRetention | undefined
   return {
+    menuBarEnabled: typeof raw?.menuBarEnabled === 'boolean' ? raw.menuBarEnabled : DEFAULTS.menuBarEnabled,
     googleClientId: raw?.googleClientId ?? DEFAULTS.googleClientId,
     googleClientSecret: '',
     googleClientSecretConfigured: false,
@@ -98,6 +100,11 @@ function load(): StoreFile {
 
 function persist(): void {
   writeFileSync(filePath(), JSON.stringify(load(), null, 2), 'utf8')
+}
+
+/** Read the desktop preference at startup without opening credential storage. */
+export function getMenuBarEnabled(): boolean {
+  return load().settings.menuBarEnabled
 }
 
 export function getSettings(): AppSettings {

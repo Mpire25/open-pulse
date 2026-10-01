@@ -1,3 +1,4 @@
+import { isMenuBarDestination, type MenuBarDestination } from '../shared/menu-bar'
 import { ipcMain } from 'electron'
 import type { IpcMainInvokeEvent, WebContents } from 'electron'
 import type {
@@ -166,10 +167,24 @@ function sendToTrustedRenderers(channel: string, ...args: unknown[]): void {
   }
 }
 
-export function registerIpc(): void {
+export function registerIpc(commands: { open: (destination: MenuBarDestination) => void; close: () => void; resizePanel: (height: number, senderId: number) => void; quit: () => void; settingsChanged: (settings: AppSettings) => void }): void {
+  handle('app:open', (_event, destination: unknown) => {
+    if (!isMenuBarDestination(destination)) throw new Error('Invalid navigation destination')
+    commands.open(destination)
+  })
+  handle('app:resize-panel', (event, height: unknown) => {
+    if (typeof height !== 'number' || !Number.isFinite(height) || height <= 0) throw new Error('Invalid panel height')
+    commands.resizePanel(height, event.sender.id)
+  })
+  handle('app:close-panel', () => commands.close())
+  handle('app:quit', () => commands.quit())
   onGoogleAuthInvalidated(notifyGoogleDisconnected)
   handle('settings:get', () => getSettings())
-  handle('settings:update', (_e, patch: Partial<AppSettings>) => updateSettings(patch))
+  handle('settings:update', (_e, patch: Partial<AppSettings>) => {
+    const settings = updateSettings(patch)
+    commands.settingsChanged(settings)
+    return settings
+  })
 
   handle('google:status', () => getGoogleStatus())
   handle('google:connect', async () => {
@@ -263,7 +278,17 @@ export function registerIpc(): void {
     getBodyMeasurements(start, end, signal)
   )
   healthHandle('health:devices', (_e, signal, force?: boolean) => getDevices(force, signal))
-  handle('health:refresh', () => clearHealthCache())
+  handle('health:refresh', (event) => {
+    clearHealthCache()
+    // The caller awaits this request and invalidates its own query cache.
+    // Other windows must invalidate theirs too, including a hidden popup.
+    for (const renderer of trustedRenderers.values()) {
+      const { webContents, isExpectedUrl } = renderer
+      if (webContents.id !== event.sender.id && !webContents.isDestroyed() && isExpectedUrl(webContents.getURL())) {
+        webContents.send('health:invalidated')
+      }
+    }
+  })
 
   // Live "requests in flight" counter for the topbar sync indicator.
   setApiActivityListener((pending) => {

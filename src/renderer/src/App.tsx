@@ -343,6 +343,19 @@ export default function App(): React.JSX.Element {
     })
   }
 
+  useEffect(() => window.pulse.app.onNavigate((destination) => {
+    navigate({
+      ...currentNavigationEntry(),
+      view: destination.view,
+      selectedDate: destination.date,
+      detailMetric: destination.metric ? { metric: destination.metric, range: destination.range ?? 'D' } : null,
+      sleepSessionId: undefined,
+      sleepStagesOpen: false,
+      workoutsOpen: false,
+      selectedWorkout: null
+    })
+  }))
+
   const selectDate = (date: string): void => {
     const entry = currentNavigationEntry()
     const nextEntry: NavigationEntry = {

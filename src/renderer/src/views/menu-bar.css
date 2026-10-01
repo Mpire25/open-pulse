@@ -1,0 +1,52 @@
+.menu-dashboard { height: 100%; overflow-y: auto; background: var(--color-canvas); line-height: 1.35; color: var(--color-ink); }
+.menu-dashboard:focus { outline: none; }
+.menu-content { display: flex; flex-direction: column; padding: 12px 20px; }
+.menu-content > * { flex-shrink: 0; }
+.menu-dashboard button { cursor: pointer; }
+.menu-dashboard button:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 3px; border-radius: 8px; }
+.menu-header, .menu-header-actions, .menu-day, .menu-section-title { display: flex; align-items: center; justify-content: space-between; }
+.menu-header { margin-bottom: 6px; }
+.menu-brand { display: flex; gap: 6px; align-items: center; font-size: 13px; font-weight: 650; letter-spacing: -.3px; }
+.menu-header-actions { gap: 12px; }
+.menu-icon-button { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 8px; color: var(--color-ink-dim); }
+.menu-icon-button:hover { background: var(--color-panel-2); color: var(--color-ink); }
+.menu-icon-button:disabled { opacity: .5; cursor: default; }
+.menu-quit { align-self: flex-end; flex-shrink: 0; padding: 4px 6px; border-radius: 5px; font-size: 10px; line-height: 1.2; color: var(--color-danger); }
+.menu-quit:hover { background: rgb(224 84 78 / 0.12); }
+.menu-day { margin-bottom: 8px; }
+.menu-day h1 { font-size: 23px; font-weight: 650; letter-spacing: -.7px; }
+.menu-day > span { font-size: 12px; color: var(--color-ink-dim); }
+.menu-rings { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.menu-ring { display: flex; flex-direction: column; align-items: center; gap: 10px; border-radius: 12px; padding: 4px 0 10px; }
+.menu-ring:hover, .menu-stats button:hover { background: var(--color-panel); }
+.menu-ring strong { display: block; font-size: 23px; font-weight: 650; letter-spacing: -.8px; }
+.menu-ring span { display: block; color: var(--color-ink-dim); font-size: 9px; text-transform: uppercase; letter-spacing: .7px; }
+.menu-ring small { color: var(--color-ink-dim); font-size: 9px; font-family: var(--font-mono); }
+.menu-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--color-hairline); }
+.menu-stats button { text-align: center; border-radius: 8px; padding: 2px; }
+.menu-stats span { display: flex; gap: 5px; align-items: center; justify-content: center; font-size: 10px; color: var(--color-ink-dim); }
+.menu-stats strong { display: block; margin-top: 5px; font-size: 16px; font-weight: 600; }
+.menu-stats small { display: block; font-size: 10px; margin-top: 4px; color: var(--color-ink-dim); }
+.menu-stats .menu-reading-date { font-size: 9px; }
+.menu-section { padding-top: 10px; }
+.menu-section-title { width: 100%; margin-bottom: 6px; text-align: left; }
+.menu-section-title h2 { font-size: 12px; font-weight: 600; }
+.menu-section-title > span { display: flex; gap: 5px; align-items: center; color: var(--color-ink-dim); font-size: 10px; }
+.menu-chart-empty { height: 105px; display: grid; place-items: center; font-size: 12px; color: var(--color-ink-dim); }
+.menu-sleep { display: block; width: 100%; text-align: left; border-top: 1px solid var(--color-hairline); margin-top: 4px; padding-bottom: 10px; }
+.menu-stage-bar { display: flex; gap: 3px; height: 12px; border-radius: 4px; overflow: hidden; margin: 8px 0 6px; }
+.menu-stage-bar span { min-width: 0; }
+.menu-stage-legend { display: grid; grid-template-columns: repeat(4, 1fr); }
+.menu-stage-legend span { display: flex; align-items: center; gap: 4px; font-size: 9px; color: var(--color-ink-dim); }
+.menu-stage-legend i { width: 5px; height: 5px; border-radius: 50%; }
+.menu-stage-legend strong { font-size: 11px; font-weight: 500; }
+.menu-footer { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; border-top: 1px solid var(--color-hairline); padding-top: 8px; }
+.menu-footer-text { min-width: 0; }
+.menu-device-sync { display: block; text-align: left; font-size: 10px; color: var(--color-ink-dim); }
+.menu-freshness { font-size: 9px; color: var(--color-ink-dim); margin-top: 6px; }
+.menu-muted { font-size: 11px; color: var(--color-ink-dim); padding: 12px 0; }
+.menu-connect { display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; min-height: 420px; gap: 18px; }
+.menu-connect > svg { color: var(--color-sleep); }
+.menu-connect h1 { font-size: 22px; font-weight: 600; }
+.menu-connect p { color: var(--color-ink-dim); font-size: 13px; line-height: 1.7; max-width: 300px; }
+.menu-connect button { display: flex; gap: 8px; align-items: center; background: var(--color-panel-2); padding: 10px 16px; border-radius: 9px; font-size: 12px; }

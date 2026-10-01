@@ -460,6 +460,7 @@ export const ASSISTANT_MODEL_PRESETS: {
 export const ASSISTANT_MODEL_PATTERN = /^[a-zA-Z0-9._:-]{1,100}$/
 
 export interface AppSettings {
+  menuBarEnabled: boolean
   googleClientId: string
   googleClientSecret: string
   googleClientSecretConfigured: boolean

@@ -1,3 +1,4 @@
+import type { MenuBarDestination } from '../shared/menu-bar'
 import { contextBridge, ipcRenderer } from 'electron'
 import { healthWireArgs, unwrapHealthResult } from '../shared/health-ipc'
 import type {
@@ -50,8 +51,45 @@ ipcRenderer.on('app:new-chat', () => {
   for (const callback of newChatCallbacks) callback()
 })
 
+const navigationCallbacks = new Set<(destination: MenuBarDestination) => void>()
+let pendingNavigation: MenuBarDestination | null = null
+ipcRenderer.on('app:navigate', (_event, destination: MenuBarDestination) => {
+  if (!navigationCallbacks.size) pendingNavigation = destination
+  else for (const callback of navigationCallbacks) callback(destination)
+})
+
+let panelVisible = false
+const panelVisibilityCallbacks = new Set<(visible: boolean) => void>()
+ipcRenderer.on('app:panel-visibility', (_event, visible: boolean) => {
+  panelVisible = visible
+  for (const callback of panelVisibilityCallbacks) callback(visible)
+})
+
 const api = {
   app: {
+    platform: process.platform,
+    onPanelVisibility: (callback: (visible: boolean) => void): (() => void) => {
+      panelVisibilityCallbacks.add(callback)
+      queueMicrotask(() => { if (panelVisibilityCallbacks.has(callback)) callback(panelVisible) })
+      return () => panelVisibilityCallbacks.delete(callback)
+    },
+    open: (destination: MenuBarDestination): Promise<void> => ipcRenderer.invoke('app:open', destination),
+    resizePanel: (height: number): Promise<void> => ipcRenderer.invoke('app:resize-panel', height),
+    closePanel: (): Promise<void> => ipcRenderer.invoke('app:close-panel'),
+    quit: (): Promise<void> => ipcRenderer.invoke('app:quit'),
+    onNavigate: (callback: (destination: MenuBarDestination) => void): (() => void) => {
+      navigationCallbacks.add(callback)
+      if (pendingNavigation) {
+        queueMicrotask(() => {
+          if (navigationCallbacks.has(callback) && pendingNavigation) {
+            const destination = pendingNavigation
+            pendingNavigation = null
+            callback(destination)
+          }
+        })
+      }
+      return () => navigationCallbacks.delete(callback)
+    },
     onNewChat: (callback: () => void): (() => void) => {
       newChatCallbacks.add(callback)
       if (newChatPending) {
@@ -135,6 +173,11 @@ const api = {
       invokeHealth('health:devices', [force], requestId),
     cancel: (requestId: string): Promise<void> => ipcRenderer.invoke('health:cancel', requestId),
     refresh: (): Promise<void> => ipcRenderer.invoke('health:refresh'),
+    onInvalidated: (callback: () => void): (() => void) => {
+      const listener = (): void => callback()
+      ipcRenderer.on('health:invalidated', listener)
+      return () => ipcRenderer.removeListener('health:invalidated', listener)
+    },
     onActivity: (callback: (activity: SyncActivity) => void): (() => void) => {
       const listener = (_: unknown, activity: SyncActivity): void => callback(activity)
       ipcRenderer.on('health:activity', listener)
