@@ -62,7 +62,6 @@ export default function MenuBarDashboard(): React.JSX.Element {
       <button className="menu-brand" onClick={() => open('home')} aria-label="Open OpenPulse">OpenPulse <ArrowUpRight size={13} /></button>
       <div className="menu-header-actions">
         <button className="menu-icon-button" onClick={() => open('settings')} aria-label="Open settings"><GearSix size={17} /></button>
-        <button className="menu-quit" onClick={() => void window.pulse.app.quit()}>Quit</button>
       </div>
     </header>
     {state?.google.connected ? <DashboardContent settings={state.settings} visible={visible} /> : <section className="menu-connect">
@@ -71,6 +70,7 @@ export default function MenuBarDashboard(): React.JSX.Element {
       <p>{error ? 'Open OpenPulse to check your connection.' : state ? 'Connect your Fitbit account in OpenPulse to see your daily rings and health summary here.' : 'Checking your connection.'}</p>
       {(state || error) && <button onClick={() => open('settings')}>Open OpenPulse <ArrowUpRight size={14} /></button>}
     </section>}
+    <button className="menu-quit" onClick={() => void window.pulse.app.quit()}>Quit</button>
   </main>
 }
 
