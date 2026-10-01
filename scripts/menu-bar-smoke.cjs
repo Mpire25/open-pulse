@@ -187,17 +187,29 @@ async function memoryRun(main, openPanel) {
     screen.getCursorScreenPoint = () => ({ x: trayBounds.x + trayBounds.width / 2, y: trayBounds.y + trayBounds.height / 2 })
     const traceStart = visibilityTrace.length
     blurHandlers.get(panel.id)()
+    tray.emit('mouse-down')
+    tray.emit('mouse-up')
     tray.emit('click')
-    assert.equal(panel.isVisible(), false, 'Second tray press closes even when blur precedes click')
+    assert.equal(panel.isVisible(), false, 'Second tray press closes even when blur precedes mouse-down')
     tray.emit('click')
     assert.equal(panel.isVisible(), true, 'Next press opens the panel')
     tray.emit('click')
     assert.equal(panel.isVisible(), false, 'Rapid second press closes the panel')
+    tray.emit('click')
+    tray.emit('mouse-down')
+    blurHandlers.get(panel.id)()
+    await until(() => !panel.isVisible(), 'blur during held tray press')
+    tray.emit('mouse-up')
+    tray.emit('click')
+    assert.equal(panel.isVisible(), false, 'Releasing a held press must not reopen a dismissed panel')
+    tray.emit('click')
+    blurHandlers.get(panel.id)()
+    await until(() => !panel.isVisible(), 'keyboard blur dismisses with pointer over tray')
     assert.ok(visibilityTrace.slice(traceStart).every(([, id]) => id === panel.id), 'Tray toggles must not show the main window')
     screen.getCursorScreenPoint = () => ({ x: trayBounds.x - 100, y: trayBounds.y + 100 })
     tray.emit('click')
     blurHandlers.get(panel.id)()
-    assert.equal(panel.isVisible(), false, 'Clicking away still dismisses the panel')
+    await until(() => !panel.isVisible(), 'Clicking away still dismisses the panel')
   } finally {
     screen.getCursorScreenPoint = originalCursorPoint
   }
@@ -253,6 +265,8 @@ async function memoryRun(main, openPanel) {
   await until(() => reopened.webContents.executeJavaScript("document.body.innerText.includes('12,345')"), 'popup refresh updates existing main page')
   await until(() => panel.webContents.executeJavaScript("document.body.innerText.includes('12,345')"), 'popup updated reading')
   blurHandlers.get(panel.id)()
+  await until(() => !panel.isVisible(), 'popup hidden before main refresh')
+  await delay(100) // Allow the renderer to apply the visibility notification.
   await until(() => panel.webContents.executeJavaScript(`!document.querySelector('[aria-label="Refresh health data"]').disabled`), 'hidden queries settled')
   const beforeHiddenRefresh = panelHealthRequests
   todaySteps = 12545

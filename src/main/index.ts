@@ -54,6 +54,7 @@ let tray: Tray | null = null
 let panelContentHeight = 650
 let panelReady = false
 let panelRequested = false
+let panelBlurTimer: ReturnType<typeof setTimeout> | undefined
 let quitting = false
 
 function createWindow(target: RendererTarget, panel = false): BrowserWindow {
@@ -137,7 +138,13 @@ function sendNewChatCommand(target: RendererTarget): void {
   win.focus()
 }
 
+function cancelPanelBlur(): void {
+  if (panelBlurTimer !== undefined) clearTimeout(panelBlurTimer)
+  panelBlurTimer = undefined
+}
+
 function closeMenuPanel(): void {
+  cancelPanelBlur()
   panelRequested = false
   menuPanel?.hide()
 }
@@ -171,13 +178,11 @@ function prepareMenuPanel(target: RendererTarget): BrowserWindow {
     if (panelRequested) { panel.show(); panel.focus() }
   })
   panel.on('blur', () => {
-    // A tray press may blur the panel before its click event arrives. Let that
-    // click close it, rather than clearing the toggle state and reopening it.
-    const cursor = screen.getCursorScreenPoint()
-    const bounds = tray?.getBounds()
-    if (bounds && cursor.x >= bounds.x && cursor.x < bounds.x + bounds.width &&
-      cursor.y >= bounds.y && cursor.y < bounds.y + bounds.height) return
-    closeMenuPanel()
+    // Defer until the current native event has finished: a tray mouse-down can
+    // arrive just after blur and needs to capture the pre-dismissal toggle state.
+    // Every other blur (including keyboard app switching) dismisses the panel.
+    cancelPanelBlur()
+    panelBlurTimer = setTimeout(closeMenuPanel, 0)
   })
   panel.on('close', (event) => {
     if (!quitting) { event.preventDefault(); closeMenuPanel() }
@@ -188,7 +193,7 @@ function prepareMenuPanel(target: RendererTarget): BrowserWindow {
   // A crashed renderer cannot be reused; rebuild it on the next click.
   panel.webContents.on('render-process-gone', () => panel.destroy())
   panel.once('closed', () => {
-    if (menuPanel === panel) { menuPanel = null; panelReady = false; panelRequested = false }
+    if (menuPanel === panel) { cancelPanelBlur(); menuPanel = null; panelReady = false; panelRequested = false }
   })
   return panel
 }
@@ -204,8 +209,23 @@ function installMenuBar(target: RendererTarget): void {
   tray.setToolTip('OpenPulse — today at a glance')
   // Treat both presses of a double-click as ordinary popup toggles.
   tray.setIgnoreDoubleClickEvents(true)
+  let openAtPress: boolean | undefined
+  let releaseTimer: ReturnType<typeof setTimeout> | undefined
+  tray.on('mouse-down', () => {
+    if (releaseTimer !== undefined) clearTimeout(releaseTimer)
+    openAtPress = panelRequested
+    cancelPanelBlur()
+  })
+  tray.on('mouse-up', () => {
+    // Electron emits click after mouse-up. Clear an abandoned press next turn.
+    releaseTimer = setTimeout(() => { openAtPress = undefined }, 0)
+  })
   tray.on('click', () => {
-    if (panelRequested) { closeMenuPanel(); return }
+    if (releaseTimer !== undefined) clearTimeout(releaseTimer)
+    const wasOpen = openAtPress ?? panelRequested
+    openAtPress = undefined
+    cancelPanelBlur()
+    if (wasOpen) { closeMenuPanel(); return }
     panelRequested = true
     const anchor = tray!.getBounds()
     const panel = prepareMenuPanel(target)
