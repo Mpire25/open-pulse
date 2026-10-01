@@ -225,6 +225,13 @@ async function memoryRun(main, openPanel) {
   let settingsWindow
   await until(() => { settingsWindow = BrowserWindow.getAllWindows().find(w => w.webContents.getURL() && !w.webContents.getURL().endsWith('#menu-bar')); return !!settingsWindow }, 'settings window')
   await until(() => settingsWindow.webContents.executeJavaScript("document.querySelector('#menu-bar-enabled')?.getAttribute('aria-checked') === 'true'"), 'menu bar setting')
+  await delay(600)
+  const headingBounds = await settingsWindow.webContents.executeJavaScript(`(() => {
+    const heading = Array.from(document.querySelectorAll('h3')).find(node => node.textContent === 'macOS menu bar')
+    const rect = heading.getBoundingClientRect()
+    return { x: Math.floor(rect.x - 40), y: Math.floor(rect.y - 16), width: 360, height: 60 }
+  })()`)
+  writeFileSync(resolve('out/menu-bar-setting-preview.png'), (await settingsWindow.webContents.capturePage(headingBounds)).toPNG())
   const activeTray = tray
   await settingsWindow.webContents.executeJavaScript("document.querySelector('#menu-bar-enabled').click()")
   await until(() => activeTray.isDestroyed() && panel.isDestroyed(), 'disable removes tray and retained panel')

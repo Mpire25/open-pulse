@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react'
 import { motion } from 'framer-motion'
 import * as Dialog from '@radix-ui/react-dialog'
-import { AppleLogo, Brain, ChatCircleDots, CheckCircle, GoogleLogo, Sparkle, Target, ArrowClockwise, Trash, Warning } from '@phosphor-icons/react'
+import { Brain, ChatCircleDots, CheckCircle, GoogleLogo, Sparkle, Target, ArrowClockwise, Trash, Warning } from '@phosphor-icons/react'
 import { Panel, SectionHeader } from '@/components/Panel'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
@@ -85,7 +85,14 @@ function MenuBarCard({ settings, onSettingsChange }: {
     }
   }
   return <Card index={0}>
-    <SectionHeader title="macOS menu bar" icon={<AppleLogo size={18} weight="fill" className="text-ink-dim" />} />
+    <SectionHeader
+      title="macOS menu bar"
+      icon={
+        <span aria-hidden="true" className="flex h-6 w-[18px] shrink-0 items-center justify-center text-[20px] leading-none text-ink-dim" style={{ fontFamily: '-apple-system, BlinkMacSystemFont, sans-serif' }}>
+          {'\uF8FF'}
+        </span>
+      }
+    />
     <div className="flex items-center justify-between gap-6">
       <div>
         <label htmlFor="menu-bar-enabled" className="text-[13px] font-medium text-ink">Show in menu bar</label>
