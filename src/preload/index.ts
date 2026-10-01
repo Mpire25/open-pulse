@@ -173,6 +173,11 @@ const api = {
       invokeHealth('health:devices', [force], requestId),
     cancel: (requestId: string): Promise<void> => ipcRenderer.invoke('health:cancel', requestId),
     refresh: (): Promise<void> => ipcRenderer.invoke('health:refresh'),
+    onInvalidated: (callback: () => void): (() => void) => {
+      const listener = (): void => callback()
+      ipcRenderer.on('health:invalidated', listener)
+      return () => ipcRenderer.removeListener('health:invalidated', listener)
+    },
     onActivity: (callback: (activity: SyncActivity) => void): (() => void) => {
       const listener = (_: unknown, activity: SyncActivity): void => callback(activity)
       ipcRenderer.on('health:activity', listener)

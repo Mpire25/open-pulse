@@ -47,7 +47,7 @@ async function until(check, label) {
   for (let i = 0; i < 100; i++) {
     let timeout
     try {
-      if (await Promise.race([check(), new Promise((_, reject) => { timeout = setTimeout(() => reject(new Error(`Unresponsive check: ${label}`)), 3000) })])) return
+      if (await Promise.race([check(), new Promise((_, reject) => { timeout = setTimeout(() => reject(new Error(`Unresponsive check: ${label}`)), 10000) })])) return
     } finally { clearTimeout(timeout) }
     await delay(50)
   }
@@ -55,6 +55,9 @@ async function until(check, label) {
 }
 function replace(channel, handler) { ipcMain.removeHandler(channel); ipcMain.handle(channel, handler) }
 let connected = true
+let mainConnected = false
+let todaySteps = 12145
+let panelHealthRequests = 0
 let missing = false
 let unavailable = false
 let refreshed = 0
@@ -67,7 +70,7 @@ const errors = []
 app.on('web-contents-created', (_event, contents) => {
   contents.on('console-message', (details) => { if (details.level === 'error') { errors.push(details.message); console.error('Renderer error:', details.message) } })
 })
-const deadline = setTimeout(() => { console.error('Test exceeded its time limit'); app.exit(1) }, measureMemory ? 120000 : 45000)
+const deadline = setTimeout(() => { console.error('Test exceeded its time limit'); app.exit(1) }, measureMemory ? 120000 : 90000)
 
 async function memoryRun(main, openPanel) {
   const stages = []
@@ -123,21 +126,27 @@ async function memoryRun(main, openPanel) {
 ;(async () => {
   await app.whenReady()
   app.setActivationPolicy('prohibited')
+  // Retain the real trusted refresh handler and its cross-window broadcast.
+  const originalHandle = ipcMain.handle.bind(ipcMain)
+  ipcMain.handle = (channel, handler) => originalHandle(channel, channel === 'health:refresh'
+    ? (...args) => { refreshed++; return handler(...args) } : handler)
   await import(pathToFileURL(resolve(appEntry)).href)
+  ipcMain.handle = originalHandle
   const goals = { steps: 10000, caloriesOut: 2800, caloriesIn: 1800, sleepMinutes: 480, activeZoneMinutes: 30, proteinG: 120, carbsG: 200, fatG: 60 }
   replace('settings:get', () => ({ menuBarEnabled: savedMenuBarEnabled(), goals, googleClientId: '', googleClientSecret: '', googleClientSecretConfigured: false, assistant: { model: 'gpt-6-astra', reasoningEffort: 'medium' }, chatRetention: 'forever' }))
-  replace('google:status', (event) => ({ connected: event.sender.getURL().endsWith('#menu-bar') && connected }))
+  replace('google:status', (event) => ({ connected: connected && (mainConnected || event.sender.getURL().endsWith('#menu-bar')) }))
   replace('codex:status', () => ({ connected: false }))
   replace('chats:list', () => ({ sessions: [], persistence: 'memory' }))
   replace('health:series', (_e, metrics, start, end) => {
     healthRequests++
+    if (_e.sender.getURL().endsWith('#menu-bar')) panelHealthRequests++
     if (unavailable) return { healthRequestError: true, message: 'Fixture network unavailable' }
     const days = {}
     for (let date = start; date <= end; date = offset(date, 1)) {
       days[date] = {}
       if (missing) continue
       for (const metric of metrics) {
-        const values = { steps: date === today ? 12145 : 6000 + Number(date.slice(-2)) * 137, caloriesOut: 2339, caloriesIn: 1463, restingHeartRate: date === today ? 71 : 66, hrvMs: date === today ? 52 : 48, weightKg: date === today ? 78.5 : 78.8 }
+        const values = { steps: date === today ? todaySteps : 6000 + Number(date.slice(-2)) * 137, caloriesOut: 2339, caloriesIn: 1463, restingHeartRate: date === today ? 71 : 66, hrvMs: date === today ? 52 : 48, weightKg: date === today ? 78.5 : 78.8 }
         days[date][metric] = values[metric]
       }
     }
@@ -145,7 +154,6 @@ async function memoryRun(main, openPanel) {
   })
   replace('health:sleep-range', () => (healthRequests++, { source: 'fixture', days: missing ? [] : [{ date: today, mainSessionId: 'night', complete: true, minutesAsleep: 367, sessions: [{ id: 'night', date: today, minutesAsleep: 367, stageMinutes: { AWAKE: 22, REM: 82, LIGHT: 220, DEEP: 65 }, stages: [] }] }] }))
   replace('health:devices', () => (healthRequests++, missing ? [] : [{ name: 'Fitbit Air', batteryPct: 76, lastSync: new Date(Date.now() - 12 * 60000).toISOString() }]))
-  replace('health:refresh', () => { refreshed++ })
   replace('health:intraday', () => ({ date: today, heartRate: [], stepsHourly: [], currentHeartRate: null }))
   replace('health:workouts', () => ({ workouts: [], source: 'fixture' }))
   await until(() => BrowserWindow.getAllWindows().every(w => w.webContents.getURL() && !w.webContents.isLoadingMainFrame()), 'initial windows loaded')
@@ -221,6 +229,7 @@ async function memoryRun(main, openPanel) {
   console.log('PASS: weekly chart navigation')
   assert.equal(await reopened.webContents.executeJavaScript('window.history.state.selectedDate'), today)
   reopened.close()
+  await until(() => reopened.isDestroyed(), 'main window closed')
   panel = await openPanel()
   await until(() => panel.webContents.executeJavaScript("document.body.innerText.includes('12,145')"), 'panel after reopening')
   assert.equal(panel.id, initialPanelId, 'reopening must reuse the existing renderer')
@@ -230,8 +239,35 @@ async function memoryRun(main, openPanel) {
   await until(() => { reopened = BrowserWindow.getAllWindows().find(w => w.webContents.getURL() && !w.webContents.getURL().endsWith('#menu-bar') && !w.webContents.isLoadingMainFrame()); return !!reopened }, 'main recreated for HRV')
   await until(() => reopened.webContents.executeJavaScript("window.history.state?.detailMetric?.metric === 'hrvMs' && window.history.state?.selectedDate === '" + today + "'"), 'dated HRV destination')
   reopened.close()
+  await until(() => reopened.isDestroyed(), 'main window closed')
   panel = await openPanel()
   console.log('PASS: HRV reading and detail navigation')
+  mainConnected = true
+  await panel.webContents.executeJavaScript(`window.pulse.app.open({ view: 'home', date: '${today}' })`)
+  await until(() => { reopened = BrowserWindow.getAllWindows().find(w => w.webContents.getURL() && !w.webContents.getURL().endsWith('#menu-bar') && !w.webContents.isLoadingMainFrame()); return !!reopened }, 'main home loaded')
+  await until(() => reopened.webContents.executeJavaScript("document.body.innerText.includes('12,145')"), 'main initial reading')
+  panel = await openPanel()
+  await until(() => panel.webContents.executeJavaScript(`!document.querySelector('[aria-label="Refresh health data"]').disabled`), 'popup refresh enabled')
+  todaySteps = 12345
+  await panel.webContents.executeJavaScript(`document.querySelector('[aria-label="Refresh health data"]').click()`)
+  await until(() => reopened.webContents.executeJavaScript("document.body.innerText.includes('12,345')"), 'popup refresh updates existing main page')
+  await until(() => panel.webContents.executeJavaScript("document.body.innerText.includes('12,345')"), 'popup updated reading')
+  blurHandlers.get(panel.id)()
+  await until(() => panel.webContents.executeJavaScript(`!document.querySelector('[aria-label="Refresh health data"]').disabled`), 'hidden queries settled')
+  const beforeHiddenRefresh = panelHealthRequests
+  todaySteps = 12545
+  await until(() => reopened.webContents.executeJavaScript(`!!document.querySelector('[aria-label="Refresh data"]')`), 'main refresh enabled')
+  await reopened.webContents.executeJavaScript(`document.querySelector('[aria-label="Refresh data"]').click()`)
+  await until(() => reopened.webContents.executeJavaScript("document.body.innerText.includes('12,545')"), 'main refreshed reading')
+  await delay(100)
+  assert.equal(panelHealthRequests, beforeHiddenRefresh, 'Hidden popup must not fetch after another window refreshes')
+  panel = await openPanel()
+  await until(() => panel.webContents.executeJavaScript("document.body.innerText.includes('12,545')"), 'hidden popup cache invalidated before stale timeout')
+  reopened.close()
+  await until(() => reopened.isDestroyed(), 'main window closed')
+  mainConnected = false
+  todaySteps = 12145
+  console.log('PASS: cross-window refresh and deferred hidden popup refresh')
   connected = false
   panel.webContents.send('chats:account-changed')
   await until(() => panel.webContents.executeJavaScript("document.body.innerText.includes('Connect your Fitbit account') && !document.body.innerText.includes('12,145')"), 'account disconnect clears metrics')

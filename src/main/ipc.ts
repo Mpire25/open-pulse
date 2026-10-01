@@ -278,7 +278,17 @@ export function registerIpc(commands: { open: (destination: MenuBarDestination) 
     getBodyMeasurements(start, end, signal)
   )
   healthHandle('health:devices', (_e, signal, force?: boolean) => getDevices(force, signal))
-  handle('health:refresh', () => clearHealthCache())
+  handle('health:refresh', (event) => {
+    clearHealthCache()
+    // The caller awaits this request and invalidates its own query cache.
+    // Other windows must invalidate theirs too, including a hidden popup.
+    for (const renderer of trustedRenderers.values()) {
+      const { webContents, isExpectedUrl } = renderer
+      if (webContents.id !== event.sender.id && !webContents.isDestroyed() && isExpectedUrl(webContents.getURL())) {
+        webContents.send('health:invalidated')
+      }
+    }
+  })
 
   // Live "requests in flight" counter for the topbar sync indicator.
   setApiActivityListener((pending) => {
