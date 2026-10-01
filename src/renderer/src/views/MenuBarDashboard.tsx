@@ -4,7 +4,6 @@ import { ArrowClockwise, ArrowUpRight, GearSix, Heartbeat, Moon, Scales } from '
 import type { AppSettings, GoogleAuthStatus, MetricKey } from '@shared/types'
 import type { MenuBarDestination } from '@shared/menu-bar'
 import { selectedSleepSession } from '@shared/sleep'
-import { AppLogo } from '@/components/AppLogo'
 import { BatteryPill } from '@/components/BatteryPill'
 import { ColumnChart, ProgressRing } from '@/components/charts'
 import { STAGE_COLOR, STAGE_LABEL } from '@/components/SleepStages'
@@ -71,7 +70,7 @@ export default function MenuBarDashboard(): React.JSX.Element {
 
   return <main className="menu-dashboard" ref={panelRef} tabIndex={-1}>
     <header className="menu-header">
-      <button className="menu-brand" onClick={() => open('home')} aria-label="Open OpenPulse"><AppLogo size={24} />OpenPulse <ArrowUpRight size={13} /></button>
+      <button className="menu-brand" onClick={() => open('home')} aria-label="Open OpenPulse">OpenPulse <ArrowUpRight size={13} /></button>
       <div className="menu-header-actions">
         {state?.google.connected && <BatteryPill enabled={visible} onClick={() => open('devices')} />}
         {state?.google.connected && <button className="menu-icon-button" disabled={busy} aria-label="Refresh health data" onClick={() => {
