@@ -216,7 +216,7 @@ async function memoryRun(main, openPanel) {
   void panel.webContents.executeJavaScript("document.querySelector('.menu-section-title').click()").catch(() => {})
   console.log('Opening weekly chart')
   let reopened
-  await until(() => { reopened = BrowserWindow.getAllWindows().find(w => !w.webContents.getURL().endsWith('#menu-bar')); return !!reopened }, 'main recreated')
+  await until(() => { reopened = BrowserWindow.getAllWindows().find(w => w.webContents.getURL() && !w.webContents.getURL().endsWith('#menu-bar') && !w.webContents.isLoadingMainFrame()); return !!reopened }, 'main recreated')
   await until(() => reopened.webContents.executeJavaScript("window.history.state?.detailMetric?.metric === 'steps' && window.history.state?.detailMetric?.range === 'W'"), 'queued weekly destination')
   console.log('PASS: weekly chart navigation')
   assert.equal(await reopened.webContents.executeJavaScript('window.history.state.selectedDate'), today)
@@ -227,7 +227,7 @@ async function memoryRun(main, openPanel) {
   console.log('PASS: panel reopens without rebuilding')
   assert.ok(await panel.webContents.executeJavaScript(`document.querySelector('[aria-label="Open HRV details"]').textContent.includes('52 ms')`), 'HRV value renders in milliseconds')
   await panel.webContents.executeJavaScript(`document.querySelector('[aria-label="Open HRV details"]').click()`)
-  await until(() => { reopened = BrowserWindow.getAllWindows().find(w => !w.webContents.getURL().endsWith('#menu-bar')); return !!reopened }, 'main recreated for HRV')
+  await until(() => { reopened = BrowserWindow.getAllWindows().find(w => w.webContents.getURL() && !w.webContents.getURL().endsWith('#menu-bar') && !w.webContents.isLoadingMainFrame()); return !!reopened }, 'main recreated for HRV')
   await until(() => reopened.webContents.executeJavaScript("window.history.state?.detailMetric?.metric === 'hrvMs' && window.history.state?.selectedDate === '" + today + "'"), 'dated HRV destination')
   reopened.close()
   panel = await openPanel()

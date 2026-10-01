@@ -26,4 +26,3 @@ export function BatteryPill({ enabled, onClick }: { enabled: boolean; onClick?: 
     </button>
   ) : meter
 }
-
