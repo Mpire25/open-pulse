@@ -27,6 +27,9 @@ function open(view: MenuBarDestination['view'], date = isoToday(), metric?: Menu
 
 export default function MenuBarDashboard(): React.JSX.Element {
   const client = useQueryClient()
+  const busy = useSyncBusy()
+  const refresh = useRefresh()
+  const [refreshFailed, setRefreshFailed] = useState(false)
   const [state, setState] = useState<{ settings: AppSettings; google: GoogleAuthStatus } | null>(null)
   const [error, setError] = useState(false)
   const [visible, setVisible] = useState(false)
@@ -42,6 +45,7 @@ export default function MenuBarDashboard(): React.JSX.Element {
       const current = ++generation
       setState(null)
       setError(false)
+      setRefreshFailed(false)
       client.clear()
       void Promise.all([window.pulse.settings.get(), window.pulse.google.status()]).then(([settings, google]) => {
         if (current === generation) setState({ settings, google })
@@ -67,10 +71,14 @@ export default function MenuBarDashboard(): React.JSX.Element {
     <header className="menu-header">
       <button className="menu-brand" onClick={() => open('home')} aria-label="Open OpenPulse">OpenPulse <ArrowUpRight size={13} /></button>
       <div className="menu-header-actions">
+        {state?.google.connected && <button className="menu-icon-button" disabled={busy} aria-label="Refresh health data" onClick={() => {
+          setRefreshFailed(false)
+          void refresh().catch(() => setRefreshFailed(true))
+        }}><ArrowClockwise size={17} className={busy ? 'animate-spin' : ''} /></button>}
         <button className="menu-icon-button" onClick={() => open('settings')} aria-label="Open settings"><GearSix size={17} /></button>
       </div>
     </header>
-    {state?.google.connected ? <DashboardContent settings={state.settings} visible={visible} /> : <section className="menu-connect">
+    {state?.google.connected ? <DashboardContent settings={state.settings} visible={visible} busy={busy} refreshFailed={refreshFailed} /> : <section className="menu-connect">
       <Moon size={30} />
       <h1>{error ? 'Unable to load your summary' : state ? 'Your day, at a glance' : 'Loading your summary…'}</h1>
       <p>{error ? 'Open OpenPulse to check your connection.' : state ? 'Connect your Fitbit account in OpenPulse to see your daily rings and health summary here.' : 'Checking your connection.'}</p>
@@ -80,7 +88,7 @@ export default function MenuBarDashboard(): React.JSX.Element {
   </main>
 }
 
-function DashboardContent({ settings, visible }: { settings: AppSettings; visible: boolean }): React.JSX.Element {
+function DashboardContent({ settings, visible, busy, refreshFailed }: { settings: AppSettings; visible: boolean; busy: boolean; refreshFailed: boolean }): React.JSX.Element {
   const [today, syncToday] = useCurrentDay()
   const range = rangeEnding(today, 7)
   const weightRange = rangeEnding(today, 30)
@@ -88,10 +96,7 @@ function DashboardContent({ settings, visible }: { settings: AppSettings; visibl
   const weightSeries = useSeries(WEIGHT, weightRange.start, today, visible)
   const sleep = useSleepDay(today, visible)
   const devices = useDevices(visible)
-  const busy = useSyncBusy()
-  const refresh = useRefresh()
   const client = useQueryClient()
-  const [refreshFailed, setRefreshFailed] = useState(false)
   const [checkedAt, setCheckedAt] = useState<string | null>(null)
   const [now, setNow] = useState(Date.now())
 
@@ -184,10 +189,6 @@ function DashboardContent({ settings, visible }: { settings: AppSettings; visibl
         const syncLabel = !Number.isFinite(sync) ? 'Sync time unavailable' : minutes < 1 ? 'Synced just now' : minutes < 60 ? `Synced ${minutes}m ago` : minutes < 1440 ? `Synced ${Math.floor(minutes / 60)}h ago` : `Synced ${Math.floor(minutes / 1440)}d ago`
         return <button key={`${device.name}-${index}`} onClick={() => open('devices', today)} title={device.lastSync ?? undefined}><strong>{device.name} · {device.batteryPct != null ? `${device.batteryPct}%` : device.batteryState ?? 'Battery unavailable'}</strong><span>{syncLabel}</span></button>
       }) : <button onClick={() => open('devices', today)}>{devices.isPending ? 'Loading device…' : 'No device information'}</button>}</div>
-      <button className="menu-icon-button" disabled={busy} aria-label="Refresh health data" onClick={() => {
-        setRefreshFailed(false)
-        void refresh().catch(() => setRefreshFailed(true))
-      }}><ArrowClockwise size={17} className={busy ? 'animate-spin' : ''} /></button>
       <p className="menu-freshness" role="status">{anyError ? 'Some data could not be updated. Open the app for details.' : busy ? 'Checking available data…' : checkedAt ? `Checked at ${checkedAt} · values depend on device sync` : 'Showing available data'}</p>
     </footer>
   </>
