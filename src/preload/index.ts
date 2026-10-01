@@ -58,8 +58,20 @@ ipcRenderer.on('app:navigate', (_event, destination: MenuBarDestination) => {
   else for (const callback of navigationCallbacks) callback(destination)
 })
 
+let panelVisible = false
+const panelVisibilityCallbacks = new Set<(visible: boolean) => void>()
+ipcRenderer.on('app:panel-visibility', (_event, visible: boolean) => {
+  panelVisible = visible
+  for (const callback of panelVisibilityCallbacks) callback(visible)
+})
+
 const api = {
   app: {
+    onPanelVisibility: (callback: (visible: boolean) => void): (() => void) => {
+      panelVisibilityCallbacks.add(callback)
+      queueMicrotask(() => { if (panelVisibilityCallbacks.has(callback)) callback(panelVisible) })
+      return () => panelVisibilityCallbacks.delete(callback)
+    },
     open: (destination: MenuBarDestination): Promise<void> => ipcRenderer.invoke('app:open', destination),
     closePanel: (): Promise<void> => ipcRenderer.invoke('app:close-panel'),
     quit: (): Promise<void> => ipcRenderer.invoke('app:quit'),

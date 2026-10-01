@@ -174,8 +174,10 @@ battery/sync information. Rings and summary tiles open the corresponding app
 page; selecting a steps bar opens that day's steps. The week heading opens the
 weekly detail view. Weight opens the date of the latest displayed reading.
 
-The panel checks data on opening and every five minutes while visible, using the
-existing health cache. Refresh requests an update; device sync time is shown
+The panel preloads its local interface at app startup and stays loaded when
+hidden, so subsequent clicks reuse the same charts and cached data. Health
+requests start only when the panel is shown. It checks stale data on reopening
+and every five minutes while visible, using the existing health cache. Refresh requests an update; device sync time is shown
 separately from the time OpenPulse checked its data. Missing values remain empty.
 Sleep duration is the daily total, while the stage breakdown is for the main sleep.
 
@@ -184,8 +186,15 @@ keeps the menu bar available; Quit (in the panel or the icon's right-click menu)
 exits OpenPulse. There is no automatic launch-at-login behaviour.
 
 For a native fixture smoke test, run `bun run build` followed by
-`bunx electron scripts/menu-bar-smoke.cjs`. This briefly opens and focuses test
-windows, uses a temporary profile with mock health/account responses, and exits
-when done. It checks chart navigation after closing the main window, account
+`bunx electron scripts/menu-bar-smoke.cjs`. This keeps test windows hidden and
+simulates visibility without taking desktop focus. It uses a temporary profile
+with mock health/account responses and exits when done. It checks chart navigation after closing the main window, account
 changes, empty/error states, refresh, dismissal, and panel fit. A fixture preview
 is saved to `out/menu-bar-preview.png`.
+
+Add `--memory` to the smoke-test command to record macOS physical footprint and
+resident memory at startup, while the panel is open/hidden, after repeated opens,
+and after closing the main window. Results go to `out/menu-bar-memory.json`;
+`OPENPULSE_MEMORY_REPORT` overrides that path. `--entry /path/to/out/main/index.js`
+can measure a previously built version with the same fixtures. Hidden test windows
+do not reproduce all graphics allocations of a visible, signed-in app.

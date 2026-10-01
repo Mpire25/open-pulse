@@ -1,19 +1,31 @@
 // Run after bun run build:
-// bunx electron scripts/menu-bar-smoke.cjs
-// Uses only generated fixture data in a temporary profile; never signs in.
+// bunx electron scripts/menu-bar-smoke.cjs [--memory] [--entry /path/to/out/main/index.js]
+// Uses generated fixture data in a temporary profile, without showing/focusing windows or signing in.
 const electron = require('electron')
 const { app, BrowserWindow, ipcMain } = electron
 const { mkdtempSync, writeFileSync, rmSync } = require('node:fs')
 const { tmpdir } = require('node:os')
 const { join, resolve } = require('node:path')
 const { pathToFileURL } = require('node:url')
+const { execFileSync } = require('node:child_process')
+const measureMemory = process.argv.includes('--memory')
+const entryFlag = process.argv.indexOf('--entry')
+const appEntry = entryFlag >= 0 ? process.argv[entryFlag + 1] : resolve('out/main/index.js')
 const assert = require('node:assert/strict')
 const profile = mkdtempSync(join(tmpdir(), 'openpulse-menu-smoke-'))
 app.setPath('userData', profile)
 app.setPath('sessionData', profile)
 let tray
+const visibilityTrace = []
 const blurHandlers = new Map()
 app.on('browser-window-created', (_event, win) => {
+  // Simulate visibility without showing windows or taking desktop focus.
+  // This still loads and renders the real Electron windows and their preload.
+  let visible = false
+  win.show = () => { visibilityTrace.push(['show', win.id]); visible = true; win.emit('show') }
+  win.hide = () => { visibilityTrace.push(['hide', win.id]); visible = false; win.emit('hide') }
+  win.isVisible = () => visible
+  win.focus = () => {}
   // Keep unrelated desktop focus changes from interrupting this automated run.
   // The real registered dismissal handler is exercised explicitly below.
   const on = win.on
@@ -42,6 +54,7 @@ let connected = true
 let missing = false
 let unavailable = false
 let refreshed = 0
+let healthRequests = 0
 const today = new Date().toLocaleDateString('en-CA')
 const offset = (date, days) => { const d = new Date(`${date}T12:00:00`); d.setDate(d.getDate() + days); return d.toLocaleDateString('en-CA') }
 let screenshotPath = resolve('out/menu-bar-preview.png')
@@ -50,17 +63,70 @@ const errors = []
 app.on('web-contents-created', (_event, contents) => {
   contents.on('console-message', (details) => { if (details.level === 'error') { errors.push(details.message); console.error('Renderer error:', details.message) } })
 })
-const deadline = setTimeout(() => { console.error('Smoke test exceeded 45 seconds'); app.exit(1) }, 45000)
+const deadline = setTimeout(() => { console.error('Test exceeded its time limit'); app.exit(1) }, measureMemory ? 120000 : 45000)
+
+async function memoryRun(main, openPanel) {
+  const stages = []
+  async function sample(label) {
+    await delay(2000)
+    const metrics = app.getAppMetrics()
+    const panel = BrowserWindow.getAllWindows().find(w => w.webContents.getURL().endsWith('#menu-bar'))
+    const rows = metrics.map(m => {
+      let footprintMiB = null
+      try {
+        const summary = execFileSync('/usr/bin/vmmap', ['-summary', String(m.pid)], { encoding: 'utf8', timeout: 10000, stdio: ['ignore', 'pipe', 'ignore'] })
+        const match = summary.match(/Physical footprint:\s+([\d.]+)([KMG])/)
+        if (match) footprintMiB = Number(match[1]) * ({ K: 1 / 1024, M: 1, G: 1024 }[match[2]])
+      } catch { /* RSS remains available if macOS refuses process inspection. */ }
+      return { pid: m.pid, type: m.type, panel: m.pid === panel?.webContents.getOSProcessId(), rssMiB: m.memory.workingSetSize / 1024, footprintMiB }
+    })
+    const result = { label, healthRequests, processes: rows, totalRssMiB: rows.reduce((sum, r) => sum + r.rssMiB, 0), totalFootprintMiB: rows.every(r => r.footprintMiB !== null) ? rows.reduce((sum, r) => sum + r.footprintMiB, 0) : null }
+    stages.push(result)
+    console.log('MEMORY', JSON.stringify(result))
+  }
+  await sample('startup-main-open')
+  const start = performance.now()
+  let panel = await openPanel()
+  const firstOpenMs = performance.now() - start
+  await until(() => panel.webContents.executeJavaScript("document.body.innerText.includes('12,145') && document.body.innerText.includes('Fitbit Air')"), 'memory fixture ready')
+  await sample('panel-open')
+  blurHandlers.get(panel.id)()
+  await sample('panel-dismissed-main-open')
+  const reopenMs = []
+  const retainedAfterDismissal = !panel.isDestroyed()
+  for (let i = 0; retainedAfterDismissal && i < 25; i++) {
+    const before = performance.now()
+    panel = await openPanel()
+    await until(() => panel.webContents.executeJavaScript("document.body.innerText.includes('12,145')"), 'warm data')
+    reopenMs.push(performance.now() - before)
+    blurHandlers.get(panel.id)()
+    if (i === 4) await sample('after-five-reopens')
+  }
+  if (retainedAfterDismissal) await sample('after-25-reopens')
+  main.close()
+  await until(() => main.isDestroyed(), 'main actually closed')
+  await sample('main-closed-panel-dismissed')
+  const retained = BrowserWindow.getAllWindows().find(w => w.webContents.getURL().endsWith('#menu-bar'))
+  retained?.destroy()
+  assert.equal(BrowserWindow.getAllWindows().length, 0, 'memory baseline must have no windows')
+  await sample('all-windows-destroyed')
+  const report = { entry: appEntry, firstOpenMs, reopenMs, retainedAfterDismissal, stages }
+  const path = resolve(process.env.OPENPULSE_MEMORY_REPORT || 'out/menu-bar-memory.json')
+  writeFileSync(path, JSON.stringify(report, null, 2))
+  console.log('MEMORY_REPORT', path)
+}
 
 ;(async () => {
   await app.whenReady()
-  await import(pathToFileURL(resolve('out/main/index.js')).href)
+  app.setActivationPolicy('prohibited')
+  await import(pathToFileURL(resolve(appEntry)).href)
   const goals = { steps: 10000, caloriesOut: 2800, caloriesIn: 1800, sleepMinutes: 480, activeZoneMinutes: 30, proteinG: 120, carbsG: 200, fatG: 60 }
   replace('settings:get', () => ({ goals, googleClientId: '', googleClientSecret: '', googleClientSecretConfigured: false, assistant: { model: 'gpt-6-astra', reasoningEffort: 'medium' }, chatRetention: 'forever' }))
   replace('google:status', (event) => ({ connected: event.sender.getURL().endsWith('#menu-bar') && connected }))
   replace('codex:status', () => ({ connected: false }))
   replace('chats:list', () => ({ sessions: [], persistence: 'memory' }))
   replace('health:series', (_e, metrics, start, end) => {
+    healthRequests++
     if (unavailable) return { healthRequestError: true, message: 'Fixture network unavailable' }
     const days = {}
     for (let date = start; date <= end; date = offset(date, 1)) {
@@ -73,24 +139,28 @@ const deadline = setTimeout(() => { console.error('Smoke test exceeded 45 second
     }
     return { source: 'fixture', start, end, days }
   })
-  replace('health:sleep-range', () => ({ source: 'fixture', days: missing ? [] : [{ date: today, mainSessionId: 'night', complete: true, minutesAsleep: 367, sessions: [{ id: 'night', date: today, minutesAsleep: 367, stageMinutes: { AWAKE: 22, REM: 82, LIGHT: 220, DEEP: 65 }, stages: [] }] }] }))
-  replace('health:devices', () => missing ? [] : [{ name: 'Fitbit Air', batteryPct: 76, lastSync: new Date(Date.now() - 12 * 60000).toISOString() }])
+  replace('health:sleep-range', () => (healthRequests++, { source: 'fixture', days: missing ? [] : [{ date: today, mainSessionId: 'night', complete: true, minutesAsleep: 367, sessions: [{ id: 'night', date: today, minutesAsleep: 367, stageMinutes: { AWAKE: 22, REM: 82, LIGHT: 220, DEEP: 65 }, stages: [] }] }] }))
+  replace('health:devices', () => (healthRequests++, missing ? [] : [{ name: 'Fitbit Air', batteryPct: 76, lastSync: new Date(Date.now() - 12 * 60000).toISOString() }]))
   replace('health:refresh', () => { refreshed++ })
   replace('health:intraday', () => ({ date: today, heartRate: [], stepsHourly: [], currentHeartRate: null }))
   replace('health:workouts', () => ({ workouts: [], source: 'fixture' }))
-  const main = BrowserWindow.getAllWindows()[0]
+  await until(() => BrowserWindow.getAllWindows().every(w => w.webContents.getURL() && !w.webContents.isLoadingMainFrame()), 'initial windows loaded')
+  const main = BrowserWindow.getAllWindows().find(w => !w.webContents.getURL().endsWith('#menu-bar'))
   await until(() => !main.webContents.isLoadingMainFrame(), 'main load')
+  if (!measureMemory) assert.equal(healthRequests, 0, 'preloading must not fetch health data')
   // Close the main window first to exercise native reopen and pending navigation.
-  main.close()
+  if (!measureMemory) { main.close(); await until(() => main.isDestroyed(), 'main closed') }
   const openPanel = async () => {
     tray.emit('click')
     let panel
     await until(() => { panel = BrowserWindow.getAllWindows().find(w => w.webContents.getURL().endsWith('#menu-bar')); return !!panel }, 'panel created')
-    await until(() => panel.isVisible() && !panel.webContents.isLoadingMainFrame(), 'panel ready')
+    await until(() => panel.isVisible() && !panel.webContents.isLoadingMainFrame(), 'panel ready').catch(error => { console.error(JSON.stringify({ panel: panel.id, visible: panel.isVisible(), loading: panel.webContents.isLoadingMainFrame(), trace: visibilityTrace.slice(-20) })); throw error })
     await until(async () => !panel.isDestroyed() && await panel.webContents.executeJavaScript("document.querySelector('.menu-rings, .menu-connect') !== null"), 'panel content')
     return panel
   }
+  if (measureMemory) { await memoryRun(main, openPanel); return }
   let panel = await openPanel()
+  const initialPanelId = panel.id
   await until(() => panel.webContents.executeJavaScript("document.body.innerText.includes('12,145') && document.body.innerText.includes('Fitbit Air')"), 'fixture values')
   await delay(1800)
   const dimensions = await panel.webContents.executeJavaScript("({ width: innerWidth, height: innerHeight, scroll: document.querySelector('.menu-dashboard').scrollHeight })")
@@ -111,7 +181,8 @@ const deadline = setTimeout(() => { console.error('Smoke test exceeded 45 second
   reopened.close()
   panel = await openPanel()
   await until(() => panel.webContents.executeJavaScript("document.body.innerText.includes('12,145')"), 'panel after reopening')
-  console.log('PASS: panel reopens')
+  assert.equal(panel.id, initialPanelId, 'reopening must reuse the existing renderer')
+  console.log('PASS: panel reopens without rebuilding')
   connected = false
   panel.webContents.send('chats:account-changed')
   await until(() => panel.webContents.executeJavaScript("document.body.innerText.includes('Connect your Fitbit account') && !document.body.innerText.includes('12,145')"), 'account disconnect clears metrics')
@@ -121,16 +192,24 @@ const deadline = setTimeout(() => { console.error('Smoke test exceeded 45 second
   panel.webContents.send('chats:account-changed')
   await until(() => panel.webContents.executeJavaScript("document.body.innerText.includes('No steps recorded this week') && document.body.innerText.includes('Sleep stages unavailable')"), 'missing data')
   console.log('PASS: missing data')
-  panel.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Escape' })
-  await until(() => panel.isDestroyed(), 'Escape dismisses panel')
+  panel.webContents.emit('before-input-event', { preventDefault() {} }, { key: 'Escape' })
+  await until(() => !panel.isVisible(), 'Escape hides panel')
+  assert.equal(panel.isDestroyed(), false)
   console.log('PASS: Escape')
   missing = false
   unavailable = true
   panel = await openPanel()
+  panel.webContents.send('chats:account-changed')
   console.log('Opened error fixture')
   await until(() => panel.webContents.executeJavaScript("document.body.innerText.includes('Some data could not be updated')"), 'partial failure feedback')
   blurHandlers.get(panel.id)()
-  await until(() => panel.isDestroyed(), 'blur dismisses panel')
+  await until(() => !panel.isVisible(), 'blur hides panel')
+  assert.equal(panel.isDestroyed(), false)
+  const hiddenRequests = healthRequests
+  await delay(1100)
+  assert.equal(healthRequests, hiddenRequests, 'hidden panel must not start new health requests')
+  panel.close()
+  assert.equal(panel.isDestroyed(), false, 'window close also preserves the panel')
   assert.deepEqual(errors, [], 'renderer console errors')
   console.log(JSON.stringify({ result: 'PASS', screenshot: screenshotPath, checks: ['panel fits', 'fixture charts', 'refresh', 'closed main window weekly navigation', 'account change clears data', 'missing data', 'Escape', 'partial error', 'blur dismissal'] }))
 })().catch(error => { exitCode = 1; console.error(error) }).finally(() => {

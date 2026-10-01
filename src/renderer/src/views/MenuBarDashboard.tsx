@@ -29,6 +29,7 @@ export default function MenuBarDashboard(): React.JSX.Element {
   const client = useQueryClient()
   const [state, setState] = useState<{ settings: AppSettings; google: GoogleAuthStatus } | null>(null)
   const [error, setError] = useState(false)
+  const [visible, setVisible] = useState(false)
   useEffect(() => {
     let generation = 0
     const load = (): void => {
@@ -43,7 +44,17 @@ export default function MenuBarDashboard(): React.JSX.Element {
     load()
     const account = window.pulse.chats.onAccountChanged(load)
     const auth = window.pulse.google.onStatusChanged(load)
-    return () => { generation++; account(); auth(); client.clear() }
+    const visibility = window.pulse.app.onPanelVisibility((nextVisible) => {
+      setVisible(nextVisible)
+      if (nextVisible) {
+        const current = generation
+        // Goals may have changed in the main window while this panel was hidden.
+        void window.pulse.settings.get().then((settings) => {
+          if (current === generation) setState((previous) => previous ? { ...previous, settings } : previous)
+        }).catch(() => { /* Keep the last known goals until the next opening. */ })
+      }
+    })
+    return () => { generation++; account(); auth(); visibility(); client.clear() }
   }, [client])
 
   return <main className="menu-dashboard">
@@ -54,7 +65,7 @@ export default function MenuBarDashboard(): React.JSX.Element {
         <button className="menu-quit" onClick={() => void window.pulse.app.quit()}>Quit</button>
       </div>
     </header>
-    {state?.google.connected ? <DashboardContent settings={state.settings} /> : <section className="menu-connect">
+    {state?.google.connected ? <DashboardContent settings={state.settings} visible={visible} /> : <section className="menu-connect">
       <Moon size={30} />
       <h1>{error ? 'Unable to load your summary' : state ? 'Your day, at a glance' : 'Loading your summary…'}</h1>
       <p>{error ? 'Open OpenPulse to check your connection.' : state ? 'Connect your Fitbit account in OpenPulse to see your daily rings and health summary here.' : 'Checking your connection.'}</p>
@@ -63,14 +74,14 @@ export default function MenuBarDashboard(): React.JSX.Element {
   </main>
 }
 
-function DashboardContent({ settings }: { settings: AppSettings }): React.JSX.Element {
-  const [today] = useCurrentDay()
+function DashboardContent({ settings, visible }: { settings: AppSettings; visible: boolean }): React.JSX.Element {
+  const [today, syncToday] = useCurrentDay()
   const range = rangeEnding(today, 7)
   const weightRange = rangeEnding(today, 30)
-  const series = useSeries(METRICS, range.start, today)
-  const weightSeries = useSeries(WEIGHT, weightRange.start, today)
-  const sleep = useSleepDay(today)
-  const devices = useDevices()
+  const series = useSeries(METRICS, range.start, today, visible)
+  const weightSeries = useSeries(WEIGHT, weightRange.start, today, visible)
+  const sleep = useSleepDay(today, visible)
+  const devices = useDevices(visible)
   const busy = useSyncBusy()
   const refresh = useRefresh()
   const client = useQueryClient()
@@ -79,12 +90,18 @@ function DashboardContent({ settings }: { settings: AppSettings }): React.JSX.El
   const [now, setNow] = useState(Date.now())
 
   useEffect(() => {
+    if (!visible) {
+      void client.cancelQueries()
+      return
+    }
+    syncToday()
+    setNow(Date.now())
     const timer = window.setInterval(() => {
       setNow(Date.now())
       void client.invalidateQueries()
     }, 5 * 60_000)
     return () => window.clearInterval(timer)
-  }, [client])
+  }, [client, visible, syncToday])
   // This is deliberately a check time, not a claim that all device data is fresh.
   useEffect(() => {
     if (!busy && !series.isPending) setCheckedAt(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }))

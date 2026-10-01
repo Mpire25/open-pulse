@@ -71,14 +71,15 @@ export interface ProgressiveSeriesResult {
  * a card fill in Steps while Calories or another slower data group is still
  * syncing, without ever borrowing values from a different date.
  */
-export function useSeries(metrics: MetricKey[], start: string, end: string): ProgressiveSeriesResult {
+export function useSeries(metrics: MetricKey[], start: string, end: string, enabled = true): ProgressiveSeriesResult {
   const queries = useQueries({
     queries: metrics.map((metric) => ({
       queryKey: ['series-metric', metric, start, end],
       queryFn: ({ signal }) => healthRequest(signal, (requestId) =>
         window.pulse.health.series(requestId, [metric], start, end)
       ),
-      staleTime: STALE_MS
+      staleTime: STALE_MS,
+      enabled
     }))
   })
 
@@ -121,14 +122,15 @@ export function useSleepRange(start: string, end: string): UseQueryResult<SleepD
   })
 }
 
-export function useSleepDay(date: string): UseQueryResult<SleepDay | null> {
+export function useSleepDay(date: string, enabled = true): UseQueryResult<SleepDay | null> {
   return useQuery({
     queryKey: ['sleep-day', date],
     queryFn: ({ signal }) => healthRequest(signal, async (requestId) => {
       const result = await window.pulse.health.sleepRange(requestId, date, date)
       return result.days.find((n) => n.date === date) ?? null
     }),
-    staleTime: STALE_MS
+    staleTime: STALE_MS,
+    enabled
   })
 }
 

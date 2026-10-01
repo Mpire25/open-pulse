@@ -50,6 +50,9 @@ function applyContentSecurityPolicy(target: RendererTarget): void {
 let mainWindow: BrowserWindow | null = null
 let menuPanel: BrowserWindow | null = null
 let tray: Tray | null = null
+let panelReady = false
+let panelRequested = false
+let quitting = false
 
 function createWindow(target: RendererTarget, panel = false): BrowserWindow {
   const win = new BrowserWindow({
@@ -83,7 +86,7 @@ function createWindow(target: RendererTarget, panel = false): BrowserWindow {
     mainWindow = win
     win.once('closed', () => { if (mainWindow === win) mainWindow = null })
   }
-  win.on('ready-to-show', () => { win.show(); if (panel) win.focus() })
+  if (!panel) win.on('ready-to-show', () => win.show())
 
   // Any external link opens in the default browser, never inside the app.
   win.webContents.setWindowOpenHandler(({ url }) => {
@@ -128,7 +131,8 @@ function sendNewChatCommand(target: RendererTarget): void {
 }
 
 function closeMenuPanel(): void {
-  menuPanel?.close()
+  panelRequested = false
+  menuPanel?.hide()
 }
 
 function openDestination(target: RendererTarget, destination: MenuBarDestination): void {
@@ -144,6 +148,36 @@ function openDestination(target: RendererTarget, destination: MenuBarDestination
   closeMenuPanel()
 }
 
+function prepareMenuPanel(target: RendererTarget): BrowserWindow {
+  if (menuPanel) return menuPanel
+  const panel = createWindow(target, true)
+  menuPanel = panel
+  panelReady = false
+  const sendVisibility = (): void => {
+    if (!panel.isDestroyed()) panel.webContents.send('app:panel-visibility', panel.isVisible())
+  }
+  panel.on('show', sendVisibility)
+  panel.on('hide', sendVisibility)
+  panel.webContents.on('did-finish-load', sendVisibility)
+  panel.once('ready-to-show', () => {
+    panelReady = true
+    if (panelRequested) { panel.show(); panel.focus() }
+  })
+  panel.on('blur', closeMenuPanel)
+  panel.on('close', (event) => {
+    if (!quitting) { event.preventDefault(); closeMenuPanel() }
+  })
+  panel.webContents.on('before-input-event', (event, input) => {
+    if (input.key === 'Escape') { event.preventDefault(); closeMenuPanel() }
+  })
+  // A crashed renderer cannot be reused; rebuild it on the next click.
+  panel.webContents.on('render-process-gone', () => panel.destroy())
+  panel.once('closed', () => {
+    if (menuPanel === panel) { menuPanel = null; panelReady = false; panelRequested = false }
+  })
+  return panel
+}
+
 function installMenuBar(target: RendererTarget): void {
   // Use the app's heart with a transparent ECG cutout. Explicit representations
   // keep the mark sharp on both standard and Retina displays after packaging.
@@ -154,22 +188,20 @@ function installMenuBar(target: RendererTarget): void {
   tray = new Tray(icon)
   tray.setToolTip('OpenPulse — today at a glance')
   tray.on('click', () => {
-    if (menuPanel) { closeMenuPanel(); return }
+    if (panelRequested) { closeMenuPanel(); return }
+    panelRequested = true
     const anchor = tray!.getBounds()
-    const panel = createWindow(target, true)
-    menuPanel = panel
+    const panel = prepareMenuPanel(target)
     panel.setBounds(menuBarBounds(anchor, screen.getDisplayMatching(anchor).workArea))
-    panel.on('blur', () => { if (!panel.isDestroyed()) panel.close() })
-    panel.webContents.on('before-input-event', (event, input) => {
-      if (input.key === 'Escape') { event.preventDefault(); panel.close() }
-    })
-    panel.once('closed', () => { if (menuPanel === panel) menuPanel = null })
+    if (panelReady) { panel.show(); panel.focus() }
   })
+  // Preload the local UI once. Health requests remain disabled until shown.
+  prepareMenuPanel(target)
   tray.on('right-click', () => tray?.popUpContextMenu(Menu.buildFromTemplate([
     { label: 'Open OpenPulse', click: () => { const win = mainWindow ?? createWindow(target); if (win.isMinimized()) win.restore(); win.show(); win.focus() } },
     { type: 'separator' }, { role: 'quit', label: 'Quit OpenPulse' }
   ])))
-  app.once('before-quit', () => { tray?.destroy(); tray = null })
+  app.once('before-quit', () => { quitting = true; tray?.destroy(); tray = null })
 }
 
 function installApplicationMenu(target: RendererTarget): void {
