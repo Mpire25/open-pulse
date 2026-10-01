@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { ArrowClockwise, ArrowUpRight, GearSix, Heartbeat, Moon, Scales } from '@phosphor-icons/react'
 import type { AppSettings, GoogleAuthStatus, MetricKey } from '@shared/types'
@@ -30,6 +30,12 @@ export default function MenuBarDashboard(): React.JSX.Element {
   const [state, setState] = useState<{ settings: AppSettings; google: GoogleAuthStatus } | null>(null)
   const [error, setError] = useState(false)
   const [visible, setVisible] = useState(false)
+  const panelRef = useRef<HTMLElement>(null)
+  useEffect(() => {
+    // Opening via the native tray must not restore focus to the first button.
+    // Tab still moves into the controls and retains their keyboard focus rings.
+    if (visible) panelRef.current?.focus({ preventScroll: true })
+  }, [visible])
   useEffect(() => {
     let generation = 0
     const load = (): void => {
@@ -57,7 +63,7 @@ export default function MenuBarDashboard(): React.JSX.Element {
     return () => { generation++; account(); auth(); visibility(); client.clear() }
   }, [client])
 
-  return <main className="menu-dashboard">
+  return <main className="menu-dashboard" ref={panelRef} tabIndex={-1}>
     <header className="menu-header">
       <button className="menu-brand" onClick={() => open('home')} aria-label="Open OpenPulse">OpenPulse <ArrowUpRight size={13} /></button>
       <div className="menu-header-actions">
