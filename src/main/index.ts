@@ -61,8 +61,10 @@ function createWindow(target: RendererTarget, panel = false): BrowserWindow {
     minWidth: 1040,
     minHeight: 700,
     show: false,
-    titleBarStyle: 'hiddenInset',
-    trafficLightPosition: { x: 20, y: 20 },
+    ...(!panel ? {
+      titleBarStyle: 'hiddenInset' as const,
+      trafficLightPosition: { x: 20, y: 20 }
+    } : {}),
     backgroundColor: '#00000000',
     vibrancy: 'sidebar',
     visualEffectState: 'active',
@@ -79,6 +81,9 @@ function createWindow(target: RendererTarget, panel = false): BrowserWindow {
       allowRunningInsecureContent: false
     }
   })
+
+  // The popup has its own header and must not inherit native window controls.
+  if (panel && process.platform === 'darwin') win.setWindowButtonVisibility(false)
 
   registerTrustedRenderer(win.webContents, target.isExpectedUrl)
 
