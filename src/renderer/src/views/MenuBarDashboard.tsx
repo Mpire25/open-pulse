@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { ArrowClockwise, ArrowUpRight, GearSix, Heartbeat, Moon, Scales } from '@phosphor-icons/react'
+import { ArrowClockwise, ArrowUpRight, GearSix, Heartbeat, Moon, Pulse, Scales } from '@phosphor-icons/react'
 import type { AppSettings, GoogleAuthStatus, MetricKey } from '@shared/types'
 import type { MenuBarDestination } from '@shared/menu-bar'
 import { selectedSleepSession } from '@shared/sleep'
@@ -13,7 +13,7 @@ import { baseline, latestPoint, rangeEnding, seriesPoints } from '@/lib/metrics'
 import { formatInt, formatMinutes, isoToday, shiftDate } from '@/lib/format'
 import './menu-bar.css'
 
-const METRICS: MetricKey[] = ['steps', 'caloriesOut', 'caloriesIn', 'restingHeartRate']
+const METRICS: MetricKey[] = ['steps', 'caloriesOut', 'caloriesIn', 'restingHeartRate', 'hrvMs']
 const WEIGHT: MetricKey[] = ['weightKg']
 const RINGS = [
   { metric: 'steps', label: 'Steps', color: 'var(--color-activity)', view: 'activity' },
@@ -143,6 +143,9 @@ function DashboardContent({ settings, visible, busy, refreshFailed }: { settings
 
   const values = series.data?.days[today]
   const steps = seriesPoints(series.data?.days, 'steps', range.start, today)
+  const hrv = values?.hrvMs
+  const hrvBase = baseline(seriesPoints(series.data?.days, 'hrvMs', range.start, today), today)
+  const hrvDelta = hrv != null && hrvBase != null ? Math.round(hrv - hrvBase) : null
   const rhr = values?.restingHeartRate
   const rhrBase = baseline(seriesPoints(series.data?.days, 'restingHeartRate', range.start, today), today)
   const rhrDelta = rhr != null && rhrBase != null ? rhr - Math.round(rhrBase) : null
@@ -191,6 +194,11 @@ function DashboardContent({ settings, visible, busy, refreshFailed }: { settings
         <strong>{weight?.value != null ? `${weight.value.toFixed(1)} kg` : missing(weightSeries.isPending)}</strong>
         <small>{weightDelta === null ? 'Latest reading' : `${signed(weightDelta)} kg in 7 days`}</small>
         {weight && weight.date !== today && <small className="menu-reading-date">{weight.date}</small>}
+      </button>
+      <button onClick={() => open('heart', today, 'hrvMs')} aria-label="Open HRV details">
+        <span><Pulse size={14} color="var(--color-recovery)" />HRV</span>
+        <strong>{hrv != null ? `${formatInt(hrv)} ms` : missing(series.isMetricPending('hrvMs'))}</strong>
+        <small>{hrvDelta === null ? 'Daily HRV' : `${signed(hrvDelta)} vs average`}</small>
       </button>
     </section>
     <section className="menu-section" aria-label="Seven-day steps chart">

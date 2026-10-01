@@ -4,6 +4,7 @@ import { isMenuBarDestination, menuBarBounds } from '../src/shared/menu-bar'
 describe('menu bar navigation boundary', () => {
   test('accepts dated daily and weekly chart links', () => {
     expect(isMenuBarDestination({ view: 'activity', date: '2026-10-01', metric: 'steps', range: 'W' })).toBe(true)
+    expect(isMenuBarDestination({ view: 'heart', date: '2026-10-01', metric: 'hrvMs', range: 'D' })).toBe(true)
     expect(isMenuBarDestination({ view: 'settings', date: '2026-10-01' })).toBe(true)
   })
   test('rejects malformed dates and unsupported commands', () => {

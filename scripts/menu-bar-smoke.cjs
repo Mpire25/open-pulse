@@ -137,7 +137,7 @@ async function memoryRun(main, openPanel) {
       days[date] = {}
       if (missing) continue
       for (const metric of metrics) {
-        const values = { steps: date === today ? 12145 : 6000 + Number(date.slice(-2)) * 137, caloriesOut: 2339, caloriesIn: 1463, restingHeartRate: date === today ? 71 : 66, weightKg: date === today ? 78.5 : 78.8 }
+        const values = { steps: date === today ? 12145 : 6000 + Number(date.slice(-2)) * 137, caloriesOut: 2339, caloriesIn: 1463, restingHeartRate: date === today ? 71 : 66, hrvMs: date === today ? 52 : 48, weightKg: date === today ? 78.5 : 78.8 }
         days[date][metric] = values[metric]
       }
     }
@@ -225,6 +225,13 @@ async function memoryRun(main, openPanel) {
   await until(() => panel.webContents.executeJavaScript("document.body.innerText.includes('12,145')"), 'panel after reopening')
   assert.equal(panel.id, initialPanelId, 'reopening must reuse the existing renderer')
   console.log('PASS: panel reopens without rebuilding')
+  assert.ok(await panel.webContents.executeJavaScript(`document.querySelector('[aria-label="Open HRV details"]').textContent.includes('52 ms')`), 'HRV value renders in milliseconds')
+  await panel.webContents.executeJavaScript(`document.querySelector('[aria-label="Open HRV details"]').click()`)
+  await until(() => { reopened = BrowserWindow.getAllWindows().find(w => !w.webContents.getURL().endsWith('#menu-bar')); return !!reopened }, 'main recreated for HRV')
+  await until(() => reopened.webContents.executeJavaScript("window.history.state?.detailMetric?.metric === 'hrvMs' && window.history.state?.selectedDate === '" + today + "'"), 'dated HRV destination')
+  reopened.close()
+  panel = await openPanel()
+  console.log('PASS: HRV reading and detail navigation')
   connected = false
   panel.webContents.send('chats:account-changed')
   await until(() => panel.webContents.executeJavaScript("document.body.innerText.includes('Connect your Fitbit account') && !document.body.innerText.includes('12,145')"), 'account disconnect clears metrics')
@@ -233,6 +240,7 @@ async function memoryRun(main, openPanel) {
   missing = true
   panel.webContents.send('chats:account-changed')
   await until(() => panel.webContents.executeJavaScript("document.body.innerText.includes('No steps recorded this week') && document.body.innerText.includes('Sleep stages unavailable')"), 'missing data')
+  assert.ok(await panel.webContents.executeJavaScript(`document.querySelector('[aria-label="Open HRV details"]').textContent.includes('No data')`), 'Missing HRV must not render as zero')
   console.log('PASS: missing data')
   panel.webContents.emit('before-input-event', { preventDefault() {} }, { key: 'Escape' })
   await until(() => !panel.isVisible(), 'Escape hides panel')

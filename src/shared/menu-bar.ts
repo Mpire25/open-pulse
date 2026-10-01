@@ -1,5 +1,5 @@
 export const MENU_BAR_VIEWS = ['home', 'activity', 'heart', 'sleep', 'body', 'nutrition', 'devices', 'settings'] as const
-export const MENU_BAR_METRICS = ['steps', 'caloriesOut', 'caloriesIn', 'restingHeartRate', 'weightKg'] as const
+export const MENU_BAR_METRICS = ['steps', 'caloriesOut', 'caloriesIn', 'restingHeartRate', 'weightKg', 'hrvMs'] as const
 export interface MenuBarDestination {
   view: typeof MENU_BAR_VIEWS[number]
   date: string
