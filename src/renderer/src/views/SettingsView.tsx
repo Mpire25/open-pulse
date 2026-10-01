@@ -87,6 +87,7 @@ function MenuBarCard({ settings, onSettingsChange }: {
   return <Card index={0}>
     <SectionHeader
       title="macOS menu bar"
+      hint="A quick view of your daily activity, sleep and health"
       icon={
         <span aria-hidden="true" className="flex h-6 w-[18px] shrink-0 items-center justify-center text-[20px] leading-none text-ink-dim" style={{ fontFamily: '-apple-system, BlinkMacSystemFont, sans-serif' }}>
           {'\uF8FF'}
