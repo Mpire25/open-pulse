@@ -4,6 +4,7 @@ import { ArrowClockwise, ArrowUpRight, GearSix, Heartbeat, Moon, Scales } from '
 import type { AppSettings, GoogleAuthStatus, MetricKey } from '@shared/types'
 import type { MenuBarDestination } from '@shared/menu-bar'
 import { selectedSleepSession } from '@shared/sleep'
+import { BatteryPill } from '@/components/BatteryPill'
 import { ColumnChart, ProgressRing } from '@/components/charts'
 import { STAGE_COLOR, STAGE_LABEL } from '@/components/SleepStages'
 import { useCurrentDay } from '@/hooks/useCurrentDay'
@@ -71,6 +72,7 @@ export default function MenuBarDashboard(): React.JSX.Element {
     <header className="menu-header">
       <button className="menu-brand" onClick={() => open('home')} aria-label="Open OpenPulse">OpenPulse <ArrowUpRight size={13} /></button>
       <div className="menu-header-actions">
+        {state?.google.connected && <BatteryPill enabled={visible} onClick={() => open('devices')} />}
         {state?.google.connected && <button className="menu-icon-button" disabled={busy} aria-label="Refresh health data" onClick={() => {
           setRefreshFailed(false)
           void refresh().catch(() => setRefreshFailed(true))
@@ -129,6 +131,10 @@ function DashboardContent({ settings, visible, busy, refreshFailed }: { settings
   const weightDelta = recentWeights.length >= 2 ? Number(((recentWeights.at(-1)!.value!) - recentWeights[0].value!).toFixed(1)) : null
   const night = selectedSleepSession(sleep.data)
   const stageTotal = STAGES.reduce((total, stage) => total + (night?.stageMinutes[stage] ?? 0), 0)
+  const device = devices.data?.find((item) => item.batteryPct != null) ?? devices.data?.[0]
+  const sync = device?.lastSync ? Date.parse(device.lastSync) : NaN
+  const minutes = Math.max(0, Math.floor((now - sync) / 60000))
+  const syncLabel = !Number.isFinite(sync) ? 'Device sync time unavailable' : minutes < 1 ? 'Device synced just now' : minutes < 60 ? `Device synced ${minutes}m ago` : minutes < 1440 ? `Device synced ${Math.floor(minutes / 60)}h ago` : `Device synced ${Math.floor(minutes / 1440)}d ago`
   const anyError = series.error != null || weightSeries.error != null || sleep.isError || devices.isError || refreshFailed
   const signed = (n: number): string => `${n > 0 ? '+' : ''}${n}`
   const missing = (pending: boolean): string => pending ? 'Loading…' : 'No data'
@@ -183,12 +189,7 @@ function DashboardContent({ settings, visible, busy, refreshFailed }: { settings
       </> : <p className="menu-muted">{sleep.isPending ? 'Loading sleep stages…' : 'Sleep stages unavailable'}</p>}
     </button>
     <footer className="menu-footer">
-      <div className="menu-device-list">{devices.data?.length ? devices.data.map((device, index) => {
-        const sync = device.lastSync ? Date.parse(device.lastSync) : NaN
-        const minutes = Math.max(0, Math.floor((now - sync) / 60000))
-        const syncLabel = !Number.isFinite(sync) ? 'Sync time unavailable' : minutes < 1 ? 'Synced just now' : minutes < 60 ? `Synced ${minutes}m ago` : minutes < 1440 ? `Synced ${Math.floor(minutes / 60)}h ago` : `Synced ${Math.floor(minutes / 1440)}d ago`
-        return <button key={`${device.name}-${index}`} onClick={() => open('devices', today)} title={device.lastSync ?? undefined}><strong>{device.name} · {device.batteryPct != null ? `${device.batteryPct}%` : device.batteryState ?? 'Battery unavailable'}</strong><span>{syncLabel}</span></button>
-      }) : <button onClick={() => open('devices', today)}>{devices.isPending ? 'Loading device…' : 'No device information'}</button>}</div>
+      <button className="menu-device-sync" onClick={() => open('devices', today)} title={device?.lastSync ?? undefined}>{devices.isPending ? 'Loading device sync…' : syncLabel}</button>
       <p className="menu-freshness" role="status">{anyError ? 'Some data could not be updated. Open the app for details.' : busy ? 'Checking available data…' : checkedAt ? `Checked at ${checkedAt} · values depend on device sync` : 'Showing available data'}</p>
     </footer>
   </>

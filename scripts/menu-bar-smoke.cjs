@@ -92,7 +92,7 @@ async function memoryRun(main, openPanel) {
   const start = performance.now()
   let panel = await openPanel()
   const firstOpenMs = performance.now() - start
-  await until(() => panel.webContents.executeJavaScript("document.body.innerText.includes('12,145') && document.body.innerText.includes('Fitbit Air')"), 'memory fixture ready')
+  await until(() => panel.webContents.executeJavaScript("document.body.innerText.includes('12,145') && document.querySelector('[role=\"meter\"]')?.getAttribute('aria-valuenow') === '76'"), 'memory fixture ready')
   await sample('panel-open')
   blurHandlers.get(panel.id)()
   await sample('panel-dismissed-main-open')
@@ -172,7 +172,7 @@ async function memoryRun(main, openPanel) {
   if (measureMemory) { await memoryRun(main, openPanel); return }
   let panel = await openPanel()
   const initialPanelId = panel.id
-  await until(() => panel.webContents.executeJavaScript("document.body.innerText.includes('12,145') && document.body.innerText.includes('Fitbit Air')"), 'fixture values')
+  await until(() => panel.webContents.executeJavaScript("document.body.innerText.includes('12,145') && document.querySelector('[role=\"meter\"]')?.getAttribute('aria-valuenow') === '76'"), 'fixture values')
   await delay(1800)
   const dimensions = await panel.webContents.executeJavaScript("({ width: innerWidth, height: innerHeight, scroll: document.querySelector('.menu-dashboard').scrollHeight })")
   assert.equal(dimensions.width, 452)

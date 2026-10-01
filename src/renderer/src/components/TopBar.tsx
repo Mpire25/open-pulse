@@ -2,9 +2,9 @@
 // control, device battery, assistant toggle, and refresh with live progress.
 
 import { ArrowClockwise, SidebarSimple, Sparkle } from '@phosphor-icons/react'
-import { BatteryIcon, clampBatteryPct } from '@/components/BatteryIcon'
+import { BatteryPill } from '@/components/BatteryPill'
 import { DateNav } from '@/components/DateNav'
-import { useDevices, useRefresh, useSyncBusy } from '@/hooks/useHealth'
+import { useRefresh, useSyncBusy } from '@/hooks/useHealth'
 import { cn } from '@/lib/utils'
 
 interface TopBarProps {
@@ -64,27 +64,6 @@ export function TopBar({
       )}
 
       <RefreshButton onRefreshDate={onRefreshDate} />
-    </div>
-  )
-}
-
-function BatteryPill({ enabled }: { enabled: boolean }): React.JSX.Element | null {
-  const { data: devices } = useDevices(enabled)
-  const device = devices?.find((d) => d.batteryPct != null)
-  if (!device || device.batteryPct == null) return null
-  const pct = Math.round(clampBatteryPct(device.batteryPct))
-  return (
-    <div
-      className="no-drag flex h-7 items-center gap-1.5 rounded-lg px-2 text-[11.5px] font-semibold text-ink-dim"
-      role="meter"
-      aria-label={`${device.name} battery level`}
-      aria-valuenow={pct}
-      aria-valuemin={0}
-      aria-valuemax={100}
-      title={`${device.name} · ${pct}%`}
-    >
-      <BatteryIcon pct={pct} size={17} />
-      {pct}%
     </div>
   )
 }

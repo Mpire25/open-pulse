@@ -40,10 +40,7 @@
 .menu-stage-legend i { width: 5px; height: 5px; border-radius: 50%; }
 .menu-stage-legend strong { font-size: 11px; font-weight: 500; }
 .menu-footer { border-top: 1px solid var(--color-hairline); padding-top: 8px; }
-.menu-device-list { min-width: 0; }
-.menu-device-list button { display: block; text-align: left; margin-bottom: 5px; font-size: 10px; }
-.menu-device-list strong { display: block; font-size: 10px; font-weight: 500; }
-.menu-device-list span { color: var(--color-ink-dim); font-size: 9px; }
+.menu-device-sync { display: block; text-align: left; font-size: 10px; color: var(--color-ink-dim); }
 .menu-freshness { font-size: 9px; color: var(--color-ink-dim); margin-top: 6px; }
 .menu-muted { font-size: 11px; color: var(--color-ink-dim); padding: 12px 0; }
 .menu-connect { display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; min-height: 420px; gap: 18px; }
