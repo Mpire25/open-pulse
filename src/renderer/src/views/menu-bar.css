@@ -39,12 +39,12 @@
 .menu-stage-legend span { display: flex; align-items: center; gap: 4px; font-size: 9px; color: var(--color-ink-dim); }
 .menu-stage-legend i { width: 5px; height: 5px; border-radius: 50%; }
 .menu-stage-legend strong { font-size: 11px; font-weight: 500; }
-.menu-footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; border-top: 1px solid var(--color-hairline); padding-top: 8px; }
-.menu-device-list { flex: 1; min-width: 0; }
+.menu-footer { border-top: 1px solid var(--color-hairline); padding-top: 8px; }
+.menu-device-list { min-width: 0; }
 .menu-device-list button { display: block; text-align: left; margin-bottom: 5px; font-size: 10px; }
 .menu-device-list strong { display: block; font-size: 10px; font-weight: 500; }
 .menu-device-list span { color: var(--color-ink-dim); font-size: 9px; }
-.menu-freshness { flex-basis: 100%; font-size: 9px; color: var(--color-ink-dim); margin-top: 6px; }
+.menu-freshness { font-size: 9px; color: var(--color-ink-dim); margin-top: 6px; }
 .menu-muted { font-size: 11px; color: var(--color-ink-dim); padding: 12px 0; }
 .menu-connect { display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; min-height: 420px; gap: 18px; }
 .menu-connect > svg { color: var(--color-sleep); }
