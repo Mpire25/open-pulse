@@ -23,8 +23,8 @@
 .menu-ring span { display: block; color: var(--color-ink-dim); font-size: 9px; text-transform: uppercase; letter-spacing: .7px; }
 .menu-ring small { color: var(--color-ink-dim); font-size: 9px; font-family: var(--font-mono); }
 .menu-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--color-hairline); }
-.menu-stats button { text-align: left; border-radius: 8px; padding: 2px; }
-.menu-stats span { display: flex; gap: 5px; align-items: center; font-size: 10px; color: var(--color-ink-dim); }
+.menu-stats button { text-align: center; border-radius: 8px; padding: 2px; }
+.menu-stats span { display: flex; gap: 5px; align-items: center; justify-content: center; font-size: 10px; color: var(--color-ink-dim); }
 .menu-stats strong { display: block; margin-top: 5px; font-size: 16px; font-weight: 600; }
 .menu-stats small { display: block; font-size: 10px; margin-top: 4px; color: var(--color-ink-dim); }
 .menu-stats .menu-reading-date { font-size: 9px; }
