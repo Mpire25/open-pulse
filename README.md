@@ -168,7 +168,11 @@ trademarks, and product imagery are excluded; see
 
 ### macOS menu bar
 
-Click the OpenPulse pulse icon in the macOS menu bar for today's goal rings,
+Use **Settings → macOS menu bar → Show in menu bar** to enable or disable the
+feature. Changes apply immediately and persist across launches. Disabling it also
+releases the retained popup window. It is enabled by default.
+
+Click the OpenPulse heart icon in the macOS menu bar for today's goal rings,
 health summary, seven-day steps chart, main-sleep stage breakdown, and device
 battery/sync information. Rings and summary tiles open the corresponding app
 page; selecting a steps bar opens that day's steps. The week heading opens the
@@ -190,7 +194,8 @@ For a native fixture smoke test, run `bun run build` followed by
 simulates visibility without taking desktop focus. It uses a temporary profile
 with mock health/account responses and exits when done. It checks chart navigation after closing the main window, account
 changes, empty/error states, refresh, dismissal, and panel fit. A fixture preview
-is saved to `out/menu-bar-preview.png`.
+is saved to `out/menu-bar-preview.png`. Add `--menu-disabled` to also verify startup
+with a saved disabled preference.
 
 Add `--memory` to the smoke-test command to record macOS physical footprint and
 resident memory at startup, while the panel is open/hidden, after repeated opens,

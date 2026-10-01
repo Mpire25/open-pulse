@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import { readFileSync } from 'node:fs'
 import menuBarIcon from '../../build/menu-barTemplate.png?asset'
 import menuBarIconRetina from '../../build/menu-barTemplate@2x.png?asset'
+import { getMenuBarEnabled } from './store'
 import { registerIpc, registerTrustedRenderer } from './ipc'
 import { createRendererTarget, safeExternalUrl, type RendererTarget } from './renderer-security'
 
@@ -206,7 +207,19 @@ function installMenuBar(target: RendererTarget): void {
     { label: 'Open OpenPulse', click: () => { const win = mainWindow ?? createWindow(target); if (win.isMinimized()) win.restore(); win.show(); win.focus() } },
     { type: 'separator' }, { role: 'quit', label: 'Quit OpenPulse' }
   ])))
-  app.once('before-quit', () => { quitting = true; tray?.destroy(); tray = null })
+}
+
+function applyMenuBarPreference(target: RendererTarget, enabled: boolean): void {
+  if (process.platform !== 'darwin') return
+  if (enabled) {
+    if (!tray) installMenuBar(target)
+  } else {
+    // Turning the feature off also releases its retained renderer and data.
+    panelRequested = false
+    menuPanel?.destroy()
+    tray?.destroy()
+    tray = null
+  }
 }
 
 function installApplicationMenu(target: RendererTarget): void {
@@ -237,10 +250,15 @@ function installApplicationMenu(target: RendererTarget): void {
 app.whenReady().then(() => {
   const target = rendererTarget()
   applyContentSecurityPolicy(target)
-  registerIpc({ open: (destination) => openDestination(target, destination), close: closeMenuPanel, quit: () => app.quit() })
+  registerIpc({
+    open: (destination) => openDestination(target, destination),
+    close: closeMenuPanel,
+    quit: () => app.quit(),
+    settingsChanged: (settings) => applyMenuBarPreference(target, settings.menuBarEnabled)
+  })
   installApplicationMenu(target)
   createWindow(target)
-  if (process.platform === 'darwin') installMenuBar(target)
+  applyMenuBarPreference(target, getMenuBarEnabled())
   app.on('activate', () => {
     const win = mainWindow ?? createWindow(target)
     if (win.isMinimized()) win.restore()
@@ -248,6 +266,8 @@ app.whenReady().then(() => {
     win.focus()
   })
 })
+
+app.once('before-quit', () => { quitting = true; tray?.destroy(); tray = null })
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()

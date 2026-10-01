@@ -3,7 +3,7 @@
 // Uses generated fixture data in a temporary profile, without showing/focusing windows or signing in.
 const electron = require('electron')
 const { app, BrowserWindow, ipcMain } = electron
-const { mkdtempSync, writeFileSync, rmSync } = require('node:fs')
+const { mkdtempSync, writeFileSync, readFileSync, existsSync, rmSync } = require('node:fs')
 const { tmpdir } = require('node:os')
 const { join, resolve } = require('node:path')
 const { pathToFileURL } = require('node:url')
@@ -15,6 +15,10 @@ const assert = require('node:assert/strict')
 const profile = mkdtempSync(join(tmpdir(), 'openpulse-menu-smoke-'))
 app.setPath('userData', profile)
 app.setPath('sessionData', profile)
+const startDisabled = process.argv.includes('--menu-disabled')
+const storePath = join(profile, 'pulse-store.json')
+if (startDisabled) writeFileSync(storePath, JSON.stringify({ settings: { menuBarEnabled: false }, secrets: {} }))
+const savedMenuBarEnabled = () => existsSync(storePath) ? JSON.parse(readFileSync(storePath, 'utf8')).settings.menuBarEnabled ?? true : true
 let tray
 const visibilityTrace = []
 const blurHandlers = new Map()
@@ -121,7 +125,7 @@ async function memoryRun(main, openPanel) {
   app.setActivationPolicy('prohibited')
   await import(pathToFileURL(resolve(appEntry)).href)
   const goals = { steps: 10000, caloriesOut: 2800, caloriesIn: 1800, sleepMinutes: 480, activeZoneMinutes: 30, proteinG: 120, carbsG: 200, fatG: 60 }
-  replace('settings:get', () => ({ goals, googleClientId: '', googleClientSecret: '', googleClientSecretConfigured: false, assistant: { model: 'gpt-6-astra', reasoningEffort: 'medium' }, chatRetention: 'forever' }))
+  replace('settings:get', () => ({ menuBarEnabled: savedMenuBarEnabled(), goals, googleClientId: '', googleClientSecret: '', googleClientSecretConfigured: false, assistant: { model: 'gpt-6-astra', reasoningEffort: 'medium' }, chatRetention: 'forever' }))
   replace('google:status', (event) => ({ connected: event.sender.getURL().endsWith('#menu-bar') && connected }))
   replace('codex:status', () => ({ connected: false }))
   replace('chats:list', () => ({ sessions: [], persistence: 'memory' }))
@@ -147,6 +151,13 @@ async function memoryRun(main, openPanel) {
   await until(() => BrowserWindow.getAllWindows().every(w => w.webContents.getURL() && !w.webContents.isLoadingMainFrame()), 'initial windows loaded')
   const main = BrowserWindow.getAllWindows().find(w => !w.webContents.getURL().endsWith('#menu-bar'))
   await until(() => !main.webContents.isLoadingMainFrame(), 'main load')
+  if (startDisabled) {
+    assert.equal(tray, undefined, 'disabled startup must not create a tray')
+    assert.equal(BrowserWindow.getAllWindows().length, 1, 'disabled startup must not preload a panel')
+    await main.webContents.executeJavaScript('window.pulse.settings.update({ menuBarEnabled: true })')
+    await until(() => !!tray, 'enable after disabled startup')
+    console.log('PASS: persisted disabled preference at startup')
+  }
   if (!measureMemory) assert.equal(healthRequests, 0, 'preloading must not fetch health data')
   // Close the main window first to exercise native reopen and pending navigation.
   if (!measureMemory) { main.close(); await until(() => main.isDestroyed(), 'main closed') }
@@ -210,12 +221,27 @@ async function memoryRun(main, openPanel) {
   assert.equal(healthRequests, hiddenRequests, 'hidden panel must not start new health requests')
   panel.close()
   assert.equal(panel.isDestroyed(), false, 'window close also preserves the panel')
+  await panel.webContents.executeJavaScript(`window.pulse.app.open({ view: 'settings', date: '${today}' })`)
+  let settingsWindow
+  await until(() => { settingsWindow = BrowserWindow.getAllWindows().find(w => w.webContents.getURL() && !w.webContents.getURL().endsWith('#menu-bar')); return !!settingsWindow }, 'settings window')
+  await until(() => settingsWindow.webContents.executeJavaScript("document.querySelector('#menu-bar-enabled')?.getAttribute('aria-checked') === 'true'"), 'menu bar setting')
+  const activeTray = tray
+  await settingsWindow.webContents.executeJavaScript("document.querySelector('#menu-bar-enabled').click()")
+  await until(() => activeTray.isDestroyed() && panel.isDestroyed(), 'disable removes tray and retained panel')
+  assert.equal(savedMenuBarEnabled(), false, 'disabled preference persisted')
+  await until(() => settingsWindow.webContents.executeJavaScript("document.querySelector('#menu-bar-enabled')?.getAttribute('aria-checked') === 'false' && !document.querySelector('#menu-bar-enabled').disabled"), 'toggle saved')
+  await settingsWindow.webContents.executeJavaScript("document.querySelector('#menu-bar-enabled').click()")
+  await until(() => tray !== activeTray && !tray.isDestroyed(), 'enable recreates tray')
+  assert.equal(savedMenuBarEnabled(), true, 'enabled preference persisted')
+  panel = await openPanel()
+  assert.equal(app.listenerCount('before-quit'), 1, 'toggling must not accumulate quit handlers')
+  console.log('PASS: settings switch disables, persists, and re-enables the menu bar')
   assert.deepEqual(errors, [], 'renderer console errors')
   console.log(JSON.stringify({ result: 'PASS', screenshot: screenshotPath, checks: ['panel fits', 'fixture charts', 'refresh', 'closed main window weekly navigation', 'account change clears data', 'missing data', 'Escape', 'partial error', 'blur dismissal'] }))
 })().catch(error => { exitCode = 1; console.error(error) }).finally(() => {
   clearTimeout(deadline)
   for (const win of BrowserWindow.getAllWindows()) win.destroy()
-  tray?.destroy()
+  if (tray && !tray.isDestroyed()) tray.destroy()
   app.exit(exitCode)
 })
 app.on('quit', () => { rmSync(profile, { recursive: true, force: true }) })

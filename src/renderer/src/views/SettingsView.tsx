@@ -4,6 +4,7 @@ import * as Dialog from '@radix-ui/react-dialog'
 import { Brain, ChatCircleDots, CheckCircle, GoogleLogo, Sparkle, Target, ArrowClockwise, Trash, Warning } from '@phosphor-icons/react'
 import { Panel, SectionHeader } from '@/components/Panel'
 import { Button } from '@/components/ui/button'
+import { Switch } from '@/components/ui/switch'
 import { Input } from '@/components/ui/input'
 import { GoogleSetup } from '@/components/GoogleSetup'
 import { cn } from '@/lib/utils'
@@ -47,9 +48,10 @@ export function SettingsView({
         className="pt-2"
       >
         <h1 className="display text-[27px] font-bold text-ink">Settings</h1>
-        <p className="mt-1 text-[13px] text-ink-dim">Accounts and daily goals.</p>
+        <p className="mt-1 text-[13px] text-ink-dim">Accounts, daily goals, and app preferences.</p>
       </motion.header>
 
+      {window.pulse.app.platform === 'darwin' && <MenuBarCard settings={settings} onSettingsChange={onSettingsChange} />}
       <GoogleCard
         settings={settings}
         google={google}
@@ -62,6 +64,37 @@ export function SettingsView({
       <GoalsCard settings={settings} onSettingsChange={onSettingsChange} />
     </div>
   )
+}
+
+function MenuBarCard({ settings, onSettingsChange }: {
+  settings: AppSettings
+  onSettingsChange: (settings: AppSettings) => void
+}): React.JSX.Element {
+  const [saving, setSaving] = useState(false)
+  const [failure, setFailure] = useState<string | null>(null)
+  const change = async (enabled: boolean): Promise<void> => {
+    if (saving) return
+    setSaving(true)
+    setFailure(null)
+    try {
+      onSettingsChange(await window.pulse.settings.update({ menuBarEnabled: enabled }))
+    } catch {
+      setFailure('Could not save the menu bar preference. Please try again.')
+    } finally {
+      setSaving(false)
+    }
+  }
+  return <Card index={0}>
+    <SectionHeader title="macOS menu bar" />
+    <div className="flex items-center justify-between gap-6">
+      <div>
+        <label htmlFor="menu-bar-enabled" className="text-[13px] font-medium text-ink">Show in menu bar</label>
+        <p id="menu-bar-description" className="mt-1 text-[12px] leading-relaxed text-ink-dim">Keep your daily rings and health summary a click away, even when the main window is closed.</p>
+      </div>
+      <Switch id="menu-bar-enabled" checked={settings.menuBarEnabled} disabled={saving} aria-describedby="menu-bar-description" onCheckedChange={(enabled) => void change(enabled)} />
+    </div>
+    {failure && <p role="alert" className="text-[12px] text-danger">{failure}</p>}
+  </Card>
 }
 
 const RETENTION_OPTIONS: Array<{ value: ChatRetention; label: string; phrase: string }> = [

@@ -67,6 +67,7 @@ ipcRenderer.on('app:panel-visibility', (_event, visible: boolean) => {
 
 const api = {
   app: {
+    platform: process.platform,
     onPanelVisibility: (callback: (visible: boolean) => void): (() => void) => {
       panelVisibilityCallbacks.add(callback)
       queueMicrotask(() => { if (panelVisibilityCallbacks.has(callback)) callback(panelVisible) })
