@@ -606,20 +606,16 @@ function CodexCard({
 }): React.JSX.Element {
   const [operation, setOperation] = useState<'connect' | 'disconnect' | null>(null)
   const operationSequence = useRef(0)
-  const [switching, setSwitching] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [selectedAccount, setSelectedAccount] = useState(codex.activeRegistration ?? '')
-  useEffect(() => { setSelectedAccount(codex.activeRegistration ?? ''); setSwitching(false) }, [codex.activeRegistration])
 
   const connect = async (): Promise<void> => {
     const sequence = ++operationSequence.current
     setError(null)
     setOperation('connect')
     try {
-      const status = await window.pulse.codex.connect(selectedAccount || undefined)
+      const status = await window.pulse.codex.connect()
       if (sequence !== operationSequence.current) return
       setOperation(null)
-      setSwitching(false)
       onCodexChange(status)
     } catch (err) {
       if (sequence === operationSequence.current) setError(err instanceof Error ? err.message : String(err))
@@ -637,15 +633,12 @@ function CodexCard({
       const status = await window.pulse.codex.status()
       if (sequence !== operationSequence.current) return
       setOperation(null)
-      setSwitching(false)
       onCodexChange(status)
       setError(result.warning ?? null)
     } catch (error) {
       if (sequence === operationSequence.current) setError(error instanceof Error ? error.message : String(error))
     } finally { if (sequence === operationSequence.current) setOperation(null) }
   }
-  const choosingAccount = !codex.signedIn || switching
-  const differentAccount = selectedAccount !== codex.activeRegistration
 
   return (
     <Card index={1}>
@@ -660,14 +653,7 @@ function CodexCard({
           />
         }
       />
-      {choosingAccount && codex.accounts && codex.accounts.length > 0 && <div className="flex items-center gap-3">
-        <select aria-label="ChatGPT account" disabled={operation !== null} value={selectedAccount} onChange={(event) => setSelectedAccount(event.target.value)} className="rounded-lg bg-canvas px-3 py-2 text-[12px] text-ink">
-          <option value="">Add another ChatGPT account</option>
-          {codex.accounts.map((account) => <option key={account.id} value={account.id}>{account.label}</option>)}
-        </select>
-        {codex.signedIn && differentAccount && <Button size="sm" disabled={operation !== null} onClick={connect}>{operation === 'connect' ? 'Waiting for ChatGPT…' : selectedAccount ? 'Switch to account' : 'Connect another account'}</Button>}
-      </div>}
-      {codex.signedIn && !codex.planEnabled && <p className="text-[12px] text-ink-faint">Signed in, but ChatGPT plan usage is not enabled.</p>}
+      {codex.signedIn && !codex.planEnabled && <p className="text-[12px] text-ink-faint">ChatGPT plan usage was not authorized. Sign out and sign in again to authorize it.</p>}
       {codex.signedIn && error && <p role="alert" className="text-[12px] text-danger">{error}</p>}
       {codex.signedIn ? (
         <div className="flex flex-col gap-4">
@@ -679,8 +665,6 @@ function CodexCard({
             <Button variant="destructive" size="sm" disabled={operation === 'disconnect'} onClick={disconnect}>
               {operation === 'disconnect' ? 'Signing out…' : 'Sign out'}
             </Button>
-            <Button variant="ghost" size="sm" disabled={operation !== null} onClick={() => setSwitching(!switching)}>{switching ? 'Cancel' : 'Switch account'}</Button>
-            {!codex.planEnabled && !differentAccount && <Button size="sm" disabled={operation !== null} onClick={connect}>Enable plan usage</Button>}
           </div>
         </div>
       ) : (
@@ -698,7 +682,7 @@ function CodexCard({
           <div>
             <Button onClick={connect} disabled={operation !== null}>
               {operation === 'connect' ? <ArrowClockwise size={15} className="animate-spin" /> : <Sparkle size={15} weight="fill" />}
-              {operation === 'connect' ? 'Waiting for ChatGPT…' : 'Continue with ChatGPT'}
+              {operation === 'connect' ? 'Waiting for ChatGPT…' : 'Sign in with ChatGPT'}
             </Button>
           </div>
         </div>

@@ -54,45 +54,56 @@ afterEach(async () => { await act(async () => root.unmount()); container.remove(
 
 test('sign out is usable immediately after connecting on the same settings page', async () => {
   await act(async () => root.render(<Harness />))
-  await act(async () => button('Continue with ChatGPT')!.click())
+  await act(async () => button('Sign in with ChatGPT')!.click())
   await act(async () => { backendStatus = connected; resolveConnect(connected) })
   expect(button('Sign out')?.disabled).toBe(false)
   expect(Boolean(button('Continue with account'))).toBe(false)
   await act(async () => button('Sign out')!.click())
   expect(disconnects).toBe(1)
-  expect(Boolean(button('Continue with ChatGPT'))).toBe(true)
+  expect(Boolean(button('Sign in with ChatGPT'))).toBe(true)
 })
 
 test('a stale sign-in completion cannot disable sign out or reconnect after signing out', async () => {
   await act(async () => root.render(<Harness />))
-  await act(async () => button('Continue with ChatGPT')!.click())
+  await act(async () => button('Sign in with ChatGPT')!.click())
   await act(async () => { backendStatus = connected; publish(connected) })
   expect(button('Sign out')?.disabled).toBe(false)
   await act(async () => button('Sign out')!.click())
   await act(async () => resolveConnect(connected))
   expect(Boolean(button('Sign out'))).toBe(false)
-  expect(button('Continue with ChatGPT')?.disabled).toBe(false)
+  expect(button('Sign in with ChatGPT')?.disabled).toBe(false)
 })
 
-test('account switching is explicit and only offers an action for another account', async () => {
-  backendStatus = connected
+test('saved accounts never introduce account management controls', async () => {
+  backendStatus = { ...connected, connected: false, signedIn: false }
+  let signInArguments: unknown[] = []
+  window.pulse.codex.connect = async (...args) => { signInArguments = args; return connected }
   await act(async () => root.render(<Harness />))
   expect(Boolean(document.querySelector('select[aria-label="ChatGPT account"]'))).toBe(false)
-  await act(async () => button('Switch account')!.click())
-  const selector = document.querySelector<HTMLSelectElement>('select[aria-label="ChatGPT account"]')!
-  expect(selector.value).toBe('account-a')
-  expect(Boolean(button('Switch to account'))).toBe(false)
-  await act(async () => { selector.value = ''; selector.dispatchEvent(new Event('change', { bubbles: true })) })
-  expect(Boolean(button('Connect another account'))).toBe(true)
-  await act(async () => button('Cancel')!.click())
+  expect(document.body.textContent?.includes('Test account')).toBe(false)
+  expect(document.body.textContent?.includes('test@example.invalid')).toBe(false)
+  await act(async () => button('Sign in with ChatGPT')!.click())
+  expect(signInArguments.length).toBe(0)
+  expect(Boolean(button('Sign out'))).toBe(true)
+  expect(Boolean(button('Switch account'))).toBe(false)
   expect(Boolean(document.querySelector('select[aria-label="ChatGPT account"]'))).toBe(false)
+  expect(Boolean(button('Sign in with ChatGPT'))).toBe(false)
+})
+
+test('sign-in without plan authorization only offers sign out', async () => {
+  backendStatus = { ...connected, connected: false, planEnabled: false }
+  await act(async () => root.render(<Harness />))
+  expect(Boolean(button('Sign out'))).toBe(true)
+  expect(Boolean(button('Enable plan usage'))).toBe(false)
+  expect(Boolean(button('Switch account'))).toBe(false)
+  expect(document.body.textContent?.includes('Sign out and sign in again')).toBe(true)
 })
 
 test('failed sign-in restores the button and displays the error', async () => {
   window.pulse.codex.connect = async () => { throw new Error('Authorization canceled') }
   await act(async () => root.render(<Harness />))
-  await act(async () => button('Continue with ChatGPT')!.click())
-  expect(button('Continue with ChatGPT')?.disabled).toBe(false)
+  await act(async () => button('Sign in with ChatGPT')!.click())
+  expect(button('Sign in with ChatGPT')?.disabled).toBe(false)
   expect(document.body.textContent?.includes('Authorization canceled')).toBe(true)
 })
 
