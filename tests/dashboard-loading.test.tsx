@@ -6,6 +6,8 @@ import { DashboardChart, DashboardRing, DashboardSummary } from '../src/renderer
 import { METRICS } from '../src/renderer/src/lib/metric-registry'
 import { rangeEnding } from '../src/renderer/src/lib/metrics'
 import { DEFAULT_GOALS, METRIC_KEYS, type MetricKey } from '../src/shared/types'
+import { normalizeDashboardLayout } from '../src/shared/dashboard'
+import { MenuBarSlots } from '../src/renderer/src/views/MenuBarDashboard'
 
 const date = '2026-10-02'
 const noop = () => {}
@@ -122,5 +124,26 @@ describe('dashboard loading presentation', () => {
       }
       expect(client.getQueryCache().findAll({ queryKey: ['activity-intraday'] })).toHaveLength(0)
     })
+  })
+
+  test('removed menu bar charts leave no empty section or specialized chart query', () => {
+    const settings = {
+      menuBarEnabled: true, googleClientId: '', googleClientSecret: '', googleClientSecretConfigured: false,
+      goals: DEFAULT_GOALS, assistant: { model: 'gpt-6-astra', reasoningEffort: 'medium' as const }, chatRetention: 'forever' as const
+    }
+    for (const removed of [[], ['chart1'], ['chart2'], ['chart1', 'chart2']]) {
+      withClient((render, client) => {
+        const layout = normalizeDashboardLayout('menuBar', {
+          chart1: { kind: 'intraday', metric: 'restingHeartRate' },
+          chart2: { kind: 'intraday', metric: 'caloriesOut' },
+          ...Object.fromEntries(removed.map(id => [id, { kind: 'hidden' }]))
+        })
+        const html = render(<MenuBarSlots layout={layout} date={date} settings={settings} enabled preview />)
+        expect((html.match(/class="menu-section dashboard-compact-chart"/g) ?? [])).toHaveLength(2 - removed.length)
+        expect(client.getQueryCache().findAll({ queryKey: ['intraday', 'heart'] })).toHaveLength(removed.includes('chart1') ? 0 : 1)
+        expect(client.getQueryCache().findAll({ queryKey: ['activity-intraday', 'caloriesOut'] })).toHaveLength(removed.includes('chart2') ? 0 : 1)
+        for (const id of removed) expect(html).not.toContain(`data-dashboard-slot="${id}"`)
+      })
+    }
   })
 })

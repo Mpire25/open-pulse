@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useIsFetching, useQueryClient } from '@tanstack/react-query'
-import { ArrowClockwise, ArrowUpRight, GearSix, Moon } from '@phosphor-icons/react'
+import { ArrowClockwise, ArrowUpRight, GearSix, Moon, Plus } from '@phosphor-icons/react'
 import type { AppSettings, GoogleAuthStatus } from '@shared/types'
 import type { DashboardLayout } from '@shared/dashboard'
 import type { MenuBarDestination } from '@shared/menu-bar'
@@ -223,6 +223,8 @@ export function MenuBarSlots({
         {content}
       </div>
     )
+  const availableChart = ['chart1', 'chart2'].find(id => layout[id].kind === 'hidden')
+  const charts = ['chart1', 'chart2'].filter(id => layout[id].kind !== 'hidden')
   return (
     <>
       <div className="menu-day">
@@ -253,7 +255,7 @@ export function MenuBarSlots({
           )
         })}
       </section>
-      <section className="menu-stats" aria-label="Health summary">
+      <section className={`menu-stats${charts.length === 0 ? ' menu-stats--no-charts' : ''}`} aria-label="Health summary">
         {['summary1', 'summary2', 'summary3', 'summary4'].map((id) => {
           const widget = layout[id]
           return wrap(
@@ -271,7 +273,7 @@ export function MenuBarSlots({
           )
         })}
       </section>
-      {['chart1', 'chart2'].map((id) =>
+      {charts.map((id) =>
         wrap(
           id,
           <DashboardChart
@@ -287,7 +289,50 @@ export function MenuBarSlots({
           />
         )
       )}
+      {editor?.editing && availableChart && <AddMenuBarChart id={availableChart} editor={editor} />}
     </>
+  )
+}
+
+function AddMenuBarChart({ id, editor }: { id: string; editor: DashboardEditorState }): React.JSX.Element {
+  const button = useRef<HTMLButtonElement>(null)
+  const [choosing, setChoosing] = useState(false)
+  const [failure, setFailure] = useState(false)
+  return (
+    <div className="pt-3">
+      <button
+        ref={button}
+        type="button"
+        className="dashboard-action"
+        data-menu-add-chart
+        disabled={editor.saving}
+        aria-haspopup="menu"
+        aria-busy={choosing}
+        onClick={async () => {
+          const current = editor.layout?.[id]
+          const rect = button.current?.getBoundingClientRect()
+          if (!current || current.kind !== 'hidden' || !rect || choosing) return
+          setChoosing(true)
+          setFailure(false)
+          try {
+            const widget = await window.pulse.dashboard.choose('menuBar', id, current, { x: rect.left, y: rect.bottom })
+            if (widget) {
+              editor.setDraft(draft => draft?.[id].kind === 'hidden' ? { ...draft, [id]: widget } : draft)
+              requestAnimationFrame(() => document.querySelector<HTMLButtonElement>(`[data-dashboard-slot="${id}"] > .dashboard-slot-change`)?.focus())
+            } else button.current?.focus()
+          } catch {
+            setFailure(true)
+            button.current?.focus()
+          } finally {
+            setChoosing(false)
+          }
+        }}
+      >
+        <Plus size={14} aria-hidden="true" />
+        Add chart
+      </button>
+      {failure && <p role="alert" className="text-[12px] text-danger">Could not open menu. Try again.</p>}
+    </div>
   )
 }
 

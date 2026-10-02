@@ -55,6 +55,13 @@ test('upgrades, independent surface saves, restart, rejection, and failed writes
   expect(persisted.settings.goals.steps).toBe(9000)
   const restarted = await import(`../../src/main/store.ts?restart=${Date.now()}`)
   expect(restarted.getDashboardLayouts()).toEqual({ version: 1, home, menuBar })
+  for (const removed of [['chart1'], ['chart1', 'chart2']]) {
+    const optional = { ...menuBar, ...Object.fromEntries(removed.map(id => [id, { kind: 'hidden' as const }])) }
+    expect(updateDashboardLayout('menuBar', optional).menuBar).toEqual(optional)
+    const reloaded = await import(`../../src/main/store.ts?removed=${removed.length}`)
+    expect(reloaded.getDashboardLayouts()).toEqual({ version: 1, home, menuBar: optional })
+  }
+  updateDashboardLayout('menuBar', menuBar)
   expect(() =>
     updateDashboardLayout('home', { ...home, ring1: { kind: 'goal', metric: 'weightKg' } })
   ).toThrow()

@@ -61,6 +61,23 @@ describe('dashboard preferences', () => {
     ).toThrow()
     expect(() => validateDashboardLayout('menuBar', {})).toThrow()
   })
+  test('menu bar charts can be removed independently without restoring defaults on load', () => {
+    const defaults = normalizeDashboardLayouts()
+    for (const removed of [[], ['chart1'], ['chart2'], ['chart1', 'chart2']]) {
+      const menuBar = { ...defaults.menuBar, ...Object.fromEntries(removed.map(id => [id, { kind: 'hidden', unexpected: true }])) }
+      const clean = validateDashboardLayout('menuBar', menuBar)
+      expect(['chart1', 'chart2'].filter(id => clean[id].kind !== 'hidden')).toHaveLength(2 - removed.length)
+      for (const id of removed) expect(clean[id]).toEqual({ kind: 'hidden' })
+      expect(normalizeDashboardLayouts({ version: 1, home: defaults.home, menuBar: clean }).menuBar).toEqual(clean)
+      expect(clean.ring1).toEqual(defaults.menuBar.ring1)
+      expect(clean.summary1).toEqual(defaults.menuBar.summary1)
+    }
+    for (const surface of ['home', 'menuBar'] as const) {
+      for (const slot of DASHBOARD_SLOTS[surface].filter(slot => surface === 'home' || slot.kind !== 'chart')) {
+        expect(() => validateDashboardLayout(surface, { ...defaults[surface], [slot.id]: { kind: 'hidden' } })).toThrow()
+      }
+    }
+  })
   test('both surfaces offer every period and only supported one-day charts', () => {
     for (const surface of ['home', 'menuBar'] as const) {
       const options = widgetOptions('chart', surface)

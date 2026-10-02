@@ -253,8 +253,9 @@ interface ChartProps {
   onWorkouts?: () => void
   onWorkout?: (workout: Workout) => void
 }
-export function DashboardChart(props: ChartProps): React.JSX.Element {
+export function DashboardChart(props: ChartProps): React.JSX.Element | null {
   const { widget } = props
+  if (widget.kind === 'hidden') return null
   if (widget.kind === 'trend')
     return <TrendWidget {...props} metric={widget.metric} days={widget.days} />
   if (widget.kind === 'intraday')

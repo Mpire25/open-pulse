@@ -155,8 +155,10 @@ export function EditableDashboardSlot({
                   x: rect.left,
                   y: rect.bottom
                 })
-                if (widget)
+                if (widget) {
                   editor.setDraft((draft) => draft ? { ...draft, [id]: widget } : draft)
+                  if (widget.kind === 'hidden') requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('[data-menu-add-chart]')?.focus())
+                }
               } catch {
                 setFailure(true)
               } finally {

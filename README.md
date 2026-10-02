@@ -72,6 +72,8 @@ Use **Save layout** to keep your choices, **Cancel** to discard the draft, or
 **Restore defaults** followed by Save to return that surface to its original layout.
 
 For the menu bar, open **Settings → macOS menu bar → Layout → Customize menu bar**.
+The two full-width charts are optional: use **Remove chart** in a chart's pencil
+menu or **Add chart** below the preview to keep zero, one, or two charts.
 The main window shows a compact draft preview;
 saving also updates an already-open popup. Preferences survive restart and do
 not change goals or health records. Missing readings remain unavailable.

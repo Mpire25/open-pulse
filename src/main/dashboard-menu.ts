@@ -88,6 +88,12 @@ export function chooseDashboardWidget(
       : Array.from(groups, ([group, submenu]) => group === 'other'
           ? submenu
           : [{ label: group[0].toUpperCase() + group.slice(1), submenu }]).flat()
+    if (surface === 'menuBar' && slot.kind === 'chart' && current.kind !== 'hidden') {
+      template.push(
+        { type: 'separator' },
+        { id: 'remove-chart', label: 'Remove chart', click: () => finish({ kind: 'hidden' }) }
+      )
+    }
     menu = Menu.buildFromTemplate(template)
     pending.set(senderId, dismiss)
     sender.once('destroyed', dismiss)

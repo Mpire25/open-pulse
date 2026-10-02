@@ -28,6 +28,7 @@ export type DashboardWidget =
   | { kind: 'intraday'; metric: MetricKey }
   | { kind: 'sleepStages' }
   | { kind: 'workouts' }
+  | { kind: 'hidden' }
 export type SlotKind = 'goal' | 'summary' | 'chart' | 'wide'
 export interface DashboardSlot {
   id: string
@@ -117,6 +118,7 @@ export function isDashboardWidget(
       (GOAL_METRICS as readonly string[]).includes(widget.metric as string)
     )
   if (slot === 'summary') return widget.kind === 'summary' && metric
+  if (widget.kind === 'hidden') return slot === 'chart' && surface === 'menuBar'
   if (widget.kind === 'trend') return metric && DASHBOARD_TREND_PERIODS.some(period => period.days === widget.days)
   if (widget.kind === 'workouts') return slot === 'wide' && surface === 'home'
   if (widget.kind === 'sleepStages') return slot === 'chart'
