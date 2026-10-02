@@ -118,7 +118,7 @@ function sortChats(chats: ViewChat[]): ViewChat[] {
   return [...chats].sort((left, right) => Date.parse(right.updatedAt) - Date.parse(left.updatedAt))
 }
 
-export function useChat(): ChatController {
+export function useChat(enabled = true): ChatController {
   const [chats, setChats] = useState<ViewChat[]>([])
   const [activeChatId, setActiveChatId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
@@ -234,10 +234,11 @@ export function useChat(): ChatController {
   )
 
   useEffect(() => {
-    void reload()
-    const offAccount = window.pulse.chats.onAccountChanged(() => void reload())
-    return offAccount
-  }, [reload])
+    if (!enabled) return
+    const load = (): void => { void reload().catch(() => {}) }
+    load()
+    return window.pulse.chats.onAccountChanged(load)
+  }, [enabled, reload])
 
   useEffect(() => {
     return window.pulse.ai.onEvent((event: AiEvent) => {
