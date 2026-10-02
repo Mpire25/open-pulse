@@ -162,7 +162,7 @@ export function DashboardSummary({
   onOpen,
   presentation
 }: MetricProps & { presentation: 'hero' | 'tile' | 'compact' }): React.JSX.Element {
-  const reading = useReading(metric, date, goals, enabled, presentation === 'compact')
+  const reading = useReading(metric, date, goals, enabled, presentation !== 'tile')
   const def = METRICS[metric]
   const Icon = def.icon
   const value =
@@ -225,8 +225,8 @@ export function DashboardSummary({
                 `${value}${reading.value !== null && def.unit ? ` ${def.unit}` : ''}`
               )}
             </strong>
-            <span className="flex min-w-0 items-center overflow-hidden pt-0.5 text-ellipsis whitespace-nowrap text-[11px] leading-[17px] text-ink-dim">
-              {reading.pending ? <SkeletonText className="w-28" /> : reading.detailSub}
+            <span title={reading.detailSub} className="flex min-w-0 items-center overflow-hidden pt-0.5 whitespace-nowrap text-[11px] leading-[17px] text-ink-dim">
+              {reading.pending || reading.comparisonPending ? <SkeletonText className="w-28" /> : reading.compactSub}
             </span>
           </span>
         </button>

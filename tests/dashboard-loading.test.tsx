@@ -51,7 +51,7 @@ describe('dashboard loading presentation', () => {
       for (const metric of ['sleepMinutes', 'restingHeartRate', 'weightKg'] as const) {
         const loaded = render(<DashboardSummary {...props} metric={metric} presentation="hero" />)
         expect(skeletonCount(loaded)).toBe(0)
-        expect(text(loaded)).toContain(metric === 'sleepMinutes' ? '% of' : metric === 'weightKg' ? '7-day change' : METRICS[metric].hint!)
+        expect(text(loaded)).toContain(metric === 'sleepMinutes' ? '107% of goal' : 'No history')
         const nextDay = render(<DashboardSummary {...props} date="2026-10-03" metric={metric} presentation="hero" />)
         expect(text(nextDay)).toBe(METRICS[metric].shortLabel ?? METRICS[metric].label)
         expect(skeletonCount(nextDay)).toBe(2)
@@ -96,7 +96,32 @@ describe('dashboard loading presentation', () => {
     })
   })
 
-  test('compact sleep efficiency uses recent nights while retaining the selected night value', () => {
+  test('hero and compact summaries share goal progress, comparisons, and weekly changes', () => {
+    withClient((render, client) => {
+      client.setQueryData(['sleep-day', date], { date, sessions: [], minutesAsleep: 512, efficiency: 95, complete: true })
+      const examples = [
+        ['restingHeartRate', 67, 73, '+6 bpm vs avg'],
+        ['floors', 5, 2, '-60% vs avg'],
+        ['weightKg', 78.8, 77.3, '-1.5 kg · 7d'],
+        ['bmi', 24.6, 24.4, '-0.2 · 7d']
+      ] as const
+      for (const [metric, base, value, expected] of examples) {
+        const range = rangeEnding(date, METRICS[metric].aggregate === 'last' ? 30 : 7)
+        client.setQueryData(['series-metric', metric, range.start, date], {
+          source: 'fixture', start: range.start, end: date,
+          days: Object.fromEntries(['2026-09-29', '2026-09-30', '2026-10-01', date].map(day => [day, { [metric]: day === date ? value : base }]))
+        })
+        for (const presentation of ['hero', 'compact'] as const) {
+          expect(text(render(<DashboardSummary {...props} metric={metric} presentation={presentation} />))).toContain(expected)
+        }
+      }
+      for (const presentation of ['hero', 'compact'] as const) {
+        expect(text(render(<DashboardSummary {...props} metric="sleepMinutes" presentation={presentation} />))).toContain('107% of goal')
+      }
+    })
+  })
+
+  test('hero and compact sleep efficiency use recent nights while retaining the selected night value', () => {
     withClient((render, client) => {
       client.setQueryData(['sleep-day', date], { date, sessions: [], minutesAsleep: 450, efficiency: 95, complete: true })
       const node = <DashboardSummary {...props} metric="sleepEfficiency" presentation="compact" />
@@ -104,6 +129,11 @@ describe('dashboard loading presentation', () => {
       expect(waiting).toContain('95 %')
       expect(waiting).not.toContain('No history')
       expect(waiting).not.toContain('vs avg')
+      const hero = <DashboardSummary {...props} metric="sleepEfficiency" presentation="hero" />
+      const waitingHero = render(hero)
+      expect(text(waitingHero)).toContain('95 %')
+      expect(text(waitingHero)).not.toContain('No history')
+      expect(skeletonCount(waitingHero)).toBe(1)
       const range = rangeEnding(date, 7)
       client.setQueryData(['series-metric', 'sleepEfficiency', range.start, date], {
         source: 'fixture', start: range.start, end: date,
@@ -115,6 +145,8 @@ describe('dashboard loading presentation', () => {
         }
       })
       expect(text(render(node))).toContain('95 %+2 pp vs avg')
+      expect(text(render(hero))).toContain('95 %+2 pp vs avg')
+      expect(skeletonCount(render(hero))).toBe(0)
     })
   })
 
