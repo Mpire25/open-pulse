@@ -3,7 +3,7 @@ import { afterAll, afterEach, beforeEach, expect, mock, test } from 'bun:test'
 import { Window } from 'happy-dom'
 import React, { act, useState } from 'react'
 import * as framerMotion from 'framer-motion'
-import type { AiEvent, ChatMessage, ChatSession, ChatSessionMessage } from '../../src/shared/types'
+import type { AiEvent, ChatMessage, ChatSession, ChatSessionMessage, ChatTitleUpdate } from '../../src/shared/types'
 import type { ChatController } from '../../src/renderer/src/hooks/useChat'
 
 const dom = new Window({ url: 'http://localhost:49173' })
@@ -24,6 +24,7 @@ let container: HTMLDivElement
 let chat: ChatController
 let receive: (event: AiEvent) => void
 let accountChanged: () => void
+let titleChanged: (title: ChatTitleUpdate) => void
 let sends: Array<[string, string]>
 let ready: Array<[string, string]>
 let histories: ChatMessage[][]
@@ -48,7 +49,8 @@ beforeEach(async () => {
         if (failPersistence) throw new Error('Synthetic history write failure')
         const value = { ...sessions.get(id)!, messages }; sessions.set(id, value); return value
       },
-      onAccountChanged: (callback: () => void) => { accountChanged = callback; return () => {} }
+      onAccountChanged: (callback: () => void) => { accountChanged = callback; return () => {} },
+      onTitleChanged: (callback: (title: ChatTitleUpdate) => void) => { titleChanged = callback; return () => {} }
     },
     ai: {
       send: async (chatId: string, runId: string, history: ChatMessage[]) => { sends.push([chatId, runId]); histories.push(history) },
@@ -200,6 +202,35 @@ test('edited request can fail and then retry its revised text', async () => {
   await act(async () => button('Retry')!.click())
   expect(histories[2]).toEqual([{ role: 'user', text: 'Revised question' }])
   expect(chat.turns).toHaveLength(2)
+})
+
+test('automatic naming preserves an open edit and survives stale history saves after resend', async () => {
+  await send()
+  await completeLatest('Original answer')
+  await act(async () => button('Edit message')!.click())
+  await changeEditedText('Revised question')
+  await act(async () => titleChanged({ id: 'chat-a', title: 'Daily step patterns', titleGeneration: 'generated' }))
+  expect(editor()!.value).toBe('Revised question')
+  expect(chat.turns.map((turn) => turn.text)).toEqual(['Analyse my steps', 'Original answer'])
+  await act(async () => editorButton('Send').click())
+  await completeLatest('Revised answer')
+  expect(histories[1]).toEqual([{ role: 'user', text: 'Revised question' }])
+  expect(chat.turns.map((turn) => turn.text)).toEqual(['Revised question', 'Revised answer'])
+  expect(chat.sessions.find((session) => session.id === 'chat-a')!.title).toBe('Daily step patterns')
+})
+
+test('automatic naming during retry preserves the active answer and generated title', async () => {
+  const ids = await send()
+  await act(async () => receive({ ...ids, type: 'error', message: 'Synthetic failure' }))
+  await act(async () => button('Retry')!.click())
+  const [chatId, runId] = sends[1]
+  await act(async () => receive({ chatId, runId, type: 'delta', text: 'Recovered ' }))
+  await act(async () => titleChanged({ id: chatId, title: 'Daily step patterns', titleGeneration: 'generated' }))
+  expect(chat.busy).toBe(true)
+  expect(chat.turns[1].text).toBe('Recovered ')
+  await completeLatest('Recovered answer')
+  expect(chat.turns.map((turn) => turn.text)).toEqual(['Analyse my steps', 'Recovered answer'])
+  expect(chat.sessions.find((session) => session.id === chatId)!.title).toBe('Daily step patterns')
 })
 
 for (const partial of ['', 'Partial answer.']) {
