@@ -37,6 +37,7 @@ export interface ChatController {
   streamingChatIds: string[]
   send: (text: string) => void
   retry: () => void
+  editLast: (userId: string, text: string) => boolean
   stop: () => void
   create: () => Promise<void>
   select: (id: string) => void
@@ -388,6 +389,10 @@ export function useChat(enabled = true): ChatController {
     if (userTurn) startTurn(userTurn.text, userTurn.id)
   }, [startTurn])
 
+  const editLast = useCallback((userId: string, text: string): boolean => {
+    return startTurn(text, userId)
+  }, [startTurn])
+
   const stop = useCallback((): void => {
     const chatId = activeChatIdRef.current
     if (!chatId) return
@@ -480,6 +485,7 @@ export function useChat(enabled = true): ChatController {
     streamingChatIds,
     send,
     retry,
+    editLast,
     stop,
     create,
     select,

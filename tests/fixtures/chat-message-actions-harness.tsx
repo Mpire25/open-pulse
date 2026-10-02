@@ -112,3 +112,92 @@ test('an older failure cannot retry after a newer request', async () => {
   await act(async () => chat.retry())
   expect(sends).toHaveLength(2)
 })
+
+function editor(): HTMLTextAreaElement | null {
+  return document.querySelector('textarea[aria-label="Edit last message"]')
+}
+async function changeEditedText(text: string): Promise<void> {
+  await act(async () => {
+    const input = editor()!
+    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(input, text)
+    input.dispatchEvent(new Event('input', { bubbles: true }))
+  })
+}
+function editorButton(label: string): HTMLButtonElement {
+  return Array.from(editor()!.parentElement!.querySelectorAll('button')).find((button) => button.textContent?.trim() === label)!
+}
+async function completeLatest(text: string): Promise<void> {
+  const [chatId, runId] = sends.at(-1)!
+  await act(async () => receive({ chatId, runId, type: 'done', outcome: 'completed', text, parts: [] }))
+}
+
+test('edit is limited to the latest user message and is unavailable while streaming', async () => {
+  await send()
+  expect(button('Edit message')).toBeUndefined()
+  await completeLatest('Earlier answer')
+  const earlierId = chat.turns[0].id
+  await act(async () => chat.send('Latest question'))
+  await completeLatest('Original answer')
+  expect(document.querySelectorAll('button[aria-label="Edit message"]')).toHaveLength(1)
+  await act(async () => { expect(chat.editLast(earlierId, 'Stale edit')).toBe(false) })
+  expect(sends).toHaveLength(2)
+  const latestId = chat.turns[2].id
+  await act(async () => { expect(chat.editLast(latestId, '   ')).toBe(false) })
+  expect(sends).toHaveLength(2)
+})
+
+test('canceling an edit preserves the original exchange', async () => {
+  await send()
+  await completeLatest('Original answer')
+  await act(async () => button('Edit message')!.click())
+  expect(editor()!.value).toBe('Analyse my steps')
+  await changeEditedText('Revised question')
+  await act(async () => editorButton('Cancel').click())
+  expect(editor()).toBeNull()
+  expect(chat.turns.map((turn) => turn.text)).toEqual(['Analyse my steps', 'Original answer'])
+  expect(sends).toHaveLength(1)
+})
+
+test('edited resend preserves earlier context, replaces the answer and saves the revision', async () => {
+  await send()
+  await completeLatest('Earlier answer')
+  await act(async () => chat.send('Latest question'))
+  await completeLatest('Obsolete answer')
+  const originalIds = chat.turns.map((turn) => turn.id)
+  await act(async () => button('Edit message')!.click())
+  await changeEditedText('Revised question\nwith a second line')
+  await act(async () => editorButton('Send').click())
+  expect(editor()).toBeNull()
+  expect(chat.busy).toBe(true)
+  expect(chat.turns).toHaveLength(4)
+  expect(chat.turns.slice(0, 3).map((turn) => turn.id)).toEqual(originalIds.slice(0, 3))
+  expect(histories[2]).toEqual([
+    { role: 'user', text: 'Analyse my steps' },
+    { role: 'assistant', text: 'Earlier answer' },
+    { role: 'user', text: 'Revised question\nwith a second line' }
+  ])
+  expect(sessions.get('chat-a')!.messages.map((turn) => turn.text)).toEqual([
+    'Analyse my steps', 'Earlier answer', 'Revised question\nwith a second line'
+  ])
+  const [chatId, staleRunId] = sends[1]
+  await act(async () => receive({ chatId, runId: staleRunId, type: 'delta', text: 'Late obsolete output' }))
+  expect(chat.turns[3].text).toBe('')
+  await completeLatest('Revised answer')
+  await act(async () => chat.reload())
+  expect(chat.turns.map((turn) => turn.text)).toEqual([
+    'Analyse my steps', 'Earlier answer', 'Revised question\nwith a second line', 'Revised answer'
+  ])
+})
+
+test('edited request can fail and then retry its revised text', async () => {
+  await send()
+  await completeLatest('Original answer')
+  await act(async () => button('Edit message')!.click())
+  await changeEditedText('Revised question')
+  await act(async () => editorButton('Send').click())
+  const [chatId, runId] = sends[1]
+  await act(async () => receive({ chatId, runId, type: 'error', message: 'Synthetic failure' }))
+  await act(async () => button('Retry')!.click())
+  expect(histories[2]).toEqual([{ role: 'user', text: 'Revised question' }])
+  expect(chat.turns).toHaveLength(2)
+})
