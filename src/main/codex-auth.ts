@@ -1,270 +1,381 @@
-// "Sign in with ChatGPT" — the OAuth 2.0 authorization-code + PKCE flow used
-// by OpenAI Codex (https://developers.openai.com/codex/auth). Uses the public
-// Codex client ID and the fixed localhost:1455 callback that client permits.
-
+// ChatGPT plan OAuth. Credentials never cross the renderer IPC boundary.
 import { shell } from 'electron'
 import { createServer } from 'node:http'
-import { createPkcePair, randomState, decodeJwtPayload } from './pkce'
-import { createSharedOperation, waitForSharedOperation, type SharedOperation } from './shared-operation'
-import { deleteSecret, getSecret, setSecret } from './store'
+import { randomUUID } from 'node:crypto'
+import { createPkcePair, randomState } from './pkce'
+import {
+  createSharedOperation,
+  waitForSharedOperation,
+  type SharedOperation
+} from './shared-operation'
+import {
+  deleteSecret,
+  getSecret,
+  setSecret,
+  hasSecret,
+  getLocalValue,
+  setLocalValue
+} from './store'
 import type { CodexAuthStatus } from '../shared/types'
+import {
+  CHATGPT_ISSUER,
+  CHATGPT_RESOURCE,
+  CHATGPT_SCOPE,
+  PLAN_SCOPE,
+  validateCallback,
+  verifyIdentity,
+  exchangeToken,
+  unusableRefresh,
+  getDiscovery
+} from './chatgpt-protocol'
 
-const CLIENT_ID = 'app_EMoamEEZ73f0CkXaXp7hrann'
-const ISSUER = 'https://auth.openai.com'
-const REDIRECT_URI = 'http://localhost:1455/auth/callback'
-const SECRET_KEY = 'codex-tokens'
-
+const SECRET_KEY = 'chatgpt-plan-registrations'
 export interface CodexTokens {
   accessToken: string
   refreshToken?: string
   idToken?: string
-  accountId?: string
+  clientId: string
+  subject: string
   email?: string
-  planType?: string
+  scopes: string[]
   expiresAt: number
+  accountId?: string
 }
-
-interface AuthClaims {
+interface Registration {
+  clientId: string
+  subject: string
   email?: string
-  'https://api.openai.com/auth'?: {
-    chatgpt_account_id?: string
-    chatgpt_plan_type?: string
-  }
+  tokens?: CodexTokens
 }
-
-const LANDING_HTML = `<!doctype html><meta charset="utf-8"><title>OpenPulse</title>
-<body style="font-family:-apple-system,system-ui;background:#0a0a0c;color:#f5f5f7;display:grid;place-items:center;height:100vh;margin:0">
-<div style="text-align:center"><h2 style="font-weight:600">Signed in with ChatGPT</h2>
-<p style="color:#a1a1a8">You can close this window and return to OpenPulse.</p></div></body>`
-
-let activeConnectReject: ((err: Error) => void) | null = null
+interface AuthStore {
+  active?: string
+  registrations: Record<string, Registration>
+}
 let authGeneration = 0
-let refreshRequest: { generation: number; operation: SharedOperation<CodexTokens | null> } | null = null
-
-function cancelRefresh(): void {
-  refreshRequest?.operation.controller.abort()
-  refreshRequest = null
+let disconnectGeneration: number | undefined
+let activeConnectReject: ((error: Error) => void) | null = null
+const refreshRequests = new Map<string, SharedOperation<CodexTokens | null>>()
+function read(): AuthStore {
+  return getSecret<AuthStore>(SECRET_KEY) ?? { registrations: {} }
 }
-
+async function finishRefreshes(): Promise<void> {
+  await Promise.allSettled(
+    [...refreshRequests.values()].map((operation) => operation.promise)
+  )
+}
 export function getCodexAuthGeneration(): number {
   return authGeneration
 }
-
 export function isCodexAuthGenerationCurrent(generation: number): boolean {
   return generation === authGeneration
 }
-
+function assertCurrent(generation: number): void {
+  if (!isCodexAuthGenerationCurrent(generation))
+    throw new Error('ChatGPT sign-in was cancelled.')
+}
 export function getCodexStatus(): CodexAuthStatus {
-  const tokens = getSecret<CodexTokens>(SECRET_KEY)
-  return tokens
-    ? { connected: true, email: tokens.email, planType: tokens.planType }
-    : { connected: false }
+  const data = read()
+  const registration = data.active ? data.registrations[data.active] : undefined
+  const tokens = registration?.tokens
+  const planEnabled =
+    disconnectGeneration !== authGeneration &&
+    Boolean(tokens?.scopes.includes(PLAN_SCOPE))
+  return {
+    connected: planEnabled,
+    signedIn: Boolean(tokens),
+    planEnabled,
+    email: registration?.email,
+    activeRegistration: data.active,
+    authRevision: authGeneration,
+    needsReconnect: !tokens && hasSecret('codex-tokens'),
+    accounts: Object.values(data.registrations).map((r) => ({
+      id: r.clientId,
+      label: `${r.email ?? 'ChatGPT account'} (${r.clientId.slice(-8)})`
+    }))
+  }
 }
 
-export function disconnectCodex(): void {
-  cancelRefresh()
-  authGeneration += 1
-  activeConnectReject?.(new Error('ChatGPT sign-in was cancelled.'))
-  deleteSecret(SECRET_KEY)
-}
-
-export async function connectCodex(): Promise<CodexAuthStatus> {
-  cancelRefresh()
+export async function disconnectCodex(): Promise<{ warning?: string }> {
   const generation = ++authGeneration
-  const { verifier, challenge } = createPkcePair()
-  const state = randomState()
-
-  activeConnectReject?.(new Error('ChatGPT sign-in was restarted.'))
-
-  const code = await new Promise<string>((resolve, reject) => {
-    let settled = false
-    let timer: ReturnType<typeof setTimeout> | null = null
-
-    const server = createServer((req, res) => {
-      const url = new URL(req.url ?? '/', 'http://localhost:1455')
-      if (url.pathname !== '/auth/callback') {
-        res.writeHead(404).end()
-        return
-      }
-      res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' }).end(LANDING_HTML)
-      const err = url.searchParams.get('error')
-      const returnedState = url.searchParams.get('state')
-      const authCode = url.searchParams.get('code')
-      if (err) settleReject(new Error(`ChatGPT sign-in failed: ${err}`))
-      else if (returnedState !== state) settleReject(new Error('OAuth state mismatch.'))
-      else if (!authCode) settleReject(new Error('ChatGPT did not return an authorization code.'))
-      else settleResolve(authCode)
-    })
-
-    const cleanup = (): void => {
-      if (timer) {
-        clearTimeout(timer)
-        timer = null
-      }
-      if (server.listening) server.close()
-      if (activeConnectReject === settleReject) activeConnectReject = null
+  disconnectGeneration = generation
+  activeConnectReject?.(new Error('ChatGPT sign-in was cancelled.'))
+  await finishRefreshes()
+  assertCurrent(generation)
+  const data = read()
+  const selected = data.active
+  const registration = selected ? data.registrations[selected] : undefined
+  const tokens = registration?.tokens
+  let warning: string | undefined
+  if (tokens?.refreshToken) {
+    try {
+      const discovery = await getDiscovery()
+      const response = await fetch(discovery.revocation_endpoint, {
+        method: 'POST',
+        signal: AbortSignal.timeout(15_000),
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          token: tokens.refreshToken,
+          token_type_hint: 'refresh_token',
+          client_id: tokens.clientId
+        })
+      })
+      if (!response.ok) throw new Error('Revocation failed.')
+    } catch {
+      warning =
+        'Signed out locally. Remote revocation was not confirmed; you can disconnect OpenPulse in ChatGPT Settings.'
     }
-
-    const settleResolve = (value: string): void => {
-      if (settled) return
-      settled = true
-      cleanup()
-      resolve(value)
-    }
-
-    function settleReject(err: Error): void {
-      if (settled) return
-      settled = true
-      cleanup()
-      reject(err)
-    }
-
-    activeConnectReject = settleReject
-    timer = setTimeout(
-      () => {
-        settleReject(new Error('Timed out waiting for ChatGPT sign-in.'))
-      },
-      5 * 60 * 1000
-    )
-    server.on('error', (err: NodeJS.ErrnoException) => {
-      settleReject(
-        err.code === 'EADDRINUSE'
-          ? new Error('Port 1455 is in use (is another Codex sign-in running?). Close it and retry.')
-          : err
-      )
-    })
-    server.listen(1455, () => {
-      if (settled) {
-        server.close()
-        return
-      }
-      const authUrl = new URL(`${ISSUER}/oauth/authorize`)
-      authUrl.search = new URLSearchParams({
-        response_type: 'code',
-        client_id: CLIENT_ID,
-        redirect_uri: REDIRECT_URI,
-        scope: 'openid profile email offline_access',
-        code_challenge: challenge,
-        code_challenge_method: 'S256',
-        state,
-        id_token_add_organizations: 'true',
-        codex_cli_simplified_flow: 'true'
-      }).toString()
-      void shell.openExternal(authUrl.toString())
-    })
-  })
-
-  const resp = await fetch(`${ISSUER}/oauth/token`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      grant_type: 'authorization_code',
-      code,
-      redirect_uri: REDIRECT_URI,
-      client_id: CLIENT_ID,
-      code_verifier: verifier
-    }).toString()
-  })
-  assertCurrentGeneration(generation)
-  if (!resp.ok) {
-    throw new Error(`ChatGPT token exchange failed (${resp.status}): ${await resp.text()}`)
   }
-  const json = (await resp.json()) as {
-    access_token: string
-    refresh_token?: string
-    id_token?: string
-    expires_in?: number
-  }
-  assertCurrentGeneration(generation)
-
-  const idClaims = json.id_token ? decodeJwtPayload<AuthClaims>(json.id_token) : null
-  const accessClaims = decodeJwtPayload<AuthClaims>(json.access_token)
-  const auth = accessClaims?.['https://api.openai.com/auth'] ?? idClaims?.['https://api.openai.com/auth']
-
-  const tokens: CodexTokens = {
-    accessToken: json.access_token,
-    refreshToken: json.refresh_token,
-    idToken: json.id_token,
-    accountId: auth?.chatgpt_account_id,
-    email: idClaims?.email,
-    planType: auth?.chatgpt_plan_type,
-    expiresAt: Date.now() + (json.expires_in ?? 3600) * 1000
-  }
-  setSecret(SECRET_KEY, tokens)
-  return { connected: true, email: tokens.email, planType: tokens.planType }
-}
-
-function assertCurrentGeneration(generation: number): void {
-  if (generation !== authGeneration) throw new Error('ChatGPT sign-in was cancelled.')
-}
-
-export async function getCodexTokens(signal?: AbortSignal): Promise<CodexTokens | null> {
-  const generation = authGeneration
-  const tokens = getSecret<CodexTokens>(SECRET_KEY)
-  if (!tokens) return null
-  if (Date.now() < tokens.expiresAt - 5 * 60_000) return tokens
-  if (!tokens.refreshToken) return tokens // let the API call surface expiry
-
-  if (refreshRequest?.generation === generation) {
-    return waitForSharedOperation(refreshRequest.operation, signal)
-  }
-
-  const operation = createSharedOperation<CodexTokens | null>(
-    (refreshSignal) => refreshCodexTokens(tokens, generation, refreshSignal)
-  )
-  refreshRequest = { generation, operation }
-  operation.promise.then(
-    () => {
-      if (refreshRequest?.operation === operation) refreshRequest = null
-    },
-    () => {
-      if (refreshRequest?.operation === operation) refreshRequest = null
-    }
-  )
-  return waitForSharedOperation(operation, signal)
-}
-
-async function refreshCodexTokens(
-  tokens: CodexTokens,
-  generation: number,
-  signal: AbortSignal
-): Promise<CodexTokens | null> {
-  const resp = await fetch(`${ISSUER}/oauth/token`, {
-    method: 'POST',
-    signal,
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({
-      grant_type: 'refresh_token',
-      client_id: CLIENT_ID,
-      refresh_token: tokens.refreshToken,
-      scope: 'openid profile email'
-    })
-  })
-  if (generation !== authGeneration) return null
-  if (!resp.ok) return tokens
-  const json = (await resp.json()) as {
-    access_token: string
-    refresh_token?: string
-    id_token?: string
-    expires_in?: number
-  }
-  if (generation !== authGeneration) return null
-  const current = getSecret<CodexTokens>(SECRET_KEY)
-  if (!current) return null
+  // Re-read so a concurrent sign-in cannot be overwritten.
+  const current = read()
   if (
-    current.accessToken !== tokens.accessToken ||
-    current.refreshToken !== tokens.refreshToken ||
-    current.expiresAt !== tokens.expiresAt
+    selected &&
+    current.registrations[selected]?.tokens?.accessToken === tokens?.accessToken
   ) {
-    return current
+    delete current.registrations[selected].tokens
+    setSecret(SECRET_KEY, current)
   }
-  const updated: CodexTokens = {
-    ...tokens,
-    accessToken: json.access_token,
-    refreshToken: json.refresh_token ?? tokens.refreshToken,
-    idToken: json.id_token ?? tokens.idToken,
-    expiresAt: Date.now() + (json.expires_in ?? 3600) * 1000
+  if (isCodexAuthGenerationCurrent(generation)) disconnectGeneration = undefined
+  return { warning }
+}
+
+export async function connectCodex(
+  selectedClientId?: string
+): Promise<CodexAuthStatus> {
+  activeConnectReject?.(new Error('ChatGPT sign-in was restarted.'))
+  const generation = ++authGeneration
+  await finishRefreshes()
+  assertCurrent(generation)
+  const data = read()
+  const selected = selectedClientId
+    ? data.registrations[selectedClientId]
+    : undefined
+  if (selectedClientId && !selected)
+    throw new Error('Unknown ChatGPT registration.')
+  let hostId = getLocalValue<string>('chatgpt-host-id')
+  if (!hostId) {
+    hostId = `urn:uuid:${randomUUID()}`
+    setLocalValue('chatgpt-host-id', hostId)
   }
-  setSecret(SECRET_KEY, updated)
-  return updated
+  const { verifier, challenge } = createPkcePair()
+  const state = randomState(),
+    nonce = randomState()
+  let redirectUri = ''
+  const callback = await new Promise<{ code: string; clientId: string }>(
+    (resolve, reject) => {
+      let settled = false
+      const server = createServer((req, res) => {
+        const url = new URL(req.url ?? '/', redirectUri)
+        if (req.method !== 'GET' || url.pathname !== '/auth/callback') {
+          res.writeHead(404).end()
+          return
+        }
+        try {
+          const value = validateCallback(
+            url.searchParams,
+            state,
+            selected?.clientId
+          )
+          res
+            .writeHead(200, { 'content-type': 'text/html; charset=utf-8' })
+            .end(
+              '<title>OpenPulse</title><p>Authorization received. Return to OpenPulse to finish signing in.</p>'
+            )
+          finish()
+          resolve(value)
+        } catch (error) {
+          res.writeHead(400).end('Authorization failed. Return to OpenPulse.')
+          fail(
+            error instanceof Error ? error : new Error('Authorization failed.')
+          )
+        }
+      })
+      const timer = setTimeout(
+        () => fail(new Error('Timed out waiting for ChatGPT sign-in.')),
+        5 * 60_000
+      )
+      function finish(): void {
+        settled = true
+        clearTimeout(timer)
+        server.close()
+        if (activeConnectReject === fail) activeConnectReject = null
+      }
+      function fail(error: Error): void {
+        if (settled) return
+        finish()
+        reject(error)
+      }
+      activeConnectReject = fail
+      server.on('error', fail)
+      server.listen(0, '127.0.0.1', () => {
+        if (settled) {
+          server.close()
+          return
+        }
+        const address = server.address()
+        if (!address || typeof address === 'string') {
+          fail(new Error('Could not start sign-in callback.'))
+          return
+        }
+        redirectUri = `http://127.0.0.1:${address.port}/auth/callback`
+        const url = new URL(`${CHATGPT_ISSUER}/api/accounts/authorize`)
+        url.search = new URLSearchParams({
+          client_id: selected?.clientId ?? 'dynamic_agent_client',
+          ...(selected ? {} : { agent_name_hint: 'OpenPulse' }),
+          ext_agent_host_id: hostId!,
+          response_type: 'code',
+          redirect_uri: redirectUri,
+          scope: CHATGPT_SCOPE,
+          resource: CHATGPT_RESOURCE,
+          state,
+          nonce,
+          code_challenge_method: 'S256',
+          code_challenge: challenge,
+          ...(selected?.tokens?.idToken
+            ? { id_token_hint: selected.tokens.idToken }
+            : {}),
+          ...(selected?.tokens && !selected.tokens.scopes.includes(PLAN_SCOPE)
+            ? { prompt: 'consent' }
+            : {})
+        }).toString()
+        void shell
+          .openExternal(url.toString())
+          .catch(() => fail(new Error('Could not open the sign-in browser.')))
+      })
+    }
+  )
+  assertCurrent(generation)
+  const response = await exchangeToken(
+    new URLSearchParams({
+      grant_type: 'authorization_code',
+      client_id: callback.clientId,
+      code: callback.code,
+      redirect_uri: redirectUri,
+      code_verifier: verifier,
+      resource: CHATGPT_RESOURCE
+    })
+  )
+  if (!response.id_token) throw new Error('ChatGPT did not return an ID token.')
+  const identity = await verifyIdentity(
+    response.id_token,
+    callback.clientId,
+    nonce
+  )
+  assertCurrent(generation)
+  if (selected && identity.subject !== selected.subject)
+    throw new Error(
+      'ChatGPT signed into a different identity. Add it as a new account instead.'
+    )
+  const tokens: CodexTokens = {
+    clientId: callback.clientId,
+    subject: identity.subject,
+    email: identity.email,
+    accessToken: response.access_token,
+    refreshToken: response.refresh_token,
+    idToken: response.id_token,
+    scopes: response.scope.split(/\s+/),
+    expiresAt: Date.now() + response.expires_in * 1000
+  }
+  const current = read()
+  const existing = current.registrations[tokens.clientId]
+  if (existing && existing.subject !== tokens.subject)
+    throw new Error('ChatGPT registration identity mismatch.')
+  current.registrations[tokens.clientId] = {
+    clientId: tokens.clientId,
+    subject: tokens.subject,
+    email: tokens.email,
+    tokens
+  }
+  current.active = tokens.clientId
+  setSecret(SECRET_KEY, current)
+  deleteSecret('codex-tokens')
+  return getCodexStatus()
+}
+
+export async function getCodexTokens(
+  signal?: AbortSignal
+): Promise<CodexTokens | null> {
+  const generation = authGeneration
+  if (disconnectGeneration === generation) return null
+  const data = read()
+  const tokens = data.active
+    ? data.registrations[data.active]?.tokens
+    : undefined
+  if (!tokens) return null
+  if (!tokens.scopes.includes(PLAN_SCOPE))
+    throw new Error(
+      'Enable ChatGPT plan usage in Settings to use the assistant.'
+    )
+  if (Date.now() < tokens.expiresAt - 5 * 60_000) return tokens
+  if (!tokens.refreshToken)
+    throw new Error('ChatGPT session expired. Reconnect in Settings.')
+  let operation = refreshRequests.get(tokens.clientId)
+  if (!operation) {
+    // Token rotation completes even when its last chat consumer cancels.
+    operation = createSharedOperation<CodexTokens | null>(() =>
+      refreshTokens(tokens)
+    )
+    refreshRequests.set(tokens.clientId, operation)
+    const current = operation
+    const clear = (): void => {
+      if (refreshRequests.get(tokens.clientId) === current)
+        refreshRequests.delete(tokens.clientId)
+    }
+    operation.promise.then(clear, clear)
+  }
+  const updated = await waitForSharedOperation(operation, signal)
+  return isCodexAuthGenerationCurrent(generation) ? updated : null
+}
+
+async function refreshTokens(tokens: CodexTokens): Promise<CodexTokens | null> {
+  try {
+    const response = await exchangeToken(
+      new URLSearchParams({
+        grant_type: 'refresh_token',
+        client_id: tokens.clientId,
+        refresh_token: tokens.refreshToken!,
+        resource: CHATGPT_RESOURCE
+      })
+    )
+    if (response.id_token) {
+      const identity = await verifyIdentity(response.id_token, tokens.clientId)
+      if (identity.subject !== tokens.subject)
+        throw new Error('Refreshed ChatGPT identity mismatch.')
+    }
+    const data = read()
+    if (
+      data.registrations[tokens.clientId]?.tokens?.refreshToken !==
+      tokens.refreshToken
+    )
+      return null
+    const updated: CodexTokens = {
+      ...tokens,
+      accessToken: response.access_token,
+      refreshToken: response.refresh_token ?? tokens.refreshToken,
+      idToken: response.id_token ?? tokens.idToken,
+      scopes: response.scope.split(/\s+/),
+      expiresAt: Date.now() + response.expires_in * 1000
+    }
+    data.registrations[tokens.clientId].tokens = updated
+    setSecret(SECRET_KEY, data)
+    if (!updated.scopes.includes(PLAN_SCOPE))
+      throw new Error(
+        'ChatGPT plan permission is no longer enabled. Reconnect in Settings.'
+      )
+    return updated
+  } catch (error) {
+    if (unusableRefresh(error)) {
+      const data = read()
+      if (
+        data.registrations[tokens.clientId]?.tokens?.refreshToken ===
+        tokens.refreshToken
+      ) {
+        delete data.registrations[tokens.clientId].tokens
+        setSecret(SECRET_KEY, data)
+      }
+      throw new Error(
+        'ChatGPT session is no longer valid. Reconnect in Settings.'
+      )
+    }
+    throw error
+  }
 }

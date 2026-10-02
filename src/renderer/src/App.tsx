@@ -239,6 +239,7 @@ export default function App(): React.JSX.Element {
       setSettings(s)
       setGoogle(g)
       setCodex(c)
+      if (c.connected) void window.pulse.codex.models().catch(() => {})
     })
   }, [])
 

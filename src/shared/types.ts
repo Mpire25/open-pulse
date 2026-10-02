@@ -409,11 +409,11 @@ export const DEFAULT_GOALS: Goals = {
   sleepMinutes: 8 * 60
 }
 
-// The endpoint also accepts "ultra", but it is an agentic mode built for the
-// Codex app's delegation machinery, which this app does not wire up.
-export type ReasoningEffort = 'low' | 'medium' | 'high' | 'xhigh' | 'max'
+// Automatic omits the effort override. Explicit tiers are the levels supported
+// by OpenPulse; unknown catalog tiers can still use the server default.
+export type ReasoningEffort = 'auto' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'
 
-export const REASONING_EFFORTS: ReasoningEffort[] = ['low', 'medium', 'high', 'xhigh', 'max']
+export const REASONING_EFFORTS: ReasoningEffort[] = ['auto', 'low', 'medium', 'high', 'xhigh', 'max']
 
 export interface AssistantSettings {
   model: string
@@ -422,39 +422,21 @@ export interface AssistantSettings {
 
 export const DEFAULT_ASSISTANT: AssistantSettings = {
   model: 'gpt-5.6-terra',
-  reasoningEffort: 'medium'
+  reasoningEffort: 'auto'
 }
 
-// Availability depends on the signed-in ChatGPT plan; the endpoint has no
-// list-models call, so a rejected model only surfaces as a 400 at send time.
-// Efforts mirror each model's supported_reasoning_levels; they match today, but
-// older models (gpt-5.5, gpt-5.4) stop at xhigh if these presets ever grow.
-export const ASSISTANT_MODEL_PRESETS: {
+export interface AssistantModel {
   id: string
   label: string
-  efforts: ReasoningEffort[]
-}[] = [
-  {
-    id: 'gpt-5.6-luna',
-    label: 'GPT-5.6 Luna',
-    efforts: ['low', 'medium', 'high', 'xhigh', 'max']
-  },
-  {
-    id: 'gpt-5.6-terra',
-    label: 'GPT-5.6 Terra',
-    efforts: ['low', 'medium', 'high', 'xhigh', 'max']
-  },
-  {
-    id: 'gpt-5.6-sol',
-    label: 'GPT-5.6 Sol',
-    efforts: ['low', 'medium', 'high', 'xhigh', 'max']
-  },
-  {
-    id: 'gpt-6-astra',
-    label: 'GPT-6 Astra',
-    efforts: ['low', 'medium', 'high', 'xhigh', 'max']
-  }
-]
+  efforts?: ReasoningEffort[]
+}
+export interface ModelCatalog {
+  models: AssistantModel[]
+  fetchedAt?: number
+  stale: boolean
+  error?: string
+  registrationId?: string
+}
 
 /** Rejects pasted prose before it becomes a guaranteed 400 at send time. */
 export const ASSISTANT_MODEL_PATTERN = /^[a-zA-Z0-9._:-]{1,100}$/
@@ -481,6 +463,12 @@ export interface CodexAuthStatus {
   connected: boolean
   email?: string
   planType?: string
+  signedIn?: boolean
+  planEnabled?: boolean
+  needsReconnect?: boolean
+  activeRegistration?: string
+  authRevision?: number
+  accounts?: { id: string; label: string }[]
 }
 
 export interface PairedDevice {

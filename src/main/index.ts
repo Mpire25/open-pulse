@@ -278,6 +278,9 @@ function installApplicationMenu(target: RendererTarget): void {
   Menu.setApplicationMenu(Menu.buildFromTemplate(template))
 }
 
+// One process owns rotating OAuth credentials for this userData directory.
+if (!app.requestSingleInstanceLock()) app.exit(0)
+
 app.whenReady().then(() => {
   const target = rendererTarget()
   applyContentSecurityPolicy(target)

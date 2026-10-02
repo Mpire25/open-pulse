@@ -10,7 +10,7 @@ const originalFetch = globalThis.fetch
 mock.module('electron', () => ({
   app: { getPath: () => userData },
   safeStorage: {
-    isEncryptionAvailable: () => false,
+    isEncryptionAvailable: () => true,
     encryptString: (value: string) => Buffer.from(value, 'utf8'),
     decryptString: (value: Buffer) => value.toString('utf8')
   },
@@ -36,7 +36,7 @@ const { disconnectCodex, getCodexTokens } = await import('../src/main/codex-auth
 const { runHealthAgentTool } = await import('../src/main/health-agent-tools')
 const { shiftIsoDate } = await import('../src/main/health-api')
 const { markFetched } = await import('../src/main/metric-store')
-const { setSecret, updateSettings } = await import('../src/main/store')
+const { setSecret, deleteSecret, updateSettings } = await import('../src/main/store')
 
 const HOME_METRICS: MetricKey[] = [
   'steps',
@@ -76,9 +76,10 @@ async function loadHome(date: string): Promise<void> {
   ])
 }
 
-beforeEach(() => {
+beforeEach(async () => {
+  deleteSecret('chatgpt-plan-registrations')
   disconnectGoogle()
-  disconnectCodex()
+  await disconnectCodex()
   resetHealthAccount()
   liveToken()
   requests = []
@@ -89,9 +90,10 @@ afterEach(() => {
   globalThis.fetch = originalFetch
 })
 
-afterAll(() => {
+afterAll(async () => {
+  deleteSecret('chatgpt-plan-registrations')
   disconnectGoogle()
-  disconnectCodex()
+  await disconnectCodex()
   rmSync(userData, { recursive: true, force: true })
 })
 
@@ -635,11 +637,10 @@ describe('health request budgets', () => {
   })
 
   test('shares one Codex refresh while allowing one caller to cancel', async () => {
-    setSecret('codex-tokens', {
-      accessToken: 'expired-codex-token',
-      refreshToken: 'codex-refresh-token',
-      expiresAt: Date.now() - 1
-    })
+    setSecret('chatgpt-plan-registrations', { active: 'issued-test', registrations: { 'issued-test': { clientId: 'issued-test', subject: 'test-user', tokens: {
+      clientId: 'issued-test', subject: 'test-user', scopes: ['chatgpt.tokens.use.direct'],
+      accessToken: 'expired-codex-token', refreshToken: 'codex-refresh-token', expiresAt: Date.now() - 1
+    } } } })
     let finishRefresh!: () => void
     globalThis.fetch = (async (input, init) => {
       requests.push(String(input))
@@ -647,6 +648,7 @@ describe('health request budgets', () => {
         finishRefresh = () => resolve(new Response(JSON.stringify({
           access_token: 'new-codex-token',
           refresh_token: 'rotated-codex-refresh-token',
+          scope: 'chatgpt.tokens.use.direct', token_type: 'Bearer',
           expires_in: 3600
         }), { status: 200 }))
         init?.signal?.addEventListener(

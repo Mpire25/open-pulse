@@ -21,6 +21,7 @@ import {
   GoogleAuthUnavailableError,
   onGoogleAuthInvalidated
 } from './google-auth'
+import { getChatGPTModels } from './chatgpt-models'
 import { connectCodex, disconnectCodex, getCodexStatus } from './codex-auth'
 import {
   clearHealthCache,
@@ -211,13 +212,15 @@ export function registerIpc(commands: { open: (destination: MenuBarDestination) 
   })
 
   handle('codex:status', () => getCodexStatus())
-  handle('codex:connect', () => {
+  handle('codex:models', (_event, force?: boolean) => getChatGPTModels(force === true))
+  handle('codex:connect', (_event, registrationId?: string) => {
+    if (registrationId !== undefined && typeof registrationId !== 'string') throw new Error('Invalid ChatGPT registration.')
     cancelAllChats('ChatGPT sign-in changed.')
-    return connectCodex()
+    return connectCodex(registrationId)
   })
   handle('codex:disconnect', () => {
     cancelAllChats('ChatGPT disconnected.')
-    disconnectCodex()
+    return disconnectCodex()
   })
 
   handle('chats:list', () => getChatHistory())

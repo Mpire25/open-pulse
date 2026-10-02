@@ -3,7 +3,7 @@
 A macOS companion app for the **Google Fitbit Air**. OpenPulse reads your health data
 from the **Google Health API v4**, presents it as a day-anchored dashboard with
 interactive charts and goal gauges, and includes an AI assistant that analyzes
-your data — powered by your own **ChatGPT account** via the Codex OAuth flow.
+your data — powered by your own **ChatGPT account** through Sign in with ChatGPT plan authorization.
 
 Built with Electron + React 19, Radix primitives, Tailwind v4, and Framer Motion.
 
@@ -84,8 +84,8 @@ Tracing is also disabled by default in development and production.
 ## Connecting Google Health (your Fitbit Air data)
 
 The Google Health API uses Google OAuth 2.0. OpenPulse runs the flow locally with a
-loopback redirect + PKCE. When OS encryption is available, your Client Secret
-and OAuth tokens are encrypted with Electron `safeStorage`.
+loopback redirect + PKCE. Your Client Secret
+and OAuth tokens require encryption with Electron `safeStorage`.
 
 1. In the [Google Cloud Console](https://console.cloud.google.com), create a
    project and enable the **Google Health API**.
@@ -108,15 +108,27 @@ Scopes requested (read-only):
 
 ## Connecting the AI assistant (Sign in with ChatGPT)
 
-The assistant uses the **Codex OAuth flow**
-([docs](https://developers.openai.com/codex/auth)) — the same "Sign in with
-ChatGPT" mechanism the Codex CLI uses. It runs on your existing ChatGPT plan; no
-API key required.
+The assistant uses [Sign in with ChatGPT plan authorization](https://developers.openai.com/siwc/token-sharing-open-source/sign-in).
+In **Settings → AI Assistant**, click **Continue with ChatGPT** and authorize
+OpenPulse in the browser. The callback uses a temporary port on `127.0.0.1`;
+no shared Codex client ID or fixed callback port is required. Account/workspace
+eligibility and usage limits are controlled by ChatGPT.
 
-In **Settings → AI Assistant**, click **Sign in with ChatGPT**. A browser window
-opens on `auth.openai.com`; after you authorize, the app receives tokens on its
-`localhost:1455` callback. Make sure no other Codex sign-in is occupying port
-1455 at the time.
+Existing installations need a one-time reconnect. Chats, health data, and saved
+assistant settings are preserved. Settings lets you add or reauthorize separate
+ChatGPT account registrations; signing out revokes the renewable session when
+reachable and clears its local tokens while retaining registration metadata.
+
+The model picker loads the connected account's catalog from `/v1/models`, refreshes
+on launch and when opening settings after six hours, and offers **Refresh models**.
+Saved catalogs are scoped to the account registration. Network failures retain
+cached choices, and refreshed lists never silently change your selected model.
+**Automatic** reasoning uses the model's default when capability metadata is
+missing; **Custom…** remains available for manual model IDs and effort overrides.
+
+If secure credential storage is unavailable or fails, OpenPulse stops using it
+for the session and does not fall back to plaintext. Handle any Keychain prompts
+manually. No credential, ID token, or authorization URL should be logged.
 
 ## How data flows
 
@@ -125,21 +137,21 @@ Renderer (React)  ──IPC──▶  Main process  ──HTTPS──▶  health
    rings, charts,            OAuth + PKCE,
    chat UI                   token storage,
         ▲                    tool loop
-        └────── ai:event stream ◀── chatgpt.com/backend-api/codex/responses
+        └────── ai:event stream ◀── api.openai.com/v1/responses
 ```
 
 - **`src/main`** — Electron main: OAuth flows (`google-auth.ts`, `codex-auth.ts`),
   the Health API client (`health-api.ts`), the live health service layer
   (`health-service.ts`), the streaming AI agent (`codex-chat.ts`), and account
-  storage (`store.ts`, using Electron `safeStorage` when available).
+  storage (`store.ts`, requiring Electron `safeStorage` for credentials).
 - **`src/preload`** — the `window.pulse` bridge (context-isolated).
 - **`src/renderer`** — the React app: views, ring/chart components, hooks.
 - **`src/shared`** — types shared across processes.
 
 ## Security notes
 
-- OpenPulse uses Electron `safeStorage` to encrypt account secrets when OS
-  encryption is available. Synced health data and account-scoped assistant
+- OpenPulse uses Electron `safeStorage` to encrypt account secrets and requires OS
+  encryption for credential storage. Synced health data and account-scoped assistant
   history — including structured response cards — are only persisted when that
   encryption is available; otherwise chat history remains in memory for the
   current session.
@@ -149,7 +161,7 @@ Renderer (React)  ──IPC──▶  Main process  ──HTTPS──▶  health
 - Google Health access uses read-only scopes; OpenPulse does not write health
   data back to your account.
 - When you use the assistant, the health metrics needed to answer your question
-  are sent to the ChatGPT Codex endpoint through your signed-in account.
+  are sent to the public Responses API through your signed-in account.
 
 ## Acknowledgements
 
