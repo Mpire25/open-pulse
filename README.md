@@ -19,7 +19,8 @@ Built with Electron + React 19, Radix primitives, Tailwind v4, and Framer Motion
 - **Customizable dashboards** — swap goal rings, summaries, and charts within
   the existing Home and macOS menu bar layouts. Each surface has independent
   saved choices, draft previews, cancel, and restore defaults. Trends can show
-  any supported daily metric over 7 or 30 days; rings use your configured goals.
+  any supported daily metric over 7 days, 30 days, 3 months, or 1 year, with
+  1-day charts where supported; rings use your configured goals.
 - **Activity** — day totals with baseline deltas and sparklines, hourly steps,
   logged workouts (duration, calories, avg HR, zone minutes), and 7-day trends
   with goal lines.
