@@ -166,7 +166,9 @@ function SessionRow({ session, selected, streaming, onSelect, onPin, onKeep, onD
       <span className="pointer-events-none shrink-0 text-[9.5px] tabular-nums text-ink-faint group-hover:hidden group-focus-within:hidden">
         {relativeTime(session.updatedAt)}
       </span>
-      <div className="hidden shrink-0 items-center group-hover:flex group-focus-within:flex">
+      {/* Collapse the actions without removing them from the tab order:
+          Shift+Tab can focus an action and reveal the whole group. */}
+      <div className="pointer-events-none flex w-0 shrink-0 items-center overflow-hidden opacity-0 group-hover:pointer-events-auto group-hover:w-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:w-auto group-focus-within:opacity-100">
         {/* Shown under every policy, including "forever": keeping is a durable
             property of the chat, and it has to be markable *before* a retention
             change starts deleting things. */}
@@ -176,7 +178,7 @@ function SessionRow({ session, selected, streaming, onSelect, onPin, onKeep, onD
           aria-label={`${session.kept ? 'Stop keeping' : 'Keep'} ${session.title}`}
           onClick={onKeep}
           className={cn(
-            'grid size-7 place-items-center rounded-lg transition-colors hover:bg-white/[0.08] hover:text-ink',
+            'grid size-7 shrink-0 place-items-center rounded-lg transition-colors hover:bg-white/[0.08] hover:text-ink',
             session.kept ? 'text-accent' : 'text-ink-faint'
           )}
         >
@@ -187,7 +189,7 @@ function SessionRow({ session, selected, streaming, onSelect, onPin, onKeep, onD
           title={session.pinned ? 'Unpin chat' : 'Pin chat'}
           aria-label={`${session.pinned ? 'Unpin' : 'Pin'} ${session.title}`}
           onClick={onPin}
-          className="grid size-7 place-items-center rounded-lg text-ink-faint transition-colors hover:bg-white/[0.08] hover:text-ink"
+          className="grid size-7 shrink-0 place-items-center rounded-lg text-ink-faint transition-colors hover:bg-white/[0.08] hover:text-ink"
         >
           {session.pinned ? <PushPinSlash size={13} /> : <PushPin size={13} />}
         </button>
@@ -196,7 +198,7 @@ function SessionRow({ session, selected, streaming, onSelect, onPin, onKeep, onD
           title="Delete chat"
           aria-label={`Delete ${session.title}`}
           onClick={onDelete}
-          className="grid size-7 place-items-center rounded-lg text-ink-faint transition-colors hover:bg-danger/10 hover:text-danger"
+          className="grid size-7 shrink-0 place-items-center rounded-lg text-ink-faint transition-colors hover:bg-danger/10 hover:text-danger"
         >
           <Trash size={13} />
         </button>
