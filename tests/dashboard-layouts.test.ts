@@ -137,6 +137,15 @@ describe('compact summary comparisons', () => {
     expect(summaryReading('steps', points(10, 12), date, { ...DEFAULT_GOALS, steps: 0 }).compactSub).toBe('+20% vs avg')
   })
 
+  test('short subtitles and full descriptions retain the same goal progress', () => {
+    const reading = summaryReading('steps', points(5000, 6300), date, DEFAULT_GOALS)
+    expect(reading).toMatchObject({
+      sub: '63% of 10,000 goal',
+      detailSub: '63% of 10,000 goal',
+      compactSub: '63% of goal'
+    })
+  })
+
   test('activity and nutrition totals show the numerical difference from recent averages', () => {
     for (const metric of ['distanceKm', 'floors', 'activeMinutes', 'sedentaryMinutes', 'waterMl', 'fiberG', 'saturatedFatG', 'sodiumG', 'sugarG'] as const) {
       expect(subtitle(metric, 10, 12)).toBe('+20% vs avg')
@@ -156,6 +165,17 @@ describe('compact summary comparisons', () => {
     expect(subtitle('skinTempDeltaC', 0.2, -0.3)).toBe('vs baseline')
   })
 
+  test('short and full average descriptions retain rounding and zero-change wording', () => {
+    for (const metric of ['restingHeartRate', 'hrvMs'] as const) {
+      const reading = summaryReading(metric, points(67, 73.4), date, DEFAULT_GOALS)
+      expect(reading.detailSub).toBe('+6 vs average')
+      expect(reading.compactSub).toBe(`+6 ${metric === 'hrvMs' ? 'ms' : 'bpm'} vs avg`)
+      const unchanged = summaryReading(metric, points(67, 67.4), date, DEFAULT_GOALS)
+      expect(unchanged.detailSub).toBe('Same as your average')
+      expect(unchanged.compactSub).toBe('At average')
+    }
+  })
+
   test('body measurements compare within the week; older measurements retain their date', () => {
     expect(subtitle('weightKg', 80, 78.5)).toBe('-1.5 kg · 7d')
     expect(subtitle('bodyFatPct', 20, 19.7)).toBe('-0.3 pp · 7d')
@@ -163,6 +183,18 @@ describe('compact summary comparisons', () => {
     expect(subtitle('bmi', 24.4, 24.4)).toBe('No change · 7d')
     expect(summaryReading('weightKg', [{ date: '2026-09-24', value: 80 }, { date, value: 78.5 }], date, DEFAULT_GOALS).compactSub).toBe('No history')
     expect(summaryReading('bmi', [{ date: '2026-09-30', value: 24.4 }], date, DEFAULT_GOALS).compactSub).toBe('As of Sep 30')
+  })
+
+  test('weight descriptions share the weekly change while preserving detail and fallback copy', () => {
+    const changed = summaryReading('weightKg', points(80, 78.5), date, DEFAULT_GOALS)
+    expect(changed.detailSub).toBe('-1.5 kg in 7 days')
+    expect(changed.compactSub).toBe('-1.5 kg · 7d')
+    const unchanged = summaryReading('weightKg', points(80, 80), date, DEFAULT_GOALS)
+    expect(unchanged.detailSub).toBe('No change in 7 days')
+    expect(unchanged.compactSub).toBe('No change · 7d')
+    const missing = summaryReading('weightKg', [{ date, value: 80 }], date, DEFAULT_GOALS)
+    expect(missing.detailSub).toBe('Not enough data for 7-day change')
+    expect(missing.compactSub).toBe('No history')
   })
 
   test('missing readings and insufficient history never produce a fabricated comparison', () => {
