@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { PencilSimple } from '@phosphor-icons/react'
+import { Check, PencilSimple } from '@phosphor-icons/react'
 import {
   DASHBOARD_SLOTS,
   normalizeDashboardLayout,
@@ -7,6 +7,7 @@ import {
   type DashboardSurface
 } from '@shared/dashboard'
 import { useDashboardLayouts } from '@/hooks/useDashboardLayouts'
+import { Button } from './ui/button'
 
 export function useDashboardEditor(surface: DashboardSurface) {
   const preferences = useDashboardLayouts()
@@ -70,7 +71,7 @@ export function DashboardEditControls({
     return (
       <button
         type="button"
-        className="dashboard-toolbar-button"
+        className="dashboard-action"
         onClick={editor.begin}
         disabled={!editor.layout}
       >
@@ -83,7 +84,7 @@ export function DashboardEditControls({
       <div className="flex flex-wrap items-center gap-2">
         <button
           type="button"
-          className="dashboard-toolbar-button dashboard-toolbar-button--quiet"
+          className="dashboard-action dashboard-action--quiet"
           onClick={editor.reset}
           disabled={editor.saving}
         >
@@ -91,20 +92,22 @@ export function DashboardEditControls({
         </button>
         <button
           type="button"
-          className="dashboard-toolbar-button"
+          className="dashboard-action"
           onClick={editor.cancel}
           disabled={editor.saving}
         >
           Cancel
         </button>
-        <button
+        <Button
           type="button"
-          className="dashboard-toolbar-button dashboard-toolbar-button--primary"
+          variant="primary"
+          size="sm"
           onClick={() => void editor.save()}
           disabled={editor.saving}
         >
+          <Check size={14} weight="bold" aria-hidden="true" />
           {editor.saving ? 'Saving…' : 'Save layout'}
-        </button>
+        </Button>
       </div>
       {editor.failure && (
         <p role="alert" className="w-full text-[12px] text-danger">
@@ -132,7 +135,7 @@ export function EditableDashboardSlot({
   const slot = DASHBOARD_SLOTS[editor.surface].find((entry) => entry.id === id)!
   return (
     <div
-      className={`dashboard-slot ${fill ? 'dashboard-slot--chart' : ''} ${editor.editing ? 'dashboard-slot--editing' : ''}`}
+      className={`dashboard-slot dashboard-slot--${slot.kind} dashboard-slot--${editor.surface} ${fill ? 'dashboard-slot--chart' : ''} ${editor.editing ? 'dashboard-slot--editing' : ''}`}
       data-dashboard-slot={id}
     >
       {editor.editing && (
@@ -167,7 +170,7 @@ export function EditableDashboardSlot({
             disabled={editor.saving}
             aria-label={`Change ${slot.label.toLowerCase()}`}
           >
-            <PencilSimple size={13} />
+            <PencilSimple size={16} />
           </button>
           {failure && (
             <span role="alert" className="dashboard-slot-error">

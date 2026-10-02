@@ -311,10 +311,12 @@ async function memoryRun(main, openPanel) {
         }
       })()`)
       report[width] = await measure()
+      if (width === 1500) writeFileSync(resolve('out/dashboard-home-default-preview.png'), (await reopened.webContents.capturePage()).toPNG())
       if (checkDashboards) {
         await reopened.webContents.executeJavaScript(`Array.from(document.querySelectorAll('button')).find(b => b.textContent.trim() === 'Customize').click()`)
         await delay(200)
         assert.deepEqual(await measure(), report[width], 'editing preserves card, ring and summary dimensions at ' + width)
+        if (width === 1500) writeFileSync(resolve('out/dashboard-edit-preview.png'), (await reopened.webContents.capturePage()).toPNG())
         await reopened.webContents.executeJavaScript(`Array.from(document.querySelectorAll('button')).find(b => b.textContent.trim() === 'Cancel').click()`)
       }
     }
@@ -352,7 +354,16 @@ async function memoryRun(main, openPanel) {
       await win.webContents.executeJavaScript(`Array.from(document.querySelectorAll('button')).find(b => b.textContent.trim() === ${JSON.stringify(label)}).click()`)
     }
     const openPicker = async (win, slotLabel) => {
-      await win.webContents.executeJavaScript(`document.querySelector('[aria-label="Change ${slotLabel}"]').click()`)
+      const target = await win.webContents.executeJavaScript(`(() => {
+        const button = document.querySelector('[aria-label="Change ${slotLabel}"]')
+        button.scrollIntoView({ block: 'nearest' })
+        const rect = button.getBoundingClientRect()
+        return { x: Math.round(button.getAttribute('aria-label') === 'Change highlight 4' ? rect.right - 4 : rect.left + 4), y: Math.round(rect.top + rect.height / 2), width: rect.width, height: rect.height }
+      })()`)
+      assert.ok(target.width >= 36 && target.height >= 36, 'pencil has a generous click target')
+      // Press the padding outside the glyph, through Chromium's actual hit testing.
+      win.webContents.sendInputEvent({ type: 'mouseDown', x: target.x, y: target.y, button: 'left', clickCount: 1 })
+      win.webContents.sendInputEvent({ type: 'mouseUp', x: target.x, y: target.y, button: 'left', clickCount: 1 })
       await until(() => pendingPicker !== null, 'native widget menu')
       await until(() => win.webContents.executeJavaScript(`document.querySelector('[aria-label="Change ${slotLabel}"]').getAttribute('aria-busy') === 'true'`), 'native picker request active')
       assert.equal(pendingPicker.options.window, win, 'picker belongs to the requesting window')
@@ -375,8 +386,15 @@ async function memoryRun(main, openPanel) {
       await until(() => win.webContents.executeJavaScript(`document.activeElement?.getAttribute('aria-label') === 'Change ${slotLabel}' && document.activeElement.getAttribute('aria-busy') === 'false'`), 'native picker restores focus')
     }
     const beforeLayouts = await reopened.webContents.executeJavaScript('window.pulse.dashboard.get()')
+    writeFileSync(resolve('out/dashboard-home-default-preview.png'), (await reopened.webContents.capturePage()).toPNG())
     await clickText(reopened, 'Customize')
+    await until(() => reopened.webContents.executeJavaScript(`!!document.querySelector('[aria-label="Change left chart"]')`), 'home editor renders before capture')
     writeFileSync(resolve('out/dashboard-edit-preview.png'), (await reopened.webContents.capturePage()).toPNG())
+    for (const highlight of ['highlight 1', 'highlight 2', 'highlight 3', 'highlight 4']) {
+      await openPicker(reopened, highlight)
+      dismissPicker()
+      await until(() => reopened.webContents.executeJavaScript(`document.querySelector('[aria-label="Change ${highlight}"]').getAttribute('aria-busy') === 'false'`), 'highlight picker dismissed')
+    }
     await openPicker(reopened, 'left chart')
     dismissPicker()
     await delay(50)

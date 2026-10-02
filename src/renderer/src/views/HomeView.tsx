@@ -86,9 +86,11 @@ export function HomeView({
           </p>
           <h1 className="display mt-1 text-[27px] font-bold text-ink">{longDate(date)}</h1>
         </div>
-        <DashboardEditControls editor={editor} />
       </motion.header>
-      <motion.div custom={1} variants={fade} initial="hidden" animate="show">
+      <motion.div custom={1} variants={fade} initial="hidden" animate="show" className="relative">
+        <div className="absolute bottom-full right-0 mb-2">
+          <DashboardEditControls editor={editor} />
+        </div>
         <Panel className={`home-hero ${CARD_HEIGHT.hero}`}>
           <div className="home-goal-rings">
             {rings.map((id) => {
@@ -142,7 +144,7 @@ export function HomeView({
         ))}
       </div>
       <motion.div custom={4} variants={fade} initial="hidden" animate="show">
-        <Panel className={`overflow-hidden ${CARD_HEIGHT.summary}`}>
+        <Panel className={`dashboard-signals-panel ${editor.editing ? 'overflow-visible' : 'overflow-hidden'} ${CARD_HEIGHT.summary}`}>
           <div className="border-b border-hairline px-5 pb-3 pt-4">
             <SectionHeader
               title={defaultSignals ? 'Night signals' : 'Metric highlights'}
