@@ -230,7 +230,9 @@ export function DashboardSummary({
                 `${value}${reading.value !== null && def.unit ? ` ${def.unit}` : ''}`
               )}
             </strong>
-            <span className="flex min-w-0 items-center overflow-hidden pt-0.5 text-ellipsis whitespace-nowrap text-[11px] leading-[17px] text-ink-dim">{reading.detailSub}</span>
+            <span className="flex min-w-0 items-center overflow-hidden pt-0.5 text-ellipsis whitespace-nowrap text-[11px] leading-[17px] text-ink-dim">
+              {reading.pending ? <SkeletonText className="w-28" /> : reading.detailSub}
+            </span>
           </span>
         </button>
       )}
@@ -272,7 +274,7 @@ function ChartFrame({
   compact?: boolean
   wide?: boolean
   title: string
-  hint: string
+  hint: React.ReactNode
   icon: React.ReactNode
   onOpen: () => void
   children: React.ReactNode
@@ -481,7 +483,7 @@ function SleepWidget({ date, enabled = true, compact, onSleep }: ChartProps): Re
       </section>
     )
   const hint = sleep.isPending
-    ? 'Loading sleep…'
+    ? <SkeletonText className="w-36" />
     : sleep.data
       ? `${formatMinutes(sleep.data.minutesAsleep)} ${!sleep.data.complete ? 'cached' : sleep.data.sessions.length > 1 ? `total · ${sleep.data.sessions.length} sessions · Main sleep shown` : `asleep${night ? ` · ${formatClock(night.startTime)}–${formatClock(night.endTime)}` : ''}`}`
       : 'No sleep recorded'
