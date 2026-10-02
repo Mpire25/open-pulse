@@ -16,6 +16,10 @@ Built with Electron + React 19, Radix primitives, Tailwind v4, and Framer Motion
   calories eaten; hourly movement; last night's hypnogram; night signals (HRV,
   SpO₂, breathing, skin temperature) compared with your recent baseline; and
   the day's workouts.
+- **Customizable dashboards** — swap goal rings, summaries, and charts within
+  the existing Home and macOS menu bar layouts. Each surface has independent
+  saved choices, draft previews, cancel, and restore defaults. Trends can show
+  any supported daily metric over 7 or 30 days; rings use your configured goals.
 - **Activity** — day totals with baseline deltas and sparklines, hourly steps,
   logged workouts (duration, calories, avg HR, zone minutes), and 7-day trends
   with goal lines.
@@ -55,6 +59,24 @@ bun run build:mac  # package a .dmg (needs the electron-builder toolchain)
 Connect Google Health in **Settings** before opening health dashboards. The app
 never substitutes generated values when an account is disconnected or a sync
 cannot complete.
+
+### Customize your dashboards
+
+Click **Customize** on Home, then **Change** beside a position to choose its widget.
+Use **Save layout** to keep your choices, **Cancel** to discard the draft, or
+**Restore defaults** followed by Save to return that surface to its original layout.
+
+For the menu bar, open **Settings → Menu bar layout → Customize menu bar**, or
+click the pencil in the popup. The main window shows a compact draft preview;
+saving also updates an already-open popup. Preferences survive restart and do
+not change goals or health records. Missing readings remain unavailable.
+
+To verify the editor and popup using synthetic data in a disposable profile:
+
+```bash
+bun run build
+bunx electron scripts/menu-bar-smoke.cjs --dashboard
+```
 
 ### Opt-in development tools
 

@@ -1,37 +1,45 @@
 import { useEffect, useRef, useState } from 'react'
-import { useQueryClient } from '@tanstack/react-query'
-import { ArrowClockwise, ArrowUpRight, GearSix, Heartbeat, Moon, Pulse, Scales } from '@phosphor-icons/react'
-import type { AppSettings, GoogleAuthStatus, MetricKey } from '@shared/types'
+import { useIsFetching, useQueryClient } from '@tanstack/react-query'
+import { ArrowClockwise, ArrowUpRight, GearSix, Moon, PencilSimple } from '@phosphor-icons/react'
+import type { AppSettings, GoogleAuthStatus } from '@shared/types'
+import type { DashboardLayout } from '@shared/dashboard'
 import type { MenuBarDestination } from '@shared/menu-bar'
-import { selectedSleepSession } from '@shared/sleep'
 import { BatteryPill } from '@/components/BatteryPill'
-import { ColumnChart, ProgressRing } from '@/components/charts'
-import { STAGE_COLOR, STAGE_LABEL } from '@/components/SleepStages'
+import {
+  DashboardChart,
+  DashboardRing,
+  DashboardSummary,
+  type DashboardOpenMetric
+} from '@/components/DashboardWidgets'
+import { EditableDashboardSlot, type DashboardEditorState } from '@/components/DashboardEditor'
+import { useDashboardLayouts } from '@/hooks/useDashboardLayouts'
 import { useCurrentDay } from '@/hooks/useCurrentDay'
-import { useDevices, useRefresh, useSeries, useSleepDay, useSyncBusy } from '@/hooks/useHealth'
-import { baseline, latestPoint, rangeEnding, seriesPoints } from '@/lib/metrics'
-import { formatInt, formatMinutes, isoToday, shiftDate } from '@/lib/format'
+import { useDevices, useRefresh, useSyncBusy } from '@/hooks/useHealth'
+import { METRICS } from '@/lib/metric-registry'
+import { isoToday } from '@/lib/format'
 import './menu-bar.css'
 
-const METRICS: MetricKey[] = ['steps', 'caloriesOut', 'caloriesIn', 'restingHeartRate', 'hrvMs']
-const WEIGHT: MetricKey[] = ['weightKg']
-const RINGS = [
-  { metric: 'steps', label: 'Steps', color: 'var(--color-activity)', view: 'activity' },
-  { metric: 'caloriesOut', label: 'Burned', color: 'var(--color-heart)', view: 'activity' },
-  { metric: 'caloriesIn', label: 'Eaten', color: 'var(--color-recovery)', view: 'nutrition' }
-] as const
-const STAGES = ['AWAKE', 'REM', 'LIGHT', 'DEEP'] as const
-
-function open(view: MenuBarDestination['view'], date = isoToday(), metric?: MenuBarDestination['metric'], range: 'D' | 'W' = 'D'): void {
+function open(
+  view: MenuBarDestination['view'],
+  date = isoToday(),
+  metric?: MenuBarDestination['metric'],
+  range: 'D' | 'W' | 'M' = 'D'
+): void {
   void window.pulse.app.open({ view, date, metric, range })
 }
+const healthQuery = (query: { queryKey: readonly unknown[] }): boolean =>
+  ['series-metric', 'sleep-day', 'devices', 'intraday', 'activity-intraday', 'workouts'].includes(
+    String(query.queryKey[0])
+  )
 
 export default function MenuBarDashboard(): React.JSX.Element {
   const client = useQueryClient()
   const busy = useSyncBusy()
   const refresh = useRefresh()
   const [refreshFailed, setRefreshFailed] = useState(false)
-  const [state, setState] = useState<{ settings: AppSettings; google: GoogleAuthStatus } | null>(null)
+  const [state, setState] = useState<{ settings: AppSettings; google: GoogleAuthStatus } | null>(
+    null
+  )
   const [error, setError] = useState(false)
   const [visible, setVisible] = useState(false)
   const panelRef = useRef<HTMLElement>(null)
@@ -63,166 +71,333 @@ export default function MenuBarDashboard(): React.JSX.Element {
       setError(false)
       setRefreshFailed(false)
       client.clear()
-      void Promise.all([window.pulse.settings.get(), window.pulse.google.status()]).then(([settings, google]) => {
-        if (current === generation) setState({ settings, google })
-      }).catch(() => { if (current === generation) setError(true) })
+      void Promise.all([window.pulse.settings.get(), window.pulse.google.status()])
+        .then(([settings, google]) => {
+          if (current === generation) setState({ settings, google })
+        })
+        .catch(() => {
+          if (current === generation) setError(true)
+        })
     }
     load()
     const account = window.pulse.chats.onAccountChanged(load)
     const auth = window.pulse.google.onStatusChanged(load)
     const visibility = window.pulse.app.onPanelVisibility((nextVisible) => {
       setVisible(nextVisible)
+      // Stop scheduled retries at the visibility event, before React commits
+      // the disabled widgets. A hidden renderer can defer its passive effects.
+      if (!nextVisible) void client.cancelQueries({ predicate: healthQuery })
       if (nextVisible) {
         const current = generation
         // Goals may have changed in the main window while this panel was hidden.
-        void window.pulse.settings.get().then((settings) => {
-          if (current === generation) setState((previous) => previous ? { ...previous, settings } : previous)
-        }).catch(() => { /* Keep the last known goals until the next opening. */ })
+        void window.pulse.settings
+          .get()
+          .then((settings) => {
+            if (current === generation)
+              setState((previous) => (previous ? { ...previous, settings } : previous))
+          })
+          .catch(() => {
+            /* Keep the last known goals until the next opening. */
+          })
       }
     })
-    return () => { generation++; account(); auth(); visibility(); client.clear() }
+    return () => {
+      generation++
+      account()
+      auth()
+      visibility()
+      client.clear()
+    }
   }, [client])
 
-  return <main className="menu-dashboard" ref={panelRef} tabIndex={-1}>
-    <div className="menu-content" ref={contentRef}>
-      <header className="menu-header">
-        <button className="menu-brand" onClick={() => open('home')} aria-label="Open OpenPulse">OpenPulse <ArrowUpRight size={13} /></button>
-        <div className="menu-header-actions">
-          {state?.google.connected && <BatteryPill enabled={visible} onClick={() => open('devices')} />}
-          {state?.google.connected && <button className="menu-icon-button" disabled={busy} aria-label="Refresh health data" onClick={() => {
-            setRefreshFailed(false)
-            void refresh().catch(() => setRefreshFailed(true))
-          }}><ArrowClockwise size={17} className={busy ? 'animate-spin' : ''} /></button>}
-          <button className="menu-icon-button" onClick={() => open('settings')} aria-label="Open settings"><GearSix size={17} /></button>
-        </div>
-      </header>
-      {state?.google.connected ? <DashboardContent settings={state.settings} visible={visible} busy={busy} refreshFailed={refreshFailed} /> : <section className="menu-connect">
-        <Moon size={30} />
-        <h1>{error ? 'Unable to load your summary' : state ? 'Your day, at a glance' : 'Loading your summary…'}</h1>
-        <p>{error ? 'Open OpenPulse to check your connection.' : state ? 'Connect your Fitbit account in OpenPulse to see your daily rings and health summary here.' : 'Checking your connection.'}</p>
-        {(state || error) && <button onClick={() => open('settings')}>Open OpenPulse <ArrowUpRight size={14} /></button>}
-      </section>}
-      {!state?.google.connected && <QuitButton />}
-    </div>
-  </main>
+  return (
+    <main className="menu-dashboard" ref={panelRef} tabIndex={-1}>
+      <div className="menu-content" ref={contentRef}>
+        <header className="menu-header">
+          <button className="menu-brand" onClick={() => open('home')} aria-label="Open OpenPulse">
+            OpenPulse <ArrowUpRight size={13} />
+          </button>
+          <div className="menu-header-actions">
+            {state?.google.connected && (
+              <BatteryPill enabled={visible} onClick={() => open('devices')} />
+            )}
+            {state?.google.connected && (
+              <button
+                className="menu-icon-button"
+                disabled={busy}
+                aria-label="Refresh health data"
+                onClick={() => {
+                  setRefreshFailed(false)
+                  void refresh().catch(() => setRefreshFailed(true))
+                }}
+              >
+                <ArrowClockwise size={17} className={busy ? 'animate-spin' : ''} />
+              </button>
+            )}
+            <button
+              className="menu-icon-button"
+              onClick={() =>
+                void window.pulse.app.open({
+                  view: 'settings',
+                  date: isoToday(),
+                  customize: 'menuBar'
+                })
+              }
+              aria-label="Customize menu bar"
+            >
+              <PencilSimple size={17} />
+            </button>
+            <button
+              className="menu-icon-button"
+              onClick={() => open('settings')}
+              aria-label="Open settings"
+            >
+              <GearSix size={17} />
+            </button>
+          </div>
+        </header>
+        {state?.google.connected ? (
+          <DashboardContent
+            settings={state.settings}
+            visible={visible}
+            busy={busy}
+            refreshFailed={refreshFailed}
+          />
+        ) : (
+          <section className="menu-connect">
+            <Moon size={30} />
+            <h1>
+              {error
+                ? 'Unable to load your summary'
+                : state
+                  ? 'Your day, at a glance'
+                  : 'Loading your summary…'}
+            </h1>
+            <p>
+              {error
+                ? 'Open OpenPulse to check your connection.'
+                : state
+                  ? 'Connect your Fitbit account in OpenPulse to see your daily rings and health summary here.'
+                  : 'Checking your connection.'}
+            </p>
+            {(state || error) && (
+              <button onClick={() => open('settings')}>
+                Open OpenPulse <ArrowUpRight size={14} />
+              </button>
+            )}
+          </section>
+        )}
+        {!state?.google.connected && <QuitButton />}
+      </div>
+    </main>
+  )
 }
 
 function QuitButton(): React.JSX.Element {
-  return <button className="menu-quit" onClick={() => void window.pulse.app.quit()}>Quit</button>
+  return (
+    <button className="menu-quit" onClick={() => void window.pulse.app.quit()}>
+      Quit
+    </button>
+  )
 }
 
-function DashboardContent({ settings, visible, busy, refreshFailed }: { settings: AppSettings; visible: boolean; busy: boolean; refreshFailed: boolean }): React.JSX.Element {
+/** Also renders the draft preview in Settings, using the main window's query cache. */
+export function MenuBarSlots({
+  layout,
+  date,
+  settings,
+  enabled,
+  editor,
+  preview = false
+}: {
+  layout: DashboardLayout
+  date: string
+  settings: AppSettings
+  enabled: boolean
+  editor?: DashboardEditorState
+  preview?: boolean
+}): React.JSX.Element {
+  const onOpen: DashboardOpenMetric = (metric, range, readingDate = date) => {
+    if (!preview)
+      open(
+        METRICS[metric].domain,
+        readingDate,
+        metric,
+        range === 'M' ? 'M' : range === 'W' ? 'W' : 'D'
+      )
+  }
+  const wrap = (id: string, content: React.ReactNode): React.ReactNode =>
+    editor ? (
+      <EditableDashboardSlot key={id} id={id} editor={editor}>
+        {content}
+      </EditableDashboardSlot>
+    ) : (
+      <div key={id} className="dashboard-slot" data-dashboard-slot={id}>
+        {content}
+      </div>
+    )
+  return (
+    <>
+      <div className="menu-day">
+        <h1>Today</h1>
+        <span>
+          {new Date(`${date}T12:00:00`).toLocaleDateString([], {
+            weekday: 'short',
+            day: 'numeric',
+            month: 'short'
+          })}
+        </span>
+      </div>
+      <section className="menu-rings" aria-label="Daily goal progress">
+        {['ring1', 'ring2', 'ring3'].map((id) => {
+          const widget = layout[id]
+          return wrap(
+            id,
+            'metric' in widget ? (
+              <DashboardRing
+                metric={widget.metric}
+                date={date}
+                goals={settings.goals}
+                enabled={enabled}
+                onOpen={onOpen}
+                compact
+              />
+            ) : null
+          )
+        })}
+      </section>
+      <section className="menu-stats" aria-label="Health summary">
+        {['summary1', 'summary2', 'summary3', 'summary4'].map((id) => {
+          const widget = layout[id]
+          return wrap(
+            id,
+            'metric' in widget ? (
+              <DashboardSummary
+                metric={widget.metric}
+                date={date}
+                goals={settings.goals}
+                enabled={enabled}
+                onOpen={onOpen}
+                presentation="compact"
+              />
+            ) : null
+          )
+        })}
+      </section>
+      {['chart1', 'chart2'].map((id) =>
+        wrap(
+          id,
+          <DashboardChart
+            widget={layout[id]}
+            date={date}
+            goals={settings.goals}
+            enabled={enabled}
+            compact
+            onOpen={onOpen}
+            onSleep={() => {
+              if (!preview) open('sleep', date)
+            }}
+          />
+        )
+      )}
+    </>
+  )
+}
+
+function DashboardContent({
+  settings,
+  visible,
+  busy,
+  refreshFailed
+}: {
+  settings: AppSettings
+  visible: boolean
+  busy: boolean
+  refreshFailed: boolean
+}): React.JSX.Element {
   const [today, syncToday] = useCurrentDay()
-  const range = rangeEnding(today, 7)
-  const weightRange = rangeEnding(today, 30)
-  const series = useSeries(METRICS, range.start, today, visible)
-  const weightSeries = useSeries(WEIGHT, weightRange.start, today, visible)
-  const sleep = useSleepDay(today, visible)
+  const preferences = useDashboardLayouts()
   const devices = useDevices(visible)
+  const fetching = useIsFetching({ predicate: healthQuery })
   const client = useQueryClient()
   const [checkedAt, setCheckedAt] = useState<string | null>(null)
   const [now, setNow] = useState(Date.now())
-
   useEffect(() => {
     if (!visible) {
-      void client.cancelQueries()
+      void client.cancelQueries({ predicate: healthQuery })
       return
     }
     syncToday()
     setNow(Date.now())
     const timer = window.setInterval(() => {
       setNow(Date.now())
-      void client.invalidateQueries()
+      void client.invalidateQueries({ predicate: healthQuery })
     }, 5 * 60_000)
     return () => window.clearInterval(timer)
   }, [client, visible, syncToday])
-  // This is deliberately a check time, not a claim that all device data is fresh.
   useEffect(() => {
-    if (!busy && !series.isPending) setCheckedAt(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }))
-  }, [busy, series.isPending])
-
-  const values = series.data?.days[today]
-  const steps = seriesPoints(series.data?.days, 'steps', range.start, today)
-  const hrv = values?.hrvMs
-  const hrvBase = baseline(seriesPoints(series.data?.days, 'hrvMs', range.start, today), today)
-  const hrvDelta = hrv != null && hrvBase != null ? Math.round(hrv - hrvBase) : null
-  const rhr = values?.restingHeartRate
-  const rhrBase = baseline(seriesPoints(series.data?.days, 'restingHeartRate', range.start, today), today)
-  const rhrDelta = rhr != null && rhrBase != null ? rhr - Math.round(rhrBase) : null
-  const weights = seriesPoints(weightSeries.data?.days, 'weightKg', weightRange.start, today)
-  const weight = latestPoint(weights)
-  const recentWeights = weights.filter((p) => p.date >= shiftDate(today, -7) && p.value != null)
-  const weightDelta = recentWeights.length >= 2 ? Number(((recentWeights.at(-1)!.value!) - recentWeights[0].value!).toFixed(1)) : null
-  const night = selectedSleepSession(sleep.data)
-  const stageTotal = STAGES.reduce((total, stage) => total + (night?.stageMinutes[stage] ?? 0), 0)
+    if (visible && !busy && fetching === 0)
+      setCheckedAt(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }))
+  }, [busy, fetching, visible])
   const device = devices.data?.find((item) => item.batteryPct != null) ?? devices.data?.[0]
   const sync = device?.lastSync ? Date.parse(device.lastSync) : NaN
   const minutes = Math.max(0, Math.floor((now - sync) / 60000))
-  const syncLabel = !Number.isFinite(sync) ? 'Device sync time unavailable' : minutes < 1 ? 'Device synced just now' : minutes < 60 ? `Device synced ${minutes}m ago` : minutes < 1440 ? `Device synced ${Math.floor(minutes / 60)}h ago` : `Device synced ${Math.floor(minutes / 1440)}d ago`
-  const anyError = series.error != null || weightSeries.error != null || sleep.isError || devices.isError || refreshFailed
-  const signed = (n: number): string => `${n > 0 ? '+' : ''}${n}`
-  const missing = (pending: boolean): string => pending ? 'Loading…' : 'No data'
-
-  return <>
-    <div className="menu-day"><h1>Today</h1><span>{new Date(`${today}T12:00:00`).toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short' })}</span></div>
-    <section className="menu-rings" aria-label="Daily goal progress">
-      {RINGS.map(({ metric, label, color, view }) => {
-        const value = values?.[metric]
-        const goal = settings.goals[metric]
-        const pending = series.isMetricPending(metric)
-        return <button key={metric} className="menu-ring" onClick={() => open(view, today, metric)} aria-label={`${metric === 'steps' ? 'Steps' : `Calories ${label.toLowerCase()}`}: ${value == null ? missing(pending) : formatInt(value)}, goal ${formatInt(goal)}. Open details`}>
-          <ProgressRing value={value ?? 0} goal={goal} color={color} size={116} stroke={10}>
-            <div><strong>{value == null ? '—' : formatInt(value)}</strong><span>{label}</span></div>
-          </ProgressRing>
-          <small>{value == null ? missing(pending) : goal > 0 ? `${Math.round(value / goal * 100)}% of ${formatInt(goal)}` : 'No goal set'}</small>
-        </button>
-      })}
-    </section>
-    <section className="menu-stats" aria-label="Health summary">
-      <button onClick={() => open('sleep', today)}>
-        <span><Moon size={14} color="var(--color-sleep)" />Sleep</span>
-        <strong>{sleep.data ? formatMinutes(sleep.data.minutesAsleep) : missing(sleep.isPending)}</strong>
-        <small>{sleep.data && settings.goals.sleepMinutes > 0 ? `${Math.round(sleep.data.minutesAsleep / settings.goals.sleepMinutes * 100)}% of ${formatMinutes(settings.goals.sleepMinutes)}` : 'Daily total'}</small>
-      </button>
-      <button onClick={() => open('heart', today)}>
-        <span><Heartbeat size={14} color="var(--color-heart)" />Resting HR</span>
-        <strong>{rhr != null ? `${rhr} bpm` : missing(series.isMetricPending('restingHeartRate'))}</strong>
-        <small>{rhrDelta === null ? 'Daily resting rate' : `${signed(rhrDelta)} vs average`}</small>
-      </button>
-      <button onClick={() => open('body', weight?.date ?? today, 'weightKg')}>
-        <span><Scales size={14} color="var(--color-body-metric)" />Weight</span>
-        <strong>{weight?.value != null ? `${weight.value.toFixed(1)} kg` : missing(weightSeries.isPending)}</strong>
-        <small>{weightDelta === null ? 'Latest reading' : `${signed(weightDelta)} kg in 7 days`}</small>
-        {weight && weight.date !== today && <small className="menu-reading-date">{weight.date}</small>}
-      </button>
-      <button onClick={() => open('heart', today, 'hrvMs')} aria-label="Open HRV details">
-        <span><Pulse size={14} color="var(--color-recovery)" />HRV</span>
-        <strong>{hrv != null ? `${formatInt(hrv)} ms` : missing(series.isMetricPending('hrvMs'))}</strong>
-        <small>{hrvDelta === null ? 'Daily HRV' : `${signed(hrvDelta)} vs average`}</small>
-      </button>
-    </section>
-    <section className="menu-section" aria-label="Seven-day steps chart">
-      <button className="menu-section-title" onClick={() => open('activity', today, 'steps', 'W')}><h2>Steps this week</h2><span>7 days <ArrowUpRight size={12} /></span></button>
-      {series.isMetricPending('steps') ? <div className="menu-chart-empty">Loading steps…</div> : steps.every((p) => p.value === null) ? <div className="menu-chart-empty">No steps recorded this week</div> : <ColumnChart
-        data={steps.map((p) => ({ key: p.date, value: p.value, label: p.date, tick: new Date(`${p.date}T12:00:00`).toLocaleDateString([], { weekday: 'narrow' }) }))}
-        color="var(--color-activity)" height={105} emphasisIndex={6}
-        goal={settings.goals.steps > 0 ? { value: settings.goals.steps, label: 'Goal' } : null}
-        format={formatInt} unitLabel="steps" onSelect={(p) => open('activity', p.key, 'steps')}
-      />}
-    </section>
-    <button className="menu-section menu-sleep" onClick={() => open('sleep', today)} aria-label="Open sleep stage details">
-      <div className="menu-section-title"><h2>Sleep stages</h2><span>Main sleep <ArrowUpRight size={12} /></span></div>
-      {stageTotal > 0 ? <>
-        <div className="menu-stage-bar" aria-hidden>{STAGES.map((stage) => <span key={stage} style={{ background: STAGE_COLOR[stage], flex: night?.stageMinutes[stage] ?? 0 }} />)}</div>
-        <div className="menu-stage-legend">{STAGES.map((stage) => <div key={stage}><span><i style={{ background: STAGE_COLOR[stage] }} />{STAGE_LABEL[stage]}</span><strong>{formatMinutes(night?.stageMinutes[stage] ?? 0)}</strong></div>)}</div>
-      </> : <p className="menu-muted">{sleep.isPending ? 'Loading sleep stages…' : 'Sleep stages unavailable'}</p>}
-    </button>
-    <footer className="menu-footer">
-      <div className="menu-footer-text">
-        <button className="menu-device-sync" onClick={() => open('devices', today)} title={device?.lastSync ?? undefined}>{devices.isPending ? 'Loading device sync…' : syncLabel}</button>
-        <p className="menu-freshness" role="status">{anyError ? 'Some data could not be updated. Open the app for details.' : busy ? 'Checking available data…' : checkedAt ? `Checked at ${checkedAt} · values depend on device sync` : 'Showing available data'}</p>
-      </div>
-      <QuitButton />
-    </footer>
-  </>
+  const syncLabel = !Number.isFinite(sync)
+    ? 'Device sync time unavailable'
+    : minutes < 1
+      ? 'Device synced just now'
+      : minutes < 60
+        ? `Device synced ${minutes}m ago`
+        : minutes < 1440
+          ? `Device synced ${Math.floor(minutes / 60)}h ago`
+          : `Device synced ${Math.floor(minutes / 1440)}d ago`
+  const anyError =
+    refreshFailed ||
+    preferences.isError ||
+    client
+      .getQueryCache()
+      .getAll()
+      .some((query) => healthQuery(query) && query.isActive() && query.state.status === 'error')
+  return (
+    <>
+      {preferences.data ? (
+        <MenuBarSlots
+          layout={preferences.data.menuBar}
+          date={today}
+          settings={settings}
+          enabled={visible}
+        />
+      ) : (
+        <p className="menu-muted" role="status">
+          {preferences.isError ? 'Could not load your layout.' : 'Loading your layout…'}
+          {preferences.isError && (
+            <button className="dashboard-retry" onClick={() => void preferences.refetch()}>
+              Retry
+            </button>
+          )}
+        </p>
+      )}
+      <footer className="menu-footer">
+        <div className="menu-footer-text">
+          <button
+            className="menu-device-sync"
+            onClick={() => open('devices', today)}
+            title={device?.lastSync ?? undefined}
+          >
+            {devices.isPending ? 'Loading device sync…' : syncLabel}
+          </button>
+          <p className="menu-freshness" role="status">
+            {anyError
+              ? 'Some data could not be updated. Open the app for details.'
+              : busy
+                ? 'Checking available data…'
+                : checkedAt
+                  ? `Checked at ${checkedAt} · values depend on device sync`
+                  : 'Showing available data'}
+          </p>
+        </div>
+        <QuitButton />
+      </footer>
+    </>
+  )
 }

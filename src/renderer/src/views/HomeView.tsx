@@ -1,41 +1,19 @@
-import { selectedSleepSession } from '@shared/sleep'
 import { motion } from 'framer-motion'
-import { Barbell, Footprints, Heartbeat, Moon, Scales } from '@phosphor-icons/react'
-import { DrillHeader, DrillPanel, InteractivePanel, Panel, SectionHeader } from '@/components/Panel'
-import { ColumnChart, ProgressRing } from '@/components/charts'
-import { MetricStat } from '@/components/MetricStat'
-import { SleepStages } from '@/components/SleepStages'
+import { Panel, SectionHeader } from '@/components/Panel'
+import { DashboardChart, DashboardRing, DashboardSummary } from '@/components/DashboardWidgets'
 import {
-  CARD_HEIGHT,
-  SkeletonChart,
-  SkeletonRing,
-  SkeletonRows,
-  SkeletonText
-} from '@/components/Skeleton'
+  DashboardEditControls,
+  EditableDashboardSlot,
+  useDashboardEditor
+} from '@/components/DashboardEditor'
+import { CARD_HEIGHT } from '@/components/Skeleton'
 import { ErrorState } from '@/components/ErrorState'
-import { WorkoutList } from '@/components/WorkoutList'
 import type { View } from '@/components/Sidebar'
-import { useIntraday, useSeries, useSleepDay, useWorkouts } from '@/hooks/useHealth'
-import { METRICS } from '@/lib/metric-registry'
-import { baseline, baselineDeltaPct, latestPoint, pointValues, rangeEnding, seriesPoints } from '@/lib/metrics'
-import { formatClock, formatHour, formatInt, formatMinutes, greeting, longDate, shiftDate, shortDate } from '@/lib/format'
+import { greeting, longDate } from '@/lib/format'
 import type { MetricRange, OpenMetric } from '@/lib/metric-navigation'
 import { fade } from '@/lib/motion'
-import type { Goals, MetricKey, Workout } from '@shared/types'
-
-const HOME_METRICS: MetricKey[] = [
-  'steps',
-  'caloriesOut',
-  'caloriesIn',
-  'restingHeartRate',
-  'hrvMs',
-  'spo2Pct',
-  'breathingRate',
-  'skinTempDeltaC'
-]
-
-const SIGNAL_KEYS: MetricKey[] = ['hrvMs', 'spo2Pct', 'breathingRate', 'skinTempDeltaC']
-const WEIGHT_METRICS: MetricKey[] = ['weightKg']
+import type { Goals, Workout } from '@shared/types'
+import { DASHBOARD_SLOTS } from '@shared/dashboard'
 
 interface HomeViewProps {
   date: string
@@ -47,422 +25,157 @@ interface HomeViewProps {
   onNavigate: (view: View) => void
 }
 
-export function HomeView({ date, today, goals, onOpenMetric, onOpenWorkout, onOpenWorkouts, onNavigate }: HomeViewProps): React.JSX.Element {
-  const { start, end } = rangeEnding(date, 7)
-  const weightRange = rangeEnding(date, 30)
-  const series = useSeries(HOME_METRICS, start, end)
-  const weightSeries = useSeries(WEIGHT_METRICS, weightRange.start, weightRange.end)
-  const night = useSleepDay(date)
-  const mainSession = selectedSleepSession(night.data)
-  const workouts = useWorkouts(date, date)
-  const intraday = useIntraday(date, true, 'steps')
-
-  const isToday = date === today
-
-  if (series.isError) {
-    return <ErrorState message={series.error instanceof Error ? series.error.message : undefined} onRetry={() => void series.refetch()} />
-  }
-
-  const days = series.data?.days
-  const dayValues = days?.[date] ?? {}
-  const pointsFor = (key: MetricKey) => seriesPoints(days, key, start, end)
-  const rhrBase = baseline(pointsFor('restingHeartRate'), date)
-  const weightPoints = seriesPoints(weightSeries.data?.days, 'weightKg', weightRange.start, weightRange.end)
-  const weight = latestPoint(weightPoints)
-  const recentWeightReadings = weightPoints.filter((point) => point.date >= shiftDate(date, -7) && point.value != null)
-  const weightChange = recentWeightReadings.length >= 2
-    ? Number(((recentWeightReadings.at(-1)?.value ?? 0) - (recentWeightReadings[0].value ?? 0)).toFixed(1))
-    : null
-
+export function HomeView({
+  date,
+  today,
+  goals,
+  onOpenMetric,
+  onOpenWorkout,
+  onOpenWorkouts,
+  onNavigate
+}: HomeViewProps): React.JSX.Element {
+  const editor = useDashboardEditor('home')
+  if (editor.isError)
+    return (
+      <ErrorState
+        message="Could not load your homepage layout."
+        onRetry={() => void editor.refetch()}
+      />
+    )
+  const layout = editor.layout
+  if (!layout)
+    return (
+      <div className="p-8 text-[13px] text-ink-dim" role="status">
+        Loading your homepage…
+      </div>
+    )
+  const rings = ['ring1', 'ring2', 'ring3']
+  const summaries = ['summary1', 'summary2', 'summary3']
+  const signals = ['signal1', 'signal2', 'signal3', 'signal4']
+  const defaultSignals = signals.every((id) => {
+    const widget = layout[id]
+    const original = DASHBOARD_SLOTS.home.find((slot) => slot.id === id)!.defaultWidget
+    return 'metric' in widget && 'metric' in original && widget.metric === original.metric
+  })
+  const chart = (id: string, wide = false): React.JSX.Element => (
+    <EditableDashboardSlot id={id} editor={editor}>
+      <DashboardChart
+        widget={layout[id]}
+        date={date}
+        goals={goals}
+        wide={wide}
+        onOpen={onOpenMetric}
+        onSleep={() => onNavigate('sleep')}
+        onWorkouts={() => onOpenWorkouts('D')}
+        onWorkout={onOpenWorkout}
+      />
+    </EditableDashboardSlot>
+  )
   return (
     <div className="mx-auto flex max-w-[1180px] flex-col gap-5 px-8 pb-12">
-      <motion.header custom={0} variants={fade} initial="hidden" animate="show" className="pt-2">
-        <p className="text-[13px] font-medium text-ink-dim">{isToday ? greeting() : 'Reviewing'}</p>
-        <h1 className="display mt-1 text-[27px] font-bold text-ink">{longDate(date)}</h1>
+      <motion.header
+        custom={0}
+        variants={fade}
+        initial="hidden"
+        animate="show"
+        className="flex flex-wrap items-end justify-between gap-4 pt-2"
+      >
+        <div>
+          <p className="text-[13px] font-medium text-ink-dim">
+            {date === today ? greeting() : 'Reviewing'}
+          </p>
+          <h1 className="display mt-1 text-[27px] font-bold text-ink">{longDate(date)}</h1>
+        </div>
+        <DashboardEditControls editor={editor} />
       </motion.header>
-
-      {/* Hero: goal rings + how the night set the day up */}
       <motion.div custom={1} variants={fade} initial="hidden" animate="show">
         <Panel className={`home-hero ${CARD_HEIGHT.hero}`}>
           <div className="home-goal-rings">
-            <GoalRing
-              value={dayValues.steps ?? null}
-              goal={goals.steps}
-              metricKey="steps"
-              pending={series.isMetricPending('steps')}
-              onOpen={onOpenMetric}
-            />
-            <GoalRing
-              value={dayValues.caloriesOut ?? null}
-              goal={goals.caloriesOut}
-              metricKey="caloriesOut"
-              label="Calories burned"
-              pending={series.isMetricPending('caloriesOut')}
-              onOpen={onOpenMetric}
-            />
-            <GoalRing
-              value={dayValues.caloriesIn ?? null}
-              goal={goals.caloriesIn}
-              metricKey="caloriesIn"
-              label="Calories eaten"
-              pending={series.isMetricPending('caloriesIn')}
-              onOpen={onOpenMetric}
-            />
+            {rings.map((id) => {
+              const widget = layout[id]
+              return (
+                <EditableDashboardSlot id={id} editor={editor} key={id}>
+                  {'metric' in widget && (
+                    <DashboardRing
+                      metric={widget.metric}
+                      date={date}
+                      goals={goals}
+                      onOpen={onOpenMetric}
+                    />
+                  )}
+                </EditableDashboardSlot>
+              )
+            })}
           </div>
-
           <div className="home-hero-stats">
-            <HeroRow
-              icon={<Moon size={15} weight="fill" style={{ color: 'var(--color-sleep)' }} />}
-              label="Sleep"
-              value={
-                night.isPending ? (
-                  <SkeletonText className="h-3.5 w-20" />
-                ) : night.data ? (
-                  formatMinutes(night.data.minutesAsleep)
-                ) : (
-                  'No data'
-                )
-              }
-              sub={
-                night.isPending ? (
-                  <SkeletonText className="w-28" />
-                ) : night.data ? (
-                  `${Math.round((night.data.minutesAsleep / goals.sleepMinutes) * 100)}% of ${formatMinutes(goals.sleepMinutes)} goal`
-                ) : undefined
-              }
-              onClick={() => onNavigate('sleep')}
-            />
-            <HeroRow
-              icon={<Heartbeat size={15} weight="fill" style={{ color: 'var(--color-heart)' }} />}
-              label="Resting HR"
-              value={
-                series.isMetricPending('restingHeartRate') ? (
-                  <SkeletonText className="h-3.5 w-20" />
-                ) : dayValues.restingHeartRate != null ? (
-                  `${dayValues.restingHeartRate} bpm`
-                ) : (
-                  'No data'
-                )
-              }
-              sub={
-                series.isMetricPending('restingHeartRate') ? (
-                  <SkeletonText className="w-28" />
-                ) : dayValues.restingHeartRate != null && rhrBase != null ? (
-                  dayValues.restingHeartRate === Math.round(rhrBase) ? (
-                    'Same as your average'
-                  ) : (
-                    `${dayValues.restingHeartRate > Math.round(rhrBase) ? '+' : ''}${dayValues.restingHeartRate - Math.round(rhrBase)} vs your average`
-                  )
-                ) : undefined
-              }
-              onClick={() => onNavigate('heart')}
-            />
-            <HeroRow
-              icon={<Scales size={15} weight="fill" style={{ color: 'var(--color-body-metric)' }} />}
-              label="Weight"
-              value={
-                weightSeries.isMetricPending('weightKg') ? (
-                  <SkeletonText className="h-3.5 w-20" />
-                ) : weight?.value != null ? (
-                  `${METRICS.weightKg.format(weight.value)} ${METRICS.weightKg.unit}`
-                ) : (
-                  'No recent data'
-                )
-              }
-              sub={
-                weightSeries.isMetricPending('weightKg') ? (
-                  <SkeletonText className="w-28" />
-                ) : weight && weight.date !== date ? (
-                  `Last measured ${shortDate(weight.date)}`
-                ) : weightChange == null ? (
-                  weight ? 'Not enough data for 7-day change' : undefined
-                ) : weightChange === 0 ? (
-                  'No change in 7 days'
-                ) : (
-                  `${weightChange > 0 ? '+' : ''}${weightChange.toFixed(1)} kg in 7 days`
-                )
-              }
-              onClick={() => onNavigate('body')}
-            />
+            {summaries.map((id) => {
+              const widget = layout[id]
+              return (
+                <EditableDashboardSlot id={id} editor={editor} key={id}>
+                  {'metric' in widget && (
+                    <DashboardSummary
+                      metric={widget.metric}
+                      date={date}
+                      goals={goals}
+                      onOpen={onOpenMetric}
+                      presentation="hero"
+                    />
+                  )}
+                </EditableDashboardSlot>
+              )
+            })}
           </div>
         </Panel>
       </motion.div>
-
       <div className="display-lg-pair-grid display-lg-pair-grid--weighted-135">
-        {/* Daily movement */}
-        <motion.div custom={2} variants={fade} initial="hidden" animate="show" className="min-w-0">
-          <InteractivePanel
-            className={`flex h-full min-w-0 flex-col gap-3 p-5 ${CARD_HEIGHT.large}`}
-            onOpen={() => onOpenMetric('steps', 'D')}
+        {['chart1', 'chart2'].map((id, i) => (
+          <motion.div
+            key={id}
+            custom={i + 2}
+            variants={fade}
+            initial="hidden"
+            animate="show"
+            className="min-w-0"
           >
-            <DrillHeader
-              title="Daily movement"
-              hint="Steps per hour"
-              icon={<Footprints size={18} weight="fill" style={{ color: 'var(--color-activity)' }} />}
-            />
-            {intraday.isPending ? (
-              <div className="mt-auto">
-                <SkeletonChart columns={24} tickEvery={6} tickWidth={40} />
-              </div>
-            ) : intraday.data && intraday.data.stepsHourly.length > 0 ? (
-              <div className="mt-auto">
-                <ColumnChart
-                  data={intraday.data.stepsHourly.map((h) => ({
-                    key: String(h.hour),
-                    label: formatHour(h.hour),
-                    value: h.steps,
-                    tick: h.hour % 6 === 0 ? formatHour(h.hour) : undefined
-                  }))}
-                  color="var(--color-activity)"
-                  format={formatInt}
-                  unitLabel="steps"
-                />
-              </div>
-            ) : (
-              <div className="grid flex-1 place-items-center text-[13px] text-ink-faint">
-                No movement recorded yet for this day.
-              </div>
-            )}
-          </InteractivePanel>
-        </motion.div>
-
-        {/* Last night */}
-        <motion.div custom={3} variants={fade} initial="hidden" animate="show" className="min-w-0">
-          <InteractivePanel
-            className={`flex h-full min-w-0 flex-col gap-3 p-5 ${CARD_HEIGHT.large}`}
-            onOpen={() => onNavigate('sleep')}
-          >
-            <DrillHeader
-              title="Sleep"
-              hint={
-                night.isPending ? (
-                  <SkeletonText className="w-36" />
-                ) : night.data ? (
-                  `${formatMinutes(night.data.minutesAsleep)} ${!night.data.complete ? 'cached' : night.data.sessions.length > 1 ? 'total' : 'asleep'} · ${night.data.sessions.length > 1 ? `${night.data.sessions.length} sessions · Main sleep shown` : `${formatClock(mainSession!.startTime)}–${formatClock(mainSession!.endTime)}`}`
-                ) : (
-                  'No sleep recorded'
-                )
-              }
-              icon={<Moon size={18} weight="fill" style={{ color: 'var(--color-sleep)' }} />}
-            />
-            {night.isPending ? (
-              <SleepStages night={null} loading />
-            ) : night.data ? (
-              <SleepStages night={mainSession} />
-            ) : (
-              <div className="grid flex-1 place-items-center text-[13px] text-ink-faint">
-                Wear your Fitbit Air to bed to see sleep stages.
-              </div>
-            )}
-          </InteractivePanel>
-        </motion.div>
+            {chart(id)}
+          </motion.div>
+        ))}
       </div>
-
-      {/* Night signals vs personal baseline */}
       <motion.div custom={4} variants={fade} initial="hidden" animate="show">
-        <SignalsPanel
-          date={date}
-          pointsFor={pointsFor}
-          today={todayValue(days, date)}
-          isPending={series.isMetricPending}
-          onOpenMetric={onOpenMetric}
-        />
-      </motion.div>
-
-      {/* Workouts */}
-      <motion.div custom={5} variants={fade} initial="hidden" animate="show">
-        <DrillPanel
-          label="Open workout details"
-          onOpen={() => onOpenWorkouts('D')}
-          className="min-h-[126px]"
-          contentClassName="flex min-h-[124px] flex-col gap-2 px-3 py-5"
-        >
-          <div className="px-2">
-            <DrillHeader
-              title="Workouts"
+        <Panel className={`overflow-hidden ${CARD_HEIGHT.summary}`}>
+          <div className="border-b border-hairline px-5 pb-3 pt-4">
+            <SectionHeader
+              title={defaultSignals ? 'Night signals' : 'Metric highlights'}
               hint={
-                workouts.isPending ? (
-                  <SkeletonText className="w-20" />
-                ) : (
-                  `${workouts.data?.length ?? 0} session${workouts.data?.length === 1 ? '' : 's'}`
-                )
+                defaultSignals
+                  ? 'Compared with your own recent baseline'
+                  : 'Your selected health metrics'
               }
-              icon={<Barbell size={18} weight="fill" style={{ color: 'var(--color-recovery)' }} />}
             />
           </div>
-          {workouts.isPending ? (
-            <SkeletonRows />
-          ) : workouts.data && workouts.data.length > 0 ? (
-            <div className="pointer-events-auto">
-              <WorkoutList workouts={workouts.data} onOpen={onOpenWorkout} />
-            </div>
-          ) : (
-            <div className="grid min-h-[58px] flex-1 place-items-center text-[13px] text-ink-faint">
-              Tracked exercises appear here automatically.
-            </div>
-          )}
-        </DrillPanel>
+          <div className="display-four-grid divide-x divide-hairline">
+            {signals.map((id) => {
+              const widget = layout[id]
+              return (
+                <EditableDashboardSlot id={id} editor={editor} key={id}>
+                  {'metric' in widget && (
+                    <DashboardSummary
+                      metric={widget.metric}
+                      date={date}
+                      goals={goals}
+                      onOpen={onOpenMetric}
+                      presentation="tile"
+                    />
+                  )}
+                </EditableDashboardSlot>
+              )
+            })}
+          </div>
+        </Panel>
+      </motion.div>
+      <motion.div custom={5} variants={fade} initial="hidden" animate="show">
+        {chart('wide', true)}
       </motion.div>
     </div>
-  )
-}
-
-function todayValue(days: Record<string, Partial<Record<MetricKey, number | null>>> | undefined, date: string) {
-  return (key: MetricKey): number | null => days?.[date]?.[key] ?? null
-}
-
-function SignalsPanel({
-  date,
-  pointsFor,
-  today,
-  isPending,
-  onOpenMetric
-}: {
-  date: string
-  pointsFor: (key: MetricKey) => ReturnType<typeof seriesPoints>
-  today: (key: MetricKey) => number | null
-  isPending: (key: MetricKey) => boolean
-  onOpenMetric: OpenMetric
-}): React.JSX.Element {
-  return (
-    <Panel className={`overflow-hidden ${CARD_HEIGHT.summary}`}>
-      <div className="border-b border-hairline px-5 pb-3 pt-4">
-        <SectionHeader title="Night signals" hint="Compared with your own recent baseline" />
-      </div>
-      <div className="display-four-grid divide-x divide-hairline">
-        {SIGNAL_KEYS.map((key) => {
-          const def = METRICS[key]
-          const points = pointsFor(key)
-          const value = today(key)
-          const base = baseline(points, date)
-          const deltaPct = def.deltaMode === 'abs' ? null : baselineDeltaPct(value, base)
-          const displayedAbsoluteDelta =
-            def.deltaMode === 'abs' && value != null ? Number(value.toFixed(1)) : null
-          const comparison =
-            def.deltaMode === 'abs'
-              ? displayedAbsoluteDelta == null
-                ? undefined
-                : displayedAbsoluteDelta > 0
-                  ? 'Above device baseline'
-                  : displayedAbsoluteDelta < 0
-                    ? 'Below device baseline'
-                    : 'At device baseline'
-              : deltaPct != null && Math.abs(deltaPct) < 1
-                ? 'In line with 7-day baseline'
-                : undefined
-          return (
-            <MetricStat
-              key={key}
-              icon={def.icon}
-              label={def.shortLabel ?? def.label}
-              value={value != null ? def.format(value) : '—'}
-              unit={def.unit}
-              accent={def.color}
-              deltaPct={deltaPct}
-              upIsGood={def.upIsGood}
-              spark={pointValues(points)}
-              sub={comparison}
-              onOpen={() => onOpenMetric(key, 'D')}
-              loading={isPending(key)}
-            />
-          )
-        })}
-      </div>
-    </Panel>
-  )
-}
-
-function GoalRing({
-  value,
-  goal,
-  metricKey,
-  label,
-  pending,
-  onOpen
-}: {
-  value: number | null
-  goal: number
-  metricKey: MetricKey
-  label?: string
-  pending: boolean
-  onOpen: OpenMetric
-}): React.JSX.Element {
-  const def = METRICS[metricKey]
-  const pct = value != null && goal > 0 ? Math.round((value / goal) * 100) : null
-  return (
-    <button
-      type="button"
-      onClick={pending ? undefined : () => onOpen(metricKey, 'D')}
-      disabled={pending}
-      aria-busy={pending}
-      className="group -m-5 flex flex-col items-center gap-2 rounded-2xl p-5 outline-none transition-[background-color,box-shadow,transform] duration-200 hover:bg-white/[0.05] hover:shadow-[inset_0_0_0_1px_rgb(255_255_255/0.07)] focus-visible:bg-white/[0.05] focus-visible:ring-2 focus-visible:ring-accent/60 active:scale-[0.985]"
-      aria-label={`Open ${def.label} details`}
-    >
-      {pending ? (
-        <SkeletonRing
-          size={120}
-          stroke={14}
-          className="home-goal-ring"
-          contentClassName="home-goal-skeleton-content"
-        />
-      ) : (
-        <ProgressRing
-          value={value ?? 0}
-          goal={goal}
-          color={def.color}
-          size={120}
-          stroke={14}
-          className="home-goal-ring"
-        >
-          <div className="text-center">
-            <div className="home-goal-value font-semibold leading-none tracking-tight text-ink">
-              {value != null ? def.format(value) : '—'}
-            </div>
-            <div className="home-goal-label mt-1 uppercase tracking-wide text-ink-faint">
-              {label ?? def.shortLabel ?? def.label}
-            </div>
-          </div>
-        </ProgressRing>
-      )}
-      {pending ? (
-        <SkeletonText className="home-goal-skeleton-label" />
-      ) : (
-        <span className="home-goal-caption font-mono text-ink-dim transition-colors group-hover:text-ink">
-          {pct != null ? `${pct}% of ${formatInt(goal)}` : 'no goal data'}
-        </span>
-      )}
-    </button>
-  )
-}
-
-function HeroRow({
-  icon,
-  label,
-  value,
-  sub,
-  onClick
-}: {
-  icon: React.ReactNode
-  label: string
-  value: React.ReactNode
-  sub?: React.ReactNode
-  onClick: () => void
-}): React.JSX.Element {
-  return (
-    <button
-      onClick={onClick}
-      className="home-hero-stat -mx-2 flex min-h-[70px] items-start gap-2.5 rounded-xl px-2 py-1.5 text-left transition-colors hover:bg-white/[0.04]"
-    >
-      <span className="mt-0.5">{icon}</span>
-      <span className="grid min-w-0 grid-rows-[17px_22px_19px]">
-        <span className="truncate text-[11px] font-medium leading-[17px] text-ink-faint">{label}</span>
-        <span className="flex min-w-0 items-center overflow-hidden text-[14.5px] font-semibold leading-[22px] text-ink">
-          {value}
-        </span>
-        <span className="flex min-w-0 items-center overflow-hidden pt-0.5 text-ellipsis whitespace-nowrap text-[11px] leading-[17px] text-ink-dim">
-          {sub}
-        </span>
-      </span>
-    </button>
   )
 }

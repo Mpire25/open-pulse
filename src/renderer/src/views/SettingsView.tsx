@@ -1,3 +1,6 @@
+import { DashboardEditControls, useDashboardEditor } from '@/components/DashboardEditor'
+import { MenuBarSlots } from './MenuBarDashboard'
+import { useCurrentDay } from '@/hooks/useCurrentDay'
 import { useEffect, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
 import * as Dialog from '@radix-ui/react-dialog'
@@ -23,6 +26,8 @@ import {
 } from '@shared/types'
 
 interface SettingsViewProps {
+  customizeMenuBar?: boolean
+  onCustomizationOpened?: () => void
   settings: AppSettings
   google: GoogleAuthStatus
   codex: CodexAuthStatus
@@ -32,6 +37,8 @@ interface SettingsViewProps {
 }
 
 export function SettingsView({
+  customizeMenuBar = false,
+  onCustomizationOpened,
   settings,
   google,
   codex,
@@ -51,7 +58,10 @@ export function SettingsView({
         <p className="mt-1 text-[13px] text-ink-dim">Accounts, daily goals, and app preferences.</p>
       </motion.header>
 
-      {window.pulse.app.platform === 'darwin' && <MenuBarCard settings={settings} onSettingsChange={onSettingsChange} />}
+      {window.pulse.app.platform === 'darwin' && <>
+        <MenuBarCard settings={settings} onSettingsChange={onSettingsChange} />
+        <MenuBarLayoutCard settings={settings} connected={google.connected} requested={customizeMenuBar} onOpened={onCustomizationOpened} />
+      </>}
       <GoogleCard
         settings={settings}
         google={google}
@@ -103,6 +113,69 @@ function MenuBarCard({ settings, onSettingsChange }: {
     </div>
     {failure && <p role="alert" className="text-[12px] text-danger">{failure}</p>}
   </Card>
+}
+
+function MenuBarLayoutCard({
+  settings,
+  connected,
+  requested,
+  onOpened
+}: {
+  settings: AppSettings
+  connected: boolean
+  requested: boolean
+  onOpened?: () => void
+}): React.JSX.Element {
+  const editor = useDashboardEditor('menuBar')
+  const [today] = useCurrentDay()
+  const card = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (requested && editor.layout && !editor.editing) {
+      editor.begin()
+      card.current?.scrollIntoView({ block: 'start' })
+      onOpened?.()
+    }
+  }, [requested, editor.layout, editor.editing, editor.begin, onOpened])
+  return (
+    <div ref={card}>
+      <Card index={0}>
+        <SectionHeader title="Menu bar layout" hint="Choose your rings, summaries and charts" />
+        <DashboardEditControls editor={editor} />
+        {editor.isError && (
+          <p role="alert" className="text-[12px] text-danger">
+            Could not load your layout. <button onClick={() => void editor.refetch()}>Retry</button>
+          </p>
+        )}
+        {editor.editing && editor.layout && (
+          <>
+            {!connected && (
+              <p className="text-[12px] text-ink-dim">
+                Connect Fitbit to see readings in the preview.
+              </p>
+            )}
+            <div className="dashboard-menu-preview">
+              <div className="menu-dashboard">
+                <div className="menu-content">
+                  <header className="menu-header">
+                    <span className="menu-brand">OpenPulse</span>
+                    <span className="text-[11px] text-ink-faint">Preview</span>
+                  </header>
+                  <MenuBarSlots
+                    layout={editor.layout}
+                    date={today}
+                    settings={settings}
+                    enabled={connected}
+                    editor={editor}
+                    preview
+                  />
+                </div>
+              </div>
+            </div>
+          </>
+        )}
+      </Card>
+    </div>
+  )
 }
 
 const RETENTION_OPTIONS: Array<{ value: ChatRetention; label: string; phrase: string }> = [

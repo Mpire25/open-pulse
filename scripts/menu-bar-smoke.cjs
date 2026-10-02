@@ -1,5 +1,5 @@
 // Run after bun run build:
-// bunx electron scripts/menu-bar-smoke.cjs [--memory] [--entry /path/to/out/main/index.js]
+// bunx electron scripts/menu-bar-smoke.cjs [--dashboard] [--memory] [--entry /path/to/out/main/index.js]
 // Uses generated fixture data in a temporary profile, without showing/focusing windows or signing in.
 const electron = require('electron')
 const { app, BrowserWindow, ipcMain, screen } = electron
@@ -9,6 +9,7 @@ const { join, resolve } = require('node:path')
 const { pathToFileURL } = require('node:url')
 const { execFileSync } = require('node:child_process')
 const measureMemory = process.argv.includes('--memory')
+const checkDashboards = process.argv.includes('--dashboard')
 const entryFlag = process.argv.indexOf('--entry')
 const appEntry = entryFlag >= 0 ? process.argv[entryFlag + 1] : resolve('out/main/index.js')
 const assert = require('node:assert/strict')
@@ -53,7 +54,18 @@ async function until(check, label) {
   }
   throw new Error(`Timed out: ${label}`)
 }
-function replace(channel, handler) { ipcMain.removeHandler(channel); ipcMain.handle(channel, handler) }
+const fixtureRequestLog = []
+const mainRequestLog = []
+function replace(channel, handler) {
+  ipcMain.removeHandler(channel)
+  ipcMain.handle(channel, (event, ...args) => {
+    if (channel.startsWith('health:')) {
+      fixtureRequestLog.push({ channel, windowId: event.sender.id, visible: BrowserWindow.fromWebContents(event.sender)?.isVisible(), panel: event.sender.getURL().endsWith('#menu-bar'), time: Date.now() })
+      if (!event.sender.getURL().endsWith('#menu-bar')) mainRequestLog.push(channel)
+    }
+    return handler(event, ...args)
+  })
+}
 let connected = true
 let mainConnected = false
 let todaySteps = 12145
@@ -103,7 +115,7 @@ async function memoryRun(main, openPanel) {
   const retainedAfterDismissal = !panel.isDestroyed()
   for (let i = 0; retainedAfterDismissal && i < 25; i++) {
     const before = performance.now()
-    panel = await openPanel()
+    panel = panel.isVisible() ? panel : await openPanel()
     await until(() => panel.webContents.executeJavaScript("document.body.innerText.includes('12,145')"), 'warm data')
     reopenMs.push(performance.now() - before)
     blurHandlers.get(panel.id)()
@@ -127,9 +139,13 @@ async function memoryRun(main, openPanel) {
   await app.whenReady()
   app.setActivationPolicy('prohibited')
   // Retain the real trusted refresh handler and its cross-window broadcast.
+  let dashboardUpdateHandler
   const originalHandle = ipcMain.handle.bind(ipcMain)
-  ipcMain.handle = (channel, handler) => originalHandle(channel, channel === 'health:refresh'
+  ipcMain.handle = (channel, handler) => {
+    if (channel === 'dashboard:update') dashboardUpdateHandler = handler
+    return originalHandle(channel, channel === 'health:refresh'
     ? (...args) => { refreshed++; return handler(...args) } : handler)
+  }
   await import(pathToFileURL(resolve(appEntry)).href)
   ipcMain.handle = originalHandle
   const goals = { steps: 10000, caloriesOut: 2800, caloriesIn: 1800, sleepMinutes: 480, activeZoneMinutes: 30, proteinG: 120, carbsG: 200, fatG: 60 }
@@ -146,13 +162,13 @@ async function memoryRun(main, openPanel) {
       days[date] = {}
       if (missing) continue
       for (const metric of metrics) {
-        const values = { steps: date === today ? todaySteps : 6000 + Number(date.slice(-2)) * 137, caloriesOut: 2339, caloriesIn: 1463, restingHeartRate: date === today ? 71 : 66, hrvMs: date === today ? 52 : 48, weightKg: date === today ? 78.5 : 78.8 }
+        const values = { steps: date === today ? todaySteps : 6000 + Number(date.slice(-2)) * 137, caloriesOut: 2339, caloriesIn: 1463, restingHeartRate: date === today ? 71 : 66, hrvMs: date === today ? 52 : 48, weightKg: date === today ? 78.5 : 78.8, proteinG: 90, waterMl: 1500, activeZoneMinutes: 26, skinTempDeltaC: -0.3 }
         days[date][metric] = values[metric]
       }
     }
     return { source: 'fixture', start, end, days }
   })
-  replace('health:sleep-range', () => (healthRequests++, { source: 'fixture', days: missing ? [] : [{ date: today, mainSessionId: 'night', complete: true, minutesAsleep: 367, sessions: [{ id: 'night', date: today, minutesAsleep: 367, stageMinutes: { AWAKE: 22, REM: 82, LIGHT: 220, DEEP: 65 }, stages: [] }] }] }))
+  replace('health:sleep-range', () => (healthRequests++, { source: 'fixture', days: missing ? [] : [{ date: today, mainSessionId: 'night', complete: true, minutesAsleep: 367, efficiency: 94, sessions: [{ id: 'night', date: today, startTime: `${offset(today, -1)}T23:00:00`, endTime: `${today}T05:29:00`, minutesAsleep: 367, stageMinutes: { AWAKE: 22, REM: 82, LIGHT: 220, DEEP: 65 }, stages: [] }] }] }))
   replace('health:devices', () => (healthRequests++, missing ? [] : [{ name: 'Fitbit Air', batteryPct: 76, lastSync: new Date(Date.now() - 12 * 60000).toISOString() }]))
   replace('health:intraday', () => ({ date: today, heartRate: [], stepsHourly: [], currentHeartRate: null }))
   replace('health:workouts', () => ({ workouts: [], source: 'fixture' }))
@@ -277,6 +293,99 @@ async function memoryRun(main, openPanel) {
   assert.equal(panelHealthRequests, beforeHiddenRefresh, 'Hidden popup must not fetch after another window refreshes')
   panel = await openPanel()
   await until(() => panel.webContents.executeJavaScript("document.body.innerText.includes('12,545')"), 'hidden popup cache invalidated before stale timeout')
+  if (checkDashboards) {
+    const clickText = async (win, label) => {
+      await until(() => win.webContents.executeJavaScript(`Array.from(document.querySelectorAll('button')).some(b => b.textContent.trim() === ${JSON.stringify(label)} && !b.disabled)`), label + ' ready')
+      await win.webContents.executeJavaScript(`Array.from(document.querySelectorAll('button')).find(b => b.textContent.trim() === ${JSON.stringify(label)}).click()`)
+    }
+    let pickerCaptured = false
+    const choose = async (win, slotLabel, widget) => {
+      await win.webContents.executeJavaScript(`document.querySelector('[aria-label="Change ${slotLabel}"]').click()`)
+      await until(() => win.webContents.executeJavaScript(`!!document.querySelector('.dashboard-widget-select')`), 'widget picker')
+      assert.equal(await win.webContents.executeJavaScript(`document.activeElement?.classList.contains('dashboard-widget-select')`), true, 'picker focuses the selector')
+      if (!pickerCaptured) {
+        writeFileSync(resolve('out/dashboard-picker-preview.png'), (await win.webContents.capturePage()).toPNG())
+        pickerCaptured = true
+      }
+      await win.webContents.executeJavaScript(`(() => { const select = document.querySelector('.dashboard-widget-select'); select.value = ${JSON.stringify(widget)}; select.dispatchEvent(new Event('change', { bubbles: true })); })()`)
+      await clickText(win, 'Done')
+      await until(() => win.webContents.executeJavaScript(`!document.querySelector('.dashboard-widget-select') && document.activeElement?.getAttribute('aria-label') === 'Change ${slotLabel}'`), 'picker closes and restores focus')
+    }
+    const beforeLayouts = await reopened.webContents.executeJavaScript('window.pulse.dashboard.get()')
+    await clickText(reopened, 'Customize')
+    await choose(reopened, 'left chart', 'trend:hrvMs:30')
+    assert.ok(await reopened.webContents.executeJavaScript(`document.querySelector('[data-dashboard-slot="chart1"]').textContent.includes('Last 30 days')`))
+    assert.deepEqual(await reopened.webContents.executeJavaScript('window.pulse.dashboard.get()'), beforeLayouts, 'draft is not persisted')
+    await clickText(reopened, 'Cancel')
+    await until(() => reopened.webContents.executeJavaScript(`document.querySelector('[data-dashboard-slot="chart1"]').textContent.includes('Daily movement')`), 'cancel restores original chart')
+    await clickText(reopened, 'Customize')
+    await choose(reopened, 'goal ring 1', 'goal:activeZoneMinutes')
+    await choose(reopened, 'summary 1', 'summary:proteinG')
+    await choose(reopened, 'left chart', 'trend:hrvMs:30')
+    await choose(reopened, 'right chart', 'trend:proteinG:7')
+    await choose(reopened, 'bottom card', 'trend:weightKg:30')
+    // A simulated ordinary write failure must retain the complete draft.
+    replace('dashboard:update', () => { throw new Error('Fixture layout save failure') })
+    await clickText(reopened, 'Save layout')
+    await until(() => reopened.webContents.executeJavaScript(`document.body.innerText.includes('Your changes are still here')`), 'failed save retains draft')
+    assert.deepEqual(await reopened.webContents.executeJavaScript('window.pulse.dashboard.get()'), beforeLayouts)
+    replace('dashboard:update', dashboardUpdateHandler)
+    await clickText(reopened, 'Save layout')
+    await until(() => reopened.webContents.executeJavaScript(`!document.querySelector('[aria-label="Change left chart"]')`), 'home saved')
+    const homeLayouts = await reopened.webContents.executeJavaScript('window.pulse.dashboard.get()')
+    assert.equal(homeLayouts.home.ring1.metric, 'activeZoneMinutes')
+    assert.deepEqual(homeLayouts.menuBar, beforeLayouts.menuBar, 'home edit preserves menu bar')
+    assert.ok(await reopened.webContents.executeJavaScript(`document.body.innerText.includes('90 g') && document.body.innerText.includes('26')`), 'replacement readings render')
+    // Refresh only the selected widgets; removed specialised queries stay idle.
+    const requestStart = mainRequestLog.length
+    await until(() => reopened.webContents.executeJavaScript(`!document.querySelector('[aria-label="Refresh data"]').disabled`), 'main ready to refresh new layout')
+    await reopened.webContents.executeJavaScript(`document.querySelector('[aria-label="Refresh data"]').click()`)
+    await until(() => reopened.webContents.executeJavaScript(`!document.querySelector('[aria-label="Refresh data"]').disabled`), 'new layout refresh completed')
+    const requests = mainRequestLog.slice(requestStart)
+    assert.ok(requests.includes('health:series'))
+    assert.ok(!requests.includes('health:sleep-range') && !requests.includes('health:intraday') && !requests.includes('health:workouts'), 'replaced widgets no longer request their data')
+    await delay(1600) // Let chart entrance animations finish before capture.
+    writeFileSync(resolve('out/dashboard-home-preview.png'), (await reopened.webContents.capturePage()).toPNG())
+    // A renderer reload reads the persisted preference rather than a component draft.
+    reopened.webContents.reload()
+    await until(() => reopened.webContents.executeJavaScript(`document.querySelector('[data-dashboard-slot="chart1"]')?.textContent.includes('Last 30 days')`), 'home preference survives reload')
+    console.log('PASS: homepage slot editing, cancel, failed save, persistence and reload')
+
+    panel = panel.isVisible() ? panel : await openPanel()
+    await panel.webContents.executeJavaScript(`document.querySelector('[aria-label="Customize menu bar"]').click()`)
+    await until(() => reopened.webContents.executeJavaScript(`!!document.querySelector('.dashboard-menu-preview')`), 'menu customization opens in Settings')
+    await choose(reopened, 'goal ring 2', 'goal:proteinG')
+    await choose(reopened, 'summary 1', 'summary:waterMl')
+    await choose(reopened, 'top chart', 'trend:weightKg:30')
+    await choose(reopened, 'bottom chart', 'trend:hrvMs:7')
+    panel = panel.isVisible() ? panel : await openPanel()
+    assert.equal(await panel.webContents.executeJavaScript(`document.querySelector('[data-dashboard-slot="chart1"] h2').textContent`), 'Steps this week', 'menu draft does not update popup before save')
+    await clickText(reopened, 'Save layout')
+    await until(() => panel.webContents.executeJavaScript(`document.querySelector('[data-dashboard-slot="chart1"] h2')?.textContent === 'Weight' && document.querySelector('[data-dashboard-slot="ring2"]').textContent.includes('90')`), 'saved layout broadcasts to visible popup')
+    const menuLayouts = await reopened.webContents.executeJavaScript('window.pulse.dashboard.get()')
+    assert.deepEqual(menuLayouts.home, homeLayouts.home, 'menu edit preserves homepage')
+    await delay(800)
+    writeFileSync(resolve('out/dashboard-menu-preview.png'), (await panel.webContents.capturePage()).toPNG())
+    await panel.webContents.executeJavaScript(`document.querySelector('[data-dashboard-slot="chart1"] .menu-section-title').click()`)
+    await until(() => reopened.webContents.executeJavaScript(`window.history.state.detailMetric?.metric === 'weightKg' && window.history.state.detailMetric?.range === 'M'`), 'monthly trend navigation')
+    console.log('PASS: menu customization shortcut, independent layouts, live popup update and monthly navigation')
+
+    panel = panel.isVisible() ? panel : await openPanel()
+    await panel.webContents.executeJavaScript(`document.querySelector('[aria-label="Customize menu bar"]').click()`)
+    await until(() => reopened.webContents.executeJavaScript(`!!document.querySelector('.dashboard-menu-preview')`), 'menu editor reopened')
+    await clickText(reopened, 'Restore defaults')
+    await clickText(reopened, 'Cancel')
+    assert.deepEqual((await reopened.webContents.executeJavaScript('window.pulse.dashboard.get()')).menuBar, menuLayouts.menuBar, 'cancelled reset leaves saved layout')
+    await clickText(reopened, 'Customize menu bar')
+    await clickText(reopened, 'Restore defaults')
+    await clickText(reopened, 'Save layout')
+    await until(() => reopened.webContents.executeJavaScript(`!document.querySelector('.dashboard-menu-preview')`), 'menu reset saved')
+    const resetLayouts = await reopened.webContents.executeJavaScript('window.pulse.dashboard.get()')
+    assert.deepEqual(resetLayouts.menuBar, beforeLayouts.menuBar)
+    assert.deepEqual(resetLayouts.home, homeLayouts.home)
+    console.log('PASS: reset defaults is scoped and can be cancelled')
+    panel = panel.isVisible() ? panel : await openPanel()
+  }
   reopened.close()
   await until(() => reopened.isDestroyed(), 'main window closed')
   mainConnected = false
@@ -289,7 +398,7 @@ async function memoryRun(main, openPanel) {
   connected = true
   missing = true
   panel.webContents.send('chats:account-changed')
-  await until(() => panel.webContents.executeJavaScript("document.body.innerText.includes('No steps recorded this week') && document.body.innerText.includes('Sleep stages unavailable')"), 'missing data')
+  await until(() => panel.webContents.executeJavaScript("document.body.innerText.includes('No steps recorded this week') && document.body.innerText.includes('Sleep stages unavailable')"), 'missing data').catch(async error => { console.error('Missing-data fixture content:', await panel.webContents.executeJavaScript('document.body.innerText')); throw error })
   assert.ok(await panel.webContents.executeJavaScript(`document.querySelector('[aria-label="Open HRV details"]').textContent.includes('No data')`), 'Missing HRV must not render as zero')
   console.log('PASS: missing data')
   panel.webContents.emit('before-input-event', { preventDefault() {} }, { key: 'Escape' })
@@ -302,12 +411,15 @@ async function memoryRun(main, openPanel) {
   panel.webContents.send('chats:account-changed')
   console.log('Opened error fixture')
   await until(() => panel.webContents.executeJavaScript("document.body.innerText.includes('Some data could not be updated')"), 'partial failure feedback')
+  await panel.webContents.executeJavaScript(`window.__fixturePanelVisible = true; window.pulse.app.onPanelVisibility(visible => { window.__fixturePanelVisible = visible }); void 0`)
   blurHandlers.get(panel.id)()
   await until(() => !panel.isVisible(), 'blur hides panel')
   assert.equal(panel.isDestroyed(), false)
+  await until(() => panel.webContents.executeJavaScript('window.__fixturePanelVisible === false'), 'renderer receives hide event')
   const hiddenRequests = healthRequests
+  const hiddenRequestLogStart = fixtureRequestLog.length
   await delay(1100)
-  assert.equal(healthRequests, hiddenRequests, 'hidden panel must not start new health requests')
+  assert.equal(healthRequests, hiddenRequests, 'hidden panel must not start new health requests: ' + JSON.stringify(fixtureRequestLog.slice(hiddenRequestLogStart)))
   panel.close()
   assert.equal(panel.isDestroyed(), false, 'window close also preserves the panel')
   await panel.webContents.executeJavaScript(`window.pulse.app.open({ view: 'settings', date: '${today}' })`)

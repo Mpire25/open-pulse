@@ -1,3 +1,4 @@
+import { normalizeDashboardLayouts } from '../src/shared/dashboard'
 import { describe, expect, test } from 'bun:test'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
@@ -27,6 +28,7 @@ function render(view: 'sleep' | 'detail' | 'home', sessions = [main, extra], ses
   const range = rangeEnding(date, 7)
   client.setQueryData(['sleep', range.start, range.end], days)
   client.setQueryData(['sleep-day', date], days[0] ?? null)
+  client.setQueryData(['dashboard-layouts'], normalizeDashboardLayouts())
   try {
     return renderToStaticMarkup(<QueryClientProvider client={client}>
       {view === 'sleep' ? <SleepView date={date} goals={DEFAULT_GOALS} sessionId={sessionId} onSelectSession={noop} onOpenMetric={noop} onOpenStages={noop} onSelectDate={noop} /> :

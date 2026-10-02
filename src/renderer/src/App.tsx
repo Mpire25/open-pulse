@@ -87,6 +87,7 @@ export default function App(): React.JSX.Element {
   const [workoutsOpen, setWorkoutsOpen] = useState(false)
   const [workoutRange, setWorkoutRange] = useState<MetricRange>('D')
   const [selectedWorkout, setSelectedWorkout] = useState<Workout | null>(null)
+  const [customizeMenuBar, setCustomizeMenuBar] = useState(false)
   const [settings, setSettings] = useState<AppSettings | null>(null)
   const [startupError, setStartupError] = useState<string | null>(null)
   const [google, setGoogle] = useState<GoogleAuthStatus>({ connected: false })
@@ -351,6 +352,7 @@ export default function App(): React.JSX.Element {
   }
 
   useEffect(() => window.pulse.app.onNavigate((destination) => {
+    setCustomizeMenuBar(destination.customize === 'menuBar')
     navigate({
       ...currentNavigationEntry(),
       view: destination.view,
@@ -379,9 +381,10 @@ export default function App(): React.JSX.Element {
     }
   }
 
-  const openMetric: OpenMetric = (metric, initialRange) => {
+  const openMetric: OpenMetric = (metric, initialRange, date) => {
     navigate({
       ...currentNavigationEntry(),
+      selectedDate: date ?? currentNavigationEntry().selectedDate,
       detailMetric: { metric, range: initialRange },
       sleepStagesOpen: false,
       workoutsOpen: false,
@@ -692,6 +695,8 @@ export default function App(): React.JSX.Element {
                 )}
                 {view === 'settings' && (
                   <SettingsView
+                    customizeMenuBar={customizeMenuBar}
+                    onCustomizationOpened={() => setCustomizeMenuBar(false)}
                     settings={settings}
                     google={google}
                     codex={codex}
