@@ -88,6 +88,8 @@ let mainConnected = false
 let todaySteps = 12145
 let panelHealthRequests = 0
 let missing = false
+let fixtureWorkouts = []
+let failActivityIntraday = false
 let unavailable = false
 let refreshed = 0
 let healthRequests = 0
@@ -188,8 +190,11 @@ async function memoryRun(main, openPanel) {
   replace('health:sleep-range', () => (healthRequests++, { source: 'fixture', days: missing ? [] : [{ date: today, mainSessionId: 'night', complete: true, minutesAsleep: 367, efficiency: 94, sessions: [{ id: 'night', date: today, startTime: `${offset(today, -1)}T23:00:00`, endTime: `${today}T05:29:00`, minutesAsleep: 367, stageMinutes: { AWAKE: 22, REM: 82, LIGHT: 220, DEEP: 65 }, stages: [] }] }] }))
   replace('health:devices', () => (healthRequests++, missing ? [] : [{ name: 'Fitbit Air', batteryPct: 76, lastSync: new Date(Date.now() - 12 * 60000).toISOString() }]))
   replace('health:intraday', () => ({ date: today, heartRate: [{ minute: 0, bpm: 65 }, { minute: 360, bpm: 78 }, { minute: 720, bpm: 70 }], stepsHourly: [{ hour: 0, steps: 120 }, { hour: 6, steps: 550 }], currentHeartRate: null }))
-  replace('health:activity-intraday', (_e, date, metric) => ({ date, metric, source: 'fixture', windowMinutes: 30, points: [{ minute: 0, value: metric === 'floors' || metric === 'sedentaryMinutes' ? 3 : 20 }, { minute: 360, value: 80 }], breakdown: [] }))
-  replace('health:workouts', () => ({ workouts: [], source: 'fixture' }))
+  replace('health:activity-intraday', (_e, date, metric) => {
+    if (failActivityIntraday) throw new Error('Fixture intraday failure')
+    return { date, metric, source: 'fixture', windowMinutes: 30, points: [{ minute: 0, value: metric === 'floors' || metric === 'sedentaryMinutes' ? 3 : 20 }, { minute: 360, value: 80 }], breakdown: [] }
+  })
+  replace('health:workouts', () => ({ workouts: fixtureWorkouts, source: 'fixture' }))
   await until(() => BrowserWindow.getAllWindows().every(w => w.webContents.getURL() && !w.webContents.isLoadingMainFrame()), 'initial windows loaded')
   const main = BrowserWindow.getAllWindows().find(w => !w.webContents.getURL().endsWith('#menu-bar'))
   await until(() => !main.webContents.isLoadingMainFrame(), 'main load')
@@ -438,6 +443,71 @@ async function memoryRun(main, openPanel) {
     await delay(50)
     assert.deepEqual(await reopened.webContents.executeJavaScript('window.pulse.dashboard.get()'), beforeLayouts, 'dismissing native menu leaves saved preferences untouched')
     assert.ok(await reopened.webContents.executeJavaScript(`document.querySelector('[data-dashboard-slot="chart1"]').textContent.includes('Daily movement')`), 'dismissing native menu preserves draft')
+    await choose(reopened, 'goal ring 1', 'goal:activeZoneMinutes')
+    await choose(reopened, 'left chart', 'trend:steps:7')
+    fixtureWorkouts = [{ id: 'draft-test-workout', name: 'Fixture walk', startTime: `${today}T09:00:00`, durationMin: 20, calories: 80, distanceKm: 1.5, avgHeartRate: 90, steps: 1500, activeZoneMinutes: 5 }]
+    await reopened.webContents.executeJavaScript(`document.querySelector('[aria-label="Refresh data"]').click()`)
+    await until(() => reopened.webContents.executeJavaScript(`!!document.querySelector('.workout-list button') && !!document.querySelector('[data-dashboard-slot="chart1"] rect[role="button"]')`), 'draft navigation fixtures ready')
+    const draftSnapshot = `JSON.stringify(['ring1', 'chart1'].map(id => document.querySelector('[data-dashboard-slot="' + id + '"]')?.textContent))`
+    const draftBeforeNavigation = await reopened.webContents.executeJavaScript(draftSnapshot)
+    const navigationTargets = [
+      '[data-dashboard-slot="ring1"] .dashboard-home-ring',
+      '[data-dashboard-slot="summary1"] .home-hero-stat',
+      '[data-dashboard-slot="signal1"] .group\\/stat',
+      '[data-dashboard-slot="chart1"] .group\\/drill',
+      '[data-dashboard-slot="chart2"] .group\\/drill',
+      '[data-dashboard-slot="wide"] button[aria-label="Open workout details"]',
+      '.workout-list button',
+      '[data-dashboard-slot="chart1"] rect[role="button"]'
+    ]
+    for (const selector of navigationTargets) {
+      await until(() => reopened.webContents.executeJavaScript(`!!document.querySelector(${JSON.stringify(selector)}) && !document.querySelector(${JSON.stringify(selector)}).disabled`), 'widget activation ready: ' + selector)
+      for (const activation of ['click', 'Enter', 'Space']) {
+        await reopened.webContents.executeJavaScript(`(() => {
+          const target = document.querySelector(${JSON.stringify(selector)})
+          target.scrollIntoView({ block: 'center' })
+          target.focus()
+          window.draftActivationObserved = false
+          const button = target instanceof HTMLButtonElement
+          target.addEventListener(${JSON.stringify(activation)} === 'click' || button ? 'click' : 'keydown', () => { window.draftActivationObserved = true }, { once: true })
+          if (${JSON.stringify(activation)} === 'click') {
+            target.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+          } else {
+            // Hidden fixture windows do not receive native keyboard activation.
+            // Exercise SVG key handlers and model the browser's button click.
+            const key = ${JSON.stringify(activation === 'Space' ? ' ' : activation)}
+            target.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true }))
+            target.dispatchEvent(new KeyboardEvent('keyup', { key, bubbles: true }))
+            if (button) target.click()
+          }
+        })()`)
+        await delay(75)
+        assert.equal(await reopened.webContents.executeJavaScript('window.draftActivationObserved'), true, 'widget received activation: ' + activation + ' ' + selector)
+        assert.equal(await reopened.webContents.executeJavaScript(`!!document.querySelector('[aria-label="Change left chart"]')`), true, activation + ' must not leave customization: ' + selector)
+        assert.equal(await reopened.webContents.executeJavaScript(draftSnapshot), draftBeforeNavigation, activation + ' must retain the draft: ' + selector)
+      }
+    }
+    assert.deepEqual(await reopened.webContents.executeJavaScript('window.pulse.dashboard.get()'), beforeLayouts, 'blocked navigation never saves the draft')
+    failActivityIntraday = true
+    await choose(reopened, 'left chart', 'intraday:caloriesOut')
+    await until(() => reopened.webContents.executeJavaScript(`!!document.querySelector('[data-dashboard-slot="chart1"] .dashboard-retry')`), 'failed draft chart offers Retry')
+    failActivityIntraday = false
+    const retryTarget = await reopened.webContents.executeJavaScript(`(() => {
+      const retry = document.querySelector('[data-dashboard-slot="chart1"] .dashboard-retry')
+      retry.scrollIntoView({ block: 'center' })
+      const rect = retry.getBoundingClientRect()
+      return { x: Math.round(rect.left + rect.width / 2), y: Math.round(rect.top + rect.height / 2) }
+    })()`)
+    reopened.webContents.sendInputEvent({ type: 'mouseDown', ...retryTarget, button: 'left', clickCount: 1 })
+    reopened.webContents.sendInputEvent({ type: 'mouseUp', ...retryTarget, button: 'left', clickCount: 1 })
+    await until(() => reopened.webContents.executeJavaScript(`document.querySelector('[data-dashboard-slot="chart1"] svg text[transform]')?.textContent === 'kcal' && !!document.querySelector('[aria-label="Change left chart"]')`), 'Retry recovers the chart without leaving customization')
+    fixtureWorkouts = []
+    await clickText(reopened, 'Cancel')
+    await reopened.webContents.executeJavaScript(`document.querySelector('[data-dashboard-slot="ring1"] .dashboard-home-ring').click()`)
+    await until(() => reopened.webContents.executeJavaScript(`window.history.state?.detailMetric?.metric === 'steps' && !document.querySelector('[aria-label="Change left chart"]')`), 'normal widget navigation resumes after Cancel')
+    await reopened.webContents.executeJavaScript('window.history.back()')
+    await clickText(reopened, 'Customize')
+    console.log('PASS: widget clicks, Enter and Space retain unsaved Home drafts; Retry works; Cancel restores normal navigation')
     await checkDraftPeriods('left chart', 170)
     failNextPicker = true
     await reopened.webContents.executeJavaScript(`document.querySelector('[aria-label="Change left chart"]').click()`)

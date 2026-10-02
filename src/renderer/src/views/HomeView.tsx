@@ -57,6 +57,10 @@ export function HomeView({
     const original = DASHBOARD_SLOTS.home.find((slot) => slot.id === id)!.defaultWidget
     return 'metric' in widget && 'metric' in original && widget.metric === original.metric
   })
+  // Opening details unmounts Home and would discard the unsaved layout draft.
+  const openMetric: OpenMetric = (...args) => {
+    if (!editor.editing) onOpenMetric(...args)
+  }
   const chart = (id: string, wide = false): React.JSX.Element => (
     <EditableDashboardSlot id={id} editor={editor} fill>
       <DashboardChart
@@ -64,10 +68,10 @@ export function HomeView({
         date={date}
         goals={goals}
         wide={wide}
-        onOpen={onOpenMetric}
-        onSleep={() => onNavigate('sleep')}
-        onWorkouts={() => onOpenWorkouts('D')}
-        onWorkout={onOpenWorkout}
+        onOpen={openMetric}
+        onSleep={() => { if (!editor.editing) onNavigate('sleep') }}
+        onWorkouts={() => { if (!editor.editing) onOpenWorkouts('D') }}
+        onWorkout={(workout) => { if (!editor.editing) onOpenWorkout(workout) }}
       />
     </EditableDashboardSlot>
   )
@@ -102,7 +106,7 @@ export function HomeView({
                       metric={widget.metric}
                       date={date}
                       goals={goals}
-                      onOpen={onOpenMetric}
+                      onOpen={openMetric}
                     />
                   )}
                 </EditableDashboardSlot>
@@ -119,7 +123,7 @@ export function HomeView({
                       metric={widget.metric}
                       date={date}
                       goals={goals}
-                      onOpen={onOpenMetric}
+                      onOpen={openMetric}
                       presentation="hero"
                     />
                   )}
@@ -165,7 +169,7 @@ export function HomeView({
                       metric={widget.metric}
                       date={date}
                       goals={goals}
-                      onOpen={onOpenMetric}
+                      onOpen={openMetric}
                       presentation="tile"
                     />
                   )}
