@@ -33,7 +33,7 @@
 .menu-section-title h2 { font-size: 12px; font-weight: 600; }
 .menu-section-title > span { display: flex; gap: 5px; align-items: center; color: var(--color-ink-dim); font-size: 10px; }
 .menu-chart-empty { height: 105px; display: grid; place-items: center; font-size: 12px; color: var(--color-ink-dim); }
-.menu-sleep { display: block; width: 100%; text-align: left; border-top: 1px solid var(--color-hairline); margin-top: 4px; padding-bottom: 10px; }
+.menu-sleep { display: block; width: 100%; text-align: left; padding-bottom: 10px; }
 .menu-stage-bar { display: flex; gap: 3px; height: 12px; border-radius: 4px; overflow: hidden; margin: 8px 0 6px; }
 .menu-stage-bar span { min-width: 0; }
 .menu-stage-legend { display: grid; grid-template-columns: repeat(4, 1fr); }

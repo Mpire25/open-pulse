@@ -567,7 +567,8 @@ body {
 .dashboard-menu-preview .menu-dashboard { max-height: 760px; }
 .dashboard-menu-preview .menu-header { padding-bottom: 8px; }
 .dashboard-menu-preview .menu-content { padding-top: 16px; }
-.dashboard-compact-chart { border-bottom: 1px solid var(--color-hairline); padding-bottom: 8px; }
+.dashboard-compact-chart { padding-bottom: 8px; }
+.menu-content > .dashboard-slot + .dashboard-slot { border-top: 1px solid var(--color-hairline); margin-top: 4px; }
 
 /* Secondary dashboard actions use subtle text in the app's typography. */
 .dashboard-action {
