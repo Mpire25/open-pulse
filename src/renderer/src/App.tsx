@@ -379,9 +379,10 @@ export default function App(): React.JSX.Element {
     }
   }
 
-  const openMetric: OpenMetric = (metric, initialRange) => {
+  const openMetric: OpenMetric = (metric, initialRange, date) => {
     navigate({
       ...currentNavigationEntry(),
+      selectedDate: date ?? currentNavigationEntry().selectedDate,
       detailMetric: { metric, range: initialRange },
       sleepStagesOpen: false,
       workoutsOpen: false,

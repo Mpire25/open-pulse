@@ -1,0 +1,221 @@
+{
+  "1000": {
+    "hero": {
+      "width": 762,
+      "height": 346.203125
+    },
+    "rings": [
+      {
+        "width": 159.25,
+        "height": 159.25
+      },
+      {
+        "width": 159.25,
+        "height": 159.25
+      },
+      {
+        "width": 159.25,
+        "height": 159.25
+      }
+    ],
+    "summaries": [
+      {
+        "width": 226.6640625,
+        "height": 70,
+        "font": "14.5px"
+      },
+      {
+        "width": 226.6640625,
+        "height": 70,
+        "font": "14.5px"
+      },
+      {
+        "width": 226.671875,
+        "height": 70,
+        "font": "14.5px"
+      }
+    ],
+    "cards": [
+      {
+        "width": 762,
+        "height": 286
+      },
+      {
+        "width": 762,
+        "height": 286
+      }
+    ],
+    "highlights": {
+      "width": 762,
+      "height": 284.5
+    },
+    "tiles": [
+      {
+        "width": 380,
+        "height": 107
+      },
+      {
+        "width": 380,
+        "height": 107
+      },
+      {
+        "width": 380,
+        "height": 107
+      },
+      {
+        "width": 380,
+        "height": 107
+      }
+    ],
+    "workouts": {
+      "width": 762,
+      "height": 147.5
+    }
+  },
+  "1280": {
+    "hero": {
+      "width": 1002,
+      "height": 284
+    },
+    "rings": [
+      {
+        "width": 189.25,
+        "height": 189.25
+      },
+      {
+        "width": 189.25,
+        "height": 189.25
+      },
+      {
+        "width": 189.25,
+        "height": 189.25
+      }
+    ],
+    "summaries": [
+      {
+        "width": 205,
+        "height": 70,
+        "font": "14.5px"
+      },
+      {
+        "width": 205,
+        "height": 70,
+        "font": "14.5px"
+      },
+      {
+        "width": 205,
+        "height": 70,
+        "font": "14.5px"
+      }
+    ],
+    "cards": [
+      {
+        "width": 564.125,
+        "height": 286
+      },
+      {
+        "width": 417.875,
+        "height": 286
+      }
+    ],
+    "highlights": {
+      "width": 1002,
+      "height": 177.5
+    },
+    "tiles": [
+      {
+        "width": 250,
+        "height": 107
+      },
+      {
+        "width": 250,
+        "height": 107
+      },
+      {
+        "width": 250,
+        "height": 107
+      },
+      {
+        "width": 250,
+        "height": 107
+      }
+    ],
+    "workouts": {
+      "width": 1002,
+      "height": 147.5
+    }
+  },
+  "1500": {
+    "hero": {
+      "width": 1116,
+      "height": 284
+    },
+    "rings": [
+      {
+        "width": 200,
+        "height": 200
+      },
+      {
+        "width": 200,
+        "height": 200
+      },
+      {
+        "width": 200,
+        "height": 200
+      }
+    ],
+    "summaries": [
+      {
+        "width": 205,
+        "height": 70,
+        "font": "14.5px"
+      },
+      {
+        "width": 205,
+        "height": 70,
+        "font": "14.5px"
+      },
+      {
+        "width": 205,
+        "height": 70,
+        "font": "14.5px"
+      }
+    ],
+    "cards": [
+      {
+        "width": 629.609375,
+        "height": 286
+      },
+      {
+        "width": 466.390625,
+        "height": 286
+      }
+    ],
+    "highlights": {
+      "width": 1116,
+      "height": 177.5
+    },
+    "tiles": [
+      {
+        "width": 278.5,
+        "height": 107
+      },
+      {
+        "width": 278.5,
+        "height": 107
+      },
+      {
+        "width": 278.5,
+        "height": 107
+      },
+      {
+        "width": 278.5,
+        "height": 107
+      }
+    ],
+    "workouts": {
+      "width": 1116,
+      "height": 147.5
+    }
+  }
+}

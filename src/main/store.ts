@@ -1,3 +1,4 @@
+import { normalizeDashboardLayouts, validateDashboardLayout, type DashboardLayouts, type DashboardSurface } from '../shared/dashboard'
 import { app, safeStorage } from 'electron'
 import { join } from 'node:path'
 import { existsSync, readFileSync, writeFileSync, renameSync } from 'node:fs'
@@ -17,6 +18,7 @@ import {
 interface StoreFile {
   settings: AppSettings
   local?: Record<string, unknown>
+  dashboardLayouts: DashboardLayouts
   // name -> base64(safeStorage-encrypted JSON)
   secrets: Record<string, string>
 }
@@ -88,6 +90,7 @@ function load(): StoreFile {
       const raw = JSON.parse(readFileSync(filePath(), 'utf8')) as Partial<StoreFile>
       cache = {
         settings: normalizeSettings(raw.settings),
+        dashboardLayouts: normalizeDashboardLayouts(raw.dashboardLayouts),
         secrets: raw.secrets ?? {},
         local: raw.local ?? {}
       }
@@ -96,13 +99,13 @@ function load(): StoreFile {
       // corrupt store: fall through to defaults
     }
   }
-  cache = { settings: { ...DEFAULTS }, secrets: {} }
+  cache = { settings: { ...DEFAULTS }, dashboardLayouts: normalizeDashboardLayouts(), secrets: {} }
   return cache
 }
 
-function persist(): void {
+function persist(store: StoreFile = load()): void {
   const temporary = `${filePath()}.tmp`
-  writeFileSync(temporary, JSON.stringify(load(), null, 2), { encoding: 'utf8', mode: 0o600 })
+  writeFileSync(temporary, JSON.stringify(store, null, 2), { encoding: 'utf8', mode: 0o600 })
   renameSync(temporary, filePath())
 }
 
@@ -132,6 +135,21 @@ export function updateSettings(patch: Partial<AppSettings>): AppSettings {
   }
   persist()
   return getSettings()
+}
+
+/** Layout preferences never need to decrypt credentials. */
+export function getDashboardLayouts(): DashboardLayouts {
+  return normalizeDashboardLayouts(load().dashboardLayouts)
+}
+
+export function updateDashboardLayout(surface: DashboardSurface, raw: unknown): DashboardLayouts {
+  const layout = validateDashboardLayout(surface, raw)
+  const store = load()
+  const next = { ...getDashboardLayouts(), [surface]: layout }
+  // Write before updating the cache, so a failed save keeps the last saved layout.
+  persist({ ...store, dashboardLayouts: next })
+  store.dashboardLayouts = next
+  return getDashboardLayouts()
 }
 
 export function getGoogleClientSecret(): string {

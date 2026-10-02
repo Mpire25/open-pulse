@@ -2,6 +2,7 @@
 import { afterAll, afterEach, beforeEach, expect, mock, test } from 'bun:test'
 import { Window } from 'happy-dom'
 import React, { act, useState } from 'react'
+import * as framerMotion from 'framer-motion'
 import { DEFAULT_ASSISTANT, DEFAULT_GOALS, type AppSettings, type CodexAuthStatus } from '../../src/shared/types'
 
 const dom = new Window({ url: 'http://localhost:49173' })
@@ -10,7 +11,8 @@ for (const name of ['window', 'document', 'navigator', 'HTMLElement', 'Element',
 }
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
 // Animation is unrelated to account state; use plain elements to keep this harness deterministic.
-mock.module('framer-motion', () => ({ motion: new Proxy({}, { get: (_, tag: string) => React.forwardRef((props: Record<string, unknown>, ref) => {
+const motionExports = { ...framerMotion }
+mock.module('framer-motion', () => ({ ...motionExports, motion: new Proxy({}, { get: (_, tag: string) => React.forwardRef((props: Record<string, unknown>, ref) => {
   const { initial, animate, transition, layoutId, layout, whileHover, whileTap, exit, ...rest } = props
   return React.createElement(tag, { ...rest, ref })
 }) }), AnimatePresence: ({ children }: { children: React.ReactNode }) => children }))

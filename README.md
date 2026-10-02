@@ -16,6 +16,11 @@ Built with Electron + React 19, Radix primitives, Tailwind v4, and Framer Motion
   calories eaten; hourly movement; last night's hypnogram; night signals (HRV,
   SpO₂, breathing, skin temperature) compared with your recent baseline; and
   the day's workouts.
+- **Customizable dashboards** — swap goal rings, summaries, and charts within
+  the existing Home and macOS menu bar layouts. Each surface has independent
+  saved choices, draft previews, cancel, and restore defaults. Trends can show
+  any supported daily metric over 7 days, 30 days, 3 months, or 1 year, with
+  1-day charts where supported; rings use your configured goals.
 - **Activity** — day totals with baseline deltas and sparklines, hourly steps,
   logged workouts (duration, calories, avg HR, zone minutes), and 7-day trends
   with goal lines.
@@ -55,6 +60,32 @@ bun run build:mac  # package a .dmg (needs the electron-builder toolchain)
 Connect Google Health in **Settings** before opening health dashboards. The app
 never substitutes generated values when an account is disconnected or a sync
 cannot complete.
+
+### Customize your dashboards
+
+Click **Customize** on Home, then the pencil beside a position to choose its widget
+from a native macOS menu. Editing preserves the original card sizes and spacing.
+Chart choices are grouped by category, metric, and period: 7 days, 30 days,
+3 months, or 1 year. Steps, heart rate, and supported activity metrics also
+offer a 1-day chart. Longer heart-rate periods show resting heart rate;
+yearly activity bars show weekly daily averages, as in the metric detail view.
+Use **Save layout** to keep your choices, **Cancel** to discard the draft, or
+**Restore defaults** followed by Save to return that surface to its original layout.
+
+For the menu bar, open **Settings → macOS menu bar → Layout → Customize menu bar**.
+The two full-width charts are optional: use **Remove chart** in a chart's pencil
+menu or **Add chart** below the preview to keep zero, one, or two charts.
+The main window shows a compact draft preview;
+saving also updates an already-open popup. Preferences survive restart and do
+not change goals or health records. Missing readings remain unavailable.
+
+To verify the editor and popup using synthetic data in a disposable profile:
+
+```bash
+bun run build
+bunx electron scripts/menu-bar-smoke.cjs --dashboard
+bunx electron scripts/menu-bar-smoke.cjs --dashboard --geometry
+```
 
 ### Opt-in development tools
 

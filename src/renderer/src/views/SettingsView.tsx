@@ -1,3 +1,6 @@
+import { DashboardEditControls, useDashboardEditor } from '@/components/DashboardEditor'
+import { MenuBarSlots } from './MenuBarDashboard'
+import { useCurrentDay } from '@/hooks/useCurrentDay'
 import { useEffect, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
 import * as Dialog from '@radix-ui/react-dialog'
@@ -51,7 +54,13 @@ export function SettingsView({
         <p className="mt-1 text-[13px] text-ink-dim">Accounts, daily goals, and app preferences.</p>
       </motion.header>
 
-      {window.pulse.app.platform === 'darwin' && <MenuBarCard settings={settings} onSettingsChange={onSettingsChange} />}
+      {window.pulse.app.platform === 'darwin' && (
+        <MenuBarCard
+          settings={settings}
+          connected={google.connected}
+          onSettingsChange={onSettingsChange}
+        />
+      )}
       <GoogleCard
         settings={settings}
         google={google}
@@ -66,8 +75,9 @@ export function SettingsView({
   )
 }
 
-function MenuBarCard({ settings, onSettingsChange }: {
+function MenuBarCard({ settings, connected, onSettingsChange }: {
   settings: AppSettings
+  connected: boolean
   onSettingsChange: (settings: AppSettings) => void
 }): React.JSX.Element {
   const [saving, setSaving] = useState(false)
@@ -102,7 +112,63 @@ function MenuBarCard({ settings, onSettingsChange }: {
       <Switch id="menu-bar-enabled" checked={settings.menuBarEnabled} disabled={saving} aria-describedby="menu-bar-description" onCheckedChange={(enabled) => void change(enabled)} />
     </div>
     {failure && <p role="alert" className="text-[12px] text-danger">{failure}</p>}
+    <MenuBarLayoutEditor
+      settings={settings}
+      connected={connected}
+    />
   </Card>
+}
+
+function MenuBarLayoutEditor({
+  settings,
+  connected
+}: {
+  settings: AppSettings
+  connected: boolean
+}): React.JSX.Element {
+  const editor = useDashboardEditor('menuBar')
+  const [today] = useCurrentDay()
+  return (
+    <div className="flex flex-col gap-4 border-t border-hairline pt-5" data-menu-bar-layout>
+      <SectionHeader
+        title="Layout"
+        hint="Choose your rings, summaries and charts"
+        action={<DashboardEditControls editor={editor} />}
+      />
+      {editor.isError && (
+        <p role="alert" className="text-[12px] text-danger">
+          Could not load your layout. <button onClick={() => void editor.refetch()}>Retry</button>
+        </p>
+      )}
+      {editor.editing && editor.layout && (
+        <>
+          {!connected && (
+            <p className="text-[12px] text-ink-dim">
+              Connect Fitbit to see readings in the preview.
+            </p>
+          )}
+          <div className="dashboard-menu-preview">
+            <div className="menu-dashboard">
+              <div className="menu-content">
+                <header className="menu-header">
+                  <span className="menu-brand">OpenPulse</span>
+                  <span className="text-[11px] text-ink-faint">Preview</span>
+                </header>
+                <MenuBarSlots
+                  layout={editor.layout}
+                  date={today}
+                  settings={settings}
+                  enabled={connected}
+                  editor={editor}
+                  preview
+                />
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  )
 }
 
 const RETENTION_OPTIONS: Array<{ value: ChatRetention; label: string; phrase: string }> = [

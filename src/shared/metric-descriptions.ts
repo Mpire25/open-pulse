@@ -1,0 +1,31 @@
+import type { MetricKey } from './types'
+
+/** Display names shared by renderer widgets and native menus. */
+export const METRIC_DESCRIPTIONS = {
+  steps: { label: 'Steps', domain: 'activity' },
+  distanceKm: { label: 'Distance', domain: 'activity' },
+  floors: { label: 'Floors', domain: 'activity' },
+  caloriesOut: { label: 'Calories burned', domain: 'activity' },
+  activeMinutes: { label: 'Active minutes', domain: 'activity' },
+  activeZoneMinutes: { label: 'Zone minutes', domain: 'activity' },
+  sedentaryMinutes: { label: 'Sedentary time', domain: 'activity' },
+  restingHeartRate: { label: 'Resting heart rate', domain: 'heart' },
+  hrvMs: { label: 'Heart rate variability', domain: 'heart' },
+  spo2Pct: { label: 'Blood oxygen', domain: 'heart' },
+  breathingRate: { label: 'Respiratory rate', domain: 'heart' },
+  skinTempDeltaC: { label: 'Skin temperature', domain: 'heart' },
+  sleepMinutes: { label: 'Sleep duration', domain: 'sleep' },
+  sleepEfficiency: { label: 'Sleep efficiency', domain: 'sleep' },
+  weightKg: { label: 'Weight', domain: 'body' },
+  bodyFatPct: { label: 'Body fat', domain: 'body' },
+  bmi: { label: 'BMI', domain: 'body' },
+  waterMl: { label: 'Water', domain: 'nutrition' },
+  caloriesIn: { label: 'Calories eaten', domain: 'nutrition' },
+  proteinG: { label: 'Protein', domain: 'nutrition' },
+  carbsG: { label: 'Carbs', domain: 'nutrition' },
+  fatG: { label: 'Fat', domain: 'nutrition' },
+  fiberG: { label: 'Fiber', domain: 'nutrition' },
+  saturatedFatG: { label: 'Saturated fat', domain: 'nutrition' },
+  sodiumG: { label: 'Sodium', domain: 'nutrition' },
+  sugarG: { label: 'Sugar', domain: 'nutrition' },
+} satisfies Record<MetricKey, { label: string; domain: 'activity' | 'heart' | 'sleep' | 'body' | 'nutrition' }>
