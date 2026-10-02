@@ -32,7 +32,10 @@ test('standalone Luna request uses only the bounded first prompt and waits for t
   expect(body.tools).toEqual([])
   expect(body.input).toHaveLength(1)
   expect(body.input[0].content[0].text).toHaveLength(4000)
-  expect(body.max_output_tokens).toBe(512)
+  // These public API fields are explicitly unsupported on the ChatGPT plan route.
+  for (const field of ['max_output_tokens', 'max_tool_calls', 'background', 'temperature', 'top_p', 'previous_response_id']) {
+    expect(body).not.toHaveProperty(field)
+  }
 })
 
 test('partial titles, incomplete responses and late usage errors are never accepted', async () => {

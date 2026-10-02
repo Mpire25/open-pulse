@@ -9,6 +9,8 @@ The naming job shares the foreground run's authenticated credentials, checks
 the account's model catalog, and has a 10-second total deadline. It uses the
 public Responses API with streaming and storage disabled. One extra inference
 request uses the connected ChatGPT plan; naming has no separate API key.
+This route rejects `max_output_tokens`; output is constrained by the title
+instructions, local validation/stream limits and request deadlines instead.
 
 If Luna/low is unavailable, the stream fails or is incomplete, the deadline
 expires, or the title is invalid, the first-prompt title remains. Attempts are
