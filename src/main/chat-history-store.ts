@@ -27,6 +27,7 @@ interface EncryptedEnvelope {
 }
 
 const EMPTY_HISTORY: PersistedChatHistory = { version: 1, accounts: {} }
+const titleSegments = new Intl.Segmenter(undefined, { granularity: 'grapheme' })
 
 function isoNow(): string {
   return new Date().toISOString()
@@ -34,6 +35,16 @@ function isoNow(): string {
 
 function validDate(value: unknown, fallback: string): string {
   return typeof value === 'string' && !Number.isNaN(Date.parse(value)) ? value : fallback
+}
+
+function truncateStoredTitle(value: string): string {
+  const title = value.trim()
+  let count = 0
+  // Match generated titles' visible-character limit without splitting Unicode.
+  for (const { index } of titleSegments.segment(title)) {
+    if (count++ === 80) return title.slice(0, index)
+  }
+  return title
 }
 
 function normalizeMessages(value: unknown): ChatSessionMessage[] {
@@ -69,7 +80,7 @@ function normalizeSession(value: unknown): ChatSession | null {
     id: candidate.id,
     title:
       typeof candidate.title === 'string' && candidate.title.trim()
-        ? candidate.title.trim().slice(0, 80)
+        ? truncateStoredTitle(candidate.title)
         : firstUserMessage
           ? generateChatTitle(firstUserMessage.text)
           : DEFAULT_CHAT_TITLE,
