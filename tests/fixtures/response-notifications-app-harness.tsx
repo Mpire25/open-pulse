@@ -61,7 +61,7 @@ beforeEach(async () => {
     app: { onNewChat: () => () => {}, onNavigate: () => () => {}, onOpenChat: (callback: typeof openChat) => {
       openChat = callback; return () => {}
     } },
-    settings: { get: async () => ({ menuBarEnabled: false, responseNotificationsEnabled: true, responseNotificationSound: false,
+    settings: { get: async () => ({ menuBarEnabled: false, responseNotificationsEnabled: true, responseNotificationSound: false, responseNotificationPreviews: false,
       googleClientId: '', googleClientSecret: '', goals: DEFAULT_GOALS, assistant: DEFAULT_ASSISTANT, chatRetention: 'forever' }) },
     google: { status: async () => ({ connected: false }), onStatusChanged: () => () => {} },
     codex: { status: async () => ({ connected: false }) },

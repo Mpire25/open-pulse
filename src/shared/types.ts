@@ -445,6 +445,7 @@ export interface AppSettings {
   menuBarEnabled: boolean
   responseNotificationsEnabled: boolean
   responseNotificationSound: boolean
+  responseNotificationPreviews: boolean
   googleClientId: string
   googleClientSecret: string
   googleClientSecretConfigured: boolean

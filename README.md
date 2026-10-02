@@ -47,8 +47,10 @@ Built with Electron + React 19, Radix primitives, Tailwind v4, and Framer Motion
   with account-scoped conversation history, pinning, and deletion.
 - **Assistant notifications** — opt in under Settings to receive a generic desktop
   notification when an answer finishes while you are away from that chat. Click
-  to open the conversation. Sound is separately opt-in; health details are never
-  included. The chat window must stay open or minimized: closing it cancels its
+  to open the conversation. Sound and message previews are separately opt-in.
+  Previews show your query and a short answer excerpt; with previews off, both
+  remain generic. Each response gets a separate notification, grouped by chat.
+  The chat window must stay open or minimized: closing it cancels its
   response. Stopped, failed, and tool-limit responses do not notify.
 
 ## Running

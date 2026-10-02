@@ -18,7 +18,7 @@ mock.module('framer-motion', () => ({ ...motionExports, motion: new Proxy({}, { 
 }) }), AnimatePresence: ({ children }: { children: React.ReactNode }) => children }))
 const { createRoot } = await import('react-dom/client')
 const { SettingsView } = await import('../../src/renderer/src/views/SettingsView')
-const settings: AppSettings = { menuBarEnabled: false, responseNotificationsEnabled: false, responseNotificationSound: false, googleClientId: '', googleClientSecret: '', googleClientSecretConfigured: false, goals: DEFAULT_GOALS, assistant: DEFAULT_ASSISTANT, chatRetention: 'forever' }
+const settings: AppSettings = { menuBarEnabled: false, responseNotificationsEnabled: false, responseNotificationSound: false, responseNotificationPreviews: false, googleClientId: '', googleClientSecret: '', googleClientSecretConfigured: false, goals: DEFAULT_GOALS, assistant: DEFAULT_ASSISTANT, chatRetention: 'forever' }
 const connected: CodexAuthStatus = { connected: true, signedIn: true, planEnabled: true, activeRegistration: 'account-a', authRevision: 1, email: 'test@example.invalid' }
 let backendStatus: CodexAuthStatus
 let publish!: (value: CodexAuthStatus) => void
@@ -39,7 +39,7 @@ function button(label: string): HTMLButtonElement | undefined {
   return Array.from(document.querySelectorAll('button')).find((element) => element.textContent?.trim() === label)
 }
 
-test('notification preferences start disabled, save independently, and keep sound opt-in', async () => {
+test('notification preferences start disabled, save independently, and keep sound and previews opt-in', async () => {
   const patches: Partial<AppSettings>[] = []
   let saved = { ...settings }
   window.pulse.settings.update = async (patch) => {
@@ -50,15 +50,23 @@ test('notification preferences start disabled, save independently, and keep soun
   await act(async () => root.render(<Harness />))
   const enabled = () => document.getElementById('response-notifications-enabled') as HTMLButtonElement
   const sound = () => document.getElementById('response-notification-sound') as HTMLButtonElement
+  const previews = () => document.getElementById('response-notification-previews') as HTMLButtonElement
   expect(enabled().getAttribute('aria-checked')).toBe('false')
   expect(sound().disabled).toBe(true)
+  expect(previews().disabled).toBe(true)
+  expect(previews().getAttribute('aria-checked')).toBe('false')
   await act(async () => enabled().click())
   expect(enabled().getAttribute('aria-checked')).toBe('true')
   expect(sound().getAttribute('aria-checked')).toBe('false')
   expect(sound().disabled).toBe(false)
+  expect(previews().disabled).toBe(false)
+  expect(previews().getAttribute('aria-checked')).toBe('false')
+  expect(document.getElementById('response-notification-previews-description')?.textContent).toContain('health information')
   await act(async () => sound().click())
   expect(sound().getAttribute('aria-checked')).toBe('true')
-  expect(patches).toEqual([{ responseNotificationsEnabled: true }, { responseNotificationSound: true }])
+  await act(async () => previews().click())
+  expect(previews().getAttribute('aria-checked')).toBe('true')
+  expect(patches).toEqual([{ responseNotificationsEnabled: true }, { responseNotificationSound: true }, { responseNotificationPreviews: true }])
 })
 
 test('failed notification preference save leaves the switch unchanged and reports the failure', async () => {

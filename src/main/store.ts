@@ -27,6 +27,7 @@ const DEFAULTS: AppSettings = {
   menuBarEnabled: true,
   responseNotificationsEnabled: false,
   responseNotificationSound: false,
+  responseNotificationPreviews: false,
   googleClientId: '',
   googleClientSecret: '',
   googleClientSecretConfigured: false,
@@ -72,6 +73,7 @@ function normalizeSettings(raw?: Partial<AppSettings>): AppSettings {
     menuBarEnabled: typeof raw?.menuBarEnabled === 'boolean' ? raw.menuBarEnabled : DEFAULTS.menuBarEnabled,
     responseNotificationsEnabled: raw?.responseNotificationsEnabled === true,
     responseNotificationSound: raw?.responseNotificationSound === true,
+    responseNotificationPreviews: raw?.responseNotificationPreviews === true,
     googleClientId: raw?.googleClientId ?? DEFAULTS.googleClientId,
     googleClientSecret: '',
     googleClientSecretConfigured: false,
@@ -119,9 +121,9 @@ export function getMenuBarEnabled(): boolean {
 }
 
 /** Notification delivery must never open credential storage. */
-export function getResponseNotificationPreferences(): { enabled: boolean; sound: boolean } {
+export function getResponseNotificationPreferences(): { enabled: boolean; sound: boolean; previews: boolean } {
   const settings = load().settings
-  return { enabled: settings.responseNotificationsEnabled, sound: settings.responseNotificationSound }
+  return { enabled: settings.responseNotificationsEnabled, sound: settings.responseNotificationSound, previews: settings.responseNotificationPreviews }
 }
 
 export function getSettings(): AppSettings {

@@ -251,7 +251,7 @@ export async function runChat(
   chatId: string,
   runId: string,
   history: ChatMessage[],
-  onEvent?: (event: AiEvent) => void
+  onEvent?: (event: AiEvent, answer?: { query: string; text: string }) => void
 ): Promise<void> {
   const key = runKey(sender, chatId)
   if (activeRuns.has(key)) {
@@ -300,9 +300,9 @@ export async function runChat(
   const onDestroyed = (): void => controller.abort(new Error('Window closed.'))
   sender.once('destroyed', onDestroyed)
 
-  const emit = (event: AiEvent): void => {
+  const emit = (event: AiEvent, completedAnswer?: string): void => {
     if (!sender.isDestroyed()) {
-      onEvent?.(event)
+      onEvent?.(event, completedAnswer === undefined ? undefined : { query: latestUserText, text: completedAnswer })
       sender.send('ai:event', event)
     }
   }
@@ -569,7 +569,7 @@ export async function runChat(
           textChars: finalText.length,
           visuals: visualParts.length
         })
-        emit({ type: 'done', chatId, runId, text: finalText, parts: visualParts, outcome: 'completed' })
+        emit({ type: 'done', chatId, runId, text: finalText, parts: visualParts, outcome: 'completed' }, resolvedTurnText)
         return
       }
 

@@ -99,9 +99,16 @@ function ResponseNotificationsCard({ settings, onSettingsChange }: {
     <div className="flex items-center justify-between gap-6">
       <div>
         <label htmlFor="response-notifications-enabled" className="text-[13px] font-medium text-ink">Notify when a response finishes</label>
-        <p id="response-notifications-description" className="mt-1 text-[12px] leading-relaxed text-ink-dim">When you aren’t viewing that chat, show a notification without health details. Click it to open the response.</p>
+        <p id="response-notifications-description" className="mt-1 text-[12px] leading-relaxed text-ink-dim">When you aren’t viewing that chat, show a notification. Click it to open the response.</p>
       </div>
       <Switch id="response-notifications-enabled" checked={settings.responseNotificationsEnabled} disabled={saving} aria-describedby="response-notifications-description" onCheckedChange={(enabled) => void change({ responseNotificationsEnabled: enabled })} />
+    </div>
+    <div className="flex items-center justify-between gap-6">
+      <div>
+        <label htmlFor="response-notification-previews" className="text-[13px] font-medium text-ink">Show message previews</label>
+        <p id="response-notification-previews-description" className="mt-1 text-[12px] leading-relaxed text-ink-dim">Show your query and a short answer preview. This may reveal health information on your desktop or lock screen. Turn off to use generic notifications.</p>
+      </div>
+      <Switch id="response-notification-previews" checked={settings.responseNotificationPreviews} disabled={saving || !settings.responseNotificationsEnabled} aria-describedby="response-notification-previews-description" onCheckedChange={(previews) => void change({ responseNotificationPreviews: previews })} />
     </div>
     <div className="flex items-center justify-between gap-6">
       <label htmlFor="response-notification-sound" className="text-[13px] font-medium text-ink">Play a sound</label>

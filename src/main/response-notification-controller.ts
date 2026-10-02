@@ -1,4 +1,5 @@
 import type { AiEvent } from '../shared/types'
+import { responseNotificationContent } from './response-notification-content'
 
 interface Completion {
   senderId: number
@@ -13,11 +14,11 @@ interface NotificationHandle {
 }
 
 interface Dependencies {
-  preferences: () => { enabled: boolean; sound: boolean }
+  preferences: () => { enabled: boolean; sound: boolean; previews: boolean }
   isFocused: (senderId: number) => boolean
   openChat: (senderId: number, chatId: string) => void
   create: (
-    options: { title: string; body: string; silent: boolean },
+    options: { title: string; body: string; silent: boolean; groupId: string },
     click: () => void,
     finished: () => void
   ) => NotificationHandle | null
@@ -27,9 +28,9 @@ interface Dependencies {
 /** Matches a main-process success to the renderer that actually accepted it. */
 export class ResponseNotificationController {
   private readonly visibleChats = new Map<number, string | null>()
-  private readonly pending = new Map<string, Completion>()
+  private readonly pending = new Map<string, Completion & { preview?: { title: string; body: string } }>()
   private readonly seen = new Map<string, Completion>()
-  private readonly displayed = new Map<string, { completion: Completion; notification: NotificationHandle }>()
+  private readonly displayed = new Map<string, { completion: Completion; notification: NotificationHandle; hasPreview: boolean }>()
 
   constructor(private readonly dependencies: Dependencies) {}
 
@@ -41,7 +42,7 @@ export class ResponseNotificationController {
     this.visibleChats.set(senderId, chatId)
   }
 
-  observe(senderId: number, event: AiEvent): void {
+  observe(senderId: number, event: AiEvent, answer?: { query: string; text: string }): void {
     if (event.type !== 'done' || event.outcome !== 'completed') return
     const key = this.key(senderId, event.runId)
     if (this.seen.has(key)) return
@@ -50,9 +51,11 @@ export class ResponseNotificationController {
       if (completion.expiresAt <= now) this.pending.delete(id)
     }
     const completion = { senderId, chatId: event.chatId, runId: event.runId, expiresAt: now + 60_000 }
+    const { enabled, previews } = this.dependencies.preferences()
+    const preview = enabled && previews && answer ? responseNotificationContent(answer.query, answer.text) : undefined
     this.seen.set(key, completion)
-    this.pending.set(key, completion)
-    // Bound metadata without retaining any answer text or health data.
+    this.pending.set(key, { ...completion, preview })
+    // Only the pending acknowledgement retains a bounded opted-in excerpt.
     if (this.seen.size > 256) {
       const oldest = this.seen.keys().next().value!
       this.seen.delete(oldest)
@@ -66,7 +69,7 @@ export class ResponseNotificationController {
     if (!completion || completion.chatId !== chatId) return
     this.pending.delete(key)
     if (completion.expiresAt <= (this.dependencies.now ?? Date.now)()) return
-    const { enabled, sound } = this.dependencies.preferences()
+    const { enabled, sound, previews } = this.dependencies.preferences()
     if (!enabled || (this.visibleChats.get(senderId) === chatId && this.dependencies.isFocused(senderId))) return
 
     const finished = (): void => { this.displayed.delete(key) }
@@ -76,11 +79,13 @@ export class ResponseNotificationController {
       this.dependencies.openChat(senderId, chatId)
     }
     try {
+      const content = previews && completion.preview ? completion.preview : { title: 'OpenPulse', body: 'Your AI response is ready.' }
       const notification = this.dependencies.create(
-        { title: 'OpenPulse', body: 'Your AI response is ready.', silent: !sound }, click, finished
+        { ...content, silent: !sound, groupId: `openpulse-chat-${chatId}` }, click, finished
       )
       if (!notification) return
-      this.displayed.set(key, { completion, notification })
+      const { preview: _preview, ...metadata } = completion
+      this.displayed.set(key, { completion: metadata, notification, hasPreview: Boolean(previews && completion.preview) })
       if (this.displayed.size > 50) this.dismiss(this.displayed.keys().next().value!)
       notification.show()
     } catch {
@@ -113,6 +118,11 @@ export class ResponseNotificationController {
     this.clearMatching((completion) => completion.senderId === senderId)
     for (const [key, completion] of this.seen) if (completion.senderId === senderId) this.seen.delete(key)
     this.visibleChats.delete(senderId)
+  }
+
+  clearPreviews(): void {
+    for (const completion of this.pending.values()) delete completion.preview
+    for (const [key, entry] of this.displayed) if (entry.hasPreview) this.dismiss(key)
   }
 
   clear(): void {

@@ -187,6 +187,28 @@ afterEach(() => {
 })
 
 describe('brokered Codex research orchestration', () => {
+  test('notification preview receives the latest query and final answer without interim tool commentary', async () => {
+    const sender = new FakeSender()
+    let calls = 0
+    const previews: Array<{ query: string; text: string }> = []
+    globalThis.fetch = (async () => {
+      if (++calls === 1) return sseResponse([
+        { type: 'response.output_item.done', item: { type: 'message', content: [{ type: 'output_text', text: 'Checking your metrics first.', annotations: [] }] } },
+        { type: 'response.output_item.done', item: { type: 'function_call', name: 'query_daily_metrics', call_id: 'preview-metrics', arguments: JSON.stringify({ metrics: ['steps', 'hrvMs'], startDate: '2026-07-01', endDate: '2026-07-07' }) } }
+      ])
+      return message('Your final analysis is ready.')
+    }) as typeof fetch
+    await runChat(sender as unknown as WebContents, 'preview-chat', 'preview-run', [
+      { role: 'user', text: 'Previous question' },
+      { role: 'assistant', text: 'Previous answer' },
+      { role: 'user', text: 'Analyse my steps and HRV together.' }
+    ], (_event, answer) => { if (answer) previews.push(answer) })
+    expect(calls).toBe(2)
+    expect(previews).toEqual([{ query: 'Analyse my steps and HRV together.', text: 'Your final analysis is ready.' }])
+    // The existing chat transcript still receives all streamed text.
+    expect(sender.events.find((event) => event.type === 'done')).toMatchObject({ text: 'Checking your metrics first.Your final analysis is ready.' })
+  })
+
   test('records successful completion before delivering it to the renderer', async () => {
     const sender = new FakeSender()
     const observed: AiEvent[] = []

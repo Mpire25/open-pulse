@@ -9,12 +9,13 @@ const success = (chatId = 'chat-a', runId = 'run-a'): AiEvent => ({
 function harness() {
   let enabled = true
   let sound = false
+  let previews = false
   let focused = false
   let now = 1_000
   let supported = true
   let fails = false
   const notifications: Array<{
-    options: { title: string; body: string; silent: boolean }
+    options: { title: string; body: string; silent: boolean; groupId: string }
     click: () => void
     finished: () => void
     shows: number
@@ -22,7 +23,7 @@ function harness() {
   }> = []
   const opened: Array<[number, string]> = []
   const controller = new ResponseNotificationController({
-    preferences: () => ({ enabled, sound }),
+    preferences: () => ({ enabled, sound, previews }),
     isFocused: () => focused,
     now: () => now,
     openChat: (senderId, chatId) => { opened.push([senderId, chatId]) },
@@ -43,6 +44,7 @@ function harness() {
   return {
     controller, notifications, opened, complete,
     setEnabled: (value: boolean) => { enabled = value },
+    setPreviews: (value: boolean) => { previews = value },
     setSound: (value: boolean) => { sound = value },
     setFocused: (value: boolean) => { focused = value },
     setNow: (value: number) => { now = value },
@@ -52,6 +54,56 @@ function harness() {
 }
 
 describe('AI response notifications', () => {
+  test('previews use the query and formatted final answer, with one notification per response grouped by chat', () => {
+    const h = harness()
+    h.setPreviews(true)
+    h.controller.observe(1, success(), { query: 'How did I sleep?', text: 'You averaged **7h 12m** per night.' })
+    h.controller.acknowledge(1, 'chat-a', 'run-a')
+    h.controller.observe(1, success('chat-a', 'run-b'), { query: 'And last week?', text: 'You averaged **6h 47m**.' })
+    h.controller.acknowledge(1, 'chat-a', 'run-b')
+    h.controller.observe(1, success('chat-b', 'run-c'), { query: 'Show my steps', text: '' })
+    h.controller.acknowledge(1, 'chat-b', 'run-c')
+    expect(h.notifications).toHaveLength(3)
+    expect(h.notifications[0].options).toEqual({ title: 'How did I sleep?', body: 'You averaged 7h 12m per night.', silent: true, groupId: 'openpulse-chat-chat-a' })
+    expect(h.notifications[1].options).toMatchObject({ title: 'And last week?', body: 'You averaged 6h 47m.', groupId: 'openpulse-chat-chat-a' })
+    expect(h.notifications[2].options).toMatchObject({ title: 'Show my steps', body: 'Your response is ready. Open the chat to view it.', groupId: 'openpulse-chat-chat-b' })
+    expect(h.notifications.every((entry) => entry.shows === 1 && entry.closes === 0)).toBe(true)
+    h.notifications[1].click()
+    expect(h.opened).toEqual([[1, 'chat-a']])
+  })
+
+  test('both query and answer stay generic without opt-in, including preference changes before acknowledgement', () => {
+    const h = harness()
+    const answer = { query: 'Private query', text: 'Private answer' }
+    h.controller.observe(1, success(), answer)
+    h.setPreviews(true)
+    h.controller.acknowledge(1, 'chat-a', 'run-a')
+    expect(h.notifications[0].options).toMatchObject({ title: 'OpenPulse', body: 'Your AI response is ready.' })
+    h.controller.observe(1, success('chat-a', 'run-b'), answer)
+    h.setPreviews(false)
+    h.controller.acknowledge(1, 'chat-a', 'run-b')
+    expect(h.notifications[1].options).toMatchObject({ title: 'OpenPulse', body: 'Your AI response is ready.' })
+  })
+
+  test('disabling previews dismisses rich banners and removes pending excerpts without replaying them', () => {
+    const h = harness()
+    h.complete()
+    h.setPreviews(true)
+    const answer = { query: 'Private query', text: 'Private answer' }
+    h.controller.observe(1, success('chat-a', 'run-b'), answer)
+    h.controller.acknowledge(1, 'chat-a', 'run-b')
+    h.controller.observe(1, success('chat-b', 'run-c'), answer)
+    h.setPreviews(false)
+    h.controller.clearPreviews()
+    expect(h.notifications[0].closes).toBe(0)
+    expect(h.notifications[1].closes).toBe(1)
+    h.notifications[1].click()
+    expect(h.opened).toHaveLength(0)
+    h.setPreviews(true)
+    h.controller.acknowledge(1, 'chat-b', 'run-c')
+    expect(h.notifications[2].options).toMatchObject({ title: 'OpenPulse', body: 'Your AI response is ready.' })
+  })
+
   test('requires a matching main-process success and renderer acknowledgement, deduplicated per run', () => {
     const h = harness()
     h.controller.acknowledge(1, 'chat-a', 'run-a')
@@ -64,7 +116,7 @@ describe('AI response notifications', () => {
     h.complete()
     expect(h.notifications).toHaveLength(1)
     expect(h.notifications[0].shows).toBe(1)
-    expect(h.notifications[0].options).toEqual({ title: 'OpenPulse', body: 'Your AI response is ready.', silent: true })
+    expect(h.notifications[0].options).toEqual({ title: 'OpenPulse', body: 'Your AI response is ready.', silent: true, groupId: 'openpulse-chat-chat-a' })
   })
 
   test('only suppresses notifications when the same chat is visible in the focused window', () => {

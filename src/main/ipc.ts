@@ -202,6 +202,7 @@ export function registerIpc(commands: { open: (destination: MenuBarDestination) 
   handle('settings:update', (_e, patch: Partial<AppSettings>) => {
     const settings = updateSettings(patch)
     if (!settings.responseNotificationsEnabled) responseNotifications?.clear()
+    if (!settings.responseNotificationPreviews) responseNotifications?.clearPreviews()
     commands.settingsChanged(settings)
     return settings
   })
@@ -332,8 +333,8 @@ export function registerIpc(commands: { open: (destination: MenuBarDestination) 
 
   handle('ai:send', (event, chatId: string, runId: string, history: ChatMessage[]) => {
     // Fire and forget: progress streams back over 'ai:event'.
-    void runChat(event.sender, chatId, runId, history, (update) => {
-      responseNotifications?.observe(event.sender.id, update)
+    void runChat(event.sender, chatId, runId, history, (update, answer) => {
+      responseNotifications?.observe(event.sender.id, update, answer)
     })
   })
   handle('ai:visible-chat', (event, chatId: unknown) => {
