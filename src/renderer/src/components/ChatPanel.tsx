@@ -328,6 +328,10 @@ const Bubble = memo(function Bubble({
   onEdit?: (userId: string, text: string) => boolean
 }): React.JSX.Element {
   const [editedText, setEditedText] = useState<string | null>(null)
+  useEffect(() => {
+    if (!onEdit) setEditedText(null)
+  }, [onEdit])
+
   const isUser = turn.role === 'user'
   const editing = isUser && editedText !== null && Boolean(onEdit)
   const canCopy = Boolean(turn.text.trim()) && !turn.streaming && !turn.error && !turn.transient

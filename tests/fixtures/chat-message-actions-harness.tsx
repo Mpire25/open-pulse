@@ -248,3 +248,30 @@ test('an intentional Stop never offers Retry, including a backend stop event', a
   await act(async () => chat.retry())
   expect(sends).toHaveLength(2)
 })
+
+for (const outcome of ['completed', 'failed', 'stopped'] as const) {
+  test(`abandoned edit stays closed when Retry is ${outcome}`, async () => {
+    const ids = await send()
+    await act(async () => receive({ ...ids, type: 'error', message: 'Synthetic failure' }))
+    await act(async () => button('Edit message')!.click())
+    await changeEditedText('Abandoned revised question')
+    await act(async () => button('Retry')!.click())
+    expect(editor()).toBeNull()
+    expect(histories[1]).toEqual([{ role: 'user', text: 'Analyse my steps' }])
+
+    if (outcome === 'completed') {
+      await completeLatest('Recovered answer')
+    } else if (outcome === 'failed') {
+      const [chatId, runId] = sends[1]
+      await act(async () => receive({ chatId, runId, type: 'error', message: 'Another synthetic failure' }))
+    } else {
+      await act(async () => chat.stop())
+    }
+
+    expect(chat.busy).toBe(false)
+    expect(editor()?.value ?? null).toBeNull()
+    expect(chat.turns[0].text).toBe('Analyse my steps')
+    await act(async () => button('Edit message')!.click())
+    expect(editor()!.value).toBe('Analyse my steps')
+  })
+}
