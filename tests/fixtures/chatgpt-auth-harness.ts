@@ -176,7 +176,7 @@ test('new sign-in removes old registrations so sign-out cannot restore them', as
   globalThis.fetch = (async () => new Response('', { status: 200 })) as typeof fetch
   await auth.disconnectCodex()
   expect(auth.getCodexStatus().signedIn).toBe(false)
-  expect((secrets.get(KEY) as { tokens?: unknown }).tokens).toBeUndefined()
+  expect(secrets.has(KEY)).toBe(false)
 })
 test('missing plan consent retains identity without enabling inference', async () => {
   scopes = 'openid email offline_access'
@@ -230,7 +230,7 @@ test('terminal refresh rejection clears credentials, temporary failures preserve
   expect(auth.getCodexStatus().signedIn).toBe(false)
   expect((secrets.get(KEY) as { tokens?: unknown }).tokens).toBeUndefined()
 })
-test('disconnect revokes and clears tokens while retaining one registration', async () => {
+test('disconnect revokes and clears the single connection', async () => {
   seed()
   globalThis.fetch = (async (input, init) => {
     expect(String(input)).toBe('https://auth.openai.com/revoke')
@@ -243,36 +243,44 @@ test('disconnect revokes and clears tokens while retaining one registration', as
   expect(auth.getCodexStatus()).toMatchObject({
     signedIn: false
   })
-  expect((secrets.get(KEY) as { tokens?: unknown }).tokens).toBeUndefined()
+  expect(secrets.has(KEY)).toBe(false)
   expect(auth.getCodexStatus().activeRegistration).toBeUndefined()
 })
-test('returning sign-in reuses the issued client and accepts a callback without client_id', async () => {
+test('sign-out allows the same or a different account through fresh registration', async () => {
   await auth.connectCodex()
-  expect(authorizationRequests[0].get('client_id')).toBe('dynamic_agent_client')
-  expect(authorizationRequests[0].get('agent_name_hint')).toBe('OpenPulse')
   const hostId = authorizationRequests[0].get('ext_agent_host_id')
   globalThis.fetch = (async () => new Response('', { status: 200 })) as typeof fetch
   await auth.disconnectCodex()
-  expect(secrets.get(KEY)).toEqual({ clientId: 'issued-a', subject: 'user-a', needsPlanConsent: false })
-  expect(auth.getCodexStatus().email).toBeUndefined()
+  expect(secrets.has(KEY)).toBe(false)
   expect(auth.getCodexStatus().signedIn).toBe(false)
-  omitClientId = true
-  exchange = async (body) => {
-    expect(body.get('client_id')).toBe('issued-a')
-    return { access_token: 'returning-access', refresh_token: 'returning-refresh', id_token: 'returning-id', expires_in: 3600, scope: scopes, token_type: 'Bearer' }
-  }
   expect(await auth.connectCodex()).toMatchObject({ connected: true })
-  expect(authorizationRequests[1].get('client_id')).toBe('issued-a')
-  expect(authorizationRequests[1].has('agent_name_hint')).toBe(false)
-  expect(authorizationRequests[1].has('id_token_hint')).toBe(false)
-  expect(authorizationRequests[1].get('ext_agent_host_id')).toBe(hostId)
+  await auth.disconnectCodex()
+  subject = 'other-user'
+  expect(await auth.connectCodex()).toMatchObject({ connected: true })
+  expect((await auth.getCodexTokens())?.subject).toBe('other-user')
+  for (const request of authorizationRequests) {
+    expect(request.get('client_id')).toBe('dynamic_agent_client')
+    expect(request.get('agent_name_hint')).toBe('OpenPulse')
+    expect(request.get('ext_agent_host_id')).toBe(hostId)
+  }
   expect(authorizationRequests[1].get('state')).not.toBe(authorizationRequests[0].get('state'))
 })
-test('sign-in after declined plan consent requests consent using the same registration', async () => {
+test('old signed-out registrations do not bind the next sign-in', async () => {
+  secrets.set(KEY, { clientId: 'removed-client', subject: 'previous-user' })
+  subject = 'other-user'
+  expect(await auth.connectCodex()).toMatchObject({ connected: true })
+  expect(authorizationRequests[0].get('client_id')).toBe('dynamic_agent_client')
+})
+test('returning sign-in with a saved session reuses its registration and accepts omitted client_id', async () => {
+  seed()
+  omitClientId = true
+  expect(await auth.connectCodex()).toMatchObject({ connected: true })
+  expect(authorizationRequests[0].get('client_id')).toBe('issued-a')
+  expect(authorizationRequests[0].has('agent_name_hint')).toBe(false)
+})
+test('declined plan consent requests consent for the saved session', async () => {
   scopes = 'openid email offline_access'
   await auth.connectCodex()
-  globalThis.fetch = (async () => new Response('', { status: 200 })) as typeof fetch
-  await auth.disconnectCodex()
   scopes += ' chatgpt.tokens.use.direct'
   expect(await auth.connectCodex()).toMatchObject({ connected: true })
   expect(authorizationRequests[1].get('prompt')).toBe('consent')

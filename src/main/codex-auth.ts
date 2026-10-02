@@ -114,7 +114,8 @@ export async function disconnectCodex(): Promise<{ warning?: string }> {
   activeConnectReject?.(new Error('ChatGPT sign-in was cancelled.'))
   await finishRefreshes()
   assertCurrent(generation)
-  const tokens = read()?.tokens
+  const connection = read()
+  const tokens = connection?.tokens
   let warning: string | undefined
   if (tokens?.refreshToken) {
     try {
@@ -139,11 +140,10 @@ export async function disconnectCodex(): Promise<{ warning?: string }> {
   const current = read()
   if (
     isCodexAuthGenerationCurrent(generation) &&
-    tokens && current?.tokens?.accessToken === tokens.accessToken &&
-    current.clientId === tokens.clientId
+    current?.tokens?.accessToken === tokens?.accessToken &&
+    current?.clientId === connection?.clientId
   ) {
-    const { tokens: _tokens, ...registration } = current
-    setSecret(SECRET_KEY, registration)
+    deleteSecret(SECRET_KEY)
   }
   if (isCodexAuthGenerationCurrent(generation)) disconnectGeneration = undefined
   return { warning }
@@ -154,7 +154,8 @@ export async function connectCodex(): Promise<CodexAuthStatus> {
   const generation = ++authGeneration
   await finishRefreshes()
   assertCurrent(generation)
-  const registration = read()
+  const saved = read()
+  const registration = saved?.tokens ? saved : null
   let hostId = getLocalValue<string>('chatgpt-host-id')
   if (!hostId) {
     hostId = `urn:uuid:${randomUUID()}`
