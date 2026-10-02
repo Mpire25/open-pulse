@@ -108,6 +108,21 @@ export function getCodexStatus(): CodexAuthStatus {
   }
 }
 
+async function revokeIssuedTokens(
+  clientId: string,
+  token: string,
+  tokenType: 'refresh_token' | 'access_token'
+): Promise<void> {
+  const discovery = await getDiscovery()
+  const response = await fetch(discovery.revocation_endpoint, {
+    method: 'POST',
+    signal: AbortSignal.timeout(15_000),
+    headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ token, token_type_hint: tokenType, client_id: clientId })
+  })
+  if (!response.ok) throw new Error('Revocation failed.')
+}
+
 export async function disconnectCodex(): Promise<{ warning?: string }> {
   const generation = ++authGeneration
   disconnectGeneration = generation
@@ -119,18 +134,7 @@ export async function disconnectCodex(): Promise<{ warning?: string }> {
   let warning: string | undefined
   if (tokens?.refreshToken) {
     try {
-      const discovery = await getDiscovery()
-      const response = await fetch(discovery.revocation_endpoint, {
-        method: 'POST',
-        signal: AbortSignal.timeout(15_000),
-        headers: { 'content-type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({
-          token: tokens.refreshToken,
-          token_type_hint: 'refresh_token',
-          client_id: tokens.clientId
-        })
-      })
-      if (!response.ok) throw new Error('Revocation failed.')
+      await revokeIssuedTokens(tokens.clientId, tokens.refreshToken, 'refresh_token')
     } catch {
       warning =
         'Signed out locally. Remote revocation was not confirmed; you can disconnect OpenPulse in ChatGPT Settings.'
@@ -252,28 +256,43 @@ export async function connectCodex(): Promise<CodexAuthStatus> {
       resource: CHATGPT_RESOURCE
     })
   )
-  if (!response.id_token) throw new Error('ChatGPT did not return an ID token.')
-  const identity = await verifyIdentity(
-    response.id_token,
-    callback.clientId,
-    nonce
-  )
-  assertCurrent(generation)
-  if (registration && identity.subject !== registration.subject)
-    throw new Error('ChatGPT returned a different identity for this OpenPulse registration.')
-  const tokens: CodexTokens = {
-    clientId: callback.clientId,
-    subject: identity.subject,
-    email: identity.email,
-    accessToken: response.access_token,
-    refreshToken: response.refresh_token,
-    idToken: response.id_token,
-    scopes: response.scope.split(/\s+/),
-    expiresAt: Date.now() + response.expires_in * 1000
+  try {
+    if (!response.id_token) throw new Error('ChatGPT did not return an ID token.')
+    const identity = await verifyIdentity(
+      response.id_token,
+      callback.clientId,
+      nonce
+    )
+    assertCurrent(generation)
+    if (registration && identity.subject !== registration.subject)
+      throw new Error('ChatGPT returned a different identity for this OpenPulse registration.')
+    const tokens: CodexTokens = {
+      clientId: callback.clientId,
+      subject: identity.subject,
+      email: identity.email,
+      accessToken: response.access_token,
+      refreshToken: response.refresh_token,
+      idToken: response.id_token,
+      scopes: response.scope.split(/\s+/),
+      expiresAt: Date.now() + response.expires_in * 1000
+    }
+    setSecret(SECRET_KEY, connectionFor(tokens))
+    deleteSecret(LEGACY_REGISTRATIONS_KEY)
+    deleteSecret('codex-tokens')
+  } catch (error) {
+    // Once issued, tokens must be revoked if validation, cancellation, or saving fails.
+    try {
+      await revokeIssuedTokens(
+        callback.clientId,
+        response.refresh_token ?? response.access_token,
+        response.refresh_token ? 'refresh_token' : 'access_token'
+      )
+    } catch {
+      const reason = error instanceof Error ? error.message : 'ChatGPT sign-in failed.'
+      throw new Error(`${reason} Remote revocation was not confirmed; disconnect OpenPulse in ChatGPT Settings.`, { cause: error })
+    }
+    throw error
   }
-  setSecret(SECRET_KEY, connectionFor(tokens))
-  deleteSecret(LEGACY_REGISTRATIONS_KEY)
-  deleteSecret('codex-tokens')
   return getCodexStatus()
 }
 

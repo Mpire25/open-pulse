@@ -140,7 +140,46 @@ test('failed callback never exchanges tokens or deletes the existing session', a
 test('returning sign-in cannot overwrite the single registration with another identity', async () => {
   seed()
   subject = 'other-user'
+  const revoked: URLSearchParams[] = []
+  globalThis.fetch = (async (_input, init) => {
+    revoked.push(new URLSearchParams(String(init?.body)))
+    return new Response('', { status: 200 })
+  }) as typeof fetch
   await expect(auth.connectCodex()).rejects.toThrow('different identity')
+  expect(revoked.map((body) => Object.fromEntries(body))).toEqual([{ token: 'new-refresh', token_type_hint: 'refresh_token', client_id: 'issued-a' }])
+  expect((await auth.getCodexTokens())?.subject).toBe('user-a')
+})
+test('sign-out during token exchange revokes both the old and discarded sessions', async () => {
+  seed()
+  const revoked: string[] = []
+  globalThis.fetch = (async (_input, init) => {
+    revoked.push(new URLSearchParams(String(init?.body)).get('token')!)
+    return new Response('', { status: 200 })
+  }) as typeof fetch
+  exchange = async () => {
+    await auth.disconnectCodex()
+    return { access_token: 'discarded-access', refresh_token: 'discarded-refresh', id_token: 'discarded-id', expires_in: 3600, scope: scopes, token_type: 'Bearer' }
+  }
+  await expect(auth.connectCodex()).rejects.toThrow('cancelled')
+  expect(revoked).toEqual(['test-refresh', 'discarded-refresh'])
+  expect(auth.getCodexStatus().signedIn).toBe(false)
+})
+test('an invalid token response without a renewable session revokes its access token', async () => {
+  const revoked: URLSearchParams[] = []
+  globalThis.fetch = (async (_input, init) => {
+    revoked.push(new URLSearchParams(String(init?.body)))
+    return new Response('', { status: 200 })
+  }) as typeof fetch
+  exchange = async () => ({ access_token: 'discarded-access', expires_in: 3600, scope: scopes, token_type: 'Bearer' })
+  await expect(auth.connectCodex()).rejects.toThrow('did not return an ID token')
+  expect(revoked.map((body) => Object.fromEntries(body))).toEqual([{ token: 'discarded-access', token_type_hint: 'access_token', client_id: 'issued-a' }])
+  expect(auth.getCodexStatus().signedIn).toBe(false)
+})
+test('discarded-token revocation failures are disclosed without replacing the saved session', async () => {
+  seed()
+  subject = 'other-user'
+  globalThis.fetch = (async () => new Response('', { status: 503 })) as typeof fetch
+  await expect(auth.connectCodex()).rejects.toThrow('Remote revocation was not confirmed')
   expect((await auth.getCodexTokens())?.subject).toBe('user-a')
 })
 test('a changed callback client ID is rejected before token exchange', async () => {
