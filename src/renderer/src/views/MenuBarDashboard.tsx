@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useIsFetching, useQueryClient } from '@tanstack/react-query'
-import { ArrowClockwise, ArrowUpRight, GearSix, Moon, PencilSimple } from '@phosphor-icons/react'
+import { ArrowClockwise, ArrowUpRight, GearSix, Moon } from '@phosphor-icons/react'
 import type { AppSettings, GoogleAuthStatus } from '@shared/types'
 import type { DashboardLayout } from '@shared/dashboard'
 import type { MenuBarDestination } from '@shared/menu-bar'
@@ -134,19 +134,6 @@ export default function MenuBarDashboard(): React.JSX.Element {
                 <ArrowClockwise size={17} className={busy ? 'animate-spin' : ''} />
               </button>
             )}
-            <button
-              className="menu-icon-button"
-              onClick={() =>
-                void window.pulse.app.open({
-                  view: 'settings',
-                  date: isoToday(),
-                  customize: 'menuBar'
-                })
-              }
-              aria-label="Customize menu bar"
-            >
-              <PencilSimple size={17} />
-            </button>
             <button
               className="menu-icon-button"
               onClick={() => open('settings')}

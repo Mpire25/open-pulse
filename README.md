@@ -67,8 +67,8 @@ from a native macOS menu. Editing preserves the original card sizes and spacing.
 Use **Save layout** to keep your choices, **Cancel** to discard the draft, or
 **Restore defaults** followed by Save to return that surface to its original layout.
 
-For the menu bar, open **Settings → macOS menu bar → Layout → Customize menu bar**, or
-click the pencil in the popup. The main window shows a compact draft preview;
+For the menu bar, open **Settings → macOS menu bar → Layout → Customize menu bar**.
+The main window shows a compact draft preview;
 saving also updates an already-open popup. Preferences survive restart and do
 not change goals or health records. Missing readings remain unavailable.
 
