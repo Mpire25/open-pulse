@@ -429,6 +429,8 @@ export interface AssistantModel {
   id: string
   label: string
   efforts?: ReasoningEffort[]
+  /** Catalog metadata for background naming; does not change assistant settings. */
+  supportsNoReasoning?: true
 }
 export interface ModelCatalog {
   models: AssistantModel[]

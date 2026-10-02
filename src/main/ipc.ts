@@ -22,7 +22,7 @@ import {
   GoogleAuthUnavailableError,
   onGoogleAuthInvalidated
 } from './google-auth'
-import { chatTitleModelAvailable, getChatGPTModels } from './chatgpt-models'
+import { getChatTitleModels, getChatGPTModels } from './chatgpt-models'
 import { ChatTitleController, generateChatName } from './chat-title-generator'
 import { connectCodex, disconnectCodex, getCodexStatus } from './codex-auth'
 import {
@@ -75,7 +75,7 @@ let responseNotifications: ResponseNotificationController | undefined
 const chatTitles = new ChatTitleController({
   claim: claimChatTitle,
   complete: completeChatTitle,
-  modelAvailable: chatTitleModelAvailable,
+  models: getChatTitleModels,
   generate: generateChatName,
   publish: (senderId, title) => {
     const renderer = trustedRenderers.get(senderId)
@@ -97,8 +97,8 @@ export function registerTrustedRenderer(
 ): void {
   const renderer = { webContents, isExpectedUrl }
   trustedRenderers.set(webContents.id, renderer)
-  webContents.on('did-start-loading', () => { chatTitles.clearSender(webContents.id); responseNotifications?.clearSender(webContents.id) })
-  webContents.on('render-process-gone', () => { chatTitles.clearSender(webContents.id); responseNotifications?.clearSender(webContents.id) })
+  webContents.on('did-start-loading', () => { chatTitles.clearSender(webContents.id, 'renderer-reloaded'); responseNotifications?.clearSender(webContents.id) })
+  webContents.on('render-process-gone', () => { chatTitles.clearSender(webContents.id, 'renderer-gone'); responseNotifications?.clearSender(webContents.id) })
   webContents.once('destroyed', () => {
     chatTitles.clearSender(webContents.id)
     responseNotifications?.clearSender(webContents.id)
@@ -201,7 +201,7 @@ function sendToTrustedRenderers(channel: string, ...args: unknown[]): void {
 
 export function registerIpc(commands: { open: (destination: MenuBarDestination) => void; close: () => void; resizePanel: (height: number, senderId: number) => void; quit: () => void; settingsChanged: (settings: AppSettings) => void; notifications: ResponseNotificationController }): void {
   responseNotifications = commands.notifications
-  app.once('before-quit', () => chatTitles.clear())
+  app.once('before-quit', () => chatTitles.clear('app-quitting'))
   handle('app:open', (_event, destination: unknown) => {
     if (!isMenuBarDestination(destination)) throw new Error('Invalid navigation destination')
     commands.open(destination)
@@ -366,8 +366,8 @@ export function registerIpc(commands: { open: (destination: MenuBarDestination) 
     // Fire and forget: progress streams back over 'ai:event'.
     void runChat(event.sender, chatId, runId, history, (update, answer) => {
       responseNotifications?.observe(event.sender.id, update, answer)
-    }, (tokens, signal, isCurrent) => {
-      void chatTitles.start(event.sender.id, chatId, tokens, signal, isCurrent)
+    }, (tokens, signal, isCurrent, assistant) => {
+      void chatTitles.start(event.sender.id, chatId, tokens, signal, isCurrent, assistant.model)
     })
   })
   handle('ai:visible-chat', (event, chatId: unknown) => {

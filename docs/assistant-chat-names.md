@@ -1,20 +1,26 @@
 # Assistant chat names
 
 New chats immediately use a shortened version of the first prompt. Alongside the
-first authenticated response, OpenPulse makes one separate GPT-6 Luna request
+first authenticated response, OpenPulse makes a separate GPT-5.6 Luna request
 with low reasoning to generate a short title. Only the first prompt (at most
 4,000 characters) is sent: no prior turns, health datasets, or tools.
 
 The naming job shares the foreground run's authenticated credentials, checks
-the account's model catalog, and has a 10-second total deadline. It uses the
-public Responses API with streaming and storage disabled. One extra inference
-request uses the connected ChatGPT plan; naming has no separate API key.
+the account's model catalog, and has a 20-second total deadline with at most
+10 seconds per model. It uses the public Responses API with streaming and
+storage disabled. Naming uses the connected ChatGPT plan, with no separate API key.
 This route rejects `max_output_tokens`; output is constrained by the title
 instructions, local validation/stream limits and request deadlines instead.
 
-If Luna/low is unavailable, the stream fails or is incomplete, the deadline
-expires, or the title is invalid, the first-prompt title remains. Attempts are
-recorded before inference and never automatically retried, including on restart.
+If Luna is unavailable, fails, times out, or returns an invalid title, OpenPulse
+tries the selected assistant model once, at its lowest advertised reasoning
+level (including none when available; low when catalog metadata is absent).
+The assistant model is captured from the normal run, so a settings change
+mid-response does not change the backup. A model is never attempted twice.
+Authentication, permission and usage-limit failures stop without a backup call.
+If neither model produces a valid name, the first-prompt title remains. This
+single naming job is recorded before inference and never automatically repeated,
+including on restart; each new chat uses at most two extra inference requests.
 Older chats are not automatically renamed. Naming never delays the answer.
 
 Generated names are stored with encrypted history. Renaming preserves messages,

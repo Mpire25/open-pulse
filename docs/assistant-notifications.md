@@ -15,7 +15,7 @@ without text use **Your response is ready. Open the chat to view it.**
 New chats use their first-prompt fallback until automatic naming finishes. The
 latest available name is read from memory when the banner is created; delivery
 never waits for naming. A later name does not reissue an existing banner. Naming
-adds one small request per new chat independently of notifications, as described
+adds up to two naming requests per new chat independently of notifications, as described
 in [Assistant chat names](assistant-chat-names.md).
 
 Previews may expose health information on the desktop or lock screen. Only a

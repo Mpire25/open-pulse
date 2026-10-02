@@ -2,7 +2,8 @@ import { afterEach, describe, expect, test } from 'bun:test'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
-import { ChatTitleController, generateChatName, normalizeGeneratedTitle } from '../src/main/chat-title-generator'
+import { ChatTitleController, generateChatName, normalizeGeneratedTitle, type ChatTitleModel } from '../src/main/chat-title-generator'
+import { ChatGPTRequestError } from '../src/main/chatgpt-responses'
 import { ChatHistoryStore } from '../src/main/chat-history-store'
 import type { ChatTitleUpdate } from '../src/shared/types'
 
@@ -25,7 +26,7 @@ test('standalone Luna request uses only the bounded first prompt and waits for t
     return stream([{ type: 'response.output_text.delta', delta: 'Weekly sleep comparison' }, completed])
   }) as typeof fetch
   expect(await generateChatName('synthetic-token', 'Compare my sleep '.repeat(500), new AbortController().signal)).toBe('Weekly sleep comparison')
-  expect(body.model).toBe('gpt-6-luna')
+  expect(body.model).toBe('gpt-5.6-luna')
   expect(body.reasoning).toEqual({ effort: 'low' })
   expect(body.store).toBe(false)
   expect(body.stream).toBe(true)
@@ -43,6 +44,16 @@ test('partial titles, incomplete responses and late usage errors are never accep
     globalThis.fetch = (async () => stream([{ type: 'response.output_text.delta', delta: 'Sleep summary' }, ...(terminal ? [terminal] : [])])) as typeof fetch
     await expect(generateChatName('synthetic', 'Sleep?', new AbortController().signal)).rejects.toThrow()
   }
+})
+
+test('backup request uses its selected model and smallest reasoning effort', async () => {
+  globalThis.fetch = (async (_url, options) => {
+    const body = JSON.parse(options!.body as string)
+    expect(body.model).toBe('assistant-model')
+    expect(body.reasoning).toEqual({ effort: 'none' })
+    return stream([{ type: 'response.output_text.delta', delta: 'Sleep comparison' }, completed])
+  }) as typeof fetch
+  expect(await generateChatName('synthetic', 'Sleep?', new AbortController().signal, { model: 'assistant-model', reasoningEffort: 'none' })).toBe('Sleep comparison')
 })
 
 test('refusals and unsuitable titles keep the fallback; Unicode titles remain intact', async () => {
@@ -68,6 +79,9 @@ function harness(timeoutMs = 10_000) {
   let generateCalls = 0
   let modelCalls = 0
   let available = true
+  let models: ChatTitleModel[] = [{ model: 'gpt-5.6-luna', reasoningEffort: 'low' }]
+  let outcomes: Array<string | null | Error | 'timeout'> | undefined
+  const selections: ChatTitleModel[] = []
   let current = true
   let failures = 0
   const published: ChatTitleUpdate[] = []
@@ -75,24 +89,77 @@ function harness(timeoutMs = 10_000) {
   const controller = new ChatTitleController({
     claim: (scope, id, messageId) => store.claimTitle(scope, id, messageId),
     complete: (scope, id, prompt, title) => store.completeTitle(scope, id, prompt, title),
-    modelAvailable: async () => { modelCalls++; return available },
-    generate: async (_token, prompt) => {
+    models: async () => { modelCalls++; return available ? models : [] },
+    generate: async (_token, prompt, signal, selection) => {
       expect(prompt).toBe(message.text)
       generateCalls++
+      selections.push(selection)
+      if (outcomes) {
+        const outcome = outcomes.shift()
+        if (outcome === 'timeout') return new Promise((_, reject) => signal.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')), { once: true }))
+        if (outcome instanceof Error) throw outcome
+        return outcome ?? null
+      }
       return new Promise<string | null>((done) => { resolve = done })
     },
     publish: (_sender, title) => published.push(title),
-    failed: () => { failures++ }, timeoutMs
+    failed: () => { failures++ }, timeoutMs, attemptTimeoutMs: 20
   })
   controller.remember(1, 'health-account-a', session)
-  const start = () => controller.start(1, chat.id, { accessToken: 'synthetic', clientId: 'registration' }, parent.signal, () => current)
-  return { controller, store, session, message, published, parent, start, path, encryption,
+  const start = () => controller.start(1, chat.id, { accessToken: 'synthetic', clientId: 'registration' }, parent.signal, () => current, 'gpt-6-astra')
+  return { controller, store, session, message, published, parent, start, path, encryption, selections,
+    setModels: (value: ChatTitleModel[]) => { models = value },
+    outcomes: (value: Array<string | null | Error | 'timeout'>) => { outcomes = value },
     resolve: (title: string | null) => resolve(title),
     calls: () => ({ generateCalls, modelCalls, failures }),
     unavailable: () => { available = false }, obsolete: () => { current = false } }
 }
 
 describe('chat title lifecycle', () => {
+  const backup: ChatTitleModel = { model: 'gpt-6-astra', reasoningEffort: 'low' }
+  const luna: ChatTitleModel = { model: 'gpt-5.6-luna', reasoningEffort: 'low' }
+  test('Luna success does not invoke the assistant backup', async () => {
+    const h = harness(); h.setModels([luna, backup]); h.outcomes(['Luna title'])
+    await h.start()
+    expect(h.selections).toEqual([luna])
+    expect(h.published[0].title).toBe('Luna title')
+  })
+  test('missing Luna directly uses the assistant backup', async () => {
+    const h = harness(); h.setModels([backup]); h.outcomes(['Assistant title'])
+    await h.start()
+    expect(h.selections).toEqual([backup])
+    expect(h.published[0].title).toBe('Assistant title')
+  })
+  for (const failure of [null, new Error('Incomplete response'), new ChatGPTRequestError('Unsupported capability', false), 'timeout'] as const) {
+    test(`Luna ${failure === null ? 'invalid output' : failure === 'timeout' ? 'timeout' : 'failure'} falls back once`, async () => {
+      const h = harness(); h.setModels([luna, backup]); h.outcomes([failure, 'Assistant title'])
+      await h.start(); await h.start()
+      expect(h.selections).toEqual([luna, backup])
+      expect(h.published[0].title).toBe('Assistant title')
+      expect(h.calls().generateCalls).toBe(2)
+    })
+  }
+  test('both failures retain the first prompt and do not retry later', async () => {
+    const h = harness(); h.setModels([luna, backup]); h.outcomes([new Error('Luna failed'), null])
+    await h.start(); await h.start()
+    expect(h.calls().generateCalls).toBe(2)
+    expect(h.published).toHaveLength(0)
+    expect(h.controller.title(1, 'chat-a')).toBe(h.session.title)
+  })
+  test('same model is never attempted twice', async () => {
+    const h = harness(); h.setModels([luna, luna]); h.outcomes([null])
+    await h.start()
+    expect(h.calls().generateCalls).toBe(1)
+  })
+  for (const boundary of ['usage-limit', 'authentication', 'permission'] as const) {
+    test(`${boundary} failure stops without using another model`, async () => {
+      const h = harness(); h.setModels([luna, backup]); h.outcomes([new ChatGPTRequestError(boundary, true), 'Never returned'])
+      await h.start()
+      expect(h.selections).toEqual([luna])
+      expect(h.published).toHaveLength(0)
+      expect(h.calls().failures).toBe(1)
+    })
+  }
   test('notification fallback survives failed history saves and later queries without replacing a known name', async () => {
     const h = harness(); h.controller.clear()
     // Creation succeeded, but the first message save did not publish a title.

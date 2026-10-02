@@ -195,11 +195,12 @@ describe('brokered Codex research orchestration', () => {
     globalThis.fetch = (async () => message('Your answer is ready.')) as typeof fetch
     await runChat(sender as unknown as WebContents, 'naming-chat', 'naming-run', [
       { role: 'user', text: 'Analyse my steps and HRV together.' }
-    ], undefined, async (tokens, signal, isCurrent) => {
+    ], undefined, async (tokens, signal, isCurrent, assistant) => {
       callbacks++
       expect(tokens.accessToken).toBe('access-token')
       expect(signal.aborted).toBe(false)
       expect(isCurrent()).toBe(true)
+      expect(assistant).toEqual({ model: 'test-model', reasoningEffort: 'low' })
       await new Promise<void>((resolve) => { finishNaming = resolve })
       namingFinished = true
     })

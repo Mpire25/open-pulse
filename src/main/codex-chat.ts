@@ -252,7 +252,7 @@ export async function runChat(
   runId: string,
   history: ChatMessage[],
   onEvent?: (event: AiEvent, answer?: { query: string; text: string }) => void,
-  onAuthenticated?: (tokens: CodexTokens, signal: AbortSignal, isCurrent: () => boolean) => void
+  onAuthenticated?: (tokens: CodexTokens, signal: AbortSignal, isCurrent: () => boolean, assistant: AssistantSettings) => void
 ): Promise<void> {
   const key = runKey(sender, chatId)
   if (activeRuns.has(key)) {
@@ -316,7 +316,7 @@ export async function runChat(
     trace.emit({ type: 'auth_ready', accountScoped: Boolean(tokens.accountId) })
     signal.throwIfAborted()
     if (!isCodexAuthGenerationCurrent(authGeneration)) throw new Error('ChatGPT disconnected.')
-    onAuthenticated?.(tokens, signal, () => isCodexAuthGenerationCurrent(authGeneration))
+    onAuthenticated?.(tokens, signal, () => isCodexAuthGenerationCurrent(authGeneration), assistant)
     const input: InputItem[] = toInputItems(history)
     let finalText = ''
     const datasets = new Map<string, AgentDataset>()
