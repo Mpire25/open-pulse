@@ -643,7 +643,6 @@ body {
   border-radius: 9999px;
 }
 .dashboard-menu-preview .menu-stats .dashboard-slot-change:hover { background: transparent; }
-.dashboard-menu-preview .menu-stats .dashboard-slot--editing .dashboard-summary-slot--compact > button > span > svg { visibility: hidden; }
 .dashboard-action:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; border-radius: 6px; }
 .dashboard-slot-change:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 0; }
 .dashboard-slot-error { position: absolute; top: 35px; right: 8px; z-index: 30; border-radius: 6px; padding: 4px 8px; background: var(--color-panel); color: var(--color-danger); font-size: 11px; }
