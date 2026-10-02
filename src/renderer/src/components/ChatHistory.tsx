@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import * as Dialog from '@radix-ui/react-dialog'
 import { ChatsCircle, PushPin, PushPinSlash, ShieldCheck, Trash } from '@phosphor-icons/react'
 import { Button } from '@/components/ui/button'
@@ -9,7 +9,7 @@ import { cn } from '@/lib/utils'
 interface ChatHistoryProps {
   chat: ChatController
   onNavigate?: () => void
-  onDeleteDialogClose?: () => void
+  onDeleteDialogOpenChange?: (open: boolean) => void
 }
 
 function relativeTime(value: string): string {
@@ -53,16 +53,18 @@ function groupSessions(sessions: ChatSession[]): SessionGroup[] {
   return groups
 }
 
-export function ChatHistory({ chat, onNavigate, onDeleteDialogClose }: ChatHistoryProps): React.JSX.Element {
+export function ChatHistory({ chat, onNavigate, onDeleteDialogOpenChange }: ChatHistoryProps): React.JSX.Element {
   const [deleteTarget, setDeleteTarget] = useState<ChatSession | null>(null)
+  const historyRef = useRef<HTMLDivElement>(null)
+  const deleteTriggerRef = useRef<HTMLButtonElement | null>(null)
 
   const closeDeleteDialog = (): void => {
     setDeleteTarget(null)
-    onDeleteDialogClose?.()
+    onDeleteDialogOpenChange?.(false)
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
+    <div ref={historyRef} tabIndex={-1} className="flex h-full min-h-0 flex-col outline-none">
       <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-3 pt-1">
         {chat.sessions.length ? (
           groupSessions(chat.sessions).map((group) => (
@@ -83,7 +85,11 @@ export function ChatHistory({ chat, onNavigate, onDeleteDialogClose }: ChatHisto
                     }}
                     onPin={() => void chat.pin(session.id, !session.pinned)}
                     onKeep={() => void chat.keep(session.id, !session.kept)}
-                    onDelete={() => setDeleteTarget(session)}
+                    onDelete={(button) => {
+                      deleteTriggerRef.current = button
+                      setDeleteTarget(session)
+                      onDeleteDialogOpenChange?.(true)
+                    }}
                   />
                 ))}
               </div>
@@ -104,7 +110,19 @@ export function ChatHistory({ chat, onNavigate, onDeleteDialogClose }: ChatHisto
       <Dialog.Root open={deleteTarget != null} onOpenChange={(open) => !open && closeDeleteDialog()}>
         <Dialog.Portal>
           <Dialog.Overlay className="fixed inset-0 z-40 bg-black/55 backdrop-blur-sm" />
-          <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-[min(380px,calc(100vw-32px))] -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-hairline bg-panel p-5 shadow-2xl outline-none">
+          <Dialog.Content
+            className="fixed left-1/2 top-1/2 z-50 w-[min(380px,calc(100vw-32px))] -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-hairline bg-panel p-5 shadow-2xl outline-none"
+            onEscapeKeyDown={(event) => event.stopPropagation()}
+            onCloseAutoFocus={(event) => {
+              // Rows open this shared dialog without a Radix Dialog.Trigger.
+              event.preventDefault()
+              const trigger = deleteTriggerRef.current
+              const fallback = historyRef.current?.querySelector<HTMLButtonElement>('button') ?? historyRef.current
+              const returnTarget = trigger?.isConnected ? trigger : fallback
+              returnTarget?.focus()
+              deleteTriggerRef.current = null
+            }}
+          >
             <Dialog.Title className="display text-[16px] font-semibold text-ink">Delete chat?</Dialog.Title>
             <Dialog.Description className="mt-2 text-[12.5px] leading-relaxed text-ink-dim">
               “{deleteTarget?.title}” will be permanently deleted. This cannot be undone.
@@ -138,7 +156,7 @@ interface SessionRowProps {
   onSelect: () => void
   onPin: () => void
   onKeep: () => void
-  onDelete: () => void
+  onDelete: (button: HTMLButtonElement) => void
 }
 
 function SessionRow({ session, selected, streaming, onSelect, onPin, onKeep, onDelete }: SessionRowProps): React.JSX.Element {
@@ -197,7 +215,7 @@ function SessionRow({ session, selected, streaming, onSelect, onPin, onKeep, onD
           type="button"
           title="Delete chat"
           aria-label={`Delete ${session.title}`}
-          onClick={onDelete}
+          onClick={(event) => onDelete(event.currentTarget)}
           className="grid size-7 shrink-0 place-items-center rounded-lg text-ink-faint transition-colors hover:bg-danger/10 hover:text-danger"
         >
           <Trash size={13} />
