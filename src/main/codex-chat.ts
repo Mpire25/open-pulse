@@ -250,7 +250,8 @@ export async function runChat(
   sender: WebContents,
   chatId: string,
   runId: string,
-  history: ChatMessage[]
+  history: ChatMessage[],
+  onEvent?: (event: AiEvent, answer?: { query: string; text: string }) => void
 ): Promise<void> {
   const key = runKey(sender, chatId)
   if (activeRuns.has(key)) {
@@ -299,8 +300,11 @@ export async function runChat(
   const onDestroyed = (): void => controller.abort(new Error('Window closed.'))
   sender.once('destroyed', onDestroyed)
 
-  const emit = (event: AiEvent): void => {
-    if (!sender.isDestroyed()) sender.send('ai:event', event)
+  const emit = (event: AiEvent, completedAnswer?: string): void => {
+    if (!sender.isDestroyed()) {
+      onEvent?.(event, completedAnswer === undefined ? undefined : { query: latestUserText, text: completedAnswer })
+      sender.send('ai:event', event)
+    }
   }
   try {
     const authGeneration = getCodexAuthGeneration()
@@ -565,7 +569,7 @@ export async function runChat(
           textChars: finalText.length,
           visuals: visualParts.length
         })
-        emit({ type: 'done', chatId, runId, text: finalText, parts: visualParts })
+        emit({ type: 'done', chatId, runId, text: finalText, parts: visualParts, outcome: 'completed' }, resolvedTurnText)
         return
       }
 
@@ -766,6 +770,7 @@ export async function runChat(
     })
     emit({
       type: 'done',
+      outcome: 'tool-limit',
       chatId,
       runId,
       text: finalText || 'I hit the tool-call limit before finishing — try a narrower question.',

@@ -279,6 +279,9 @@ export function useChat(enabled = true): ChatController {
 
       if (event.type === 'done' || event.type === 'interrupted' || event.type === 'error') {
         runsRef.current.delete(event.chatId)
+        if (event.type === 'done' && event.outcome === 'completed') {
+          void window.pulse.ai.responseReady(event.chatId, event.runId).catch(() => {})
+        }
         if (event.type === 'done' || event.type === 'interrupted') void saveCompletedChat(event.chatId)
       }
     })

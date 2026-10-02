@@ -4,7 +4,7 @@ import { useCurrentDay } from '@/hooks/useCurrentDay'
 import { useEffect, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
 import * as Dialog from '@radix-ui/react-dialog'
-import { Brain, ChatCircleDots, CheckCircle, GoogleLogo, Sparkle, Target, ArrowClockwise, Trash, Warning } from '@phosphor-icons/react'
+import { Bell, Brain, ChatCircleDots, CheckCircle, GoogleLogo, Sparkle, Target, ArrowClockwise, Trash, Warning } from '@phosphor-icons/react'
 import { Panel, SectionHeader } from '@/components/Panel'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
@@ -69,10 +69,54 @@ export function SettingsView({
       />
       <CodexCard codex={codex} onCodexChange={onCodexChange} />
       <AssistantCard codex={codex} settings={settings} onSettingsChange={onSettingsChange} />
+      <ResponseNotificationsCard settings={settings} onSettingsChange={onSettingsChange} />
       <ChatRetentionCard settings={settings} onSettingsChange={onSettingsChange} />
       <GoalsCard settings={settings} onSettingsChange={onSettingsChange} />
     </div>
   )
+}
+
+function ResponseNotificationsCard({ settings, onSettingsChange }: {
+  settings: AppSettings
+  onSettingsChange: (settings: AppSettings) => void
+}): React.JSX.Element {
+  const [saving, setSaving] = useState(false)
+  const [failure, setFailure] = useState<string | null>(null)
+  const change = async (patch: Partial<AppSettings>): Promise<void> => {
+    if (saving) return
+    setSaving(true)
+    setFailure(null)
+    try {
+      onSettingsChange(await window.pulse.settings.update(patch))
+    } catch {
+      setFailure('Could not save the notification preference. Please try again.')
+    } finally {
+      setSaving(false)
+    }
+  }
+  return <Card index={3}>
+    <SectionHeader title="Assistant notifications" hint="Know when your response is ready" icon={<Bell size={18} weight="fill" className="text-ink-dim" />} />
+    <div className="flex items-center justify-between gap-6">
+      <div>
+        <label htmlFor="response-notifications-enabled" className="text-[13px] font-medium text-ink">Notify when a response finishes</label>
+        <p id="response-notifications-description" className="mt-1 text-[12px] leading-relaxed text-ink-dim">When you aren’t viewing that chat, show a notification. Click it to open the response.</p>
+      </div>
+      <Switch id="response-notifications-enabled" checked={settings.responseNotificationsEnabled} disabled={saving} aria-describedby="response-notifications-description" onCheckedChange={(enabled) => void change({ responseNotificationsEnabled: enabled })} />
+    </div>
+    <div className="flex items-center justify-between gap-6">
+      <div>
+        <label htmlFor="response-notification-previews" className="text-[13px] font-medium text-ink">Show message previews</label>
+        <p id="response-notification-previews-description" className="mt-1 text-[12px] leading-relaxed text-ink-dim">Show your query and a short answer preview. This may reveal health information on your desktop or lock screen. Turn off to use generic notifications.</p>
+      </div>
+      <Switch id="response-notification-previews" checked={settings.responseNotificationPreviews} disabled={saving || !settings.responseNotificationsEnabled} aria-describedby="response-notification-previews-description" onCheckedChange={(previews) => void change({ responseNotificationPreviews: previews })} />
+    </div>
+    <div className="flex items-center justify-between gap-6">
+      <label htmlFor="response-notification-sound" className="text-[13px] font-medium text-ink">Play a sound</label>
+      <Switch id="response-notification-sound" checked={settings.responseNotificationSound} disabled={saving || !settings.responseNotificationsEnabled} onCheckedChange={(sound) => void change({ responseNotificationSound: sound })} />
+    </div>
+    <p className="text-[12px] leading-relaxed text-ink-faint">OpenPulse must remain running with the chat window open or minimized. Allow notifications in your system settings; Focus settings may silence them.</p>
+    {failure && <p role="alert" className="text-[12px] text-danger">{failure}</p>}
+  </Card>
 }
 
 function MenuBarCard({ settings, connected, onSettingsChange }: {

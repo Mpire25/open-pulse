@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "description": "A macOS companion for Google Fitbit Air — health dashboard, activity rings, and an AI assistant for your data.",
   "license": "MIT",
-  "main": "./out/main/index.js",
+  "main": "./out/main/index.cjs",
   "type": "module",
   "private": true,
   "scripts": {
@@ -37,7 +37,9 @@
     "react-dom": "^19.0.0",
     "react-markdown": "^10.1.0",
     "remark-gfm": "^4.0.1",
-    "tailwind-merge": "^3.0.0"
+    "remark-parse": "^11.0.0",
+    "tailwind-merge": "^3.0.0",
+    "unified": "^11.0.5"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.1.0",

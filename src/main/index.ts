@@ -8,6 +8,7 @@ import menuBarIconRetina from '../../build/menu-barTemplate@2x.png?asset'
 import { getMenuBarEnabled } from './store'
 import { installWindowActivation } from './window-activation'
 import { registerIpc, registerTrustedRenderer } from './ipc'
+import { createResponseNotifications } from './response-notifications'
 import { createRendererTarget, safeExternalUrl, type RendererTarget } from './renderer-security'
 
 const PRODUCTION_CSP =
@@ -57,6 +58,15 @@ let panelReady = false
 let panelRequested = false
 let panelBlurTimer: ReturnType<typeof setTimeout> | undefined
 let quitting = false
+const responseNotifications = createResponseNotifications((senderId, chatId) => {
+  const win = mainWindow
+  if (!win || win.isDestroyed() || win.webContents.id !== senderId) return
+  win.webContents.send('app:open-chat', chatId)
+  if (win.isMinimized()) win.restore()
+  win.show()
+  win.focus()
+  closeMenuPanel()
+})
 
 function createWindow(target: RendererTarget, panel = false): BrowserWindow {
   const win = new BrowserWindow({
@@ -287,6 +297,7 @@ app.whenReady().then(() => {
   const target = rendererTarget()
   applyContentSecurityPolicy(target)
   registerIpc({
+    notifications: responseNotifications,
     open: (destination) => openDestination(target, destination),
     close: closeMenuPanel,
     resizePanel: (height, senderId) => {
@@ -303,7 +314,7 @@ app.whenReady().then(() => {
   applyMenuBarPreference(target, getMenuBarEnabled())
 })
 
-app.once('before-quit', () => { quitting = true; tray?.destroy(); tray = null })
+app.once('before-quit', () => { quitting = true; responseNotifications.clear(); tray?.destroy(); tray = null })
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()

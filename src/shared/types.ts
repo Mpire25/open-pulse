@@ -443,6 +443,9 @@ export const ASSISTANT_MODEL_PATTERN = /^[a-zA-Z0-9._:-]{1,100}$/
 
 export interface AppSettings {
   menuBarEnabled: boolean
+  responseNotificationsEnabled: boolean
+  responseNotificationSound: boolean
+  responseNotificationPreviews: boolean
   googleClientId: string
   googleClientSecret: string
   googleClientSecretConfigured: boolean
@@ -677,6 +680,6 @@ export type AiEvent =
   | { type: 'delta'; chatId: string; runId: string; text: string }
   | { type: 'reasoning'; chatId: string; runId: string }
   | { type: 'tool'; chatId: string; runId: string; name: string; label: string }
-  | { type: 'done'; chatId: string; runId: string; text: string; parts: AssistantVisualPart[] }
+  | { type: 'done'; chatId: string; runId: string; text: string; parts: AssistantVisualPart[]; outcome: 'completed' | 'tool-limit' }
   | { type: 'interrupted'; chatId: string; runId: string; message: string }
   | { type: 'error'; chatId: string; runId: string; message: string }

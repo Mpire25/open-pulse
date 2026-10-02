@@ -54,6 +54,12 @@ ipcRenderer.on('app:new-chat', () => {
 })
 
 const navigationCallbacks = new Set<(destination: MenuBarDestination) => void>()
+const openChatCallbacks = new Set<(chatId: string) => void>()
+let pendingOpenChat: string | null = null
+ipcRenderer.on('app:open-chat', (_event, chatId: string) => {
+  if (!openChatCallbacks.size) pendingOpenChat = chatId
+  else for (const callback of openChatCallbacks) callback(chatId)
+})
 let pendingNavigation: MenuBarDestination | null = null
 ipcRenderer.on('app:navigate', (_event, destination: MenuBarDestination) => {
   if (!navigationCallbacks.size) pendingNavigation = destination
@@ -70,6 +76,18 @@ ipcRenderer.on('app:panel-visibility', (_event, visible: boolean) => {
 const api = {
   app: {
     platform: process.platform,
+    onOpenChat: (callback: (chatId: string) => void): (() => void) => {
+      openChatCallbacks.add(callback)
+      if (pendingOpenChat) {
+        queueMicrotask(() => {
+          if (!openChatCallbacks.has(callback) || !pendingOpenChat) return
+          const chatId = pendingOpenChat
+          pendingOpenChat = null
+          callback(chatId)
+        })
+      }
+      return () => openChatCallbacks.delete(callback)
+    },
     onPanelVisibility: (callback: (visible: boolean) => void): (() => void) => {
       panelVisibilityCallbacks.add(callback)
       queueMicrotask(() => { if (panelVisibilityCallbacks.has(callback)) callback(panelVisible) })
@@ -198,6 +216,8 @@ const api = {
     }
   },
   ai: {
+    setVisibleChat: (chatId: string | null): Promise<void> => ipcRenderer.invoke('ai:visible-chat', chatId),
+    responseReady: (chatId: string, runId: string): Promise<void> => ipcRenderer.invoke('ai:response-ready', chatId, runId),
     send: (chatId: string, runId: string, history: ChatMessage[]): Promise<void> =>
       ipcRenderer.invoke('ai:send', chatId, runId, history),
     cancel: (chatId: string, runId: string): Promise<void> =>
