@@ -187,6 +187,29 @@ afterEach(() => {
 })
 
 describe('brokered Codex research orchestration', () => {
+  test('authenticated naming hook shares run credentials without delaying the answer', async () => {
+    const sender = new FakeSender()
+    let callbacks = 0
+    let namingFinished = false
+    let finishNaming!: () => void
+    globalThis.fetch = (async () => message('Your answer is ready.')) as typeof fetch
+    await runChat(sender as unknown as WebContents, 'naming-chat', 'naming-run', [
+      { role: 'user', text: 'Analyse my steps and HRV together.' }
+    ], undefined, async (tokens, signal, isCurrent) => {
+      callbacks++
+      expect(tokens.accessToken).toBe('access-token')
+      expect(signal.aborted).toBe(false)
+      expect(isCurrent()).toBe(true)
+      await new Promise<void>((resolve) => { finishNaming = resolve })
+      namingFinished = true
+    })
+    expect(callbacks).toBe(1)
+    expect(sender.events.find((event) => event.type === 'done')).toMatchObject({ outcome: 'completed' })
+    expect(namingFinished).toBe(false)
+    finishNaming(); await Promise.resolve()
+    expect(namingFinished).toBe(true)
+  })
+
   test('notification preview receives the latest query and final answer without interim tool commentary', async () => {
     const sender = new FakeSender()
     let calls = 0

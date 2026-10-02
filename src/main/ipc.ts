@@ -1,6 +1,6 @@
 import { chooseDashboardWidget } from './dashboard-menu'
 import { isMenuBarDestination, type MenuBarDestination } from '../shared/menu-bar'
-import { ipcMain } from 'electron'
+import { app, ipcMain } from 'electron'
 import type { IpcMainInvokeEvent, WebContents } from 'electron'
 import type {
   ActivityIntradayMetric,
@@ -22,7 +22,8 @@ import {
   GoogleAuthUnavailableError,
   onGoogleAuthInvalidated
 } from './google-auth'
-import { getChatGPTModels } from './chatgpt-models'
+import { chatTitleModelAvailable, getChatGPTModels } from './chatgpt-models'
+import { ChatTitleController, generateChatName } from './chat-title-generator'
 import { connectCodex, disconnectCodex, getCodexStatus } from './codex-auth'
 import {
   clearHealthCache,
@@ -45,6 +46,8 @@ import { cancelAllChats, cancelChat, runChat } from './codex-chat'
 import type { ResponseNotificationController } from './response-notification-controller'
 import {
   applyChatRetention,
+  claimChatTitle,
+  completeChatTitle,
   createChatSession,
   deleteChatSession,
   getChatHistory,
@@ -69,6 +72,19 @@ interface TrustedRenderer {
 
 const trustedRenderers = new Map<number, TrustedRenderer>()
 let responseNotifications: ResponseNotificationController | undefined
+const chatTitles = new ChatTitleController({
+  claim: claimChatTitle,
+  complete: completeChatTitle,
+  modelAvailable: chatTitleModelAvailable,
+  generate: generateChatName,
+  publish: (senderId, title) => {
+    const renderer = trustedRenderers.get(senderId)
+    if (renderer && !renderer.webContents.isDestroyed() && renderer.isExpectedUrl(renderer.webContents.getURL())) {
+      renderer.webContents.send('chats:title-changed', title)
+    }
+  },
+  failed: () => console.warn('Chat naming did not complete; keeping the first-prompt title.')
+})
 
 export function registerTrustedRenderer(
   webContents: WebContents,
@@ -76,9 +92,10 @@ export function registerTrustedRenderer(
 ): void {
   const renderer = { webContents, isExpectedUrl }
   trustedRenderers.set(webContents.id, renderer)
-  webContents.on('did-start-loading', () => responseNotifications?.clearSender(webContents.id))
-  webContents.on('render-process-gone', () => responseNotifications?.clearSender(webContents.id))
+  webContents.on('did-start-loading', () => { chatTitles.clearSender(webContents.id); responseNotifications?.clearSender(webContents.id) })
+  webContents.on('render-process-gone', () => { chatTitles.clearSender(webContents.id); responseNotifications?.clearSender(webContents.id) })
   webContents.once('destroyed', () => {
+    chatTitles.clearSender(webContents.id)
     responseNotifications?.clearSender(webContents.id)
     if (trustedRenderers.get(webContents.id) === renderer) trustedRenderers.delete(webContents.id)
     const prefix = `${webContents.id}:`
@@ -131,6 +148,7 @@ function notifyGoogleDisconnected(): void {
   responseNotifications?.clear()
   abortAllHealthRequests()
   cancelAllChats('Health account disconnected.')
+  chatTitles.clear()
   resetHealthAccount()
   sendToTrustedRenderers('google:status-changed', { connected: false })
   sendToTrustedRenderers('chats:account-changed')
@@ -167,7 +185,7 @@ function healthHandle<Args extends unknown[], Result>(
 }
 
 function sendToTrustedRenderers(channel: string, ...args: unknown[]): void {
-  if (channel === 'chats:account-changed') responseNotifications?.clear()
+  if (channel === 'chats:account-changed') { chatTitles.clear(); responseNotifications?.clear() }
   for (const renderer of trustedRenderers.values()) {
     const { webContents, isExpectedUrl } = renderer
     if (!webContents.isDestroyed() && isExpectedUrl(webContents.getURL())) {
@@ -178,6 +196,7 @@ function sendToTrustedRenderers(channel: string, ...args: unknown[]): void {
 
 export function registerIpc(commands: { open: (destination: MenuBarDestination) => void; close: () => void; resizePanel: (height: number, senderId: number) => void; quit: () => void; settingsChanged: (settings: AppSettings) => void; notifications: ResponseNotificationController }): void {
   responseNotifications = commands.notifications
+  app.once('before-quit', () => chatTitles.clear())
   handle('app:open', (_event, destination: unknown) => {
     if (!isMenuBarDestination(destination)) throw new Error('Invalid navigation destination')
     commands.open(destination)
@@ -209,6 +228,7 @@ export function registerIpc(commands: { open: (destination: MenuBarDestination) 
 
   handle('google:status', () => getGoogleStatus())
   handle('google:connect', async () => {
+    chatTitles.clear()
     responseNotifications?.clear()
     // Wipe the previous account before new credentials can be persisted, then
     // rotate again so any work started while OAuth was open is also stale.
@@ -224,6 +244,7 @@ export function registerIpc(commands: { open: (destination: MenuBarDestination) 
     return status
   })
   handle('google:disconnect', () => {
+    chatTitles.clear()
     responseNotifications?.clear()
     googleDisconnectedNotified = true
     abortAllHealthRequests()
@@ -236,24 +257,27 @@ export function registerIpc(commands: { open: (destination: MenuBarDestination) 
   handle('codex:status', () => getCodexStatus())
   handle('codex:models', (_event, force?: boolean) => getChatGPTModels(force === true))
   handle('codex:connect', () => {
+    chatTitles.clear()
     responseNotifications?.clear()
     cancelAllChats('ChatGPT sign-in changed.')
     return connectCodex()
   })
   handle('codex:disconnect', () => {
+    chatTitles.clear()
     responseNotifications?.clear()
     cancelAllChats('ChatGPT disconnected.')
     return disconnectCodex()
   })
 
-  handle('chats:list', () => {
-    const snapshot = getChatHistory()
+  handle('chats:list', (event) => {
+    const snapshot = getChatHistory((scope, session) => chatTitles.remember(event.sender.id, scope, session))
+    chatTitles.retainChats(event.sender.id, new Set(snapshot.sessions.map((chat) => chat.id)))
     responseNotifications?.retainChats(new Set(snapshot.sessions.map((chat) => chat.id)))
     return snapshot
   })
-  handle('chats:create', (_event, id?: string) => createChatSession(id))
-  handle('chats:update', (_event, id: string, messages: ChatSessionMessage[]) =>
-    updateChatSession(id, messages)
+  handle('chats:create', (event, id?: string) => createChatSession(id, (scope, session) => chatTitles.remember(event.sender.id, scope, session)))
+  handle('chats:update', (event, id: string, messages: ChatSessionMessage[]) =>
+    updateChatSession(id, messages, (scope, session) => chatTitles.remember(event.sender.id, scope, session))
   )
   handle('chats:set-pinned', (_event, id: string, pinned: boolean) =>
     setChatSessionPinned(id, pinned === true)
@@ -263,6 +287,7 @@ export function registerIpc(commands: { open: (destination: MenuBarDestination) 
   )
   handle('chats:delete', (_event, id: string) => {
     const snapshot = deleteChatSession(id)
+    chatTitles.clearChat(id)
     responseNotifications?.clearChat(id)
     return snapshot
   })
@@ -335,6 +360,8 @@ export function registerIpc(commands: { open: (destination: MenuBarDestination) 
     // Fire and forget: progress streams back over 'ai:event'.
     void runChat(event.sender, chatId, runId, history, (update, answer) => {
       responseNotifications?.observe(event.sender.id, update, answer)
+    }, (tokens, signal, isCurrent) => {
+      void chatTitles.start(event.sender.id, chatId, tokens, signal, isCurrent)
     })
   })
   handle('ai:visible-chat', (event, chatId: unknown) => {

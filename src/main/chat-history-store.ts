@@ -73,6 +73,8 @@ function normalizeSession(value: unknown): ChatSession | null {
         : firstUserMessage
           ? generateChatTitle(firstUserMessage.text)
           : DEFAULT_CHAT_TITLE,
+    ...(['waiting', 'attempted', 'generated'].includes(candidate.titleGeneration ?? '')
+      ? { titleGeneration: candidate.titleGeneration } : {}),
     createdAt,
     updatedAt: validDate(candidate.updatedAt, createdAt),
     ...(candidate.pinned === true ? { pinned: true } : {}),
@@ -167,6 +169,7 @@ export class ChatHistoryStore {
     const session: ChatSession = {
       id: requestedId ?? randomUUID(),
       title: DEFAULT_CHAT_TITLE,
+      titleGeneration: 'waiting',
       createdAt: now,
       updatedAt: now,
       messages: []
@@ -193,6 +196,29 @@ export class ChatHistoryStore {
     // Pinning deliberately leaves updatedAt alone so it doesn't fake recency.
     if (pinned) session.pinned = true
     else delete session.pinned
+    this.persist()
+    return structuredClone(session)
+  }
+
+  /** Claim once before inference; a restart must not retry a failed naming job. */
+  claimTitle(accountScope: string, id: string, messageId: string): boolean {
+    const session = (this.load().accounts[accountScope] ?? []).find((chat) => chat.id === id)
+    if (!session || session.titleGeneration !== 'waiting' ||
+      session.messages.find((message) => message.role === 'user')?.id !== messageId) return false
+    this.assertWritable()
+    session.titleGeneration = 'attempted'
+    this.persist()
+    return true
+  }
+
+  completeTitle(accountScope: string, id: string, message: ChatSessionMessage, title: string): ChatSession | null {
+    const session = (this.load().accounts[accountScope] ?? []).find((chat) => chat.id === id)
+    const first = session?.messages.find((candidate) => candidate.role === 'user')
+    if (!session || session.titleGeneration !== 'attempted' || first?.id !== message.id || first.text !== message.text) return null
+    this.assertWritable()
+    session.title = title
+    session.titleGeneration = 'generated'
+    // Naming is metadata, not activity: preserve ordering and retention age.
     this.persist()
     return structuredClone(session)
   }

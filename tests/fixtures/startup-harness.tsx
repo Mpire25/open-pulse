@@ -25,7 +25,7 @@ beforeEach(() => {
     settings: { get: status('settings') },
     google: { status: status('google'), onStatusChanged: () => () => {} },
     codex: { status: status('codex'), models: status('models') },
-    chats: { list: status('chats'), onAccountChanged: () => () => {} },
+    chats: { list: status('chats'), onAccountChanged: () => () => {}, onTitleChanged: () => () => {} },
     ai: { onEvent: () => () => {} }
   } })
   container = document.createElement('div'); document.body.append(container); root = createRoot(container)

@@ -19,6 +19,14 @@ function storedSession(id: string, extra: Partial<ChatSession> = {}): ChatSessio
 const running = (ids: string[]) => (id: string): boolean => ids.includes(id)
 
 describe('history snapshot merge', () => {
+  test('a stale save snapshot cannot revert a generated title or replace streaming turns', () => {
+    const current = viewChat('live', { title: 'Weekly sleep comparison', titleGeneration: 'generated', turns: [turn('Partial answer', { streaming: true })] })
+    const stale = storedSession('live', { title: 'Compare my sleep this week', titleGeneration: 'waiting' })
+    const merged = mergeHistorySnapshot([current], [stale], running(['live']), true)
+    expect(merged[0].title).toBe(current.title)
+    expect(merged[0].titleGeneration).toBe('generated')
+    expect(merged[0].turns).toEqual(current.turns)
+  })
   test('keeps a streaming chat that cleanup removed before its first save landed', () => {
     const streaming = viewChat('mid-answer', { turns: [turn('Half an ans', { streaming: true })] })
 

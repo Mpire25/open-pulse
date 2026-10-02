@@ -13,8 +13,25 @@ import {
 import { getLocalValue, setLocalValue } from './store'
 import { TokenExchangeError, CHATGPT_RESOURCE } from './chatgpt-protocol'
 import { responseError } from './chatgpt-responses'
+import { CHAT_TITLE_MODEL } from './chat-title-generator'
 const MAX_AGE = 6 * 60 * 60_000
 const pending = new Map<string, Promise<ModelCatalog>>()
+
+/** Reuses the foreground run's credentials; never opens secure storage. */
+export async function chatTitleModelAvailable(
+  tokens: { accessToken: string; clientId: string }, signal: AbortSignal
+): Promise<boolean> {
+  const cached = getLocalValue<ModelCatalog>(`chatgpt-models:${tokens.clientId}`)
+  let models = cached?.models
+  if (!cached?.fetchedAt || cached.stale || Date.now() - cached.fetchedAt >= MAX_AGE) {
+    const response = await fetch(`${CHATGPT_RESOURCE}/models`, {
+      headers: { authorization: `Bearer ${tokens.accessToken}` }, signal
+    })
+    if (!response.ok) throw responseError(await response.json().catch(() => null), response.status, response.headers.get('x-request-id'))
+    models = parseModels(await response.json())
+  }
+  return Boolean(models?.some((model) => model.id === CHAT_TITLE_MODEL && (!model.efforts || model.efforts.includes('low'))))
+}
 
 export function parseModels(value: unknown): AssistantModel[] {
   if (

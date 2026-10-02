@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { generateChatTitle, interruptedTurnState } from '@shared/chat'
+import { generateChatTitle, interruptedTurnState, mergeChatTitle } from '@shared/chat'
 import { assistantPartsContext } from '@shared/assistant-parts'
 import type {
   AiEvent,
@@ -102,6 +102,7 @@ export function mergeHistorySnapshot(
   const currentById = new Map(current.map((chat) => [chat.id, chat]))
   const stored = sessions.map((session) => {
     const existing = currentById.get(session.id)
+    if (existing) session = { ...session, ...mergeChatTitle(existing, session) }
     return preserveRunning && existing && isRunning(session.id)
       ? { ...session, turns: existing.turns, persisted: true }
       : toViewChat(session)
@@ -143,7 +144,7 @@ export function useChat(enabled = true): ChatController {
       const current = chatsRef.current.find((chat) => chat.id === session.id)
       publish([
         ...chatsRef.current.filter((chat) => chat.id !== session.id),
-        current ? { ...session, turns: current.turns, persisted: true } : toViewChat(session)
+        current ? { ...session, ...mergeChatTitle(current, session), turns: current.turns, persisted: true } : toViewChat(session)
       ])
     },
     [publish]
@@ -239,6 +240,14 @@ export function useChat(enabled = true): ChatController {
     load()
     return window.pulse.chats.onAccountChanged(load)
   }, [enabled, reload])
+
+  useEffect(() => {
+    if (!enabled) return
+    return window.pulse.chats.onTitleChanged((title) => {
+      publish(chatsRef.current.map((chat) => chat.id === title.id
+        ? { ...chat, ...mergeChatTitle(chat, title) } : chat))
+    })
+  }, [enabled, publish])
 
   useEffect(() => {
     return window.pulse.ai.onEvent((event: AiEvent) => {
