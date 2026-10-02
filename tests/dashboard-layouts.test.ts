@@ -98,12 +98,7 @@ describe('dashboard preferences', () => {
     for (const metric of METRIC_KEYS)
       for (const range of ['D', ...DASHBOARD_TREND_PERIODS.map(period => period.range)])
         expect(isMenuBarDestination({ view: 'home', metric, range, date: '2026-10-02' })).toBe(true)
-    expect(
-      isMenuBarDestination({ view: 'settings', customize: 'menuBar', date: '2026-10-02' })
-    ).toBe(true)
-    expect(isMenuBarDestination({ view: 'home', customize: 'menuBar', date: '2026-10-02' })).toBe(
-      false
-    )
+    expect(isMenuBarDestination({ view: 'settings', date: '2026-10-02' })).toBe(true)
   })
 })
 

@@ -26,8 +26,6 @@ import {
 } from '@shared/types'
 
 interface SettingsViewProps {
-  customizeMenuBar?: boolean
-  onCustomizationOpened?: () => void
   settings: AppSettings
   google: GoogleAuthStatus
   codex: CodexAuthStatus
@@ -37,8 +35,6 @@ interface SettingsViewProps {
 }
 
 export function SettingsView({
-  customizeMenuBar = false,
-  onCustomizationOpened,
   settings,
   google,
   codex,
@@ -62,8 +58,6 @@ export function SettingsView({
         <MenuBarCard
           settings={settings}
           connected={google.connected}
-          requested={customizeMenuBar}
-          onCustomizationOpened={onCustomizationOpened}
           onSettingsChange={onSettingsChange}
         />
       )}
@@ -81,11 +75,9 @@ export function SettingsView({
   )
 }
 
-function MenuBarCard({ settings, connected, requested, onCustomizationOpened, onSettingsChange }: {
+function MenuBarCard({ settings, connected, onSettingsChange }: {
   settings: AppSettings
   connected: boolean
-  requested: boolean
-  onCustomizationOpened?: () => void
   onSettingsChange: (settings: AppSettings) => void
 }): React.JSX.Element {
   const [saving, setSaving] = useState(false)
@@ -123,35 +115,21 @@ function MenuBarCard({ settings, connected, requested, onCustomizationOpened, on
     <MenuBarLayoutEditor
       settings={settings}
       connected={connected}
-      requested={requested}
-      onOpened={onCustomizationOpened}
     />
   </Card>
 }
 
 function MenuBarLayoutEditor({
   settings,
-  connected,
-  requested,
-  onOpened
+  connected
 }: {
   settings: AppSettings
   connected: boolean
-  requested: boolean
-  onOpened?: () => void
 }): React.JSX.Element {
   const editor = useDashboardEditor('menuBar')
   const [today] = useCurrentDay()
-  const card = useRef<HTMLDivElement>(null)
-  useEffect(() => {
-    if (requested && editor.layout && !editor.editing) {
-      editor.begin()
-      card.current?.closest('[class~="bg-panel"]')?.scrollIntoView({ block: 'start' })
-      onOpened?.()
-    }
-  }, [requested, editor.layout, editor.editing, editor.begin, onOpened])
   return (
-    <div ref={card} className="flex flex-col gap-4 border-t border-hairline pt-5" data-menu-bar-layout>
+    <div className="flex flex-col gap-4 border-t border-hairline pt-5" data-menu-bar-layout>
       <SectionHeader
         title="Layout"
         hint="Choose your rings, summaries and charts"
