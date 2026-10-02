@@ -363,6 +363,23 @@ function AssistantCard({
     void persist({ ...assistant, model: trimmedCustomModel })
   }
 
+  if (!codex.connected || (loading && catalog.models.length === 0)) {
+    return (
+      <Card index={2}>
+        <SectionHeader
+          title="Assistant model"
+          hint="Choose the model used for your insights"
+          icon={<Brain size={18} weight="fill" className="text-sleep" />}
+        />
+        <p className="text-[12px] leading-relaxed text-ink-faint" role={codex.connected ? 'status' : undefined}>
+          {codex.connected
+            ? 'Loading models available through your ChatGPT plan…'
+            : 'Connect your ChatGPT account above to choose a model and reasoning level.'}
+        </p>
+      </Card>
+    )
+  }
+
   return (
     <Card index={2}>
       <SectionHeader
@@ -380,7 +397,7 @@ function AssistantCard({
           </Button>
         </div>
         {catalog.error && <p className="text-[12px] text-ink-faint">{catalog.error}{catalog.models.length > 0 ? ' Showing saved choices.' : ''}</p>}
-        {!custom && !presetIds.has(assistant.model) && <p className="text-[12px] text-ink-faint">Saved selection: {assistant.model}. {catalog.stale ? 'Availability has not been checked.' : 'This model is not in the current catalog. Choose another model or use Custom.'}</p>}
+        {!loading && !custom && !presetIds.has(assistant.model) && <p className="text-[12px] text-ink-faint">Saved selection: {assistant.model}. {catalog.stale ? 'Availability has not been checked.' : 'This model is not in the current catalog. Choose another model or use Custom.'}</p>}
         <div className="flex w-fit flex-wrap rounded-xl border border-hairline bg-white/[0.03] p-0.5">
           {presets.map((m) => (
             <Pill
@@ -431,7 +448,7 @@ function AssistantCard({
       </div>
 
       <div className="flex flex-col gap-2">
-        {!efforts.includes(assistant.reasoningEffort) && <p className="text-[12px] text-ink-faint">Saved effort: {EFFORT_LABELS[assistant.reasoningEffort]}. Choose Automatic to use the model’s default.</p>}
+        {!loading && !efforts.includes(assistant.reasoningEffort) && <p className="text-[12px] text-ink-faint">Saved effort: {EFFORT_LABELS[assistant.reasoningEffort]}. Choose Automatic to use the model’s default.</p>}
         <span className="text-[11px] font-medium text-ink-faint">Reasoning effort</span>
         <div className="flex w-fit flex-wrap rounded-xl border border-hairline bg-white/[0.03] p-0.5">
           {efforts.map((effort) => (

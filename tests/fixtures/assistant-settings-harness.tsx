@@ -95,3 +95,28 @@ test('failed sign-in restores the button and displays the error', async () => {
   expect(button('Continue with ChatGPT')?.disabled).toBe(false)
   expect(document.body.textContent?.includes('Authorization canceled')).toBe(true)
 })
+
+test('disconnected model card explains the next step without incomplete controls', async () => {
+  await act(async () => root.render(<Harness />))
+  expect(document.body.textContent?.includes('Connect your ChatGPT account above')).toBe(true)
+  expect(Boolean(button('Custom…'))).toBe(false)
+  expect(Boolean(button('Automatic'))).toBe(false)
+  expect(Boolean(button('Refresh models'))).toBe(false)
+  expect(document.body.textContent?.includes('Saved selection:')).toBe(false)
+  expect(modelRequests).toBe(0)
+})
+
+test('model controls appear after the account catalog loads', async () => {
+  backendStatus = connected
+  let complete!: (value: unknown) => void
+  window.pulse.codex.models = () => new Promise((resolve) => { complete = resolve }) as ReturnType<typeof window.pulse.codex.models>
+  await act(async () => root.render(<Harness />))
+  expect(document.body.textContent?.includes('Loading models available')).toBe(true)
+  expect(Boolean(button('Custom…'))).toBe(false)
+  expect(document.body.textContent?.includes('Saved effort:')).toBe(false)
+  await act(async () => complete(modelResult))
+  expect(Boolean(button('Future Model'))).toBe(true)
+  expect(Boolean(button('Refresh models'))).toBe(true)
+  await act(async () => { backendStatus = { connected: false }; publish(backendStatus) })
+  expect(Boolean(button('Future Model'))).toBe(false)
+})
