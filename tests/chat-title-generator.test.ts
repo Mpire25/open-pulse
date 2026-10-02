@@ -90,6 +90,19 @@ function harness(timeoutMs = 10_000) {
 }
 
 describe('chat title lifecycle', () => {
+  test('notification fallback survives failed history saves and later queries without replacing a known name', async () => {
+    const h = harness(); h.controller.clear()
+    // Creation succeeded, but the first message save did not publish a title.
+    h.controller.remember(1, 'health-account-a', { ...h.session, title: 'New chat', messages: [] })
+    h.controller.rememberFallback(1, 'chat-a', 'First prompt about sleep')
+    h.controller.rememberFallback(1, 'chat-a', 'A completely different follow-up')
+    expect(h.controller.title(1, 'chat-a')).toBe('First prompt about sleep')
+    await h.start()
+    expect(h.calls().generateCalls).toBe(0)
+    h.controller.remember(1, 'health-account-a', { ...h.session, title: 'Generated name', titleGeneration: 'generated' })
+    h.controller.rememberFallback(1, 'chat-a', 'Follow-up')
+    expect(h.controller.title(1, 'chat-a')).toBe('Generated name')
+  })
   test('updates metadata once without losing a concurrent answer or changing retention/pin flags', async () => {
     const h = harness()
     const operation = h.start()

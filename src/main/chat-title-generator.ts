@@ -1,5 +1,6 @@
 import type { ChatSession, ChatSessionMessage, ChatTitleUpdate } from '../shared/types'
 import { RESPONSES_URL, responseEvents } from './chatgpt-responses'
+import { DEFAULT_CHAT_TITLE, generateChatTitle } from '../shared/chat'
 
 export const CHAT_TITLE_MODEL = 'gpt-6-luna'
 const MAX_TITLE_CHARACTERS = 80
@@ -80,6 +81,13 @@ export class ChatTitleController {
 
   title(senderId: number, chatId: string): string | undefined {
     return this.titles.get(senderId)?.get(chatId)
+  }
+
+  /** Even a chat whose history save failed has a stable first-prompt name. */
+  rememberFallback(senderId: number, chatId: string, firstPrompt: string): void {
+    const titles = this.titles.get(senderId) ?? new Map<string, string>()
+    if (!titles.has(chatId) || titles.get(chatId) === DEFAULT_CHAT_TITLE) titles.set(chatId, generateChatTitle(firstPrompt))
+    this.titles.set(senderId, titles)
   }
 
   async start(senderId: number, chatId: string, tokens: Credentials, parentSignal: AbortSignal, isCurrent: () => boolean): Promise<void> {

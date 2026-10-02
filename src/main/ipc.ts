@@ -86,6 +86,11 @@ const chatTitles = new ChatTitleController({
   failed: () => console.warn('Chat naming did not complete; keeping the first-prompt title.')
 })
 
+/** Notification delivery reads only memory, never encrypted history or auth. */
+export function getCachedChatTitle(senderId: number, chatId: string): string | undefined {
+  return chatTitles.title(senderId, chatId)
+}
+
 export function registerTrustedRenderer(
   webContents: WebContents,
   isExpectedUrl: (url: string) => boolean
@@ -357,6 +362,7 @@ export function registerIpc(commands: { open: (destination: MenuBarDestination) 
   })
 
   handle('ai:send', (event, chatId: string, runId: string, history: ChatMessage[]) => {
+    chatTitles.rememberFallback(event.sender.id, chatId, history.find((message) => message.role === 'user')?.text ?? '')
     // Fire and forget: progress streams back over 'ai:event'.
     void runChat(event.sender, chatId, runId, history, (update, answer) => {
       responseNotifications?.observe(event.sender.id, update, answer)
