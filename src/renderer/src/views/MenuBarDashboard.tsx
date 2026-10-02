@@ -13,6 +13,7 @@ import {
 } from '@/components/DashboardWidgets'
 import { EditableDashboardSlot, type DashboardEditorState } from '@/components/DashboardEditor'
 import { useDashboardLayouts } from '@/hooks/useDashboardLayouts'
+import { useDashboardWidgetPicker } from '@/hooks/useDashboardWidgetPicker'
 import { useCurrentDay } from '@/hooks/useCurrentDay'
 import { useDevices, useRefresh, useSyncBusy } from '@/hooks/useHealth'
 import { METRICS } from '@/lib/metric-registry'
@@ -295,43 +296,26 @@ export function MenuBarSlots({
 }
 
 function AddMenuBarChart({ id, editor }: { id: string; editor: DashboardEditorState }): React.JSX.Element {
-  const button = useRef<HTMLButtonElement>(null)
-  const [choosing, setChoosing] = useState(false)
-  const [failure, setFailure] = useState(false)
+  const picker = useDashboardWidgetPicker(editor, id)
   return (
     <div className="pt-3">
       <button
-        ref={button}
+        ref={picker.buttonRef}
         type="button"
         className="dashboard-action"
         data-menu-add-chart
         disabled={editor.saving}
         aria-haspopup="menu"
-        aria-busy={choosing}
+        aria-busy={picker.choosing}
         onClick={async () => {
-          const current = editor.layout?.[id]
-          const rect = button.current?.getBoundingClientRect()
-          if (!current || current.kind !== 'hidden' || !rect || choosing) return
-          setChoosing(true)
-          setFailure(false)
-          try {
-            const widget = await window.pulse.dashboard.choose('menuBar', id, current, { x: rect.left, y: rect.bottom })
-            if (widget) {
-              editor.setDraft(draft => draft?.[id].kind === 'hidden' ? { ...draft, [id]: widget } : draft)
-              requestAnimationFrame(() => document.querySelector<HTMLButtonElement>(`[data-dashboard-slot="${id}"] > .dashboard-slot-change`)?.focus())
-            } else button.current?.focus()
-          } catch {
-            setFailure(true)
-            button.current?.focus()
-          } finally {
-            setChoosing(false)
-          }
+          const widget = await picker.choose()
+          if (widget) requestAnimationFrame(() => document.querySelector<HTMLButtonElement>(`[data-dashboard-slot="${id}"] > .dashboard-slot-change`)?.focus())
         }}
       >
         <Plus size={14} aria-hidden="true" />
         Add chart
       </button>
-      {failure && <p role="alert" className="text-[12px] text-danger">Could not open menu. Try again.</p>}
+      {picker.failure && <p role="alert" className="text-[12px] text-danger">Could not open menu. Try again.</p>}
     </div>
   )
 }

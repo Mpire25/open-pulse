@@ -512,6 +512,14 @@ async function memoryRun(main, openPanel) {
     failNextPicker = true
     await reopened.webContents.executeJavaScript(`document.querySelector('[aria-label="Change left chart"]').click()`)
     await until(() => reopened.webContents.executeJavaScript(`document.querySelector('[role="alert"]')?.textContent === 'Could not open menu. Try again.'`), 'native menu failure keeps editor usable')
+    assert.ok(await reopened.webContents.executeJavaScript(`document.activeElement?.getAttribute('aria-label') === 'Change left chart'`), 'failed widget picker restores keyboard focus')
+    await openPicker(reopened, 'left chart')
+    const lateChoice = pendingPicker.menu.getMenuItemById('trend:hrvMs:30')
+    await clickText(reopened, 'Restore defaults')
+    lateChoice.click(lateChoice, reopened, {})
+    dismissPicker()
+    await until(() => reopened.webContents.executeJavaScript(`document.querySelector('[aria-label="Change left chart"]').getAttribute('aria-busy') === 'false'`), 'late picker selection settled')
+    assert.ok(await reopened.webContents.executeJavaScript(`document.querySelector('[data-dashboard-slot="chart1"]').textContent.includes('Daily movement')`), 'late selection cannot overwrite restored defaults')
     await choose(reopened, 'left chart', 'trend:hrvMs:30')
     assert.ok(await reopened.webContents.executeJavaScript(`document.querySelector('[data-dashboard-slot="chart1"]').textContent.includes('Last 30 days')`))
     assert.deepEqual(await reopened.webContents.executeJavaScript('window.pulse.dashboard.get()'), beforeLayouts, 'draft is not persisted')
@@ -630,6 +638,7 @@ async function memoryRun(main, openPanel) {
     panel = panel.isVisible() ? panel : await openPanel()
     const chartCount = win => win.webContents.executeJavaScript(`document.querySelectorAll('[data-dashboard-slot="chart1"], [data-dashboard-slot="chart2"]').length`)
     const addChart = async widget => {
+      const slotId = await reopened.webContents.executeJavaScript(`['chart1', 'chart2'].find(id => !document.querySelector('[data-dashboard-slot="' + id + '"]'))`)
       await clickText(reopened, 'Add chart')
       await until(() => pendingPicker !== null, 'native add chart menu')
       assert.equal(pendingPicker.menu.getMenuItemById('remove-chart'), null, 'add menu only adds a chart')
@@ -640,6 +649,7 @@ async function memoryRun(main, openPanel) {
       }
       dismissPicker()
       await until(() => reopened.webContents.executeJavaScript(`!document.querySelector('[data-menu-add-chart][aria-busy="true"]')`), 'add menu settled')
+      if (widget) await until(() => reopened.webContents.executeJavaScript(`document.activeElement === document.querySelector('[data-dashboard-slot="${slotId}"] > .dashboard-slot-change')`), 'added chart receives keyboard focus')
     }
     await until(async () => await chartCount(panel) === 2, 'default charts restored before removal')
     const fullHeight = await panel.webContents.executeJavaScript('innerHeight')
@@ -672,6 +682,7 @@ async function memoryRun(main, openPanel) {
     failNextPicker = true
     await clickText(reopened, 'Add chart')
     await until(() => reopened.webContents.executeJavaScript(`document.querySelector('[role="alert"]')?.textContent === 'Could not open menu. Try again.'`), 'failed add can be retried')
+    assert.ok(await reopened.webContents.executeJavaScript(`document.activeElement?.hasAttribute('data-menu-add-chart')`), 'failed Add restores keyboard focus')
     await addChart('intraday:restingHeartRate')
     assert.equal(await chartCount(reopened), 1)
     await clickText(reopened, 'Save layout')

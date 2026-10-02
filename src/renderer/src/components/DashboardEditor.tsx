@@ -4,9 +4,11 @@ import {
   DASHBOARD_SLOTS,
   normalizeDashboardLayout,
   type DashboardLayout,
-  type DashboardSurface
+  type DashboardSurface,
+  type DashboardWidget
 } from '@shared/dashboard'
 import { useDashboardLayouts } from '@/hooks/useDashboardLayouts'
+import { useDashboardWidgetPicker } from '@/hooks/useDashboardWidgetPicker'
 import { Button } from './ui/button'
 
 export function useDashboardEditor(surface: DashboardSurface) {
@@ -30,6 +32,11 @@ export function useDashboardEditor(surface: DashboardSurface) {
   }
   const reset = (): void => {
     if (!savingRef.current) setDraft(normalizeDashboardLayout(surface, undefined))
+  }
+  const changeWidget = (id: string, widget: DashboardWidget, current: DashboardWidget): void => {
+    if (savingRef.current) return
+    // A dismissed edit or a replaced slot must not receive a late menu selection.
+    setDraft(draft => draft?.[id] === current ? { ...draft, [id]: widget } : draft)
   }
   const save = async (): Promise<void> => {
     if (!draft || savingRef.current) return
@@ -57,7 +64,7 @@ export function useDashboardEditor(surface: DashboardSurface) {
     cancel,
     reset,
     save,
-    setDraft
+    changeWidget
   }
 }
 export type DashboardEditorState = ReturnType<typeof useDashboardEditor>
@@ -129,9 +136,7 @@ export function EditableDashboardSlot({
   editor: DashboardEditorState
   children: React.ReactNode
 }): React.JSX.Element {
-  const [choosing, setChoosing] = useState(false)
-  const [failure, setFailure] = useState(false)
-  const changeRef = useRef<HTMLButtonElement>(null)
+  const picker = useDashboardWidgetPicker(editor, id)
   const slot = DASHBOARD_SLOTS[editor.surface].find((entry) => entry.id === id)!
   return (
     <div
@@ -142,39 +147,23 @@ export function EditableDashboardSlot({
         <>
           <button
             type="button"
-            ref={changeRef}
+            ref={picker.buttonRef}
             className="dashboard-slot-change"
             onClick={async () => {
-              const current = editor.layout?.[id]
-              const rect = changeRef.current?.getBoundingClientRect()
-              if (!current || !rect || choosing) return
-              setChoosing(true)
-              setFailure(false)
-              try {
-                const widget = await window.pulse.dashboard.choose(editor.surface, id, current, {
-                  x: rect.left,
-                  y: rect.bottom
-                })
-                if (widget) {
-                  editor.setDraft((draft) => draft ? { ...draft, [id]: widget } : draft)
-                  if (widget.kind === 'hidden') requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('[data-menu-add-chart]')?.focus())
-                }
-              } catch {
-                setFailure(true)
-              } finally {
-                setChoosing(false)
-                changeRef.current?.focus()
-              }
+              const widget = await picker.choose()
+              if (!widget) return
+              picker.buttonRef.current?.focus()
+              if (widget.kind === 'hidden') requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('[data-menu-add-chart]')?.focus())
             }}
             aria-haspopup="menu"
-            aria-busy={choosing}
+            aria-busy={picker.choosing}
             title={`Change ${slot.label.toLowerCase()}`}
             disabled={editor.saving}
             aria-label={`Change ${slot.label.toLowerCase()}`}
           >
             <PencilSimple size={16} />
           </button>
-          {failure && (
+          {picker.failure && (
             <span role="alert" className="dashboard-slot-error">
               Could not open menu. Try again.
             </span>
