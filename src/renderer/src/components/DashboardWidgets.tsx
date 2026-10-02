@@ -15,7 +15,7 @@ import { pointValues, rangeEnding, seriesPoints } from '@/lib/metrics'
 import { formatClock, formatHour, formatMinutes, shortDate } from '@/lib/format'
 import type { MetricRange } from '@/lib/metric-navigation'
 import { ColumnChart, ProgressRing, TrendLine } from './charts'
-import { DrillHeader, Panel, SectionHeader } from './Panel'
+import { DrillHeader, DrillPanel, Panel } from './Panel'
 import { MetricStat } from './MetricStat'
 import { SleepStages, STAGE_COLOR, STAGE_LABEL } from './SleepStages'
 import { CARD_HEIGHT, SkeletonChart, SkeletonRing, SkeletonRows, SkeletonText } from './Skeleton'
@@ -215,22 +215,22 @@ export function DashboardSummary({
         <button
           type="button"
           onClick={open}
-          className="home-hero-stat flex items-start gap-3 rounded-xl p-2 text-left hover:bg-white/[0.03]"
+          className="home-hero-stat -mx-2 flex min-h-[70px] items-start gap-2.5 rounded-xl px-2 py-1.5 text-left transition-colors hover:bg-white/[0.04]"
           aria-label={`Open ${def.shortLabel ?? def.label} details`}
         >
-          <span className="mt-1">
+          <span className="mt-0.5">
             <Icon size={15} weight="fill" color={def.color} />
           </span>
-          <span className="min-w-0">
-            <span className="block text-[11px] text-ink-faint">{def.shortLabel ?? def.label}</span>
-            <strong className="mt-1 block text-[17px] font-semibold">
+          <span className="grid min-w-0 grid-rows-[17px_22px_19px]">
+            <span className="truncate text-[11px] font-medium leading-[17px] text-ink-faint">{def.shortLabel ?? def.label}</span>
+            <strong className="flex min-w-0 items-center overflow-hidden text-[14.5px] font-semibold leading-[22px] text-ink">
               {reading.pending ? (
                 <SkeletonText className="h-3.5 w-20" />
               ) : (
                 `${value}${reading.value !== null && def.unit ? ` ${def.unit}` : ''}`
               )}
             </strong>
-            <span className="mt-1 block text-[11px] text-ink-dim">{reading.detailSub}</span>
+            <span className="flex min-w-0 items-center overflow-hidden pt-0.5 text-ellipsis whitespace-nowrap text-[11px] leading-[17px] text-ink-dim">{reading.detailSub}</span>
           </span>
         </button>
       )}
@@ -510,28 +510,32 @@ function SleepWidget({ date, enabled = true, compact, onSleep }: ChartProps): Re
 function WorkoutsWidget({ date, onWorkouts, onWorkout }: ChartProps): React.JSX.Element {
   const workouts = useWorkouts(date, date)
   return (
-    <Panel className="flex min-h-[126px] flex-col gap-3 p-5">
-      <SectionHeader
-        title="Workouts"
-        hint={workouts.isPending ? 'Loading sessions…' : `${workouts.data?.length ?? 0} sessions`}
-        icon={<Barbell size={18} weight="fill" color="var(--color-recovery)" />}
-        action={
-          <button type="button" className="dashboard-change" onClick={onWorkouts}>
-            Open details ›
-          </button>
-        }
-      />
+    <DrillPanel
+      label="Open workout details"
+      onOpen={() => onWorkouts?.()}
+      className="min-h-[126px]"
+      contentClassName="flex min-h-[124px] flex-col gap-2 px-3 py-5"
+    >
+      <div className="px-2">
+        <DrillHeader
+          title="Workouts"
+          hint={workouts.isPending ? <SkeletonText className="w-20" /> : `${workouts.data?.length ?? 0} session${workouts.data?.length === 1 ? '' : 's'}`}
+          icon={<Barbell size={18} weight="fill" color="var(--color-recovery)" />}
+        />
+      </div>
       {workouts.isError ? (
-        <Retry onRetry={() => void workouts.refetch()} />
+        <div className="pointer-events-auto"><Retry onRetry={() => void workouts.refetch()} /></div>
       ) : workouts.isPending ? (
         <SkeletonRows />
       ) : workouts.data?.length ? (
-        <WorkoutList workouts={workouts.data} onOpen={onWorkout ?? (() => {})} />
+        <div className="pointer-events-auto">
+          <WorkoutList workouts={workouts.data} onOpen={onWorkout ?? (() => {})} />
+        </div>
       ) : (
-        <p className="py-3 text-center text-[13px] text-ink-faint">
+        <div className="grid min-h-[58px] flex-1 place-items-center text-[13px] text-ink-faint">
           Tracked exercises appear here automatically.
-        </p>
+        </div>
       )}
-    </Panel>
+    </DrillPanel>
   )
 }

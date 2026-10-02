@@ -274,6 +274,42 @@ async function memoryRun(main, openPanel) {
   await panel.webContents.executeJavaScript(`window.pulse.app.open({ view: 'home', date: '${today}' })`)
   await until(() => { reopened = BrowserWindow.getAllWindows().find(w => w.webContents.getURL() && !w.webContents.getURL().endsWith('#menu-bar') && !w.webContents.isLoadingMainFrame()); return !!reopened }, 'main home loaded')
   await until(() => reopened.webContents.executeJavaScript("document.body.innerText.includes('12,145')"), 'main initial reading')
+  if (process.argv.includes('--geometry')) {
+    const report = {}
+    for (const width of [1000, 1280, 1500]) {
+      reopened.setSize(width, 1100)
+      await delay(600)
+      const measure = () => reopened.webContents.executeJavaScript(`(() => {
+        const rect = (e) => { const r = e.getBoundingClientRect(); return { width: r.width, height: r.height } }
+        const hero = document.querySelector('.home-hero')
+        const root = hero.parentElement.parentElement
+        return {
+          hero: rect(hero),
+          rings: Array.from(hero.querySelectorAll('.home-goal-ring')).map(rect),
+          summaries: Array.from(hero.querySelectorAll('.home-hero-stat')).map(e => ({ ...rect(e), font: getComputedStyle(e.querySelector('strong') || e.querySelector('span > span:nth-child(2)')).fontSize })),
+          cards: Array.from(document.querySelector('.display-lg-pair-grid').children).map(rect),
+          highlights: rect(root.children[3]),
+          tiles: Array.from(root.querySelector('.display-four-grid').children).map(rect),
+          workouts: rect(root.children[4])
+        }
+      })()`)
+      report[width] = await measure()
+      if (checkDashboards) {
+        await reopened.webContents.executeJavaScript(`Array.from(document.querySelectorAll('button')).find(b => b.textContent.trim() === 'Customize').click()`)
+        await delay(200)
+        assert.deepEqual(await measure(), report[width], 'editing preserves card, ring and summary dimensions at ' + width)
+        await reopened.webContents.executeJavaScript(`Array.from(document.querySelectorAll('button')).find(b => b.textContent.trim() === 'Cancel').click()`)
+      }
+    }
+    const referenceFlag = process.argv.indexOf('--geometry-reference')
+    // Recorded from the unmodified a883643 homepage with the same Electron fixture.
+    const reference = referenceFlag >= 0 ? process.argv[referenceFlag + 1] : checkDashboards ? resolve('tests/fixtures/dashboard-original-geometry.json') : null
+    if (reference) assert.deepEqual(report, JSON.parse(readFileSync(reference, 'utf8')), 'default geometry matches the original homepage')
+    writeFileSync(resolve('out/dashboard-geometry.json'), JSON.stringify(report, null, 2))
+    writeFileSync(resolve('out/dashboard-default-preview.png'), (await reopened.webContents.capturePage()).toPNG())
+    console.log('PASS: original homepage geometry at 1000, 1280 and 1500px; editing keeps widget dimensions')
+    return
+  }
   panel = await openPanel()
   await until(() => panel.webContents.executeJavaScript(`!document.querySelector('[aria-label="Refresh health data"]').disabled`), 'popup refresh enabled')
   todaySteps = 12345

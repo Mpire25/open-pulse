@@ -58,7 +58,7 @@ export function HomeView({
     return 'metric' in widget && 'metric' in original && widget.metric === original.metric
   })
   const chart = (id: string, wide = false): React.JSX.Element => (
-    <EditableDashboardSlot id={id} editor={editor}>
+    <EditableDashboardSlot id={id} editor={editor} fill>
       <DashboardChart
         widget={layout[id]}
         date={date}

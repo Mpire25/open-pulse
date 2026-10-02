@@ -104,8 +104,10 @@ export function DashboardEditControls({
 export function EditableDashboardSlot({
   id,
   editor,
-  children
+  children,
+  fill = false
 }: {
+  fill?: boolean
   id: string
   editor: DashboardEditorState
   children: React.ReactNode
@@ -115,7 +117,7 @@ export function EditableDashboardSlot({
   const slot = DASHBOARD_SLOTS[editor.surface].find((entry) => entry.id === id)!
   return (
     <div
-      className={`dashboard-slot ${editor.editing ? 'dashboard-slot--editing' : ''}`}
+      className={`dashboard-slot ${fill ? 'dashboard-slot--chart' : ''} ${editor.editing ? 'dashboard-slot--editing' : ''}`}
       data-dashboard-slot={id}
     >
       {editor.editing && (
