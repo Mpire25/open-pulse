@@ -1,5 +1,5 @@
 // Run after bun run build:
-// bunx electron scripts/menu-bar-smoke.cjs [--dashboard] [--memory] [--entry /path/to/out/main/index.js]
+// bunx electron scripts/menu-bar-smoke.cjs [--dashboard] [--memory] [--entry /path/to/out/main/index.cjs]
 // Uses generated fixture data in a temporary profile, without showing/focusing windows or signing in.
 const electron = require('electron')
 const { app, BrowserWindow, ipcMain, screen } = electron
@@ -28,7 +28,7 @@ if (checkDashboards) {
   }
 }
 const entryFlag = process.argv.indexOf('--entry')
-const appEntry = entryFlag >= 0 ? process.argv[entryFlag + 1] : resolve('out/main/index.js')
+const appEntry = entryFlag >= 0 ? process.argv[entryFlag + 1] : resolve(require('../package.json').main)
 const assert = require('node:assert/strict')
 const profile = mkdtempSync(join(tmpdir(), 'openpulse-menu-smoke-'))
 app.setPath('userData', profile)

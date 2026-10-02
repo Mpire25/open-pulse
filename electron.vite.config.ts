@@ -4,7 +4,15 @@ import tailwindcss from '@tailwindcss/vite'
 import { resolve } from 'node:path'
 
 export default defineConfig({
-  main: {},
+  // Generated asset paths use CommonJS globals. An explicit CJS entry avoids
+  // relying on ESM shim detection inside bundled dependency comments.
+  main: {
+    build: {
+      rollupOptions: {
+        output: { format: 'cjs', entryFileNames: 'index.cjs' }
+      }
+    }
+  },
   preload: {},
   renderer: {
     plugins: [react(), tailwindcss()],

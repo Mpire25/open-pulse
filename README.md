@@ -64,6 +64,12 @@ bun run build      # create a production build in out/
 bun run build:mac  # package a .dmg (needs the electron-builder toolchain)
 ```
 
+The main process is bundled as `out/main/index.cjs` and the preload remains ESM.
+The test suite builds the production main entry in a temporary directory and
+checks that it loads with the module format declared by `package.json`. Electron
+is mocked and readiness held pending, so this check opens no windows and reads no
+user credentials; packaged-app behaviour still requires native acceptance.
+
 Connect Google Health in **Settings** before opening health dashboards. The app
 never substitutes generated values when an account is disconnected or a sync
 cannot complete.
@@ -252,6 +258,6 @@ with a saved disabled preference.
 Add `--memory` to the smoke-test command to record macOS physical footprint and
 resident memory at startup, while the panel is open/hidden, after repeated opens,
 and after closing the main window. Results go to `out/menu-bar-memory.json`;
-`OPENPULSE_MEMORY_REPORT` overrides that path. `--entry /path/to/out/main/index.js`
+`OPENPULSE_MEMORY_REPORT` overrides that path. `--entry /path/to/out/main/index.cjs`
 can measure a previously built version with the same fixtures. Hidden test windows
 do not reproduce all graphics allocations of a visible, signed-in app.
