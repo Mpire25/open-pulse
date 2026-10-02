@@ -45,6 +45,11 @@ Built with Electron + React 19, Radix primitives, Tailwind v4, and Framer Motion
   from the returned data, plus web research when current external guidance
   is needed. Available as a full page and as a slide-over panel on every view,
   with account-scoped conversation history, pinning, and deletion.
+- **Assistant notifications** — opt in under Settings to receive a generic desktop
+  notification when an answer finishes while you are away from that chat. Click
+  to open the conversation. Sound is separately opt-in; health details are never
+  included. The chat window must stay open or minimized: closing it cancels its
+  response. Stopped, failed, and tool-limit responses do not notify.
 
 ## Running
 

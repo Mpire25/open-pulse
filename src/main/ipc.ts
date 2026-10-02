@@ -42,6 +42,7 @@ import {
 import { setApiActivityListener } from './health-api'
 import { getDashboardLayouts, updateDashboardLayout, getSettings, updateSettings } from './store'
 import { cancelAllChats, cancelChat, runChat } from './codex-chat'
+import type { ResponseNotificationController } from './response-notification-controller'
 import {
   applyChatRetention,
   createChatSession,
@@ -67,6 +68,7 @@ interface TrustedRenderer {
 }
 
 const trustedRenderers = new Map<number, TrustedRenderer>()
+let responseNotifications: ResponseNotificationController | undefined
 
 export function registerTrustedRenderer(
   webContents: WebContents,
@@ -74,7 +76,10 @@ export function registerTrustedRenderer(
 ): void {
   const renderer = { webContents, isExpectedUrl }
   trustedRenderers.set(webContents.id, renderer)
+  webContents.on('did-start-loading', () => responseNotifications?.clearSender(webContents.id))
+  webContents.on('render-process-gone', () => responseNotifications?.clearSender(webContents.id))
   webContents.once('destroyed', () => {
+    responseNotifications?.clearSender(webContents.id)
     if (trustedRenderers.get(webContents.id) === renderer) trustedRenderers.delete(webContents.id)
     const prefix = `${webContents.id}:`
     for (const [key, controller] of healthControllers) {
@@ -123,6 +128,7 @@ function healthRequestKey(event: IpcMainInvokeEvent, requestId: string): string 
 function notifyGoogleDisconnected(): void {
   if (googleDisconnectedNotified) return
   googleDisconnectedNotified = true
+  responseNotifications?.clear()
   abortAllHealthRequests()
   cancelAllChats('Health account disconnected.')
   resetHealthAccount()
@@ -161,6 +167,7 @@ function healthHandle<Args extends unknown[], Result>(
 }
 
 function sendToTrustedRenderers(channel: string, ...args: unknown[]): void {
+  if (channel === 'chats:account-changed') responseNotifications?.clear()
   for (const renderer of trustedRenderers.values()) {
     const { webContents, isExpectedUrl } = renderer
     if (!webContents.isDestroyed() && isExpectedUrl(webContents.getURL())) {
@@ -169,7 +176,8 @@ function sendToTrustedRenderers(channel: string, ...args: unknown[]): void {
   }
 }
 
-export function registerIpc(commands: { open: (destination: MenuBarDestination) => void; close: () => void; resizePanel: (height: number, senderId: number) => void; quit: () => void; settingsChanged: (settings: AppSettings) => void }): void {
+export function registerIpc(commands: { open: (destination: MenuBarDestination) => void; close: () => void; resizePanel: (height: number, senderId: number) => void; quit: () => void; settingsChanged: (settings: AppSettings) => void; notifications: ResponseNotificationController }): void {
+  responseNotifications = commands.notifications
   handle('app:open', (_event, destination: unknown) => {
     if (!isMenuBarDestination(destination)) throw new Error('Invalid navigation destination')
     commands.open(destination)
@@ -193,12 +201,14 @@ export function registerIpc(commands: { open: (destination: MenuBarDestination) 
   handle('settings:get', () => getSettings())
   handle('settings:update', (_e, patch: Partial<AppSettings>) => {
     const settings = updateSettings(patch)
+    if (!settings.responseNotificationsEnabled) responseNotifications?.clear()
     commands.settingsChanged(settings)
     return settings
   })
 
   handle('google:status', () => getGoogleStatus())
   handle('google:connect', async () => {
+    responseNotifications?.clear()
     // Wipe the previous account before new credentials can be persisted, then
     // rotate again so any work started while OAuth was open is also stale.
     abortAllHealthRequests()
@@ -213,6 +223,7 @@ export function registerIpc(commands: { open: (destination: MenuBarDestination) 
     return status
   })
   handle('google:disconnect', () => {
+    responseNotifications?.clear()
     googleDisconnectedNotified = true
     abortAllHealthRequests()
     cancelAllChats('Health account disconnected.')
@@ -224,15 +235,21 @@ export function registerIpc(commands: { open: (destination: MenuBarDestination) 
   handle('codex:status', () => getCodexStatus())
   handle('codex:models', (_event, force?: boolean) => getChatGPTModels(force === true))
   handle('codex:connect', () => {
+    responseNotifications?.clear()
     cancelAllChats('ChatGPT sign-in changed.')
     return connectCodex()
   })
   handle('codex:disconnect', () => {
+    responseNotifications?.clear()
     cancelAllChats('ChatGPT disconnected.')
     return disconnectCodex()
   })
 
-  handle('chats:list', () => getChatHistory())
+  handle('chats:list', () => {
+    const snapshot = getChatHistory()
+    responseNotifications?.retainChats(new Set(snapshot.sessions.map((chat) => chat.id)))
+    return snapshot
+  })
   handle('chats:create', (_event, id?: string) => createChatSession(id))
   handle('chats:update', (_event, id: string, messages: ChatSessionMessage[]) =>
     updateChatSession(id, messages)
@@ -243,10 +260,16 @@ export function registerIpc(commands: { open: (destination: MenuBarDestination) 
   handle('chats:set-kept', (_event, id: string, kept: boolean) =>
     setChatSessionKept(id, kept === true)
   )
-  handle('chats:delete', (_event, id: string) => deleteChatSession(id))
+  handle('chats:delete', (_event, id: string) => {
+    const snapshot = deleteChatSession(id)
+    responseNotifications?.clearChat(id)
+    return snapshot
+  })
   handle('chats:retention-preview', (_event, retention: ChatRetention) =>
     previewChatRetention(assertRetention(retention))
   )
+  // The renderer refreshes chats:list after applying retention; that snapshot
+  // also removes notifications for expired chats without another credential read.
   handle('chats:apply-retention', (_event, retention: ChatRetention) =>
     applyChatRetention(assertRetention(retention))
   )
@@ -309,7 +332,17 @@ export function registerIpc(commands: { open: (destination: MenuBarDestination) 
 
   handle('ai:send', (event, chatId: string, runId: string, history: ChatMessage[]) => {
     // Fire and forget: progress streams back over 'ai:event'.
-    void runChat(event.sender, chatId, runId, history)
+    void runChat(event.sender, chatId, runId, history, (update) => {
+      responseNotifications?.observe(event.sender.id, update)
+    })
+  })
+  handle('ai:visible-chat', (event, chatId: unknown) => {
+    if (chatId !== null && typeof chatId !== 'string') throw new Error('Invalid visible chat')
+    responseNotifications?.setVisibleChat(event.sender.id, chatId)
+  })
+  handle('ai:response-ready', (event, chatId: unknown, runId: unknown) => {
+    if (typeof chatId !== 'string' || typeof runId !== 'string') throw new Error('Invalid response acknowledgement')
+    responseNotifications?.acknowledge(event.sender.id, chatId, runId)
   })
   handle('ai:cancel', (event, chatId: string, runId: string) => {
     cancelChat(event.sender, chatId, runId)

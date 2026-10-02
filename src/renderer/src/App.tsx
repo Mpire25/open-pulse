@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useEffectEvent, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useQueryClient } from '@tanstack/react-query'
 import { Sidebar, type View } from '@/components/Sidebar'
@@ -104,6 +104,11 @@ export default function App(): React.JSX.Element {
 
   // One multi-chat controller shared by the Assistant page and side panel.
   const chat = useChat(settings !== null)
+  const visibleChatId = view === 'assistant' || chatOpen ? chat.activeChatId : null
+  useEffect(() => {
+    if (!settings) return
+    void window.pulse.ai.setVisibleChat(visibleChatId).catch(() => {})
+  }, [visibleChatId, settings !== null])
   const queryClient = useQueryClient()
   useTrackpadHistoryNavigation()
 
@@ -349,6 +354,17 @@ export default function App(): React.JSX.Element {
       selectedWorkout: null
     })
   }
+
+  const openNotificationChat = useEffectEvent((chatId: string): void => {
+    // A notification may outlive deletion/retention cleanup or an account change.
+    if (!chat.sessions.some((session) => session.id === chatId)) return
+    chat.select(chatId)
+    openAssistant(true)
+  })
+  useEffect(() => {
+    if (chat.loading) return
+    return window.pulse.app.onOpenChat(openNotificationChat)
+  }, [chat.loading])
 
   useEffect(() => window.pulse.app.onNavigate((destination) => {
     navigate({

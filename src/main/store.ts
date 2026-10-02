@@ -25,6 +25,8 @@ interface StoreFile {
 
 const DEFAULTS: AppSettings = {
   menuBarEnabled: true,
+  responseNotificationsEnabled: false,
+  responseNotificationSound: false,
   googleClientId: '',
   googleClientSecret: '',
   googleClientSecretConfigured: false,
@@ -68,6 +70,8 @@ function normalizeSettings(raw?: Partial<AppSettings>): AppSettings {
   const chatRetention = raw?.chatRetention as ChatRetention | undefined
   return {
     menuBarEnabled: typeof raw?.menuBarEnabled === 'boolean' ? raw.menuBarEnabled : DEFAULTS.menuBarEnabled,
+    responseNotificationsEnabled: raw?.responseNotificationsEnabled === true,
+    responseNotificationSound: raw?.responseNotificationSound === true,
     googleClientId: raw?.googleClientId ?? DEFAULTS.googleClientId,
     googleClientSecret: '',
     googleClientSecretConfigured: false,
@@ -112,6 +116,12 @@ function persist(store: StoreFile = load()): void {
 /** Read the desktop preference at startup without opening credential storage. */
 export function getMenuBarEnabled(): boolean {
   return load().settings.menuBarEnabled
+}
+
+/** Notification delivery must never open credential storage. */
+export function getResponseNotificationPreferences(): { enabled: boolean; sound: boolean } {
+  const settings = load().settings
+  return { enabled: settings.responseNotificationsEnabled, sound: settings.responseNotificationSound }
 }
 
 export function getSettings(): AppSettings {

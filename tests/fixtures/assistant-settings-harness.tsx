@@ -6,7 +6,7 @@ import * as framerMotion from 'framer-motion'
 import { DEFAULT_ASSISTANT, DEFAULT_GOALS, type AppSettings, type CodexAuthStatus } from '../../src/shared/types'
 
 const dom = new Window({ url: 'http://localhost:49173' })
-for (const name of ['window', 'document', 'navigator', 'HTMLElement', 'Element', 'Node', 'SVGElement', 'Document', 'HTMLInputElement', 'HTMLButtonElement', 'HTMLSelectElement', 'Event', 'MouseEvent', 'MutationObserver', 'getComputedStyle', 'requestAnimationFrame', 'cancelAnimationFrame']) {
+for (const name of ['window', 'document', 'navigator', 'HTMLElement', 'Element', 'Node', 'SVGElement', 'Document', 'HTMLInputElement', 'HTMLFormElement', 'HTMLButtonElement', 'HTMLSelectElement', 'Event', 'MouseEvent', 'MutationObserver', 'getComputedStyle', 'requestAnimationFrame', 'cancelAnimationFrame']) {
   Object.defineProperty(globalThis, name, { configurable: true, value: name === 'window' ? dom : (dom as unknown as Record<string, unknown>)[name] })
 }
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
@@ -18,7 +18,7 @@ mock.module('framer-motion', () => ({ ...motionExports, motion: new Proxy({}, { 
 }) }), AnimatePresence: ({ children }: { children: React.ReactNode }) => children }))
 const { createRoot } = await import('react-dom/client')
 const { SettingsView } = await import('../../src/renderer/src/views/SettingsView')
-const settings: AppSettings = { menuBarEnabled: false, googleClientId: '', googleClientSecret: '', googleClientSecretConfigured: false, goals: DEFAULT_GOALS, assistant: DEFAULT_ASSISTANT, chatRetention: 'forever' }
+const settings: AppSettings = { menuBarEnabled: false, responseNotificationsEnabled: false, responseNotificationSound: false, googleClientId: '', googleClientSecret: '', googleClientSecretConfigured: false, goals: DEFAULT_GOALS, assistant: DEFAULT_ASSISTANT, chatRetention: 'forever' }
 const connected: CodexAuthStatus = { connected: true, signedIn: true, planEnabled: true, activeRegistration: 'account-a', authRevision: 1, email: 'test@example.invalid' }
 let backendStatus: CodexAuthStatus
 let publish!: (value: CodexAuthStatus) => void
@@ -31,12 +31,45 @@ let container: HTMLDivElement
 
 function Harness(): React.JSX.Element {
   const [status, setStatus] = useState(backendStatus)
+  const [preferences, setPreferences] = useState(settings)
   publish = setStatus
-  return <SettingsView settings={settings} google={{ connected: true }} codex={status} onSettingsChange={() => {}} onGoogleChange={() => {}} onCodexChange={setStatus} />
+  return <SettingsView settings={preferences} google={{ connected: true }} codex={status} onSettingsChange={setPreferences} onGoogleChange={() => {}} onCodexChange={setStatus} />
 }
 function button(label: string): HTMLButtonElement | undefined {
   return Array.from(document.querySelectorAll('button')).find((element) => element.textContent?.trim() === label)
 }
+
+test('notification preferences start disabled, save independently, and keep sound opt-in', async () => {
+  const patches: Partial<AppSettings>[] = []
+  let saved = { ...settings }
+  window.pulse.settings.update = async (patch) => {
+    patches.push(patch)
+    saved = { ...saved, ...patch }
+    return saved
+  }
+  await act(async () => root.render(<Harness />))
+  const enabled = () => document.getElementById('response-notifications-enabled') as HTMLButtonElement
+  const sound = () => document.getElementById('response-notification-sound') as HTMLButtonElement
+  expect(enabled().getAttribute('aria-checked')).toBe('false')
+  expect(sound().disabled).toBe(true)
+  await act(async () => enabled().click())
+  expect(enabled().getAttribute('aria-checked')).toBe('true')
+  expect(sound().getAttribute('aria-checked')).toBe('false')
+  expect(sound().disabled).toBe(false)
+  await act(async () => sound().click())
+  expect(sound().getAttribute('aria-checked')).toBe('true')
+  expect(patches).toEqual([{ responseNotificationsEnabled: true }, { responseNotificationSound: true }])
+})
+
+test('failed notification preference save leaves the switch unchanged and reports the failure', async () => {
+  window.pulse.settings.update = async () => { throw new Error('Synthetic disk write failure') }
+  await act(async () => root.render(<Harness />))
+  const enabled = document.getElementById('response-notifications-enabled') as HTMLButtonElement
+  await act(async () => enabled.click())
+  expect(enabled.getAttribute('aria-checked')).toBe('false')
+  expect(enabled.disabled).toBe(false)
+  expect(document.querySelector('[role="alert"]')?.textContent).toContain('Could not save the notification preference')
+})
 beforeEach(() => {
   backendStatus = { connected: false }; disconnects = 0; modelRequests = 0
   modelResult = { models: [{ id: 'future-model', label: 'Future Model', efforts: ['auto', 'low'] }], stale: false }

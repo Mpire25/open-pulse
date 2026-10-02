@@ -187,6 +187,33 @@ afterEach(() => {
 })
 
 describe('brokered Codex research orchestration', () => {
+  test('records successful completion before delivering it to the renderer', async () => {
+    const sender = new FakeSender()
+    const observed: AiEvent[] = []
+    globalThis.fetch = (async () => message('Your analysis is ready.')) as typeof fetch
+    await runChat(sender as unknown as WebContents, 'notification-chat', 'notification-run', [
+      { role: 'user', text: 'Analyse my steps and HRV together.' }
+    ], (event) => {
+      if (event.type === 'done') expect(sender.events.some((item) => item.type === 'done')).toBe(false)
+      observed.push(event)
+    })
+    expect(observed.find((event) => event.type === 'done')).toMatchObject({ outcome: 'completed' })
+    expect(observed.filter((event) => event.type === 'done')).toHaveLength(1)
+  })
+
+  test('tool-budget exhaustion has a separate completion outcome', async () => {
+    const sender = new FakeSender()
+    let calls = 0
+    globalThis.fetch = (async () => functionCall('query_daily_metrics', `limit-${++calls}`, {
+      metrics: ['steps', 'hrvMs'], startDate: '2026-07-01', endDate: '2026-07-07'
+    })) as typeof fetch
+    await runChat(sender as unknown as WebContents, 'limited-chat', 'limited-run', [
+      { role: 'user', text: 'Analyse my steps and HRV together.' }
+    ])
+    expect(sender.events.find((event) => event.type === 'done')).toMatchObject({ outcome: 'tool-limit' })
+    expect(calls).toBe(8)
+  })
+
   test('plan usage limits in research stop the run without another inference request', async () => {
     const sender = new FakeSender()
     let requests = 0
