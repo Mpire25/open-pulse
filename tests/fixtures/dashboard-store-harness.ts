@@ -37,12 +37,14 @@ test('upgrades, independent surface saves, restart, rejection, and failed writes
   expect(getDashboardLayouts()).toEqual(defaults)
   const home = {
     ...defaults.home,
-    ring1: { kind: 'goal' as const, metric: 'sleepMinutes' as const }
+    ring1: { kind: 'goal' as const, metric: 'sleepMinutes' as const },
+    chart1: { kind: 'trend' as const, metric: 'steps' as const, days: 90 as const }
   }
   expect(updateDashboardLayout('home', home).home).toEqual(home)
   const menuBar = {
     ...defaults.menuBar,
-    chart1: { kind: 'trend' as const, metric: 'hrvMs' as const, days: 30 as const }
+    chart1: { kind: 'trend' as const, metric: 'hrvMs' as const, days: 365 as const },
+    chart2: { kind: 'intraday' as const, metric: 'restingHeartRate' as const }
   }
   expect(updateDashboardLayout('menuBar', menuBar)).toEqual({ version: 1, home, menuBar })
   const persisted = JSON.parse(readFileSync(path, 'utf8'))

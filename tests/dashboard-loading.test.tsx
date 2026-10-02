@@ -93,4 +93,34 @@ describe('dashboard loading presentation', () => {
       expect(text(html)).toContain('Loading…')
     })
   })
+
+  test('long trends query the selected period and preserve chart heights on both surfaces', () => {
+    withClient((render, client) => {
+      for (const compact of [false, true]) {
+        for (const days of [90, 365] as const) {
+          const range = rangeEnding(date, days)
+          const html = render(<DashboardChart {...props} compact={compact} widget={{ kind: 'trend', metric: 'steps', days }} onSleep={noop} />)
+          expect(text(html)).toContain(days === 90 ? 'Last 3 months' : 'Last 1 year · weekly daily averages')
+          expect(html).toContain(`height:${compact ? 105 : 170}px`)
+          expect(client.getQueryCache().find({ queryKey: ['series-metric', 'steps', range.start, date], exact: true })).toBeDefined()
+        }
+      }
+    })
+  })
+
+  test('one-day heart rate uses heart samples and retains the correct empty and loading states', () => {
+    withClient((render, client) => {
+      for (const compact of [false, true]) {
+        const node = <DashboardChart {...props} compact={compact} widget={{ kind: 'intraday', metric: 'restingHeartRate' }} onSleep={noop} />
+        const pending = render(node)
+        expect(text(pending)).toContain('Heart rate')
+        expect(pending).toContain(`height:${compact ? 105 : 170}px`)
+        expect(skeletonCount(pending)).toBeGreaterThan(0)
+        client.setQueryData(['intraday', 'heart', date], { date, heartRate: [], stepsHourly: [], currentHeartRate: null })
+        expect(text(render(node))).toContain('No heart-rate samples recorded for this day.')
+        client.removeQueries({ queryKey: ['intraday', 'heart', date], exact: true })
+      }
+      expect(client.getQueryCache().findAll({ queryKey: ['activity-intraday'] })).toHaveLength(0)
+    })
+  })
 })

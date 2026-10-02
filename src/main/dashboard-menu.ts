@@ -1,6 +1,7 @@
 import { BrowserWindow, Menu, type MenuItemConstructorOptions, type WebContents } from 'electron'
 import {
   DASHBOARD_SLOTS,
+  DASHBOARD_TREND_PERIODS,
   isDashboardWidget,
   widgetId,
   widgetOptions,
@@ -58,20 +59,28 @@ export function chooseDashboardWidget(
     for (const widget of widgetOptions(slot.kind, surface)) {
       const description = 'metric' in widget ? METRIC_DESCRIPTIONS[widget.metric] : null
       const group = description?.domain ?? (widget.kind === 'sleepStages' ? 'sleep' : 'other')
-      const suffix = widget.kind === 'trend'
-        ? ` — Last ${widget.days} days`
-        : widget.kind === 'intraday' ? ' — Throughout the day' : ''
-      const label = description
-        ? description.label + suffix
-        : widget.kind === 'sleepStages' ? 'Sleep stages' : 'Workouts'
+      const label = widget.kind === 'trend'
+        ? DASHBOARD_TREND_PERIODS.find(period => period.days === widget.days)!.label
+        : widget.kind === 'intraday' ? '1 day'
+        : description?.label ?? (widget.kind === 'sleepStages' ? 'Sleep stages' : 'Workouts')
       const entries = groups.get(group) ?? []
-      entries.push({
+      const option: MenuItemConstructorOptions = {
         id: widgetId(widget),
         label,
         type: 'checkbox',
         checked: widgetId(widget) === widgetId(current),
         click: () => finish(widget)
-      })
+      }
+      if (description && (widget.kind === 'trend' || widget.kind === 'intraday')) {
+        const id = `metric:${widget.metric}`
+        let metricMenu = entries.find(entry => entry.id === id)
+        if (!metricMenu) {
+          metricMenu = { id, label: widget.metric === 'restingHeartRate' ? 'Heart rate' : description.label, submenu: [] }
+          entries.push(metricMenu)
+        }
+        const periods = metricMenu.submenu as MenuItemConstructorOptions[]
+        periods.push(option)
+      } else entries.push(option)
       groups.set(group, entries)
     }
     const template: MenuItemConstructorOptions[] = slot.kind === 'goal'

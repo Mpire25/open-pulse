@@ -23,7 +23,7 @@ function open(
   view: MenuBarDestination['view'],
   date = isoToday(),
   metric?: MenuBarDestination['metric'],
-  range: 'D' | 'W' | 'M' = 'D'
+  range: NonNullable<MenuBarDestination['range']> = 'D'
 ): void {
   void window.pulse.app.open({ view, date, metric, range })
 }
@@ -210,7 +210,7 @@ export function MenuBarSlots({
         METRICS[metric].domain,
         readingDate,
         metric,
-        range === 'M' ? 'M' : range === 'W' ? 'W' : 'D'
+        range
       )
   }
   const wrap = (id: string, content: React.ReactNode): React.ReactNode =>

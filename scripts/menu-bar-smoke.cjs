@@ -187,7 +187,8 @@ async function memoryRun(main, openPanel) {
   })
   replace('health:sleep-range', () => (healthRequests++, { source: 'fixture', days: missing ? [] : [{ date: today, mainSessionId: 'night', complete: true, minutesAsleep: 367, efficiency: 94, sessions: [{ id: 'night', date: today, startTime: `${offset(today, -1)}T23:00:00`, endTime: `${today}T05:29:00`, minutesAsleep: 367, stageMinutes: { AWAKE: 22, REM: 82, LIGHT: 220, DEEP: 65 }, stages: [] }] }] }))
   replace('health:devices', () => (healthRequests++, missing ? [] : [{ name: 'Fitbit Air', batteryPct: 76, lastSync: new Date(Date.now() - 12 * 60000).toISOString() }]))
-  replace('health:intraday', () => ({ date: today, heartRate: [], stepsHourly: [], currentHeartRate: null }))
+  replace('health:intraday', () => ({ date: today, heartRate: [{ minute: 0, bpm: 65 }, { minute: 360, bpm: 78 }, { minute: 720, bpm: 70 }], stepsHourly: [{ hour: 0, steps: 120 }, { hour: 6, steps: 550 }], currentHeartRate: null }))
+  replace('health:activity-intraday', (_e, _requestId, date, metric) => ({ date, metric, source: 'fixture', windowMinutes: 30, points: [{ minute: 0, value: 20 }, { minute: 360, value: 80 }], breakdown: [] }))
   replace('health:workouts', () => ({ workouts: [], source: 'fixture' }))
   await until(() => BrowserWindow.getAllWindows().every(w => w.webContents.getURL() && !w.webContents.isLoadingMainFrame()), 'initial windows loaded')
   const main = BrowserWindow.getAllWindows().find(w => !w.webContents.getURL().endsWith('#menu-bar'))
@@ -369,6 +370,18 @@ async function memoryRun(main, openPanel) {
       assert.equal(pendingPicker.options.window, win, 'picker belongs to the requesting window')
       const flatten = menu => menu.items.flatMap(item => [item, ...(item.submenu ? flatten(item.submenu) : [])])
       assert.equal(flatten(pendingPicker.menu).filter(item => item.checked).length, 1, 'current widget is checked')
+      if (pendingPicker.menu.getMenuItemById('trend:steps:7')) {
+        const metrics = [
+          ['Activity', 'steps', ['1 day', '7 days', '30 days', '3 months', '1 year']],
+          ['Heart', 'restingHeartRate', ['1 day', '7 days', '30 days', '3 months', '1 year']],
+          ['Sleep', 'sleepMinutes', ['7 days', '30 days', '3 months', '1 year']]
+        ]
+        for (const [category, metric, periods] of metrics) {
+          const group = pendingPicker.menu.items.find(item => item.label === category)
+          const submenu = group?.submenu?.items.find(item => item.id === `metric:${metric}`)?.submenu
+          assert.deepEqual(submenu?.items.map(item => item.label), periods, 'category → metric → period: ' + metric)
+        }
+      }
       assert.equal(await win.webContents.executeJavaScript(`!!document.querySelector('[role="dialog"]')`), false, 'no web picker dialog')
     }
     const dismissPicker = () => {
@@ -386,6 +399,15 @@ async function memoryRun(main, openPanel) {
       await until(() => win.webContents.executeJavaScript(`document.activeElement?.getAttribute('aria-label') === 'Change ${slotLabel}' && document.activeElement.getAttribute('aria-busy') === 'false'`), 'native picker restores focus')
     }
     const beforeLayouts = await reopened.webContents.executeJavaScript('window.pulse.dashboard.get()')
+    const checkDraftPeriods = async (slotLabel, height) => {
+      for (const [widget, hint] of [['trend:steps:90', 'Last 3 months'], ['trend:steps:365', 'Last 1 year'], ['intraday:restingHeartRate', 'Across the day'], ['intraday:caloriesOut', 'Throughout the day'], ['intraday:steps', 'Steps per hour']]) {
+        await choose(reopened, slotLabel, widget)
+        await until(() => reopened.webContents.executeJavaScript(`(() => {
+          const slot = document.querySelector('[data-dashboard-slot="chart1"]')
+          return slot.textContent.includes(${JSON.stringify(hint)}) && !slot.querySelector('[aria-busy="true"]') && Array.from(slot.querySelectorAll('div')).some(div => div.style.height === '${height}px')
+        })()`), widget + ' renders at the original chart height')
+      }
+    }
     writeFileSync(resolve('out/dashboard-home-default-preview.png'), (await reopened.webContents.capturePage()).toPNG())
     await clickText(reopened, 'Customize')
     await until(() => reopened.webContents.executeJavaScript(`!!document.querySelector('[aria-label="Change left chart"]')`), 'home editor renders before capture')
@@ -400,6 +422,7 @@ async function memoryRun(main, openPanel) {
     await delay(50)
     assert.deepEqual(await reopened.webContents.executeJavaScript('window.pulse.dashboard.get()'), beforeLayouts, 'dismissing native menu leaves saved preferences untouched')
     assert.ok(await reopened.webContents.executeJavaScript(`document.querySelector('[data-dashboard-slot="chart1"]').textContent.includes('Daily movement')`), 'dismissing native menu preserves draft')
+    await checkDraftPeriods('left chart', 170)
     failNextPicker = true
     await reopened.webContents.executeJavaScript(`document.querySelector('[aria-label="Change left chart"]').click()`)
     await until(() => reopened.webContents.executeJavaScript(`document.querySelector('[role="alert"]')?.textContent === 'Could not open menu. Try again.'`), 'native menu failure keeps editor usable')
@@ -449,6 +472,7 @@ async function memoryRun(main, openPanel) {
     assert.equal(await reopened.webContents.executeJavaScript(`document.querySelector('[data-menu-bar-layout]').closest('[class~="bg-panel"]').querySelector('h3').textContent`), 'macOS menu bar', 'layout editor belongs to the macOS menu bar card')
     await delay(600)
     writeFileSync(resolve('out/dashboard-menu-settings-edit-preview.png'), (await reopened.webContents.capturePage()).toPNG())
+    await checkDraftPeriods('top chart', 105)
     await choose(reopened, 'goal ring 2', 'goal:proteinG')
     await choose(reopened, 'summary 1', 'summary:waterMl')
     await choose(reopened, 'top chart', 'trend:weightKg:30')
@@ -492,6 +516,24 @@ async function memoryRun(main, openPanel) {
     assert.deepEqual(resetLayouts.menuBar, beforeLayouts.menuBar)
     assert.deepEqual(resetLayouts.home, homeLayouts.home)
     console.log('PASS: reset defaults is scoped and can be cancelled')
+    // Save, reload, and navigate using both new long periods on both surfaces.
+    for (const surface of ['home', 'menuBar']) {
+      const savedLayout = (await reopened.webContents.executeJavaScript('window.pulse.dashboard.get()'))[surface]
+      for (const [days, range, hint] of [[90, '3M', 'Last 3 months'], [365, 'Y', 'Last 1 year']]) {
+        await reopened.webContents.executeJavaScript(`window.pulse.app.open({ view: '${surface === 'home' ? 'home' : 'settings'}', date: '${today}' })`)
+        await clickText(reopened, surface === 'home' ? 'Customize' : 'Customize menu bar')
+        await choose(reopened, surface === 'home' ? 'left chart' : 'top chart', `trend:steps:${days}`)
+        await clickText(reopened, 'Save layout')
+        await until(async () => (await reopened.webContents.executeJavaScript('window.pulse.dashboard.get()'))[surface].chart1.days === days, 'long period saved')
+        const chartWindow = surface === 'home' ? reopened : panel.isVisible() ? panel : await openPanel()
+        chartWindow.webContents.reload()
+        await until(() => chartWindow.webContents.executeJavaScript(`document.querySelector('[data-dashboard-slot="chart1"]')?.textContent.includes('${hint}')`), 'long period survives reload')
+        await chartWindow.webContents.executeJavaScript(`document.querySelector('[data-dashboard-slot="chart1"] ${surface === 'home' ? 'button' : '.menu-section-title'}').click()`)
+        await until(() => reopened.webContents.executeJavaScript(`window.history.state.detailMetric?.metric === 'steps' && window.history.state.detailMetric?.range === '${range}'`), surface + ' long period navigation')
+      }
+      await reopened.webContents.executeJavaScript(`window.pulse.dashboard.update('${surface}', ${JSON.stringify(savedLayout)})`)
+    }
+    console.log('PASS: both native menus group metric periods; intraday charts fit; 3-month/year choices persist, reload and navigate on both surfaces')
     panel = panel.isVisible() ? panel : await openPanel()
   }
   reopened.close()

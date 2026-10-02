@@ -11,10 +11,20 @@ export const GOAL_METRICS = [
   'sleepMinutes'
 ] as const satisfies readonly MetricKey[]
 export type DashboardSurface = 'home' | 'menuBar'
+export const DASHBOARD_TREND_PERIODS = [
+  { days: 7, label: '7 days', hint: 'Last 7 days', range: 'W' },
+  { days: 30, label: '30 days', hint: 'Last 30 days', range: 'M' },
+  { days: 90, label: '3 months', hint: 'Last 3 months', range: '3M' },
+  { days: 365, label: '1 year', hint: 'Last 1 year', range: 'Y' }
+] as const
+export type DashboardTrendDays = (typeof DASHBOARD_TREND_PERIODS)[number]['days']
+export const DASHBOARD_INTRADAY_METRICS = [
+  'steps', 'restingHeartRate', ...ACTIVITY_INTRADAY_METRICS
+] as const satisfies readonly MetricKey[]
 export type DashboardWidget =
   | { kind: 'goal'; metric: MetricKey }
   | { kind: 'summary'; metric: MetricKey }
-  | { kind: 'trend'; metric: MetricKey; days: 7 | 30 }
+  | { kind: 'trend'; metric: MetricKey; days: DashboardTrendDays }
   | { kind: 'intraday'; metric: MetricKey }
   | { kind: 'sleepStages' }
   | { kind: 'workouts' }
@@ -107,15 +117,13 @@ export function isDashboardWidget(
       (GOAL_METRICS as readonly string[]).includes(widget.metric as string)
     )
   if (slot === 'summary') return widget.kind === 'summary' && metric
-  if (widget.kind === 'trend') return metric && (widget.days === 7 || widget.days === 30)
-  if (slot === 'wide') return widget.kind === 'workouts' && surface === 'home'
-  if (widget.kind === 'sleepStages') return true
+  if (widget.kind === 'trend') return metric && DASHBOARD_TREND_PERIODS.some(period => period.days === widget.days)
+  if (widget.kind === 'workouts') return slot === 'wide' && surface === 'home'
+  if (widget.kind === 'sleepStages') return slot === 'chart'
   return (
-    surface === 'home' &&
     widget.kind === 'intraday' &&
     metric &&
-    (widget.metric === 'steps' ||
-      (ACTIVITY_INTRADAY_METRICS as readonly string[]).includes(widget.metric as string))
+    (DASHBOARD_INTRADAY_METRICS as readonly string[]).includes(widget.metric as string)
   )
 }
 
@@ -168,17 +176,13 @@ export function widgetOptions(slot: SlotKind, surface: DashboardSurface): Dashbo
   if (slot === 'goal') return GOAL_METRICS.map((metric) => ({ kind: 'goal', metric }))
   if (slot === 'summary') return METRIC_KEYS.map((metric) => ({ kind: 'summary', metric }))
   const trends = METRIC_KEYS.flatMap((metric): DashboardWidget[] =>
-    [7, 30].map((days) => ({ kind: 'trend', metric, days: days as 7 | 30 }))
+    DASHBOARD_TREND_PERIODS.map(({ days }) => ({ kind: 'trend', metric, days }))
   )
-  if (slot === 'wide') return [{ kind: 'workouts' }, ...trends]
+  const intraday = DASHBOARD_INTRADAY_METRICS.map((metric): DashboardWidget => ({ kind: 'intraday', metric }))
+  if (slot === 'wide') return [...(surface === 'home' ? [{ kind: 'workouts' } as const] : []), ...intraday, ...trends]
   return [
     { kind: 'sleepStages' },
-    ...(surface === 'home'
-      ? ['steps', ...ACTIVITY_INTRADAY_METRICS].map((metric): DashboardWidget => ({
-          kind: 'intraday',
-          metric: metric as MetricKey
-        }))
-      : []),
+    ...intraday,
     ...trends
   ]
 }

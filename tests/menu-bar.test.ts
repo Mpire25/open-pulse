@@ -6,12 +6,14 @@ describe('menu bar navigation boundary', () => {
     expect(isMenuBarDestination({ view: 'activity', date: '2026-10-01', metric: 'steps', range: 'W' })).toBe(true)
     expect(isMenuBarDestination({ view: 'heart', date: '2026-10-01', metric: 'hrvMs', range: 'D' })).toBe(true)
     expect(isMenuBarDestination({ view: 'settings', date: '2026-10-01' })).toBe(true)
+    expect(isMenuBarDestination({ view: 'activity', date: '2026-10-01', metric: 'steps', range: '3M' })).toBe(true)
+    expect(isMenuBarDestination({ view: 'heart', date: '2026-10-01', metric: 'hrvMs', range: 'Y' })).toBe(true)
   })
   test('rejects malformed dates and unsupported commands', () => {
     for (const value of [null, {}, { view: 'shell', date: '2026-10-01' },
       { view: 'sleep', date: '2026-02-30' }, { view: 'sleep', date: 'not-a-date' },
       { view: 'activity', date: '2026-10-01', metric: 'unknown' },
-      { view: 'activity', date: '2026-10-01', range: 'Y' }]) {
+      { view: 'activity', date: '2026-10-01', range: '2Y' }]) {
       expect(isMenuBarDestination(value)).toBe(false)
     }
   })

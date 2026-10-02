@@ -2,6 +2,8 @@ import { describe, expect, test } from 'bun:test'
 import { resolve } from 'node:path'
 import {
   DASHBOARD_SLOTS,
+  DASHBOARD_INTRADAY_METRICS,
+  DASHBOARD_TREND_PERIODS,
   normalizeDashboardLayout,
   normalizeDashboardLayouts,
   validateDashboardLayout,
@@ -48,22 +50,37 @@ describe('dashboard preferences', () => {
     expect(() =>
       validateDashboardLayout('menuBar', {
         ...layout,
-        chart1: { kind: 'intraday', metric: 'steps' }
+        chart1: { kind: 'intraday', metric: 'sleepMinutes' }
       })
     ).toThrow()
     expect(() =>
       validateDashboardLayout('menuBar', {
         ...layout,
-        chart1: { kind: 'trend', metric: 'hrvMs', days: 365 }
+        chart1: { kind: 'trend', metric: 'hrvMs', days: 180 }
       })
     ).toThrow()
     expect(() => validateDashboardLayout('menuBar', {})).toThrow()
   })
-  test('menu destinations cover every selectable metric and monthly trends', () => {
+  test('both surfaces offer every period and only supported one-day charts', () => {
+    for (const surface of ['home', 'menuBar'] as const) {
+      const options = widgetOptions('chart', surface)
+      for (const metric of METRIC_KEYS) {
+        expect(options.filter(widget => widget.kind === 'trend' && widget.metric === metric).map(widget => widget.kind === 'trend' && widget.days)).toEqual(DASHBOARD_TREND_PERIODS.map(period => period.days))
+        expect(options.some(widget => widget.kind === 'intraday' && widget.metric === metric)).toBe((DASHBOARD_INTRADAY_METRICS as readonly string[]).includes(metric))
+      }
+      const layout = normalizeDashboardLayout(surface, {
+        ...normalizeDashboardLayout(surface, undefined),
+        chart1: { kind: 'trend', metric: 'steps', days: 365 },
+        chart2: { kind: 'intraday', metric: 'restingHeartRate' }
+      })
+      expect(layout.chart1).toEqual({ kind: 'trend', metric: 'steps', days: 365 })
+      expect(layout.chart2).toEqual({ kind: 'intraday', metric: 'restingHeartRate' })
+    }
+  })
+  test('menu destinations cover every selectable metric and every chart period', () => {
     for (const metric of METRIC_KEYS)
-      expect(isMenuBarDestination({ view: 'home', metric, range: 'M', date: '2026-10-02' })).toBe(
-        true
-      )
+      for (const range of ['D', ...DASHBOARD_TREND_PERIODS.map(period => period.range)])
+        expect(isMenuBarDestination({ view: 'home', metric, range, date: '2026-10-02' })).toBe(true)
     expect(
       isMenuBarDestination({ view: 'settings', customize: 'menuBar', date: '2026-10-02' })
     ).toBe(true)

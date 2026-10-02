@@ -1,5 +1,5 @@
 import { Barbell, Moon } from '@phosphor-icons/react'
-import type { DashboardWidget } from '@shared/dashboard'
+import { DASHBOARD_TREND_PERIODS, type DashboardTrendDays, type DashboardWidget } from '@shared/dashboard'
 import type { Goals, MetricKey, Workout } from '@shared/types'
 import { selectedSleepSession } from '@shared/sleep'
 import {
@@ -11,10 +11,10 @@ import {
 } from '@/hooks/useHealth'
 import { METRICS } from '@/lib/metric-registry'
 import { metricGoal, summaryReading } from '@/lib/dashboard-widgets'
-import { pointValues, rangeEnding, seriesPoints } from '@/lib/metrics'
-import { formatClock, formatHour, formatMinutes, shortDate } from '@/lib/format'
+import { pointValues, rangeEnding, seriesPoints, weeklyAverageBuckets } from '@/lib/metrics'
+import { formatClock, formatHour, formatMinuteOfDay, formatMinutes, shortDate } from '@/lib/format'
 import type { MetricRange } from '@/lib/metric-navigation'
-import { ColumnChart, ProgressRing, TrendLine } from './charts'
+import { ColumnChart, IntradayLine, ProgressRing, TrendLine } from './charts'
 import { DrillHeader, DrillPanel, Panel } from './Panel'
 import { MetricStat } from './MetricStat'
 import { SleepStages, STAGE_COLOR, STAGE_LABEL } from './SleepStages'
@@ -257,7 +257,10 @@ export function DashboardChart(props: ChartProps): React.JSX.Element {
   const { widget } = props
   if (widget.kind === 'trend')
     return <TrendWidget {...props} metric={widget.metric} days={widget.days} />
-  if (widget.kind === 'intraday') return <IntradayWidget {...props} metric={widget.metric} />
+  if (widget.kind === 'intraday')
+    return widget.metric === 'restingHeartRate'
+      ? <HeartRateWidget {...props} />
+      : <IntradayWidget {...props} metric={widget.metric} />
   if (widget.kind === 'sleepStages') return <SleepWidget {...props} />
   return <WorkoutsWidget {...props} />
 }
@@ -309,11 +312,14 @@ function TrendWidget({
   compact,
   wide,
   onOpen
-}: ChartProps & { metric: MetricKey; days: 7 | 30 }): React.JSX.Element {
+}: ChartProps & { metric: MetricKey; days: DashboardTrendDays }): React.JSX.Element {
   const range = rangeEnding(date, days)
   const series = useSeries([metric], range.start, date, enabled)
   const points = seriesPoints(series.data?.days, metric, range.start, date)
   const def = METRICS[metric]
+  const period = DASHBOARD_TREND_PERIODS.find(period => period.days === days)!
+  const weekly = days === 365 && def.chart === 'bar' ? weeklyAverageBuckets(points) : null
+  const chartPoints = weekly ?? points
   const Icon = def.icon
   const height = compact ? 105 : 170
   const goal = metricGoal(metric, goals)
@@ -321,22 +327,24 @@ function TrendWidget({
   const chart =
     def.chart === 'bar' ? (
       <ColumnChart
-        data={points.map((p) => ({
+        data={chartPoints.map((p, index) => ({
           key: p.date,
           value: p.value,
-          label: shortDate(p.date),
+          label: weekly ? `${shortDate(weekly[index].date)}–${shortDate(weekly[index].endDate)} · daily average` : shortDate(p.date),
           tick:
             days === 7
               ? new Date(`${p.date}T12:00:00`).toLocaleDateString([], { weekday: 'narrow' })
-              : undefined
+              : days >= 90 && (index === 0 || p.date.slice(0, 7) !== chartPoints[index - 1].date.slice(0, 7))
+                ? new Date(`${p.date}T12:00:00`).toLocaleDateString([], { month: 'short' })
+                : undefined
         }))}
         color={def.color}
         height={height}
-        emphasisIndex={points.length - 1}
+        emphasisIndex={weekly ? undefined : points.length - 1}
         goal={goal !== null && goal > 0 ? { value: goal, label: 'Goal' } : null}
         format={def.format}
         unitLabel={def.unit || (metric === 'steps' ? 'steps' : '')}
-        onSelect={(p) => onOpen(metric, 'D', p.key)}
+        onSelect={weekly ? undefined : (p) => onOpen(metric, 'D', p.key)}
       />
     ) : (
       <TrendLine
@@ -353,16 +361,16 @@ function TrendWidget({
       compact={compact}
       wide={wide}
       title={title}
-      hint={`Last ${days} days`}
+      hint={`${period.hint}${weekly ? ' · weekly daily averages' : ''}`}
       icon={<Icon size={18} weight="fill" color={def.color} />}
-      onOpen={() => onOpen(metric, days === 7 ? 'W' : 'M', date)}
+      onOpen={() => onOpen(metric, period.range, date)}
     >
       {series.isError ? (
         <Retry onRetry={() => void series.refetch()} />
       ) : series.isMetricPending(metric) ? (
         <SkeletonChart
           height={height}
-          columns={days}
+          columns={chartPoints.length}
           variant={def.chart === 'line' ? 'line' : undefined}
         />
       ) : points.every((p) => p.value === null) ? (
@@ -382,6 +390,8 @@ function IntradayWidget({
   metric,
   date,
   enabled = true,
+  compact,
+  wide,
   onOpen
 }: ChartProps & { metric: MetricKey }): React.JSX.Element {
   const steps = useIntraday(date, enabled && metric === 'steps', 'steps')
@@ -393,6 +403,7 @@ function IntradayWidget({
   const query = metric === 'steps' ? steps : activity
   const def = METRICS[metric]
   const Icon = def.icon
+  const height = compact ? 105 : 170
   const data =
     metric === 'steps'
       ? (steps.data?.stepsHourly ?? []).map((h) => ({
@@ -403,14 +414,14 @@ function IntradayWidget({
         }))
       : (activity.data?.points ?? []).map((p) => ({
           key: String(p.minute),
-          label: formatClock(
-            new Date(new Date(`${date}T00:00:00`).getTime() + p.minute * 60_000).toISOString()
-          ),
+          label: formatMinuteOfDay(p.minute),
           value: p.value,
           tick: p.minute % 360 === 0 ? formatHour(p.minute / 60) : undefined
         }))
   return (
     <ChartFrame
+      compact={compact}
+      wide={wide}
       title={metric === 'steps' ? 'Daily movement' : def.label}
       hint={metric === 'steps' ? 'Steps per hour' : 'Throughout the day'}
       icon={<Icon size={18} weight="fill" color={def.color} />}
@@ -419,16 +430,44 @@ function IntradayWidget({
       {query.isError ? (
         <Retry onRetry={() => void query.refetch()} />
       ) : query.isPending ? (
-        <SkeletonChart columns={metric === 'steps' ? 24 : 48} />
+        <SkeletonChart height={height} columns={metric === 'steps' ? 24 : 48} />
       ) : data.length && data.some((p) => p.value !== null) ? (
         <ColumnChart
           data={data}
+          height={height}
           color={def.color}
           format={def.format}
           unitLabel={def.unit || 'steps'}
         />
       ) : (
-        <div className="dashboard-chart-empty">No movement recorded yet for this day.</div>
+        <div className="dashboard-chart-empty" style={{ height }}>No movement recorded yet for this day.</div>
+      )}
+    </ChartFrame>
+  )
+}
+
+function HeartRateWidget({ date, enabled = true, compact, wide, onOpen }: ChartProps): React.JSX.Element {
+  const intraday = useIntraday(date, enabled, 'heart')
+  const def = METRICS.restingHeartRate
+  const Icon = def.icon
+  const height = compact ? 105 : 170
+  return (
+    <ChartFrame
+      compact={compact}
+      wide={wide}
+      title="Heart rate"
+      hint="Across the day"
+      icon={<Icon size={18} weight="fill" color={def.color} />}
+      onOpen={() => onOpen('restingHeartRate', 'D', date)}
+    >
+      {intraday.isError ? (
+        <Retry onRetry={() => void intraday.refetch()} />
+      ) : intraday.isPending ? (
+        <SkeletonChart height={height} variant="intraday-line" />
+      ) : intraday.data && intraday.data.heartRate.length > 1 ? (
+        <IntradayLine points={intraday.data.heartRate} height={height} color={def.color} />
+      ) : (
+        <div className="dashboard-chart-empty" style={{ height }}>No heart-rate samples recorded for this day.</div>
       )}
     </ChartFrame>
   )

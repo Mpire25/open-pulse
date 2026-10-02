@@ -64,6 +64,10 @@ cannot complete.
 
 Click **Customize** on Home, then the pencil beside a position to choose its widget
 from a native macOS menu. Editing preserves the original card sizes and spacing.
+Chart choices are grouped by category, metric, and period: 7 days, 30 days,
+3 months, or 1 year. Steps, heart rate, and supported activity metrics also
+offer a 1-day chart. Longer heart-rate periods show resting heart rate;
+yearly activity bars show weekly daily averages, as in the metric detail view.
 Use **Save layout** to keep your choices, **Cancel** to discard the draft, or
 **Restore defaults** followed by Save to return that surface to its original layout.
 
