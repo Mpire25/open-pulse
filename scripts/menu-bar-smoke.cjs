@@ -188,7 +188,7 @@ async function memoryRun(main, openPanel) {
   replace('health:sleep-range', () => (healthRequests++, { source: 'fixture', days: missing ? [] : [{ date: today, mainSessionId: 'night', complete: true, minutesAsleep: 367, efficiency: 94, sessions: [{ id: 'night', date: today, startTime: `${offset(today, -1)}T23:00:00`, endTime: `${today}T05:29:00`, minutesAsleep: 367, stageMinutes: { AWAKE: 22, REM: 82, LIGHT: 220, DEEP: 65 }, stages: [] }] }] }))
   replace('health:devices', () => (healthRequests++, missing ? [] : [{ name: 'Fitbit Air', batteryPct: 76, lastSync: new Date(Date.now() - 12 * 60000).toISOString() }]))
   replace('health:intraday', () => ({ date: today, heartRate: [{ minute: 0, bpm: 65 }, { minute: 360, bpm: 78 }, { minute: 720, bpm: 70 }], stepsHourly: [{ hour: 0, steps: 120 }, { hour: 6, steps: 550 }], currentHeartRate: null }))
-  replace('health:activity-intraday', (_e, _requestId, date, metric) => ({ date, metric, source: 'fixture', windowMinutes: 30, points: [{ minute: 0, value: 20 }, { minute: 360, value: 80 }], breakdown: [] }))
+  replace('health:activity-intraday', (_e, date, metric) => ({ date, metric, source: 'fixture', windowMinutes: 30, points: [{ minute: 0, value: metric === 'floors' || metric === 'sedentaryMinutes' ? 3 : 20 }, { minute: 360, value: 80 }], breakdown: [] }))
   replace('health:workouts', () => ({ workouts: [], source: 'fixture' }))
   await until(() => BrowserWindow.getAllWindows().every(w => w.webContents.getURL() && !w.webContents.isLoadingMainFrame()), 'initial windows loaded')
   const main = BrowserWindow.getAllWindows().find(w => !w.webContents.getURL().endsWith('#menu-bar'))
@@ -402,6 +402,20 @@ async function memoryRun(main, openPanel) {
     }
     const beforeLayouts = await reopened.webContents.executeJavaScript('window.pulse.dashboard.get()')
     const checkDraftPeriods = async (slotLabel, height) => {
+      for (const [metric, axis, value, unit] of [['floors', 'floors', '3', 'floors'], ['sedentaryMinutes', 'min', '3m', ''], ['distanceKm', 'km', '20.00', 'km'], ['caloriesOut', 'kcal', '20', 'kcal'], ['steps', 'steps', '120', 'steps']]) {
+        await choose(reopened, slotLabel, `intraday:${metric}`)
+        await until(() => reopened.webContents.executeJavaScript(`document.querySelector('[data-dashboard-slot="chart1"] svg text[transform]')?.textContent === ${JSON.stringify(axis)}`), metric + ' has the correct axis unit')
+        await reopened.webContents.executeJavaScript(`(() => {
+          const hit = document.querySelector('[data-dashboard-slot="chart1"] svg rect[fill="transparent"]')
+          hit.dispatchEvent(new PointerEvent('pointermove', { bubbles: true }))
+        })()`)
+        await until(() => reopened.webContents.executeJavaScript(`!!document.querySelector('[data-dashboard-slot="chart1"] .pointer-events-none')`), metric + ' tooltip rendered')
+        const tooltip = await reopened.webContents.executeJavaScript(`(() => {
+          const row = document.querySelector('[data-dashboard-slot="chart1"] .pointer-events-none > div:last-child')
+          return Array.from(row.querySelectorAll('span')).filter(span => span.textContent).map(span => span.textContent)
+        })()`)
+        assert.deepEqual(tooltip, unit ? [value, unit] : [value], slotLabel + ': ' + metric + ' tooltip uses the correct unit without duplicates')
+      }
       for (const [widget, hint] of [['trend:steps:90', 'Last 3 months'], ['trend:steps:365', 'Last 1 year'], ['intraday:restingHeartRate', 'Across the day'], ['intraday:caloriesOut', 'Throughout the day'], ['intraday:steps', 'Steps per hour']]) {
         await choose(reopened, slotLabel, widget)
         await until(() => reopened.webContents.executeJavaScript(`(() => {

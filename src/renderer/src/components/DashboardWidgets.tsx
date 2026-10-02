@@ -403,6 +403,7 @@ function IntradayWidget({
   )
   const query = metric === 'steps' ? steps : activity
   const def = METRICS[metric]
+  const unitLabel = metric === 'steps' || metric === 'floors' ? metric : def.unit
   const Icon = def.icon
   const height = compact ? 105 : 170
   const data =
@@ -438,10 +439,13 @@ function IntradayWidget({
           height={height}
           color={def.color}
           format={def.format}
-          unitLabel={def.unit || 'steps'}
+          unitLabel={unitLabel}
+          axisLabel={metric === 'sedentaryMinutes' ? 'min' : unitLabel}
         />
       ) : (
-        <div className="dashboard-chart-empty" style={{ height }}>No movement recorded yet for this day.</div>
+        <div className="dashboard-chart-empty" style={{ height }}>
+          {metric === 'steps' ? 'No movement recorded yet for this day.' : `No ${def.label.toLowerCase()} recorded for this day.`}
+        </div>
       )}
     </ChartFrame>
   )

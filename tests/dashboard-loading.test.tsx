@@ -6,7 +6,7 @@ import { DashboardChart, DashboardRing, DashboardSummary } from '../src/renderer
 import { METRICS } from '../src/renderer/src/lib/metric-registry'
 import { rangeEnding } from '../src/renderer/src/lib/metrics'
 import { DEFAULT_GOALS, METRIC_KEYS, type MetricKey } from '../src/shared/types'
-import { normalizeDashboardLayout } from '../src/shared/dashboard'
+import { DASHBOARD_INTRADAY_METRICS, normalizeDashboardLayout } from '../src/shared/dashboard'
 import { MenuBarSlots } from '../src/renderer/src/views/MenuBarDashboard'
 
 const date = '2026-10-02'
@@ -123,6 +123,30 @@ describe('dashboard loading presentation', () => {
         client.removeQueries({ queryKey: ['intraday', 'heart', date], exact: true })
       }
       expect(client.getQueryCache().findAll({ queryKey: ['activity-intraday'] })).toHaveLength(0)
+    })
+  })
+
+  test('empty one-day activity charts describe the selected metric on both surfaces', () => {
+    withClient((render, client) => {
+      for (const metric of DASHBOARD_INTRADAY_METRICS.filter(metric => metric !== 'restingHeartRate')) {
+        for (const compact of [false, true]) {
+          const node = <DashboardChart {...props} compact={compact} widget={{ kind: 'intraday', metric }} onSleep={noop} />
+          expect(skeletonCount(render(node))).toBeGreaterThan(0)
+          for (const points of [[], [{ minute: 0, value: null }]]) {
+            client.setQueryData(metric === 'steps' ? ['intraday', 'steps', date] : ['activity-intraday', metric, date],
+              metric === 'steps'
+                ? { date, stepsHourly: [], heartRate: [], currentHeartRate: null }
+                : { date, metric, source: 'fixture', windowMinutes: 30, points, breakdown: [] })
+            const html = render(node)
+            expect(text(html)).toContain(metric === 'steps'
+              ? 'No movement recorded yet for this day.'
+              : `No ${METRICS[metric].label.toLowerCase()} recorded for this day.`)
+            expect(html).toContain(`height:${compact ? 105 : 170}px`)
+            expect(skeletonCount(html)).toBe(0)
+          }
+          client.removeQueries({ queryKey: metric === 'steps' ? ['intraday', 'steps', date] : ['activity-intraday', metric, date], exact: true })
+        }
+      }
     })
   })
 
