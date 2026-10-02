@@ -32,7 +32,14 @@ mock.module('electron', () => ({
             ? 'issued-a'
             : authorization.searchParams.get('client_id')!
       }).toString()
-      await originalFetch(callback)
+      const response = await originalFetch(callback)
+      expect(response.status).toBe(callbackFailure ? 400 : 200)
+      expect(response.headers.get('content-type')).toBe('text/html; charset=utf-8')
+      expect(response.headers.get('cache-control')).toBe('no-store')
+      const page = await response.text()
+      expect(page).toContain(callbackFailure ? 'Sign-in interrupted' : 'Authorization received')
+      expect(page).toContain('Return to OpenPulse')
+      expect(page).not.toContain(callback.searchParams.get('state')!)
     }
   }
 }))

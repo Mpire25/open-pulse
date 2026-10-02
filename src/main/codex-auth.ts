@@ -3,6 +3,7 @@ import { shell } from 'electron'
 import { createServer } from 'node:http'
 import { randomUUID } from 'node:crypto'
 import { createPkcePair, randomState } from './pkce'
+import { chatGPTCallbackPage, CHATGPT_CALLBACK_HEADERS } from './chatgpt-callback-page'
 import {
   createSharedOperation,
   waitForSharedOperation,
@@ -158,14 +159,12 @@ export async function connectCodex(): Promise<CodexAuthStatus> {
             state
           )
           res
-            .writeHead(200, { 'content-type': 'text/html; charset=utf-8' })
-            .end(
-              '<title>OpenPulse</title><p>Authorization received. Return to OpenPulse to finish signing in.</p>'
-            )
+            .writeHead(200, CHATGPT_CALLBACK_HEADERS)
+            .end(chatGPTCallbackPage('received'))
           finish()
           resolve(value)
         } catch (error) {
-          res.writeHead(400).end('Authorization failed. Return to OpenPulse.')
+          res.writeHead(400, CHATGPT_CALLBACK_HEADERS).end(chatGPTCallbackPage('failed'))
           fail(
             error instanceof Error ? error : new Error('Authorization failed.')
           )
