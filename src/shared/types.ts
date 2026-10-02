@@ -468,7 +468,6 @@ export interface CodexAuthStatus {
   needsReconnect?: boolean
   activeRegistration?: string
   authRevision?: number
-  accounts?: { id: string; label: string }[]
 }
 
 export interface PairedDevice {

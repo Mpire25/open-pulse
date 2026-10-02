@@ -54,7 +54,7 @@ export function responseError(
     subscription_sharing_invalid_user:
       'ChatGPT could not validate this session. Reconnect in Settings.',
     chatpass_v2_scope_not_authorized:
-      'ChatGPT plan permission is not authorized. Enable plan usage in Settings.',
+      'ChatGPT plan permission is not authorized. Sign out and sign in again in Settings.',
     chatpass_v2_invalid_authorization_context:
       'ChatGPT authorization is not valid for this request. Reconnect in Settings.'
   }

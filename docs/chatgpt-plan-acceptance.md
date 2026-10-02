@@ -4,12 +4,12 @@ Automated tests use synthetic credentials and mocked storage; they do not access
 macOS Keychain or verify ChatGPT plan eligibility. Complete this checklist in the
 packaged app before considering live account acceptance finished.
 
-1. Open Settings and choose **Continue with ChatGPT**. For an old Codex sign-in,
+1. Open Settings and choose **Sign in with ChatGPT**. For an old Codex sign-in,
    confirm the reconnect notice appears and existing chats/settings remain.
 2. Complete browser authorization yourself. Handle any Keychain prompt manually;
    stop on the first authentication or decryption failure.
 3. Confirm the active account and plan-enabled state. If plan consent was not
-   granted, the app should retain the sign-in and offer **Enable plan usage**.
+   granted, the app should explain that signing out and signing in again is needed.
 4. Confirm models load, refresh the catalog, and select a model. Leave reasoning
    on **Automatic** initially. Discovery is a catalog, not proof of inference
    access; send a simple message and wait for a completed answer.
@@ -22,10 +22,10 @@ packaged app before considering live account acceptance finished.
 8. With a previously cached catalog, disconnect the network and refresh models.
    Cached choices should remain with a stale/error message; the selection should
    not change. Restore the network and refresh successfully.
-9. Add or reauthorize another account registration. Confirm catalogs stay separate
-   and a failed or cancelled sign-in preserves the previous active registration.
-10. Sign out. Confirm local credentials are cleared, the registration remains
-    available for later sign-in, and unconfirmed remote revocation is disclosed.
+9. Sign out, then sign in with a different account on the ChatGPT site. Confirm
+   its model catalog replaces the previous choices and no account selector appears.
+10. Sign out. Confirm the local session is removed and unconfirmed remote
+    revocation is disclosed.
 
 No automated step should approve, dismiss, or retry Keychain authentication.
 See the official [ChatGPT plan flow](https://developers.openai.com/siwc/token-sharing-open-source/sign-in)

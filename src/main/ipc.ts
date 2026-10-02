@@ -213,10 +213,9 @@ export function registerIpc(commands: { open: (destination: MenuBarDestination) 
 
   handle('codex:status', () => getCodexStatus())
   handle('codex:models', (_event, force?: boolean) => getChatGPTModels(force === true))
-  handle('codex:connect', (_event, registrationId?: string) => {
-    if (registrationId !== undefined && typeof registrationId !== 'string') throw new Error('Invalid ChatGPT registration.')
+  handle('codex:connect', () => {
     cancelAllChats('ChatGPT sign-in changed.')
-    return connectCodex(registrationId)
+    return connectCodex()
   })
   handle('codex:disconnect', () => {
     cancelAllChats('ChatGPT disconnected.')

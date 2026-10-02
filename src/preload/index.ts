@@ -116,7 +116,7 @@ const api = {
   },
   codex: {
     status: (): Promise<CodexAuthStatus> => ipcRenderer.invoke('codex:status'),
-    connect: (registrationId?: string): Promise<CodexAuthStatus> => ipcRenderer.invoke('codex:connect', registrationId),
+    connect: (): Promise<CodexAuthStatus> => ipcRenderer.invoke('codex:connect'),
     models: (force = false): Promise<ModelCatalog> => ipcRenderer.invoke('codex:models', force),
     disconnect: (): Promise<{ warning?: string }> => ipcRenderer.invoke('codex:disconnect')
   },

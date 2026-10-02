@@ -17,7 +17,7 @@ mock.module('framer-motion', () => ({ motion: new Proxy({}, { get: (_, tag: stri
 const { createRoot } = await import('react-dom/client')
 const { SettingsView } = await import('../../src/renderer/src/views/SettingsView')
 const settings: AppSettings = { menuBarEnabled: false, googleClientId: '', googleClientSecret: '', googleClientSecretConfigured: false, goals: DEFAULT_GOALS, assistant: DEFAULT_ASSISTANT, chatRetention: 'forever' }
-const connected: CodexAuthStatus = { connected: true, signedIn: true, planEnabled: true, activeRegistration: 'account-a', authRevision: 1, email: 'test@example.invalid', accounts: [{ id: 'account-a', label: 'Test account' }] }
+const connected: CodexAuthStatus = { connected: true, signedIn: true, planEnabled: true, activeRegistration: 'account-a', authRevision: 1, email: 'test@example.invalid' }
 let backendStatus: CodexAuthStatus
 let publish!: (value: CodexAuthStatus) => void
 let resolveConnect!: (value: CodexAuthStatus) => void
@@ -74,8 +74,8 @@ test('a stale sign-in completion cannot disable sign out or reconnect after sign
   expect(button('Sign in with ChatGPT')?.disabled).toBe(false)
 })
 
-test('saved accounts never introduce account management controls', async () => {
-  backendStatus = { ...connected, connected: false, signedIn: false }
+test('sign-in delegates account selection to ChatGPT', async () => {
+  backendStatus = { connected: false, signedIn: false }
   let signInArguments: unknown[] = []
   window.pulse.codex.connect = async (...args) => { signInArguments = args; return connected }
   await act(async () => root.render(<Harness />))

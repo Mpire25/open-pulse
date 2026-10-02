@@ -78,7 +78,7 @@ mock.module('../../src/main/chatgpt-protocol', () => ({
 const auth = await import('../../src/main/codex-auth')
 const { getChatGPTModels, parseModels } =
   await import('../../src/main/chatgpt-models')
-const KEY = 'chatgpt-plan-registrations'
+const KEY = 'chatgpt-plan-session'
 function seed(overrides: Partial<CodexTokens> = {}): void {
   const tokens = {
     accessToken: 'test-access',
@@ -90,12 +90,7 @@ function seed(overrides: Partial<CodexTokens> = {}): void {
     expiresAt: Date.now() + 3600_000,
     ...overrides
   }
-  secrets.set(KEY, {
-    active: 'issued-a',
-    registrations: {
-      'issued-a': { clientId: 'issued-a', subject: 'user-a', tokens }
-    }
-  })
+  secrets.set(KEY, tokens)
 }
 beforeEach(() => {
   secrets.clear()
@@ -134,17 +129,44 @@ test('legacy credentials require reconnect, successful migration preserves setti
 test('failed callback never exchanges tokens or deletes the existing session', async () => {
   seed()
   callbackFailure = true
-  await expect(auth.connectCodex('issued-a')).rejects.toThrow('state')
+  await expect(auth.connectCodex()).rejects.toThrow('state')
   expect(exchanges).toBe(0)
   expect((await auth.getCodexTokens())?.accessToken).toBe('test-access')
 })
-test('a changed identity cannot overwrite a saved registration', async () => {
+test('browser sign-in replaces the single session with the chosen identity', async () => {
   seed()
   subject = 'other-user'
-  await expect(auth.connectCodex('issued-a')).rejects.toThrow(
-    'different identity'
-  )
-  expect((await auth.getCodexTokens())?.accessToken).toBe('test-access')
+  expect(await auth.connectCodex()).toMatchObject({ signedIn: true })
+  expect((await auth.getCodexTokens())?.subject).toBe('other-user')
+  expect((secrets.get(KEY) as CodexTokens).subject).toBe('other-user')
+})
+test('old registration storage migrates only the active session', async () => {
+  seed()
+  const active = secrets.get(KEY)
+  secrets.delete(KEY)
+  secrets.set('chatgpt-plan-registrations', {
+    active: 'issued-a',
+    registrations: {
+      'issued-a': { tokens: active },
+      'issued-b': { tokens: { ...(active as CodexTokens), clientId: 'issued-b', subject: 'other-user' } }
+    }
+  })
+  expect((await auth.getCodexTokens())?.subject).toBe('user-a')
+  expect(secrets.has('chatgpt-plan-registrations')).toBe(false)
+  expect(secrets.get(KEY)).toEqual(active)
+  expect('accounts' in auth.getCodexStatus()).toBe(false)
+})
+test('new sign-in removes old registrations so sign-out cannot restore them', async () => {
+  seed()
+  const previous = secrets.get(KEY)
+  secrets.delete(KEY)
+  secrets.set('chatgpt-plan-registrations', { active: 'old', registrations: { old: { tokens: previous } } })
+  await auth.connectCodex()
+  expect(secrets.has('chatgpt-plan-registrations')).toBe(false)
+  globalThis.fetch = (async () => new Response('', { status: 200 })) as typeof fetch
+  await auth.disconnectCodex()
+  expect(auth.getCodexStatus().signedIn).toBe(false)
+  expect(secrets.has(KEY)).toBe(false)
 })
 test('missing plan consent retains identity without enabling inference', async () => {
   scopes = 'openid email offline_access'
@@ -154,7 +176,7 @@ test('missing plan consent retains identity without enabling inference', async (
     planEnabled: false
   })
   await expect(auth.getCodexTokens()).rejects.toThrow(
-    'Enable ChatGPT plan usage'
+    'Sign out and sign in again'
   )
 })
 test('concurrent consumers share a rotating refresh and cancellation does not discard replacement tokens', async () => {
@@ -196,9 +218,9 @@ test('terminal refresh rejection clears credentials, temporary failures preserve
   }
   await expect(auth.getCodexTokens()).rejects.toThrow('no longer valid')
   expect(auth.getCodexStatus().signedIn).toBe(false)
-  expect(auth.getCodexStatus().accounts).toHaveLength(1)
+  expect(secrets.has(KEY)).toBe(false)
 })
-test('disconnect revokes and clears tokens while retaining the registration', async () => {
+test('disconnect revokes and removes the single session', async () => {
   seed()
   globalThis.fetch = (async (input, init) => {
     expect(String(input)).toBe('https://auth.openai.com/revoke')
@@ -209,9 +231,10 @@ test('disconnect revokes and clears tokens while retaining the registration', as
   }) as typeof fetch
   expect(await auth.disconnectCodex()).toEqual({ warning: undefined })
   expect(auth.getCodexStatus()).toMatchObject({
-    signedIn: false,
-    accounts: [{ id: 'issued-a' }]
+    signedIn: false
   })
+  expect(secrets.has(KEY)).toBe(false)
+  expect(auth.getCodexStatus().activeRegistration).toBeUndefined()
 })
 test('model catalog preserves ordering, filters hidden/duplicate/invalid models and handles new IDs', () => {
   expect(
@@ -256,22 +279,7 @@ test('catalog refresh caches per registration and falls back without erasing suc
     stale: true,
     models: [{ id: 'new-model' }]
   })
-  secrets.set(KEY, {
-    active: 'issued-b',
-    registrations: {
-      'issued-b': {
-        clientId: 'issued-b',
-        subject: 'user-b',
-        tokens: {
-          accessToken: 'other',
-          clientId: 'issued-b',
-          subject: 'user-b',
-          scopes: scopes.split(' '),
-          expiresAt: Date.now() + 3600_000
-        }
-      }
-    }
-  })
+  seed({ clientId: 'issued-b', subject: 'user-b', accessToken: 'other' })
   expect((await getChatGPTModels()).models).toEqual([])
 })
 

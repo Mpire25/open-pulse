@@ -109,15 +109,15 @@ Scopes requested (read-only):
 ## Connecting the AI assistant (Sign in with ChatGPT)
 
 The assistant uses [Sign in with ChatGPT plan authorization](https://developers.openai.com/siwc/token-sharing-open-source/sign-in).
-In **Settings → AI Assistant**, click **Continue with ChatGPT** and authorize
+In **Settings → AI Assistant**, click **Sign in with ChatGPT** and authorize
 OpenPulse in the browser. The callback uses a temporary port on `127.0.0.1`;
 no shared Codex client ID or fixed callback port is required. Account/workspace
 eligibility and usage limits are controlled by ChatGPT.
 
 Existing installations need a one-time reconnect. Chats, health data, and saved
-assistant settings are preserved. Settings lets you add or reauthorize separate
-ChatGPT account registrations; signing out revokes the renewable session when
-reachable and clears its local tokens while retaining registration metadata.
+assistant settings are preserved. OpenPulse keeps one ChatGPT session; account
+selection happens on the ChatGPT site. Signing out revokes the renewable session
+when reachable and removes its local credentials.
 
 The model picker loads the connected account's catalog from `/v1/models`, refreshes
 on launch and when opening settings after six hours, and offers **Refresh models**.
