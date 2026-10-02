@@ -587,38 +587,54 @@ function CodexCard({
   codex: CodexAuthStatus
   onCodexChange: (s: CodexAuthStatus) => void
 }): React.JSX.Element {
-  const [busy, setBusy] = useState(false)
+  const [operation, setOperation] = useState<'connect' | 'disconnect' | null>(null)
+  const operationSequence = useRef(0)
+  const [switching, setSwitching] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [selectedAccount, setSelectedAccount] = useState(codex.activeRegistration ?? '')
-  useEffect(() => { setSelectedAccount(codex.activeRegistration ?? '') }, [codex.activeRegistration])
+  useEffect(() => { setSelectedAccount(codex.activeRegistration ?? ''); setSwitching(false) }, [codex.activeRegistration])
 
   const connect = async (): Promise<void> => {
+    const sequence = ++operationSequence.current
     setError(null)
-    setBusy(true)
+    setOperation('connect')
     try {
-      onCodexChange(await window.pulse.codex.connect(selectedAccount || undefined))
+      const status = await window.pulse.codex.connect(selectedAccount || undefined)
+      if (sequence !== operationSequence.current) return
+      setOperation(null)
+      setSwitching(false)
+      onCodexChange(status)
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
+      if (sequence === operationSequence.current) setError(err instanceof Error ? err.message : String(err))
     } finally {
-      setBusy(false)
+      if (sequence === operationSequence.current) setOperation(null)
     }
   }
 
   const disconnect = async (): Promise<void> => {
-    setBusy(true)
+    const sequence = ++operationSequence.current
+    setOperation('disconnect')
+    setError(null)
     try {
       const result = await window.pulse.codex.disconnect()
-      onCodexChange(await window.pulse.codex.status())
+      const status = await window.pulse.codex.status()
+      if (sequence !== operationSequence.current) return
+      setOperation(null)
+      setSwitching(false)
+      onCodexChange(status)
       setError(result.warning ?? null)
-    } catch (error) { setError(error instanceof Error ? error.message : String(error)) }
-    finally { setBusy(false) }
+    } catch (error) {
+      if (sequence === operationSequence.current) setError(error instanceof Error ? error.message : String(error))
+    } finally { if (sequence === operationSequence.current) setOperation(null) }
   }
+  const choosingAccount = !codex.signedIn || switching
+  const differentAccount = selectedAccount !== codex.activeRegistration
 
   return (
     <Card index={1}>
       <SectionHeader
         title="AI Assistant"
-        hint="Sign in with ChatGPT to power insights"
+        hint={codex.connected ? "Your ChatGPT plan powers insights" : "Sign in with ChatGPT to power insights"}
         icon={<Sparkle size={18} weight="fill" className="text-accent" />}
         action={
           <StatusPill
@@ -627,12 +643,12 @@ function CodexCard({
           />
         }
       />
-      {codex.accounts && codex.accounts.length > 0 && <div className="flex items-center gap-3">
-        <select aria-label="ChatGPT account" value={selectedAccount} onChange={(event) => setSelectedAccount(event.target.value)} className="rounded-lg bg-canvas px-3 py-2 text-[12px] text-ink">
+      {choosingAccount && codex.accounts && codex.accounts.length > 0 && <div className="flex items-center gap-3">
+        <select aria-label="ChatGPT account" disabled={operation !== null} value={selectedAccount} onChange={(event) => setSelectedAccount(event.target.value)} className="rounded-lg bg-canvas px-3 py-2 text-[12px] text-ink">
           <option value="">Add another ChatGPT account</option>
           {codex.accounts.map((account) => <option key={account.id} value={account.id}>{account.label}</option>)}
         </select>
-        {codex.signedIn && <Button size="sm" disabled={busy} onClick={connect}>{codex.planEnabled ? 'Continue with account' : 'Enable plan usage'}</Button>}
+        {codex.signedIn && differentAccount && <Button size="sm" disabled={operation !== null} onClick={connect}>{operation === 'connect' ? 'Waiting for ChatGPT…' : selectedAccount ? 'Switch to account' : 'Connect another account'}</Button>}
       </div>}
       {codex.signedIn && !codex.planEnabled && <p className="text-[12px] text-ink-faint">Signed in, but ChatGPT plan usage is not enabled.</p>}
       {codex.signedIn && error && <p role="alert" className="text-[12px] text-danger">{error}</p>}
@@ -642,10 +658,12 @@ function CodexCard({
             <CheckCircle size={16} weight="fill" className="text-[#4fd979]" />
             Signed in{codex.email ? ` as ${codex.email}` : ''}
           </div>
-          <div>
-            <Button variant="destructive" size="sm" disabled={busy} onClick={disconnect}>
-              Sign out
+          <div className="flex flex-wrap items-center gap-3">
+            <Button variant="destructive" size="sm" disabled={operation === 'disconnect'} onClick={disconnect}>
+              {operation === 'disconnect' ? 'Signing out…' : 'Sign out'}
             </Button>
+            <Button variant="ghost" size="sm" disabled={operation !== null} onClick={() => setSwitching(!switching)}>{switching ? 'Cancel' : 'Switch account'}</Button>
+            {!codex.planEnabled && !differentAccount && <Button size="sm" disabled={operation !== null} onClick={connect}>Enable plan usage</Button>}
           </div>
         </div>
       ) : (
@@ -661,9 +679,9 @@ function CodexCard({
             </div>
           )}
           <div>
-            <Button onClick={connect} disabled={busy}>
-              {busy ? <ArrowClockwise size={15} className="animate-spin" /> : <Sparkle size={15} weight="fill" />}
-              {busy ? 'Waiting for ChatGPT…' : 'Continue with ChatGPT'}
+            <Button onClick={connect} disabled={operation !== null}>
+              {operation === 'connect' ? <ArrowClockwise size={15} className="animate-spin" /> : <Sparkle size={15} weight="fill" />}
+              {operation === 'connect' ? 'Waiting for ChatGPT…' : 'Continue with ChatGPT'}
             </Button>
           </div>
         </div>
