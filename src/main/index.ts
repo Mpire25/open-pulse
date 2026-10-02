@@ -6,6 +6,7 @@ import { readFileSync } from 'node:fs'
 import menuBarIcon from '../../build/menu-barTemplate.png?asset'
 import menuBarIconRetina from '../../build/menu-barTemplate@2x.png?asset'
 import { getMenuBarEnabled } from './store'
+import { installWindowActivation } from './window-activation'
 import { registerIpc, registerTrustedRenderer } from './ipc'
 import { createRendererTarget, safeExternalUrl, type RendererTarget } from './renderer-security'
 
@@ -280,6 +281,7 @@ function installApplicationMenu(target: RendererTarget): void {
 
 // One process owns rotating OAuth credentials for this userData directory.
 if (!app.requestSingleInstanceLock()) app.exit(0)
+installWindowActivation(app, () => mainWindow ?? createWindow(rendererTarget()))
 
 app.whenReady().then(() => {
   const target = rendererTarget()
@@ -299,12 +301,6 @@ app.whenReady().then(() => {
   installApplicationMenu(target)
   createWindow(target)
   applyMenuBarPreference(target, getMenuBarEnabled())
-  app.on('activate', () => {
-    const win = mainWindow ?? createWindow(target)
-    if (win.isMinimized()) win.restore()
-    win.show()
-    win.focus()
-  })
 })
 
 app.once('before-quit', () => { quitting = true; tray?.destroy(); tray = null })
