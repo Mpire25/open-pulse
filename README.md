@@ -62,7 +62,8 @@ cannot complete.
 
 ### Customize your dashboards
 
-Click **Customize** on Home, then **Change** beside a position to choose its widget.
+Click **Customize** on Home, then the pencil beside a position to choose its widget
+from a native macOS menu. Editing preserves the original card sizes and spacing.
 Use **Save layout** to keep your choices, **Cancel** to discard the draft, or
 **Restore defaults** followed by Save to return that surface to its original layout.
 
@@ -76,6 +77,7 @@ To verify the editor and popup using synthetic data in a disposable profile:
 ```bash
 bun run build
 bunx electron scripts/menu-bar-smoke.cjs --dashboard
+bunx electron scripts/menu-bar-smoke.cjs --dashboard --geometry
 ```
 
 ### Opt-in development tools

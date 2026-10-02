@@ -1,3 +1,4 @@
+import { chooseDashboardWidget } from './dashboard-menu'
 import { isMenuBarDestination, type MenuBarDestination } from '../shared/menu-bar'
 import { ipcMain } from 'electron'
 import type { IpcMainInvokeEvent, WebContents } from 'electron'
@@ -180,6 +181,8 @@ export function registerIpc(commands: { open: (destination: MenuBarDestination) 
   handle('app:close-panel', () => commands.close())
   handle('app:quit', () => commands.quit())
   onGoogleAuthInvalidated(notifyGoogleDisconnected)
+  handle('dashboard:choose', (event, surface, slot, current, anchor) =>
+    chooseDashboardWidget(event.sender, surface, slot, current, anchor))
   handle('dashboard:get', () => getDashboardLayouts())
   handle('dashboard:update', (_e, surface: unknown, layout: unknown) => {
     if (surface !== 'home' && surface !== 'menuBar') throw new Error('Unknown dashboard.')

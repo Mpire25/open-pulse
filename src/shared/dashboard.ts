@@ -157,3 +157,28 @@ export function validateDashboardLayout(surface: DashboardSurface, raw: unknown)
   }
   return normalizeDashboardLayout(surface, input)
 }
+
+export function widgetId(widget: DashboardWidget): string {
+  return 'metric' in widget
+    ? `${widget.kind}:${widget.metric}${widget.kind === 'trend' ? `:${widget.days}` : ''}`
+    : widget.kind
+}
+
+export function widgetOptions(slot: SlotKind, surface: DashboardSurface): DashboardWidget[] {
+  if (slot === 'goal') return GOAL_METRICS.map((metric) => ({ kind: 'goal', metric }))
+  if (slot === 'summary') return METRIC_KEYS.map((metric) => ({ kind: 'summary', metric }))
+  const trends = METRIC_KEYS.flatMap((metric): DashboardWidget[] =>
+    [7, 30].map((days) => ({ kind: 'trend', metric, days: days as 7 | 30 }))
+  )
+  if (slot === 'wide') return [{ kind: 'workouts' }, ...trends]
+  return [
+    { kind: 'sleepStages' },
+    ...(surface === 'home'
+      ? ['steps', ...ACTIVITY_INTRADAY_METRICS].map((metric): DashboardWidget => ({
+          kind: 'intraday',
+          metric: metric as MetricKey
+        }))
+      : []),
+    ...trends
+  ]
+}

@@ -4,10 +4,11 @@ import {
   DASHBOARD_SLOTS,
   normalizeDashboardLayout,
   normalizeDashboardLayouts,
-  validateDashboardLayout
+  validateDashboardLayout,
+  widgetOptions
 } from '../src/shared/dashboard'
 import { METRIC_KEYS, DEFAULT_GOALS } from '../src/shared/types'
-import { summaryReading, widgetOptions } from '../src/renderer/src/lib/dashboard-widgets'
+import { summaryReading } from '../src/renderer/src/lib/dashboard-widgets'
 import { isMenuBarDestination } from '../src/shared/menu-bar'
 
 describe('dashboard preferences', () => {

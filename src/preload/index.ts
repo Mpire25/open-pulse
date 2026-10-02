@@ -1,4 +1,4 @@
-import type { DashboardLayout, DashboardLayouts, DashboardSurface } from '../shared/dashboard'
+import type { DashboardLayout, DashboardLayouts, DashboardSurface, DashboardWidget } from '../shared/dashboard'
 import type { MenuBarDestination } from '../shared/menu-bar'
 import { contextBridge, ipcRenderer } from 'electron'
 import { healthWireArgs, unwrapHealthResult } from '../shared/health-ipc'
@@ -102,6 +102,7 @@ const api = {
     }
   },
   dashboard: {
+    choose: (surface: DashboardSurface, slot: string, current: DashboardWidget, anchor: { x: number; y: number }): Promise<DashboardWidget | null> => ipcRenderer.invoke('dashboard:choose', surface, slot, current, anchor),
     get: (): Promise<DashboardLayouts> => ipcRenderer.invoke('dashboard:get'),
     update: (surface: DashboardSurface, layout: DashboardLayout): Promise<DashboardLayouts> => ipcRenderer.invoke('dashboard:update', surface, layout),
     onChanged: (callback: (layouts: DashboardLayouts) => void): (() => void) => {

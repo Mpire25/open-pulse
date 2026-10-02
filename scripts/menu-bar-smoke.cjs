@@ -10,6 +10,23 @@ const { pathToFileURL } = require('node:url')
 const { execFileSync } = require('node:child_process')
 const measureMemory = process.argv.includes('--memory')
 const checkDashboards = process.argv.includes('--dashboard')
+let pendingPicker = null
+let failNextPicker = false
+// Inspect the real native Menu/IPC without displaying a menu or taking desktop focus.
+if (checkDashboards) {
+  electron.Menu.prototype.popup = function(options) {
+    if (failNextPicker) { failNextPicker = false; throw new Error('Fixture native menu failure') }
+    assert.equal(pendingPicker, null, 'one native picker at a time')
+    pendingPicker = { menu: this, options }
+  }
+  electron.Menu.prototype.closePopup = function() {
+    if (pendingPicker?.menu === this) {
+      const { options } = pendingPicker
+      pendingPicker = null
+      options.callback?.()
+    }
+  }
+}
 const entryFlag = process.argv.indexOf('--entry')
 const appEntry = entryFlag >= 0 ? process.argv[entryFlag + 1] : resolve('out/main/index.js')
 const assert = require('node:assert/strict')
@@ -334,21 +351,40 @@ async function memoryRun(main, openPanel) {
       await until(() => win.webContents.executeJavaScript(`Array.from(document.querySelectorAll('button')).some(b => b.textContent.trim() === ${JSON.stringify(label)} && !b.disabled)`), label + ' ready')
       await win.webContents.executeJavaScript(`Array.from(document.querySelectorAll('button')).find(b => b.textContent.trim() === ${JSON.stringify(label)}).click()`)
     }
-    let pickerCaptured = false
-    const choose = async (win, slotLabel, widget) => {
+    const openPicker = async (win, slotLabel) => {
       await win.webContents.executeJavaScript(`document.querySelector('[aria-label="Change ${slotLabel}"]').click()`)
-      await until(() => win.webContents.executeJavaScript(`!!document.querySelector('.dashboard-widget-select')`), 'widget picker')
-      assert.equal(await win.webContents.executeJavaScript(`document.activeElement?.classList.contains('dashboard-widget-select')`), true, 'picker focuses the selector')
-      if (!pickerCaptured) {
-        writeFileSync(resolve('out/dashboard-picker-preview.png'), (await win.webContents.capturePage()).toPNG())
-        pickerCaptured = true
-      }
-      await win.webContents.executeJavaScript(`(() => { const select = document.querySelector('.dashboard-widget-select'); select.value = ${JSON.stringify(widget)}; select.dispatchEvent(new Event('change', { bubbles: true })); })()`)
-      await clickText(win, 'Done')
-      await until(() => win.webContents.executeJavaScript(`!document.querySelector('.dashboard-widget-select') && document.activeElement?.getAttribute('aria-label') === 'Change ${slotLabel}'`), 'picker closes and restores focus')
+      await until(() => pendingPicker !== null, 'native widget menu')
+      await until(() => win.webContents.executeJavaScript(`document.querySelector('[aria-label="Change ${slotLabel}"]').getAttribute('aria-busy') === 'true'`), 'native picker request active')
+      assert.equal(pendingPicker.options.window, win, 'picker belongs to the requesting window')
+      const flatten = menu => menu.items.flatMap(item => [item, ...(item.submenu ? flatten(item.submenu) : [])])
+      assert.equal(flatten(pendingPicker.menu).filter(item => item.checked).length, 1, 'current widget is checked')
+      assert.equal(await win.webContents.executeJavaScript(`!!document.querySelector('[role="dialog"]')`), false, 'no web picker dialog')
+    }
+    const dismissPicker = () => {
+      const { options } = pendingPicker
+      pendingPicker = null
+      options.callback()
+    }
+    const choose = async (win, slotLabel, widget) => {
+      await openPicker(win, slotLabel)
+      const { menu } = pendingPicker
+      const item = menu.getMenuItemById(widget)
+      assert.ok(item, 'compatible widget is present in native menu: ' + widget)
+      item.click(item, win, {})
+      dismissPicker()
+      await until(() => win.webContents.executeJavaScript(`document.activeElement?.getAttribute('aria-label') === 'Change ${slotLabel}' && document.activeElement.getAttribute('aria-busy') === 'false'`), 'native picker restores focus')
     }
     const beforeLayouts = await reopened.webContents.executeJavaScript('window.pulse.dashboard.get()')
     await clickText(reopened, 'Customize')
+    writeFileSync(resolve('out/dashboard-edit-preview.png'), (await reopened.webContents.capturePage()).toPNG())
+    await openPicker(reopened, 'left chart')
+    dismissPicker()
+    await delay(50)
+    assert.deepEqual(await reopened.webContents.executeJavaScript('window.pulse.dashboard.get()'), beforeLayouts, 'dismissing native menu leaves saved preferences untouched')
+    assert.ok(await reopened.webContents.executeJavaScript(`document.querySelector('[data-dashboard-slot="chart1"]').textContent.includes('Daily movement')`), 'dismissing native menu preserves draft')
+    failNextPicker = true
+    await reopened.webContents.executeJavaScript(`document.querySelector('[aria-label="Change left chart"]').click()`)
+    await until(() => reopened.webContents.executeJavaScript(`document.querySelector('[role="alert"]')?.textContent === 'Could not open menu. Try again.'`), 'native menu failure keeps editor usable')
     await choose(reopened, 'left chart', 'trend:hrvMs:30')
     assert.ok(await reopened.webContents.executeJavaScript(`document.querySelector('[data-dashboard-slot="chart1"]').textContent.includes('Last 30 days')`))
     assert.deepEqual(await reopened.webContents.executeJavaScript('window.pulse.dashboard.get()'), beforeLayouts, 'draft is not persisted')
