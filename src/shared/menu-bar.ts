@@ -1,10 +1,12 @@
+import { METRIC_KEYS } from './types'
 export const MENU_BAR_VIEWS = ['home', 'activity', 'heart', 'sleep', 'body', 'nutrition', 'devices', 'settings'] as const
-export const MENU_BAR_METRICS = ['steps', 'caloriesOut', 'caloriesIn', 'restingHeartRate', 'weightKg', 'hrvMs'] as const
+export const MENU_BAR_METRICS = METRIC_KEYS
 export interface MenuBarDestination {
   view: typeof MENU_BAR_VIEWS[number]
   date: string
   metric?: typeof MENU_BAR_METRICS[number]
-  range?: 'D' | 'W'
+  range?: 'D' | 'W' | 'M'
+  customize?: 'menuBar'
 }
 
 export function isMenuBarDestination(value: unknown): value is MenuBarDestination {
@@ -14,7 +16,8 @@ export function isMenuBarDestination(value: unknown): value is MenuBarDestinatio
   return MENU_BAR_VIEWS.includes(v.view) && date !== null && Number.isFinite(date.getTime()) &&
     date.toISOString().slice(0, 10) === v.date &&
     (v.metric === undefined || MENU_BAR_METRICS.includes(v.metric)) &&
-    (v.range === undefined || v.range === 'D' || v.range === 'W')
+    (v.range === undefined || v.range === 'D' || v.range === 'W' || v.range === 'M') &&
+    (v.customize === undefined || (v.customize === 'menuBar' && v.view === 'settings' && v.metric === undefined))
 }
 
 /** Keep the panel within the display containing the tray, including small displays. */

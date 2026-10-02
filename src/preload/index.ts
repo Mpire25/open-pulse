@@ -1,3 +1,4 @@
+import type { DashboardLayout, DashboardLayouts, DashboardSurface } from '../shared/dashboard'
 import type { MenuBarDestination } from '../shared/menu-bar'
 import { contextBridge, ipcRenderer } from 'electron'
 import { healthWireArgs, unwrapHealthResult } from '../shared/health-ipc'
@@ -98,6 +99,15 @@ const api = {
         queueMicrotask(callback)
       }
       return () => newChatCallbacks.delete(callback)
+    }
+  },
+  dashboard: {
+    get: (): Promise<DashboardLayouts> => ipcRenderer.invoke('dashboard:get'),
+    update: (surface: DashboardSurface, layout: DashboardLayout): Promise<DashboardLayouts> => ipcRenderer.invoke('dashboard:update', surface, layout),
+    onChanged: (callback: (layouts: DashboardLayouts) => void): (() => void) => {
+      const listener = (_event: unknown, layouts: DashboardLayouts): void => callback(layouts)
+      ipcRenderer.on('dashboard:changed', listener)
+      return () => ipcRenderer.removeListener('dashboard:changed', listener)
     }
   },
   settings: {

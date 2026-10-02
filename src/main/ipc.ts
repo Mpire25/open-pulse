@@ -39,7 +39,7 @@ import {
   resetHealthAccount
 } from './health-service'
 import { setApiActivityListener } from './health-api'
-import { getSettings, updateSettings } from './store'
+import { getDashboardLayouts, updateDashboardLayout, getSettings, updateSettings } from './store'
 import { cancelAllChats, cancelChat, runChat } from './codex-chat'
 import {
   applyChatRetention,
@@ -180,6 +180,13 @@ export function registerIpc(commands: { open: (destination: MenuBarDestination) 
   handle('app:close-panel', () => commands.close())
   handle('app:quit', () => commands.quit())
   onGoogleAuthInvalidated(notifyGoogleDisconnected)
+  handle('dashboard:get', () => getDashboardLayouts())
+  handle('dashboard:update', (_e, surface: unknown, layout: unknown) => {
+    if (surface !== 'home' && surface !== 'menuBar') throw new Error('Unknown dashboard.')
+    const layouts = updateDashboardLayout(surface, layout)
+    sendToTrustedRenderers('dashboard:changed', layouts)
+    return layouts
+  })
   handle('settings:get', () => getSettings())
   handle('settings:update', (_e, patch: Partial<AppSettings>) => {
     const settings = updateSettings(patch)
