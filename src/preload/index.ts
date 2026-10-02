@@ -13,6 +13,7 @@ import type {
   ChatSession,
   ChatSessionMessage,
   CodexAuthStatus,
+  ModelCatalog,
   GoogleAuthStatus,
   HeartDetailMetric,
   HeartDetailResult,
@@ -116,7 +117,8 @@ const api = {
   codex: {
     status: (): Promise<CodexAuthStatus> => ipcRenderer.invoke('codex:status'),
     connect: (): Promise<CodexAuthStatus> => ipcRenderer.invoke('codex:connect'),
-    disconnect: (): Promise<void> => ipcRenderer.invoke('codex:disconnect')
+    models: (force = false): Promise<ModelCatalog> => ipcRenderer.invoke('codex:models', force),
+    disconnect: (): Promise<{ warning?: string }> => ipcRenderer.invoke('codex:disconnect')
   },
   chats: {
     list: (): Promise<ChatHistorySnapshot> => ipcRenderer.invoke('chats:list'),

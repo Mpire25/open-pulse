@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
 import * as Dialog from '@radix-ui/react-dialog'
 import { Brain, ChatCircleDots, CheckCircle, GoogleLogo, Sparkle, Target, ArrowClockwise, Trash, Warning } from '@phosphor-icons/react'
@@ -10,11 +10,11 @@ import { GoogleSetup } from '@/components/GoogleSetup'
 import { cn } from '@/lib/utils'
 import {
   ASSISTANT_MODEL_PATTERN,
-  ASSISTANT_MODEL_PRESETS,
   DEFAULT_ASSISTANT,
   REASONING_EFFORTS,
   type AppSettings,
   type AssistantSettings,
+  type ModelCatalog,
   type ChatRetention,
   type CodexAuthStatus,
   type Goals,
@@ -59,7 +59,7 @@ export function SettingsView({
         onGoogleChange={onGoogleChange}
       />
       <CodexCard codex={codex} onCodexChange={onCodexChange} />
-      <AssistantCard settings={settings} onSettingsChange={onSettingsChange} />
+      <AssistantCard codex={codex} settings={settings} onSettingsChange={onSettingsChange} />
       <ChatRetentionCard settings={settings} onSettingsChange={onSettingsChange} />
       <GoalsCard settings={settings} onSettingsChange={onSettingsChange} />
     </div>
@@ -233,18 +233,13 @@ function ChatRetentionCard({
   )
 }
 
-const PRESET_IDS = new Set<string>(ASSISTANT_MODEL_PRESETS.map((m) => m.id))
 const EFFORT_LABELS: Record<ReasoningEffort, string> = {
+  auto: 'Automatic',
   low: 'Low',
   medium: 'Medium',
   high: 'High',
   xhigh: 'Extra high',
   max: 'Max'
-}
-
-/** A custom model's ladder is unknown, so offer the full set and let it 400. */
-function effortsForModel(model: string): ReasoningEffort[] {
-  return ASSISTANT_MODEL_PRESETS.find((m) => m.id === model)?.efforts ?? REASONING_EFFORTS
 }
 
 function Pill({
@@ -283,17 +278,45 @@ function Pill({
 }
 
 function AssistantCard({
+  codex,
   settings,
   onSettingsChange
 }: {
+  codex: CodexAuthStatus
   settings: AppSettings
   onSettingsChange: (s: AppSettings) => void
 }): React.JSX.Element {
   const [assistant, setAssistant] = useState<AssistantSettings>(settings.assistant)
-  const [custom, setCustom] = useState(() => !PRESET_IDS.has(settings.assistant.model))
-  const [customModel, setCustomModel] = useState(() =>
-    PRESET_IDS.has(settings.assistant.model) ? '' : settings.assistant.model
-  )
+  const [catalog, setCatalog] = useState<ModelCatalog>({ models: [], stale: true })
+  const [loading, setLoading] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
+  const catalogSequence = useRef(0)
+  const lastAuthRevision = useRef(codex.authRevision)
+  const [custom, setCustom] = useState(false)
+  const [customModel, setCustomModel] = useState(settings.assistant.model)
+  const presets = catalog.models
+  const presetIds = new Set(presets.map((m) => m.id))
+  const effortsForModel = (model: string): ReasoningEffort[] => presets.find((m) => m.id === model)?.efforts ?? ['auto']
+  const refreshModels = async (force = false): Promise<void> => {
+    const sequence = ++catalogSequence.current
+    setLoading(true)
+    try {
+      const value = await window.pulse.codex.models(force)
+      if (sequence === catalogSequence.current) setCatalog(value)
+    } catch (error) {
+      if (sequence === catalogSequence.current) setCatalog((old) => ({ ...old, stale: true, error: error instanceof Error ? error.message : 'Could not load models.' }))
+    } finally { if (sequence === catalogSequence.current) setLoading(false) }
+  }
+  useEffect(() => {
+    setCatalog({ models: [], stale: true })
+    setLoading(false)
+    setCustom(false)
+    const signedInAgain = lastAuthRevision.current !== codex.authRevision
+    lastAuthRevision.current = codex.authRevision
+    if (codex.connected) void refreshModels(signedInAgain)
+    const timer = codex.connected ? setInterval(() => void refreshModels(), 6 * 60 * 60_000) : undefined
+    return () => { catalogSequence.current++; if (timer) clearInterval(timer) }
+  }, [codex.connected, codex.activeRegistration, codex.authRevision])
   const saveSequence = useRef(0)
   const trimmedCustomModel = customModel.trim()
   const customDirty = trimmedCustomModel !== assistant.model
@@ -304,17 +327,23 @@ function AssistantCard({
     const sequence = ++saveSequence.current
     setAssistant(nextAssistant)
 
-    const next = await window.pulse.settings.update({ assistant: nextAssistant })
+    setSaveError(null)
+    let next: AppSettings
+    try { next = await window.pulse.settings.update({ assistant: nextAssistant }) }
+    catch (error) {
+      if (sequence === saveSequence.current) { setAssistant(settings.assistant); setSaveError(error instanceof Error ? error.message : 'Could not save assistant settings.') }
+      return
+    }
     if (sequence !== saveSequence.current) return
 
     onSettingsChange(next)
     setAssistant(next.assistant)
-    const savedIsCustom = !PRESET_IDS.has(next.assistant.model)
+    const savedIsCustom = !presetIds.has(next.assistant.model)
     setCustom(savedIsCustom)
     setCustomModel(savedIsCustom ? next.assistant.model : '')
   }
 
-  // Keep the pair valid when a model drops a tier (Luna has no ultra).
+  // Unknown capability ladders use the server default.
   const selectModel = (model: string): void => {
     const supported = effortsForModel(model)
     void persist({
@@ -334,18 +363,43 @@ function AssistantCard({
     void persist({ ...assistant, model: trimmedCustomModel })
   }
 
+  if (!codex.connected || (loading && catalog.models.length === 0)) {
+    return (
+      <Card index={2}>
+        <SectionHeader
+          title="Assistant model"
+          hint="Choose the model used for your insights"
+          icon={<Brain size={18} weight="fill" className="text-sleep" />}
+        />
+        <p className="text-[12px] leading-relaxed text-ink-faint" role={codex.connected ? 'status' : undefined}>
+          {codex.connected
+            ? 'Loading models available through your ChatGPT plan…'
+            : 'Connect your ChatGPT account above to choose a model and reasoning level.'}
+        </p>
+      </Card>
+    )
+  }
+
   return (
     <Card index={2}>
       <SectionHeader
         title="Assistant model"
-        hint="Availability depends on your ChatGPT plan — an unavailable model only fails when you send a message"
+        hint="Models available through your connected ChatGPT plan"
         icon={<Brain size={18} weight="fill" className="text-sleep" />}
       />
 
+      {saveError && <p role="alert" className="text-[12px] text-danger">{saveError}</p>}
       <div className="flex flex-col gap-2">
-        <span className="text-[11px] font-medium text-ink-faint">Model</span>
+        <div className="flex items-center justify-between">
+          <span className="text-[11px] font-medium text-ink-faint">Model</span>
+          <Button size="sm" variant="ghost" disabled={loading || !codex.connected} onClick={() => void refreshModels(true)}>
+            {loading ? 'Loading…' : 'Refresh models'}
+          </Button>
+        </div>
+        {catalog.error && <p className="text-[12px] text-ink-faint">{catalog.error}{catalog.models.length > 0 ? ' Showing saved choices.' : ''}</p>}
+        {!loading && !custom && !presetIds.has(assistant.model) && <p className="text-[12px] text-ink-faint">Saved selection: {assistant.model}. {catalog.stale ? 'Availability has not been checked.' : 'This model is not in the current catalog. Choose another model or use Custom.'}</p>}
         <div className="flex w-fit flex-wrap rounded-xl border border-hairline bg-white/[0.03] p-0.5">
-          {ASSISTANT_MODEL_PRESETS.map((m) => (
+          {presets.map((m) => (
             <Pill
               key={m.id}
               active={!custom && assistant.model === m.id}
@@ -363,7 +417,7 @@ function AssistantCard({
             layoutId="assistant-model-active"
             onClick={() => {
               setCustom(true)
-              setCustomModel(PRESET_IDS.has(assistant.model) ? '' : assistant.model)
+              setCustomModel(presetIds.has(assistant.model) ? '' : assistant.model)
             }}
           >
             Custom…
@@ -394,8 +448,9 @@ function AssistantCard({
       </div>
 
       <div className="flex flex-col gap-2">
+        {!loading && !efforts.includes(assistant.reasoningEffort) && <p className="text-[12px] text-ink-faint">Saved effort: {EFFORT_LABELS[assistant.reasoningEffort]}. Choose Automatic to use the model’s default.</p>}
         <span className="text-[11px] font-medium text-ink-faint">Reasoning effort</span>
-        <div className="flex w-fit rounded-xl border border-hairline bg-white/[0.03] p-0.5">
+        <div className="flex w-fit flex-wrap rounded-xl border border-hairline bg-white/[0.03] p-0.5">
           {efforts.map((effort) => (
             <Pill
               key={effort}
@@ -549,31 +604,47 @@ function CodexCard({
   codex: CodexAuthStatus
   onCodexChange: (s: CodexAuthStatus) => void
 }): React.JSX.Element {
-  const [busy, setBusy] = useState(false)
+  const [operation, setOperation] = useState<'connect' | 'disconnect' | null>(null)
+  const operationSequence = useRef(0)
   const [error, setError] = useState<string | null>(null)
 
   const connect = async (): Promise<void> => {
+    const sequence = ++operationSequence.current
     setError(null)
-    setBusy(true)
+    setOperation('connect')
     try {
-      onCodexChange(await window.pulse.codex.connect())
+      const status = await window.pulse.codex.connect()
+      if (sequence !== operationSequence.current) return
+      setOperation(null)
+      onCodexChange(status)
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
+      if (sequence === operationSequence.current) setError(err instanceof Error ? err.message : String(err))
     } finally {
-      setBusy(false)
+      if (sequence === operationSequence.current) setOperation(null)
     }
   }
 
   const disconnect = async (): Promise<void> => {
-    await window.pulse.codex.disconnect()
-    onCodexChange({ connected: false })
+    const sequence = ++operationSequence.current
+    setOperation('disconnect')
+    setError(null)
+    try {
+      const result = await window.pulse.codex.disconnect()
+      const status = await window.pulse.codex.status()
+      if (sequence !== operationSequence.current) return
+      setOperation(null)
+      onCodexChange(status)
+      setError(result.warning ?? null)
+    } catch (error) {
+      if (sequence === operationSequence.current) setError(error instanceof Error ? error.message : String(error))
+    } finally { if (sequence === operationSequence.current) setOperation(null) }
   }
 
   return (
     <Card index={1}>
       <SectionHeader
         title="AI Assistant"
-        hint="Sign in with ChatGPT to power insights"
+        hint={codex.connected ? "Your ChatGPT plan powers insights" : "Sign in with ChatGPT to power insights"}
         icon={<Sparkle size={18} weight="fill" className="text-accent" />}
         action={
           <StatusPill
@@ -582,23 +653,25 @@ function CodexCard({
           />
         }
       />
-      {codex.connected ? (
+      {codex.signedIn && !codex.planEnabled && <p className="text-[12px] text-ink-faint">ChatGPT plan usage was not authorized. Sign out and sign in again to authorize it.</p>}
+      {codex.signedIn && error && <p role="alert" className="text-[12px] text-danger">{error}</p>}
+      {codex.signedIn ? (
         <div className="flex flex-col gap-4">
           <div className="flex items-center gap-2 text-[13px] text-ink-dim">
             <CheckCircle size={16} weight="fill" className="text-[#4fd979]" />
             Signed in{codex.email ? ` as ${codex.email}` : ''}
           </div>
-          <div>
-            <Button variant="destructive" size="sm" onClick={disconnect}>
-              Sign out
+          <div className="flex flex-wrap items-center gap-3">
+            <Button variant="destructive" size="sm" disabled={operation === 'disconnect'} onClick={disconnect}>
+              {operation === 'disconnect' ? 'Signing out…' : 'Sign out'}
             </Button>
           </div>
         </div>
       ) : (
         <div className="flex flex-col gap-4">
           <p className="text-[12px] leading-relaxed text-ink-faint">
-            Uses the ChatGPT Codex OAuth flow. The assistant runs on your existing ChatGPT plan — no API
-            key required. A browser window opens for you to authorize.
+            Connect your ChatGPT plan to OpenPulse. A browser window opens for you to authorize plan usage.
+            {codex.needsReconnect && ' Your previous connection needs a one-time reconnect. Your chats and settings are preserved.'}
           </p>
           {error && (
             <div className="flex items-start gap-2 rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-[12px] text-danger">
@@ -607,9 +680,9 @@ function CodexCard({
             </div>
           )}
           <div>
-            <Button onClick={connect} disabled={busy}>
-              {busy ? <ArrowClockwise size={15} className="animate-spin" /> : <Sparkle size={15} weight="fill" />}
-              {busy ? 'Waiting for ChatGPT…' : 'Sign in with ChatGPT'}
+            <Button onClick={connect} disabled={operation !== null}>
+              {operation === 'connect' ? <ArrowClockwise size={15} className="animate-spin" /> : <Sparkle size={15} weight="fill" />}
+              {operation === 'connect' ? 'Waiting for ChatGPT…' : 'Sign in with ChatGPT'}
             </Button>
           </div>
         </div>

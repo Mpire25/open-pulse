@@ -1,6 +1,6 @@
 import { app, safeStorage } from 'electron'
 import { join } from 'node:path'
-import { existsSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, readFileSync, writeFileSync, renameSync } from 'node:fs'
 import {
   ASSISTANT_MODEL_PATTERN,
   CHAT_RETENTIONS,
@@ -16,6 +16,7 @@ import {
 
 interface StoreFile {
   settings: AppSettings
+  local?: Record<string, unknown>
   // name -> base64(safeStorage-encrypted JSON)
   secrets: Record<string, string>
 }
@@ -87,7 +88,8 @@ function load(): StoreFile {
       const raw = JSON.parse(readFileSync(filePath(), 'utf8')) as Partial<StoreFile>
       cache = {
         settings: normalizeSettings(raw.settings),
-        secrets: raw.secrets ?? {}
+        secrets: raw.secrets ?? {},
+        local: raw.local ?? {}
       }
       return cache
     } catch {
@@ -99,7 +101,9 @@ function load(): StoreFile {
 }
 
 function persist(): void {
-  writeFileSync(filePath(), JSON.stringify(load(), null, 2), 'utf8')
+  const temporary = `${filePath()}.tmp`
+  writeFileSync(temporary, JSON.stringify(load(), null, 2), { encoding: 'utf8', mode: 0o600 })
+  renameSync(temporary, filePath())
 }
 
 /** Read the desktop preference at startup without opening credential storage. */
@@ -134,32 +138,63 @@ export function getGoogleClientSecret(): string {
   return getSecret<string>(GOOGLE_CLIENT_SECRET_KEY) ?? ''
 }
 
-export function setSecret(name: string, value: unknown): void {
+let storageFailure: Error | null = null
+
+function assertSecureStorage(): void {
+  if (storageFailure) throw storageFailure
+  if (!safeStorage.isEncryptionAvailable()) {
+    storageFailure = new Error('Secure credential storage is unavailable. Please handle Keychain access manually before restarting OpenPulse.')
+    throw storageFailure
+  }
+}
+
+export function hasSecret(name: string): boolean {
+  return Boolean(load().secrets[name])
+}
+
+export function getLocalValue<T>(name: string): T | undefined {
+  return load().local?.[name] as T | undefined
+}
+
+export function setLocalValue(name: string, value: unknown): void {
   const store = load()
-  const plain = JSON.stringify(value)
-  const encrypted = safeStorage.isEncryptionAvailable()
-    ? safeStorage.encryptString(plain).toString('base64')
-    : Buffer.from(plain, 'utf8').toString('base64')
-  store.secrets[name] = encrypted
-  persist()
+  const previous = store.local
+  store.local = { ...previous, [name]: value }
+  try { persist() } catch (error) { store.local = previous; throw error }
+}
+
+export function setSecret(name: string, value: unknown): void {
+  assertSecureStorage()
+  const store = load()
+  let encrypted: string
+  try {
+    encrypted = safeStorage.encryptString(JSON.stringify(value)).toString('base64')
+  } catch {
+    storageFailure = new Error('Secure credential storage authentication failed. Handle Keychain access manually; OpenPulse will not retry this session.')
+    throw storageFailure
+  }
+  const previous = store.secrets
+  store.secrets = { ...previous, [name]: encrypted }
+  try { persist() } catch (error) { store.secrets = previous; throw error }
 }
 
 export function getSecret<T>(name: string): T | null {
   const stored = load().secrets[name]
   if (!stored) return null
+  assertSecureStorage()
   try {
-    const buf = Buffer.from(stored, 'base64')
-    const plain = safeStorage.isEncryptionAvailable()
-      ? safeStorage.decryptString(buf)
-      : buf.toString('utf8')
-    return JSON.parse(plain) as T
+    return JSON.parse(safeStorage.decryptString(Buffer.from(stored, 'base64'))) as T
   } catch {
-    return null
+    storageFailure = new Error('Secure credential storage decryption failed. Handle Keychain access manually; OpenPulse will not retry this session.')
+    throw storageFailure
   }
 }
 
 export function deleteSecret(name: string): void {
+  if (storageFailure) throw storageFailure
   const store = load()
+  const previous = store.secrets
+  store.secrets = { ...previous }
   delete store.secrets[name]
-  persist()
+  try { persist() } catch (error) { store.secrets = previous; throw error }
 }

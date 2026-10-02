@@ -101,6 +101,7 @@ class FakeSender extends EventEmitter {
 }
 
 function sseResponse(events: unknown[]): Response {
+  events = [...events, { type: 'response.completed', response: { status: 'completed' } }]
   const body = `${events.map((event) => `data: ${JSON.stringify(event)}\n\n`).join('')}data: [DONE]\n\n`
   return new Response(body, {
     status: 200,
@@ -171,7 +172,7 @@ function requestBody(init?: RequestInit): Record<string, unknown> {
 
 function toolNames(body: Record<string, unknown>): string[] {
   return Array.isArray(body.tools)
-    ? body.tools.flatMap((tool) =>
+    ? body.tools.flatMap((tool) => (tool as { tools?: unknown[] }).tools ?? [tool]).flatMap((tool) =>
         tool != null && typeof tool === 'object' && typeof (tool as Record<string, unknown>).name === 'string'
           ? [(tool as Record<string, unknown>).name as string]
           : []
@@ -186,6 +187,34 @@ afterEach(() => {
 })
 
 describe('brokered Codex research orchestration', () => {
+  test('plan usage limits in research stop the run without another inference request', async () => {
+    const sender = new FakeSender()
+    let requests = 0
+    globalThis.fetch = (async () => {
+      requests++
+      if (requests === 1) return functionCall('research_web', 'quota-call', { query: 'Current evidence about sleep patterns' })
+      return sseResponse([{ type: 'response.failed', response: { error: { code: 'subscription_sharing_usage_limit_exceeded' } } }])
+    }) as typeof fetch
+    await runChat(sender as unknown as WebContents, 'quota-chat', 'quota-run', [{ role: 'user', text: 'Research current evidence about sleep patterns.' }])
+    expect(requests).toBe(2)
+    expect(sender.events.some((event) => event.type === 'done')).toBe(false)
+    expect(sender.events.some((event) => event.type === 'error' && event.message.includes('usage limit'))).toBe(true)
+  })
+
+  test('does not execute model tools when the stream ends before completion', async () => {
+    const sender = new FakeSender()
+    let requests = 0
+    globalThis.fetch = (async () => {
+      requests++
+      return new Response(`data: ${JSON.stringify({ type: 'response.output_item.done', item: { type: 'function_call', namespace: 'openpulse', name: 'query_daily_metrics', call_id: 'unfinished', arguments: '{}' } })}\n\n`)
+    }) as typeof fetch
+    await runChat(sender as unknown as WebContents, 'unfinished-chat', 'unfinished-run', [{ role: 'user', text: 'Analyse my steps and HRV together.' }])
+    expect(requests).toBe(1)
+    expect(sender.events.some((event) => event.type === 'done')).toBe(false)
+    expect(sender.events.some((event) => event.type === 'tool')).toBe(false)
+    expect(sender.events.some((event) => event.type === 'error' || event.type === 'interrupted')).toBe(true)
+  })
+
   test('emits an interruption when the user stops a stalled response', async () => {
     const sender = new FakeSender()
     let fetchStarted: (() => void) | undefined
@@ -370,7 +399,7 @@ describe('brokered Codex research orchestration', () => {
             query: 'Do people with HRV around 32 ms report sleeping about 7 hours? Include community reports.'
           })
         case 3: {
-          expect(sessionId).toBe('chat-id:research')
+          expect(sessionId).toBeNull()
           expect(body.model).toBe('test-model')
           expect(body.reasoning).toEqual({ effort: 'low' })
           const serialized = JSON.stringify(body)

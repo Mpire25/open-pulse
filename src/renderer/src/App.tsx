@@ -88,6 +88,7 @@ export default function App(): React.JSX.Element {
   const [workoutRange, setWorkoutRange] = useState<MetricRange>('D')
   const [selectedWorkout, setSelectedWorkout] = useState<Workout | null>(null)
   const [settings, setSettings] = useState<AppSettings | null>(null)
+  const [startupError, setStartupError] = useState<string | null>(null)
   const [google, setGoogle] = useState<GoogleAuthStatus>({ connected: false })
   const [codex, setCodex] = useState<CodexAuthStatus>({ connected: false })
   const [today, syncToday] = useCurrentDay()
@@ -102,7 +103,7 @@ export default function App(): React.JSX.Element {
   const appliedNavigationRef = useRef<NavigationEntry | null>(null)
 
   // One multi-chat controller shared by the Assistant page and side panel.
-  const chat = useChat()
+  const chat = useChat(settings !== null)
   const queryClient = useQueryClient()
   useTrackpadHistoryNavigation()
 
@@ -231,15 +232,21 @@ export default function App(): React.JSX.Element {
   }
 
   useEffect(() => {
+    let active = true
     void Promise.all([
       window.pulse.settings.get(),
       window.pulse.google.status(),
       window.pulse.codex.status()
     ]).then(([s, g, c]) => {
+      if (!active) return
       setSettings(s)
       setGoogle(g)
       setCodex(c)
+      if (c.connected) void window.pulse.codex.models().catch(() => {})
+    }).catch((error: unknown) => {
+      if (active) setStartupError(error instanceof Error ? error.message : 'OpenPulse could not load your connection settings.')
     })
+    return () => { active = false }
   }, [])
 
   useEffect(() => {
@@ -519,7 +526,17 @@ export default function App(): React.JSX.Element {
   }
 
   if (!settings) {
-    return <div className="h-full w-full bg-canvas" />
+    return (
+      <div className="grid h-full w-full place-items-center bg-canvas p-8 text-ink">
+        {startupError && (
+          <main role="alert" className="max-w-md space-y-4">
+            <h1 className="text-xl font-semibold">OpenPulse couldn’t start</h1>
+            <p className="text-sm leading-relaxed text-ink-dim">{startupError}</p>
+            <p className="text-sm leading-relaxed text-ink-dim">If macOS requested Keychain access, handle it manually. Quit and reopen OpenPulse when access is available. Your saved data has been preserved.</p>
+          </main>
+        )}
+      </div>
+    )
   }
 
   const isDataView = DATA_VIEWS.includes(view)
