@@ -790,7 +790,8 @@ export async function runChat(
         type: 'interrupted',
         chatId,
         runId,
-        message: error instanceof StreamTimeoutError ? `${error.message} Try again.` : error.message
+        message: error instanceof StreamTimeoutError ? `${error.message} Try again.` : error.message,
+        ...(error instanceof StreamTimeoutError ? { retryable: true } : {})
       })
     } else {
       emit({ type: 'error', chatId, runId, message: error.message })

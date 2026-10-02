@@ -327,7 +327,7 @@ describe('brokered Codex research orchestration', () => {
     expect(sender.events.some((event) => event.type === 'error')).toBe(false)
   })
 
-  test('reports a main response timeout as an interruption', async () => {
+  test('reports a main response timeout as a retryable interruption', async () => {
     const sender = new FakeSender()
     globalThis.fetch = (async () => {
       throw new StreamTimeoutError('idle', 'The assistant stopped responding for 120 seconds.')
@@ -344,7 +344,8 @@ describe('brokered Codex research orchestration', () => {
       type: 'interrupted',
       chatId: 'timeout-chat',
       runId: 'timeout-run',
-      message: 'The assistant stopped responding for 120 seconds. Try again.'
+      message: 'The assistant stopped responding for 120 seconds. Try again.',
+      retryable: true
     })
     expect(sender.events.some((event) => event.type === 'error')).toBe(false)
   })

@@ -687,5 +687,5 @@ export type AiEvent =
   | { type: 'reasoning'; chatId: string; runId: string }
   | { type: 'tool'; chatId: string; runId: string; name: string; label: string }
   | { type: 'done'; chatId: string; runId: string; text: string; parts: AssistantVisualPart[]; outcome: 'completed' | 'tool-limit' }
-  | { type: 'interrupted'; chatId: string; runId: string; message: string }
+  | { type: 'interrupted'; chatId: string; runId: string; message: string; retryable?: boolean }
   | { type: 'error'; chatId: string; runId: string; message: string }

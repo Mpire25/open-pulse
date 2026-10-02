@@ -201,3 +201,50 @@ test('edited request can fail and then retry its revised text', async () => {
   expect(histories[2]).toEqual([{ role: 'user', text: 'Revised question' }])
   expect(chat.turns).toHaveLength(2)
 })
+
+for (const partial of ['', 'Partial answer.']) {
+  test(`timeout ${partial ? 'after partial output' : 'before output'} offers retry without duplicating the request`, async () => {
+    const ids = await send()
+    if (partial) await act(async () => receive({ ...ids, type: 'delta', text: partial }))
+    await act(async () => receive({
+      ...ids,
+      type: 'interrupted',
+      message: 'The assistant stopped responding. Try again.',
+      retryable: true
+    }))
+    expect(chat.busy).toBe(false)
+    expect(chat.turns[1].error).not.toBe(true)
+    expect(chat.turns[1].text).toContain('Try again.')
+    if (partial) {
+      expect(chat.turns[1].text).toContain(partial)
+      expect(container.textContent).toContain(partial)
+      expect(sessions.get(ids.chatId)!.messages[1].text).toContain(partial)
+    }
+    expect(button('Retry')).toBeDefined()
+    expect(ready).toHaveLength(0)
+    await act(async () => { button('Retry')!.click(); chat.retry() })
+    expect(sends).toHaveLength(2)
+    expect(histories[1]).toEqual([{ role: 'user', text: 'Analyse my steps' }])
+    expect(chat.turns).toHaveLength(2)
+    expect(chat.busy).toBe(true)
+    expect(button('Retry')).toBeUndefined()
+    await completeLatest('Recovered answer')
+    expect(sessions.get(ids.chatId)!.messages.map((turn) => turn.text)).toEqual(['Analyse my steps', 'Recovered answer'])
+  })
+}
+
+test('an intentional Stop never offers Retry, including a backend stop event', async () => {
+  const ids = await send()
+  await act(async () => receive({ ...ids, type: 'delta', text: 'Partial answer.' }))
+  await act(async () => chat.stop())
+  expect(chat.turns[1].text).toContain('Partial answer.')
+  expect(button('Retry')).toBeUndefined()
+  await act(async () => chat.retry())
+  expect(sends).toHaveLength(1)
+  await act(async () => chat.send('Another question'))
+  const [chatId, runId] = sends[1]
+  await act(async () => receive({ chatId, runId, type: 'interrupted', message: 'Response stopped.' }))
+  expect(button('Retry')).toBeUndefined()
+  await act(async () => chat.retry())
+  expect(sends).toHaveLength(2)
+})

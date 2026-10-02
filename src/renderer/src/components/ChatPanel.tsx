@@ -265,7 +265,7 @@ export function ChatPanel({
                   turn={turn}
                   compact={compact}
                   onAction={handleAssistantAction}
-                  onRetry={turn.error && turn.id === turns.at(-1)?.id && !busy ? retry : undefined}
+                  onRetry={(turn.error || turn.retryable) && turn.id === turns.at(-1)?.id && !busy ? retry : undefined}
                   onEdit={turn.id === latestUserId && !busy ? editLast : undefined}
                 />
               ))}
@@ -385,11 +385,6 @@ const Bubble = memo(function Bubble({
             <div className={cn(!compact && 'max-w-[720px]')}>
               <div className="rounded-[16px] border border-danger/30 bg-danger/10 px-4 py-3 text-[13px] text-danger">
                 <p role="alert">{turn.text}</p>
-                {onRetry && (
-                  <Button variant="ghost" size="sm" onClick={onRetry} className="mt-2">
-                    <ArrowClockwise size={14} /> Retry
-                  </Button>
-                )}
               </div>
             </div>
           ) : (
@@ -402,6 +397,11 @@ const Bubble = memo(function Bubble({
               </div>
               <AssistantResponseParts parts={turn.parts ?? []} compact={compact} onAction={onAction} />
             </>
+          )}
+          {onRetry && (
+            <Button variant="ghost" size="sm" onClick={onRetry} className="mt-2">
+              <ArrowClockwise size={14} /> Retry
+            </Button>
           )}
         </div>
       )}

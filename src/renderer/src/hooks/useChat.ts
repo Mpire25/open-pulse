@@ -14,6 +14,7 @@ export interface ChatTurn extends ChatSessionMessage {
   streaming?: boolean
   toolLabel?: string
   error?: boolean
+  retryable?: boolean
   transient?: boolean
 }
 
@@ -279,6 +280,7 @@ export function useChat(enabled = true): ChatController {
               return {
                 ...turn,
                 ...interruption,
+                retryable: event.retryable,
                 streaming: false,
                 toolLabel: undefined
               }
@@ -384,7 +386,8 @@ export function useChat(enabled = true): ChatController {
 
   const retry = useCallback((): void => {
     const chat = chatsRef.current.find((candidate) => candidate.id === activeChatIdRef.current)
-    if (!chat || !chat.turns.at(-1)?.error) return
+    const lastTurn = chat?.turns.at(-1)
+    if (!chat || !(lastTurn?.error || lastTurn?.retryable)) return
     const userTurn = [...chat.turns].reverse().find((turn) => turn.role === 'user')
     if (userTurn) startTurn(userTurn.text, userTurn.id)
   }, [startTurn])
