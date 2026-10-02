@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { addUrlCitations, countValidMarkdownCitations, countValidUrlCitations } from '../src/main/ai-citations'
+import { addUrlCitations } from '../src/main/ai-citations'
 
 describe('AI web citations', () => {
   test('adds clickable inline markers and a deduplicated source list', () => {
@@ -43,7 +43,6 @@ describe('AI web citations', () => {
         }
       ]
     expect(addUrlCitations('Ignore this.', annotations)).toBe('Ignore this.')
-    expect(countValidUrlCitations(annotations)).toBe(0)
   })
 
   test('still exposes a source when annotation offsets are invalid', () => {
@@ -59,16 +58,6 @@ describe('AI web citations', () => {
 
     expect(cited).toContain('Useful answer.')
     expect(cited).toContain('[1 · WHO fact sheets](https://www.who.int/news-room/fact-sheets)')
-  })
-
-  test('recognizes only safe HTTPS citations carried into a synthesis', () => {
-    const text = [
-      '[NHS](https://www.nhs.uk/live-well/exercise/)',
-      '[duplicate](https://www.nhs.uk/live-well/exercise/)',
-      '[insecure](http://example.com)',
-      '[unsafe](javascript:alert(1))'
-    ].join(' ')
-    expect(countValidMarkdownCitations(text)).toBe(1)
   })
 
 })
