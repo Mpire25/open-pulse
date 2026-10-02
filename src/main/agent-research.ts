@@ -104,27 +104,3 @@ export function isolatedResearchPrompt(query: unknown): string {
   if (!sanitized) throw new Error('Research query is empty after removing direct identifiers.')
   return sanitized
 }
-
-function redactSearchText(value: string): string {
-  return sanitizeResearchQuery(value).slice(0, 180)
-}
-
-export interface SanitizedWebSearchAction {
-  action: 'search' | 'open_page' | 'find_in_page' | 'unknown'
-  query?: string
-}
-
-export function sanitizeWebSearchAction(value: unknown): SanitizedWebSearchAction {
-  if (value == null || typeof value !== 'object' || Array.isArray(value)) return { action: 'unknown' }
-  const item = value as Record<string, unknown>
-  const action = item.type === 'search' || item.type === 'open_page' || item.type === 'find_in_page'
-    ? item.type
-    : 'unknown'
-  const rawQueries = typeof item.query === 'string'
-    ? [item.query]
-    : Array.isArray(item.queries)
-      ? item.queries.filter((query): query is string => typeof query === 'string')
-      : []
-  const query = redactSearchText(rawQueries.join(' | '))
-  return query ? { action, query } : { action }
-}

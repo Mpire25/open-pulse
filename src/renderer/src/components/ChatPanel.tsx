@@ -17,6 +17,8 @@ import {
   ArrowUp,
   Check,
   Copy,
+  ArrowClockwise,
+  PencilSimple,
   Stop as StopIcon,
   Sparkle,
   Heartbeat,
@@ -96,7 +98,7 @@ export function ChatPanel({
   typeToFocus = false,
   onTypeToFocus
 }: ChatPanelProps): React.JSX.Element {
-  const { turns, busy, loading, activeChatId, send, stop } = chat
+  const { turns, busy, loading, activeChatId, send, retry, editLast, stop } = chat
   const scrollRef = useRef<HTMLDivElement>(null)
   const responseSpaceRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
@@ -240,6 +242,7 @@ export function ChatPanel({
   }
 
   const empty = turns.length === 0
+  const latestUserId = [...turns].reverse().find((turn) => turn.role === 'user')?.id
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -257,7 +260,14 @@ export function ChatPanel({
           >
             <AnimatePresence initial={false}>
               {turns.map((turn) => (
-                <Bubble key={turn.id} turn={turn} compact={compact} onAction={handleAssistantAction} />
+                <Bubble
+                  key={turn.id}
+                  turn={turn}
+                  compact={compact}
+                  onAction={handleAssistantAction}
+                  onRetry={(turn.error || turn.retryable) && turn.id === turns.at(-1)?.id && !busy ? retry : undefined}
+                  onEdit={turn.id === latestUserId && !busy ? editLast : undefined}
+                />
               ))}
             </AnimatePresence>
             <div ref={responseSpaceRef} aria-hidden="true" className="shrink-0" />
@@ -307,14 +317,27 @@ export function ChatPanel({
 const Bubble = memo(function Bubble({
   turn,
   compact,
-  onAction
+  onAction,
+  onRetry,
+  onEdit
 }: {
   turn: ChatTurn
   compact?: boolean
   onAction: (action: AssistantAction) => void
+  onRetry?: () => void
+  onEdit?: (userId: string, text: string) => boolean
 }): React.JSX.Element {
+  const [editedText, setEditedText] = useState<string | null>(null)
+  useEffect(() => {
+    if (!onEdit) setEditedText(null)
+  }, [onEdit])
+
   const isUser = turn.role === 'user'
+  const editing = isUser && editedText !== null && Boolean(onEdit)
   const canCopy = Boolean(turn.text.trim()) && !turn.streaming && !turn.error && !turn.transient
+  const resend = (): void => {
+    if (editedText?.trim() && onEdit?.(turn.id, editedText)) setEditedText(null)
+  }
   return (
     <motion.div
       data-turn-id={turn.id}
@@ -323,8 +346,33 @@ const Bubble = memo(function Bubble({
       transition={{ type: 'spring', stiffness: 220, damping: 26 }}
       className={cn('group/turn relative flex w-full flex-col', isUser ? 'items-end' : 'items-start')}
     >
-      {isUser ? (
-        <div className="max-w-[80%] rounded-[16px] rounded-br-md bg-accent px-4 py-2.5 text-[13px] leading-relaxed text-white shadow-[inset_0_1px_0_rgb(255_255_255/0.15)] select-text">
+      {editing ? (
+        <div className="w-full rounded-[16px] border border-hairline-strong bg-panel p-3">
+          <textarea
+            autoFocus
+            aria-label="Edit last message"
+            value={editedText ?? ''}
+            onChange={(event) => setEditedText(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.nativeEvent.isComposing) return
+              if (event.key === 'Escape') {
+                event.preventDefault()
+                setEditedText(null)
+              } else if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault()
+                resend()
+              }
+            }}
+            rows={Math.min(8, Math.max(3, (editedText ?? '').split('\n').length))}
+            className="max-h-64 min-h-20 w-full resize-y bg-transparent text-[13px] leading-relaxed text-ink outline-none select-text"
+          />
+          <div className="mt-2 flex justify-end gap-2">
+            <Button variant="ghost" size="sm" onClick={() => setEditedText(null)}>Cancel</Button>
+            <Button size="sm" onClick={resend} disabled={!editedText?.trim()}>Send</Button>
+          </div>
+        </div>
+      ) : isUser ? (
+        <div className="max-w-[80%] whitespace-pre-wrap rounded-[16px] rounded-br-md bg-accent px-4 py-2.5 text-[13px] leading-relaxed text-white shadow-[inset_0_1px_0_rgb(255_255_255/0.15)] select-text">
           {turn.text}
         </div>
       ) : (
@@ -340,7 +388,7 @@ const Bubble = memo(function Bubble({
           ) : turn.error ? (
             <div className={cn(!compact && 'max-w-[720px]')}>
               <div className="rounded-[16px] border border-danger/30 bg-danger/10 px-4 py-3 text-[13px] text-danger">
-                {turn.text}
+                <p role="alert">{turn.text}</p>
               </div>
             </div>
           ) : (
@@ -354,9 +402,14 @@ const Bubble = memo(function Bubble({
               <AssistantResponseParts parts={turn.parts ?? []} compact={compact} onAction={onAction} />
             </>
           )}
+          {onRetry && (
+            <Button variant="ghost" size="sm" onClick={onRetry} className="mt-2">
+              <ArrowClockwise size={14} /> Retry
+            </Button>
+          )}
         </div>
       )}
-      {canCopy && (
+      {canCopy && !editing && (
         <div
           className={cn(
             'absolute inset-x-0 top-full z-10 flex h-8 items-end opacity-0 transition-opacity duration-150',
@@ -365,6 +418,17 @@ const Bubble = memo(function Bubble({
           )}
         >
           <CopyMessageButton text={turn.text} />
+          {isUser && onEdit && (
+            <button
+              type="button"
+              onClick={() => setEditedText(turn.text)}
+              aria-label="Edit message"
+              title="Edit message"
+              className="grid size-7 place-items-center rounded-lg text-ink-faint transition-colors hover:bg-white/[0.06] hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+            >
+              <PencilSimple size={14} />
+            </button>
+          )}
         </div>
       )}
     </motion.div>

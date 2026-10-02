@@ -3,8 +3,7 @@ import {
   isolatedResearchPrompt,
   RESEARCH_TOOL,
   researchPolicyForRequest,
-  sanitizeResearchQuery,
-  sanitizeWebSearchAction
+  sanitizeResearchQuery
 } from '../src/main/agent-research'
 
 describe('assistant web research policy', () => {
@@ -150,15 +149,4 @@ describe('assistant web research policy', () => {
     expect(sanitizeResearchQuery('Was guidance different on 2026-07-14?')).toContain('2026-07-14')
   })
 
-  test('redacts measurements and identifiers from diagnostic traces', () => {
-    expect(
-      sanitizeWebSearchAction({
-        type: 'search',
-        queries: ['NHS resting heart rate 68 bpm on 2026-07-11', 'person@example.com healthy range']
-      })
-    ).toEqual({
-      action: 'search',
-      query: 'NHS resting heart rate 68 bpm on 2026-07-11 | [email removed] healthy range'
-    })
-  })
 })

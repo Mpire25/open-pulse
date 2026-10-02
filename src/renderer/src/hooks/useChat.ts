@@ -14,6 +14,7 @@ export interface ChatTurn extends ChatSessionMessage {
   streaming?: boolean
   toolLabel?: string
   error?: boolean
+  retryable?: boolean
   transient?: boolean
 }
 
@@ -36,6 +37,8 @@ export interface ChatController {
   loading: boolean
   streamingChatIds: string[]
   send: (text: string) => void
+  retry: () => void
+  editLast: (userId: string, text: string) => boolean
   stop: () => void
   create: () => Promise<void>
   select: (id: string) => void
@@ -277,6 +280,7 @@ export function useChat(enabled = true): ChatController {
               return {
                 ...turn,
                 ...interruption,
+                retryable: event.retryable,
                 streaming: false,
                 toolLabel: undefined
               }
@@ -296,15 +300,23 @@ export function useChat(enabled = true): ChatController {
     })
   }, [saveCompletedChat, updateTurns])
 
-  const send = useCallback(
-    (text: string): void => {
+  const startTurn = useCallback(
+    (text: string, replaceUserId?: string): boolean => {
       const trimmed = text.trim()
       const chatId = activeChatIdRef.current
       const chat = chatsRef.current.find((candidate) => candidate.id === chatId)
-      if (!trimmed || !chat || runsRef.current.has(chat.id)) return
+      if (!trimmed || !chat || runsRef.current.has(chat.id)) return false
+
+      const replaceIndex = replaceUserId ? chat.turns.findIndex((turn) => turn.id === replaceUserId) : -1
+      if (replaceUserId && (
+        replaceIndex < 0 || chat.turns[replaceIndex].role !== 'user' ||
+        chat.turns.slice(replaceIndex + 1).some((turn) => turn.role === 'user')
+      )) return false
 
       const createdAt = new Date().toISOString()
-      const userTurn: ChatTurn = { id: newId(), role: 'user', text: trimmed, createdAt }
+      const userTurn: ChatTurn = replaceIndex >= 0
+        ? { ...chat.turns[replaceIndex], text: trimmed }
+        : { id: newId(), role: 'user', text: trimmed, createdAt }
       const assistantTurn: ChatTurn = {
         id: newId(),
         role: 'assistant',
@@ -313,7 +325,11 @@ export function useChat(enabled = true): ChatController {
         streaming: true
       }
       const runId = newId()
-      const nextTurns = [...chat.turns, userTurn, assistantTurn]
+      const nextTurns = [
+        ...(replaceIndex >= 0 ? chat.turns.slice(0, replaceIndex) : chat.turns),
+        userTurn,
+        assistantTurn
+      ]
       const title = chat.title === 'New chat' ? generateChatTitle(trimmed) : chat.title
       const updatedAt = new Date().toISOString()
       const run: ActiveRun = { runId, assistantId: assistantTurn.id, preparation: Promise.resolve() }
@@ -346,12 +362,39 @@ export function useChat(enabled = true): ChatController {
       void run.preparation
         .finally(() => {
           if (epoch === accountEpochRef.current && runsRef.current.get(chat.id)?.runId === runId) {
-            void window.pulse.ai.send(chat.id, runId, history)
+            void window.pulse.ai.send(chat.id, runId, history).catch((error: unknown) => {
+              if (epoch !== accountEpochRef.current || runsRef.current.get(chat.id)?.runId !== runId) return
+              runsRef.current.delete(chat.id)
+              updateTurns(chat.id, (turns) => turns.map((turn) => turn.id === assistantTurn.id
+                ? {
+                    ...turn,
+                    text: error instanceof Error ? error.message : 'Could not send message.',
+                    streaming: false,
+                    error: true,
+                    toolLabel: undefined
+                  }
+                : turn))
+            })
           }
         })
+      return true
     },
-    [mergeSession, publish]
+    [mergeSession, publish, updateTurns]
   )
+
+  const send = useCallback((text: string): void => { startTurn(text) }, [startTurn])
+
+  const retry = useCallback((): void => {
+    const chat = chatsRef.current.find((candidate) => candidate.id === activeChatIdRef.current)
+    const lastTurn = chat?.turns.at(-1)
+    if (!chat || !(lastTurn?.error || lastTurn?.retryable)) return
+    const userTurn = [...chat.turns].reverse().find((turn) => turn.role === 'user')
+    if (userTurn) startTurn(userTurn.text, userTurn.id)
+  }, [startTurn])
+
+  const editLast = useCallback((userId: string, text: string): boolean => {
+    return startTurn(text, userId)
+  }, [startTurn])
 
   const stop = useCallback((): void => {
     const chatId = activeChatIdRef.current
@@ -444,6 +487,8 @@ export function useChat(enabled = true): ChatController {
     loading,
     streamingChatIds,
     send,
+    retry,
+    editLast,
     stop,
     create,
     select,
