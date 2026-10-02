@@ -636,10 +636,12 @@ body {
 .dashboard-slot--menuBar > .dashboard-slot-change { top: -2px; right: -6px; }
 .dashboard-slot--menuBar.dashboard-slot--chart > .dashboard-slot-change { top: -1px; right: -6px; }
 .dashboard-menu-preview .menu-section-title { padding-right: 36px; }
+.dashboard-menu-preview .menu-rings > .dashboard-slot { justify-self: center; }
+.dashboard-menu-preview .menu-rings .dashboard-slot-change { top: -14px; right: -14px; }
 .dashboard-menu-preview .menu-stats .dashboard-slot-change {
-  top: -11px;
-  right: auto;
-  left: -4px;
+  top: -18px;
+  right: -18px;
+  left: auto;
   border-radius: 9999px;
 }
 .dashboard-menu-preview .menu-stats .dashboard-slot-change:hover { background: transparent; }
