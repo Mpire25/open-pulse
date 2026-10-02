@@ -30,31 +30,26 @@ interface MetricProps {
   onOpen: DashboardOpenMetric
 }
 
-function useReading(metric: MetricKey, date: string, goals: Goals, enabled: boolean) {
+function useReading(metric: MetricKey, date: string, goals: Goals, enabled: boolean, compareSleep = false) {
   const sleepMetric = metric === 'sleepMinutes' || metric === 'sleepEfficiency'
+  const sleepHistory = compareSleep && sleepMetric && (metric === 'sleepEfficiency' || goals.sleepMinutes <= 0)
   const range = rangeEnding(date, METRICS[metric].aggregate === 'last' ? 30 : 7)
-  const series = useSeries(sleepMetric ? [] : [metric], range.start, date, enabled && !sleepMetric)
+  const series = useSeries(!sleepMetric || sleepHistory ? [metric] : [], range.start, date, enabled && (!sleepMetric || sleepHistory))
   const sleep = useSleepDay(date, enabled && sleepMetric)
-  const points = sleepMetric
-    ? [
-        {
-          date,
-          value: sleep.data
-            ? metric === 'sleepMinutes'
-              ? sleep.data.minutesAsleep
-              : sleep.data.efficiency
-            : null
-        }
-      ]
-    : seriesPoints(series.data?.days, metric, range.start, date)
+  const sleepValue = sleep.data ? metric === 'sleepMinutes' ? sleep.data.minutesAsleep : sleep.data.efficiency : null
+  const points = sleepMetric && !sleepHistory
+    ? [{ date, value: sleepValue }]
+    : seriesPoints(series.data?.days, metric, range.start, date).map(p =>
+        sleepMetric && p.date === date ? { ...p, value: sleepValue } : p)
   return {
     ...summaryReading(metric, points, date, goals),
     points,
     pending: sleepMetric ? sleep.isPending : series.isMetricPending(metric),
-    error: sleepMetric ? sleep.isError : series.isError,
+    comparisonPending: sleepHistory && series.isMetricPending(metric),
+    error: sleepMetric ? sleep.isError || (sleepHistory && series.isError) : series.isError,
     retry: () => {
       if (sleepMetric) void sleep.refetch()
-      else void series.refetch()
+      if (!sleepMetric || sleepHistory) void series.refetch()
     }
   }
 }
@@ -167,7 +162,7 @@ export function DashboardSummary({
   onOpen,
   presentation
 }: MetricProps & { presentation: 'hero' | 'tile' | 'compact' }): React.JSX.Element {
-  const reading = useReading(metric, date, goals, enabled)
+  const reading = useReading(metric, date, goals, enabled, presentation === 'compact')
   const def = METRICS[metric]
   const Icon = def.icon
   const value =
@@ -209,7 +204,7 @@ export function DashboardSummary({
             {value}
             {reading.value !== null && def.unit ? ` ${def.unit}` : ''}
           </strong>
-          <small>{reading.detailSub}</small>
+          <small title={reading.detailSub}>{reading.pending || reading.comparisonPending ? '' : reading.compactSub}</small>
         </button>
       ) : (
         <button

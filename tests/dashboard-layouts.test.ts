@@ -9,7 +9,7 @@ import {
   validateDashboardLayout,
   widgetOptions
 } from '../src/shared/dashboard'
-import { METRIC_KEYS, DEFAULT_GOALS } from '../src/shared/types'
+import { METRIC_KEYS, DEFAULT_GOALS, type MetricKey } from '../src/shared/types'
 import { summaryReading } from '../src/renderer/src/lib/dashboard-widgets'
 import { isMenuBarDestination } from '../src/shared/menu-bar'
 
@@ -119,6 +119,56 @@ describe('summary dates', () => {
     expect(
       summaryReading('steps', [{ date: '2026-10-02', value: 0 }], '2026-10-02', DEFAULT_GOALS).value
     ).toBe(0)
+  })
+})
+
+describe('compact summary comparisons', () => {
+  const date = '2026-10-02'
+  const points = (base: number, value: number) => [
+    ...['2026-09-29', '2026-09-30', '2026-10-01'].map(date => ({ date, value: base })),
+    { date, value }
+  ]
+  const subtitle = (metric: MetricKey, base: number, value: number) => summaryReading(metric, points(base, value), date, DEFAULT_GOALS).compactSub
+
+  test('configured goals take priority over comparisons for every goal metric', () => {
+    for (const [metric, goal] of Object.entries(DEFAULT_GOALS)) {
+      expect(subtitle(metric as MetricKey, goal * 0.5, goal * 0.63)).toBe('63% of goal')
+    }
+    expect(summaryReading('steps', points(10, 12), date, { ...DEFAULT_GOALS, steps: 0 }).compactSub).toBe('+20% vs avg')
+  })
+
+  test('activity and nutrition totals show the numerical difference from recent averages', () => {
+    for (const metric of ['distanceKm', 'floors', 'activeMinutes', 'sedentaryMinutes', 'waterMl', 'fiberG', 'saturatedFatG', 'sodiumG', 'sugarG'] as const) {
+      expect(subtitle(metric, 10, 12)).toBe('+20% vs avg')
+      expect(subtitle(metric, 10, 8)).toBe('-20% vs avg')
+      expect(subtitle(metric, 10, 10)).toBe('At average')
+    }
+    expect(subtitle('floors', 0, 2)).toBe('+2 vs avg')
+    expect(subtitle('floors', 0, 0)).toBe('At average')
+  })
+
+  test('rates use absolute differences and percent readings use percentage points', () => {
+    expect(subtitle('restingHeartRate', 67, 73)).toBe('+6 bpm vs avg')
+    expect(subtitle('hrvMs', 50, 62)).toBe('+12 ms vs avg')
+    expect(subtitle('breathingRate', 14, 14.8)).toBe('+0.8 vs avg')
+    expect(subtitle('spo2Pct', 96, 95.6)).toBe('-0.4 pp vs avg')
+    expect(subtitle('sleepEfficiency', 93, 95)).toBe('+2 pp vs avg')
+    expect(subtitle('skinTempDeltaC', 0.2, -0.3)).toBe('vs baseline')
+  })
+
+  test('body measurements compare within the week; older measurements retain their date', () => {
+    expect(subtitle('weightKg', 80, 78.5)).toBe('-1.5 kg · 7d')
+    expect(subtitle('bodyFatPct', 20, 19.7)).toBe('-0.3 pp · 7d')
+    expect(subtitle('bmi', 24.6, 24.4)).toBe('-0.2 · 7d')
+    expect(subtitle('bmi', 24.4, 24.4)).toBe('No change · 7d')
+    expect(summaryReading('weightKg', [{ date: '2026-09-24', value: 80 }, { date, value: 78.5 }], date, DEFAULT_GOALS).compactSub).toBe('No history')
+    expect(summaryReading('bmi', [{ date: '2026-09-30', value: 24.4 }], date, DEFAULT_GOALS).compactSub).toBe('As of Sep 30')
+  })
+
+  test('missing readings and insufficient history never produce a fabricated comparison', () => {
+    for (const metric of METRIC_KEYS) expect(summaryReading(metric, [], date, DEFAULT_GOALS).compactSub).toBe('')
+    expect(summaryReading('floors', [{ date: '2026-10-01', value: 5 }, { date, value: 2 }, { date: '2026-10-03', value: 20 }], date, DEFAULT_GOALS).compactSub).toBe('No history')
+    expect(summaryReading('waterMl', [{ date, value: 1000 }], date, DEFAULT_GOALS).compactSub).toBe('No history')
   })
 })
 

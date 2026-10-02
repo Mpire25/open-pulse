@@ -27,7 +27,7 @@
 .menu-stats button { text-align: center; border-radius: 8px; padding: 2px; }
 .menu-stats span { display: flex; gap: 5px; align-items: center; justify-content: center; font-size: 10px; color: var(--color-ink-dim); }
 .menu-stats strong { display: block; margin-top: 5px; font-size: 16px; font-weight: 600; }
-.menu-stats small { display: block; font-size: 10px; margin-top: 4px; color: var(--color-ink-dim); }
+.menu-stats small { display: block; white-space: nowrap; font-size: 10px; margin-top: 4px; color: var(--color-ink-dim); }
 .menu-stats .menu-reading-date { font-size: 9px; }
 .menu-section { padding-top: 10px; }
 .menu-section-title { width: 100%; margin-bottom: 6px; text-align: left; }

@@ -8,6 +8,49 @@ export function metricGoal(metric: MetricKey, goals: Goals): number | null {
   return key ? goals[key] : null
 }
 
+function signed(value: number, decimals = 0): string {
+  const rounded = Number(value.toFixed(decimals))
+  return `${rounded > 0 ? '+' : ''}${rounded}`
+}
+
+function compactSubtitle(
+  metric: MetricKey,
+  points: SeriesPoint[],
+  reading: SeriesPoint | null,
+  date: string,
+  goals: Goals,
+  base: number | null
+): string {
+  const value = reading?.value ?? null
+  if (value === null) return ''
+  if (reading!.date !== date) return `As of ${shortDate(reading!.date)}`
+  const def = METRICS[metric]
+  const goal = metricGoal(metric, goals)
+  if (goal !== null && goal > 0) return `${Math.round((value / goal) * 100)}% of goal`
+  if (def.deltaMode === 'abs') return 'vs baseline'
+  if (def.aggregate === 'last') {
+    const previous = points.find(p => p.date >= shiftDate(date, -7) && p.date < date && p.value !== null)
+    if (!previous) return 'No history'
+    const change = Number((value - previous.value!).toFixed(1))
+    const unit = metric === 'bodyFatPct' ? ' pp' : def.unit ? ` ${def.unit}` : ''
+    return change === 0 ? 'No change · 7d' : `${signed(change, 1)}${unit} · 7d`
+  }
+  if (base === null) return 'No history'
+  const difference = value - base
+  if (metric === 'restingHeartRate' || metric === 'hrvMs') {
+    const change = Math.round(difference)
+    return change === 0 ? 'At average' : `${signed(change)} ${def.unit} vs avg`
+  }
+  if (metric === 'spo2Pct' || metric === 'sleepEfficiency' || metric === 'breathingRate') {
+    const change = Number(difference.toFixed(1))
+    const unit = metric === 'breathingRate' ? '' : ' pp'
+    return change === 0 ? 'At average' : `${signed(change, 1)}${unit} vs avg`
+  }
+  if (base === 0) return difference === 0 ? 'At average' : `${difference > 0 ? '+' : '-'}${def.format(Math.abs(difference))} vs avg`
+  const change = Math.round((difference / base) * 100)
+  return change === 0 ? 'At average' : `${signed(change)}% vs avg`
+}
+
 /** Selected-day values for daily metrics; dated latest readings for sparse body data. */
 export function summaryReading(
   metric: MetricKey,
@@ -58,5 +101,5 @@ export function summaryReading(
     detailSub =
       change === 0 ? 'Same as your average' : `${change > 0 ? '+' : ''}${change} vs average`
   }
-  return { value, date: reading?.date ?? date, sub, detailSub, delta, base }
+  return { value, date: reading?.date ?? date, sub, detailSub, compactSub: compactSubtitle(metric, eligible, reading, date, goals, base), delta, base }
 }

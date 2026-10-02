@@ -96,6 +96,28 @@ describe('dashboard loading presentation', () => {
     })
   })
 
+  test('compact sleep efficiency uses recent nights while retaining the selected night value', () => {
+    withClient((render, client) => {
+      client.setQueryData(['sleep-day', date], { date, sessions: [], minutesAsleep: 450, efficiency: 95, complete: true })
+      const node = <DashboardSummary {...props} metric="sleepEfficiency" presentation="compact" />
+      const waiting = text(render(node))
+      expect(waiting).toContain('95 %')
+      expect(waiting).not.toContain('No history')
+      expect(waiting).not.toContain('vs avg')
+      const range = rangeEnding(date, 7)
+      client.setQueryData(['series-metric', 'sleepEfficiency', range.start, date], {
+        source: 'fixture', start: range.start, end: date,
+        days: {
+          '2026-09-29': { sleepEfficiency: 93 },
+          '2026-09-30': { sleepEfficiency: 93 },
+          '2026-10-01': { sleepEfficiency: 93 },
+          [date]: { sleepEfficiency: 80 }
+        }
+      })
+      expect(text(render(node))).toContain('95 %+2 pp vs avg')
+    })
+  })
+
   test('long trends query the selected period and preserve chart heights on both surfaces', () => {
     withClient((render, client) => {
       for (const compact of [false, true]) {
