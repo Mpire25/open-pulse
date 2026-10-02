@@ -31,6 +31,8 @@ export function AssistantView({
   // the travel between them.
   const [historyOpen, setHistoryOpen] = useState(false)
   const closeTimer = useRef<number | null>(null)
+  const historyRef = useRef<HTMLElement>(null)
+  const deleteDialogOpen = useRef(false)
 
   const cancelClose = (): void => {
     if (closeTimer.current != null) {
@@ -46,6 +48,7 @@ export function AssistantView({
 
   const scheduleClose = (): void => {
     cancelClose()
+    if (deleteDialogOpen.current || historyRef.current?.contains(document.activeElement)) return
     closeTimer.current = window.setTimeout(() => setHistoryOpen(false), 300)
   }
 
@@ -56,9 +59,12 @@ export function AssistantView({
   }, [composerFocusRequest])
 
   useEffect(() => {
-    if (!historyOpen) return
+    if (!historyOpen) {
+      deleteDialogOpen.current = false
+      return
+    }
     const onKey = (event: KeyboardEvent): void => {
-      if (event.key === 'Escape') setHistoryOpen(false)
+      if (event.key === 'Escape' && !event.defaultPrevented && !deleteDialogOpen.current) setHistoryOpen(false)
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
@@ -132,12 +138,17 @@ export function AssistantView({
       <AnimatePresence>
         {historyOpen && (
           <motion.aside
+            ref={historyRef}
             initial={{ opacity: 0, x: 20 }}
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: 20 }}
             transition={{ type: 'spring', stiffness: 380, damping: 34 }}
             onMouseEnter={cancelClose}
             onMouseLeave={scheduleClose}
+            onFocusCapture={cancelClose}
+            onBlurCapture={(event) => {
+              if (!event.currentTarget.contains(event.relatedTarget)) scheduleClose()
+            }}
             className="absolute bottom-3 right-3 top-1.5 z-30 flex w-[300px] flex-col overflow-hidden rounded-[22px] border border-hairline bg-panel/75 shadow-[0_20px_50px_-30px_rgb(0_0_0/0.8),inset_0_1px_0_rgb(255_255_255/0.05)] backdrop-blur-2xl"
           >
             <div className="flex h-10 shrink-0 items-center justify-between border-b border-hairline pl-4 pr-2">
@@ -159,7 +170,10 @@ export function AssistantView({
             <ChatHistory
               chat={chat}
               onNavigate={() => setHistoryOpen(false)}
-              onDeleteDialogClose={() => setHistoryOpen(false)}
+              onDeleteDialogOpenChange={(open) => {
+                deleteDialogOpen.current = open
+                if (open) cancelClose()
+              }}
             />
           </motion.aside>
         )}

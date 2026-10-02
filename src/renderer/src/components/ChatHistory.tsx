@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import * as Dialog from '@radix-ui/react-dialog'
 import { ChatsCircle, PushPin, PushPinSlash, ShieldCheck, Trash } from '@phosphor-icons/react'
 import { Button } from '@/components/ui/button'
@@ -9,7 +9,7 @@ import { cn } from '@/lib/utils'
 interface ChatHistoryProps {
   chat: ChatController
   onNavigate?: () => void
-  onDeleteDialogClose?: () => void
+  onDeleteDialogOpenChange?: (open: boolean) => void
 }
 
 function relativeTime(value: string): string {
@@ -53,16 +53,18 @@ function groupSessions(sessions: ChatSession[]): SessionGroup[] {
   return groups
 }
 
-export function ChatHistory({ chat, onNavigate, onDeleteDialogClose }: ChatHistoryProps): React.JSX.Element {
+export function ChatHistory({ chat, onNavigate, onDeleteDialogOpenChange }: ChatHistoryProps): React.JSX.Element {
   const [deleteTarget, setDeleteTarget] = useState<ChatSession | null>(null)
+  const historyRef = useRef<HTMLDivElement>(null)
+  const deleteTriggerRef = useRef<HTMLButtonElement | null>(null)
 
   const closeDeleteDialog = (): void => {
     setDeleteTarget(null)
-    onDeleteDialogClose?.()
+    onDeleteDialogOpenChange?.(false)
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
+    <div ref={historyRef} tabIndex={-1} className="flex h-full min-h-0 flex-col outline-none">
       <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-3 pt-1">
         {chat.sessions.length ? (
           groupSessions(chat.sessions).map((group) => (
@@ -83,7 +85,11 @@ export function ChatHistory({ chat, onNavigate, onDeleteDialogClose }: ChatHisto
                     }}
                     onPin={() => void chat.pin(session.id, !session.pinned)}
                     onKeep={() => void chat.keep(session.id, !session.kept)}
-                    onDelete={() => setDeleteTarget(session)}
+                    onDelete={(button) => {
+                      deleteTriggerRef.current = button
+                      setDeleteTarget(session)
+                      onDeleteDialogOpenChange?.(true)
+                    }}
                   />
                 ))}
               </div>
@@ -104,7 +110,19 @@ export function ChatHistory({ chat, onNavigate, onDeleteDialogClose }: ChatHisto
       <Dialog.Root open={deleteTarget != null} onOpenChange={(open) => !open && closeDeleteDialog()}>
         <Dialog.Portal>
           <Dialog.Overlay className="fixed inset-0 z-40 bg-black/55 backdrop-blur-sm" />
-          <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-[min(380px,calc(100vw-32px))] -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-hairline bg-panel p-5 shadow-2xl outline-none">
+          <Dialog.Content
+            className="fixed left-1/2 top-1/2 z-50 w-[min(380px,calc(100vw-32px))] -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-hairline bg-panel p-5 shadow-2xl outline-none"
+            onEscapeKeyDown={(event) => event.stopPropagation()}
+            onCloseAutoFocus={(event) => {
+              // Rows open this shared dialog without a Radix Dialog.Trigger.
+              event.preventDefault()
+              const trigger = deleteTriggerRef.current
+              const fallback = historyRef.current?.querySelector<HTMLButtonElement>('button') ?? historyRef.current
+              const returnTarget = trigger?.isConnected ? trigger : fallback
+              returnTarget?.focus()
+              deleteTriggerRef.current = null
+            }}
+          >
             <Dialog.Title className="display text-[16px] font-semibold text-ink">Delete chat?</Dialog.Title>
             <Dialog.Description className="mt-2 text-[12.5px] leading-relaxed text-ink-dim">
               “{deleteTarget?.title}” will be permanently deleted. This cannot be undone.
@@ -138,36 +156,37 @@ interface SessionRowProps {
   onSelect: () => void
   onPin: () => void
   onKeep: () => void
-  onDelete: () => void
+  onDelete: (button: HTMLButtonElement) => void
 }
 
 function SessionRow({ session, selected, streaming, onSelect, onPin, onKeep, onDelete }: SessionRowProps): React.JSX.Element {
   return (
     <div
       className={cn(
-        'group relative flex w-full items-center rounded-[10px] border text-left transition-colors',
+        'group relative flex w-full items-center rounded-[10px] border pr-3 text-left transition-colors hover:pr-1 focus-within:pr-1',
         selected
           ? 'border-hairline bg-white/[0.065] text-ink'
           : 'border-transparent text-ink-dim hover:bg-white/[0.035] hover:text-ink'
       )}
     >
-      {/* The right gutter is constant so the title's ellipsis never moves: the
-          hover actions need it, and paying for them at rest is cheaper than
-          re-truncating the title every time the pointer crosses the row. */}
       <button
         type="button"
         onClick={onSelect}
-        className="flex min-w-0 flex-1 items-center gap-2 rounded-[10px] px-3 py-2.5 pr-20 text-left outline-none focus-visible:ring-1 focus-visible:ring-accent/50"
+        className="flex min-w-0 flex-1 items-center gap-2 rounded-[10px] py-2.5 pl-3 pr-1 text-left outline-none focus-visible:ring-1 focus-visible:ring-accent/50"
       >
         {streaming && <span className="size-1.5 shrink-0 animate-pulse rounded-full bg-accent" />}
-        <span className="min-w-0 flex-1 truncate text-[12px] font-medium">{session.title}</span>
+        <span className="min-w-0 flex-1 overflow-hidden whitespace-nowrap text-[12px] font-medium [mask-image:linear-gradient(to_right,black_calc(100%_-_10px),transparent)]">
+          {session.title}
+        </span>
       </button>
-      {/* Positioned outside the button so it never reflows when the hover
-          actions replace it — it just fades in place. */}
-      <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[9.5px] tabular-nums text-ink-faint transition-opacity group-hover:opacity-0 group-focus-within:opacity-0">
+      {/* Only the visible trailing content takes up space, so the fade stays
+          close to the timestamp at rest and the actions on hover or focus. */}
+      <span className="pointer-events-none shrink-0 text-[9.5px] tabular-nums text-ink-faint group-hover:hidden group-focus-within:hidden">
         {relativeTime(session.updatedAt)}
       </span>
-      <div className="pointer-events-none absolute right-1 flex items-center opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100">
+      {/* Collapse the actions without removing them from the tab order:
+          Shift+Tab can focus an action and reveal the whole group. */}
+      <div className="pointer-events-none flex w-0 shrink-0 items-center overflow-hidden opacity-0 group-hover:pointer-events-auto group-hover:w-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:w-auto group-focus-within:opacity-100">
         {/* Shown under every policy, including "forever": keeping is a durable
             property of the chat, and it has to be markable *before* a retention
             change starts deleting things. */}
@@ -177,7 +196,7 @@ function SessionRow({ session, selected, streaming, onSelect, onPin, onKeep, onD
           aria-label={`${session.kept ? 'Stop keeping' : 'Keep'} ${session.title}`}
           onClick={onKeep}
           className={cn(
-            'grid size-7 place-items-center rounded-lg transition-colors hover:bg-white/[0.08] hover:text-ink',
+            'grid size-7 shrink-0 place-items-center rounded-lg transition-colors hover:bg-white/[0.08] hover:text-ink',
             session.kept ? 'text-accent' : 'text-ink-faint'
           )}
         >
@@ -188,7 +207,7 @@ function SessionRow({ session, selected, streaming, onSelect, onPin, onKeep, onD
           title={session.pinned ? 'Unpin chat' : 'Pin chat'}
           aria-label={`${session.pinned ? 'Unpin' : 'Pin'} ${session.title}`}
           onClick={onPin}
-          className="grid size-7 place-items-center rounded-lg text-ink-faint transition-colors hover:bg-white/[0.08] hover:text-ink"
+          className="grid size-7 shrink-0 place-items-center rounded-lg text-ink-faint transition-colors hover:bg-white/[0.08] hover:text-ink"
         >
           {session.pinned ? <PushPinSlash size={13} /> : <PushPin size={13} />}
         </button>
@@ -196,8 +215,8 @@ function SessionRow({ session, selected, streaming, onSelect, onPin, onKeep, onD
           type="button"
           title="Delete chat"
           aria-label={`Delete ${session.title}`}
-          onClick={onDelete}
-          className="grid size-7 place-items-center rounded-lg text-ink-faint transition-colors hover:bg-danger/10 hover:text-danger"
+          onClick={(event) => onDelete(event.currentTarget)}
+          className="grid size-7 shrink-0 place-items-center rounded-lg text-ink-faint transition-colors hover:bg-danger/10 hover:text-danger"
         >
           <Trash size={13} />
         </button>
