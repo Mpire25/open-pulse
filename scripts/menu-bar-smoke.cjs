@@ -466,9 +466,16 @@ async function memoryRun(main, openPanel) {
 
     panel = panel.isVisible() ? panel : await openPanel()
     assert.equal(await panel.webContents.executeJavaScript(`!!document.querySelector('[aria-label="Customize menu bar"]')`), false, 'popup uses Settings for layout editing')
+    const chartHeaderGeometry = `Array.from(document.querySelectorAll('.menu-section-title')).map(header => {
+      const rect = header.getBoundingClientRect()
+      const hint = header.querySelector('span').getBoundingClientRect()
+      return { height: rect.height, hintInset: rect.right - hint.right }
+    })`
+    const originalChartHeaders = await panel.webContents.executeJavaScript(chartHeaderGeometry)
     await panel.webContents.executeJavaScript(`document.querySelector('[aria-label="Open settings"]').click()`)
     await clickText(reopened, 'Customize menu bar')
     await until(() => reopened.webContents.executeJavaScript(`!!document.querySelector('.dashboard-menu-preview')`), 'menu customization opens in Settings')
+    assert.deepEqual(await reopened.webContents.executeJavaScript(chartHeaderGeometry), originalChartHeaders, 'chart pencils overlay the corner without moving period text or resizing the header')
     assert.equal(await reopened.webContents.executeJavaScript(`document.querySelector('[data-menu-bar-layout]').closest('[class~="bg-panel"]').querySelector('h3').textContent`), 'macOS menu bar', 'layout editor belongs to the macOS menu bar card')
     await delay(600)
     writeFileSync(resolve('out/dashboard-menu-settings-edit-preview.png'), (await reopened.webContents.capturePage()).toPNG())
