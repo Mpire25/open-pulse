@@ -145,29 +145,28 @@ function SessionRow({ session, selected, streaming, onSelect, onPin, onKeep, onD
   return (
     <div
       className={cn(
-        'group relative flex w-full items-center rounded-[10px] border text-left transition-colors',
+        'group relative flex w-full items-center rounded-[10px] border pr-3 text-left transition-colors hover:pr-1 focus-within:pr-1',
         selected
           ? 'border-hairline bg-white/[0.065] text-ink'
           : 'border-transparent text-ink-dim hover:bg-white/[0.035] hover:text-ink'
       )}
     >
-      {/* The right gutter is constant so the title's ellipsis never moves: the
-          hover actions need it, and paying for them at rest is cheaper than
-          re-truncating the title every time the pointer crosses the row. */}
       <button
         type="button"
         onClick={onSelect}
-        className="flex min-w-0 flex-1 items-center gap-2 rounded-[10px] px-3 py-2.5 pr-20 text-left outline-none focus-visible:ring-1 focus-visible:ring-accent/50"
+        className="flex min-w-0 flex-1 items-center gap-2 rounded-[10px] py-2.5 pl-3 pr-1 text-left outline-none focus-visible:ring-1 focus-visible:ring-accent/50"
       >
         {streaming && <span className="size-1.5 shrink-0 animate-pulse rounded-full bg-accent" />}
-        <span className="min-w-0 flex-1 truncate text-[12px] font-medium">{session.title}</span>
+        <span className="min-w-0 flex-1 overflow-hidden whitespace-nowrap text-[12px] font-medium [mask-image:linear-gradient(to_right,black_calc(100%_-_10px),transparent)]">
+          {session.title}
+        </span>
       </button>
-      {/* Positioned outside the button so it never reflows when the hover
-          actions replace it — it just fades in place. */}
-      <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[9.5px] tabular-nums text-ink-faint transition-opacity group-hover:opacity-0 group-focus-within:opacity-0">
+      {/* Only the visible trailing content takes up space, so the fade stays
+          close to the timestamp at rest and the actions on hover or focus. */}
+      <span className="pointer-events-none shrink-0 text-[9.5px] tabular-nums text-ink-faint group-hover:hidden group-focus-within:hidden">
         {relativeTime(session.updatedAt)}
       </span>
-      <div className="pointer-events-none absolute right-1 flex items-center opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100">
+      <div className="hidden shrink-0 items-center group-hover:flex group-focus-within:flex">
         {/* Shown under every policy, including "forever": keeping is a durable
             property of the chat, and it has to be markable *before* a retention
             change starts deleting things. */}
