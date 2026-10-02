@@ -17,6 +17,7 @@ import {
   ArrowUp,
   Check,
   Copy,
+  ArrowClockwise,
   Stop as StopIcon,
   Sparkle,
   Heartbeat,
@@ -96,7 +97,7 @@ export function ChatPanel({
   typeToFocus = false,
   onTypeToFocus
 }: ChatPanelProps): React.JSX.Element {
-  const { turns, busy, loading, activeChatId, send, stop } = chat
+  const { turns, busy, loading, activeChatId, send, retry, stop } = chat
   const scrollRef = useRef<HTMLDivElement>(null)
   const responseSpaceRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
@@ -257,7 +258,13 @@ export function ChatPanel({
           >
             <AnimatePresence initial={false}>
               {turns.map((turn) => (
-                <Bubble key={turn.id} turn={turn} compact={compact} onAction={handleAssistantAction} />
+                <Bubble
+                  key={turn.id}
+                  turn={turn}
+                  compact={compact}
+                  onAction={handleAssistantAction}
+                  onRetry={turn.error && turn.id === turns.at(-1)?.id && !busy ? retry : undefined}
+                />
               ))}
             </AnimatePresence>
             <div ref={responseSpaceRef} aria-hidden="true" className="shrink-0" />
@@ -307,11 +314,13 @@ export function ChatPanel({
 const Bubble = memo(function Bubble({
   turn,
   compact,
-  onAction
+  onAction,
+  onRetry
 }: {
   turn: ChatTurn
   compact?: boolean
   onAction: (action: AssistantAction) => void
+  onRetry?: () => void
 }): React.JSX.Element {
   const isUser = turn.role === 'user'
   const canCopy = Boolean(turn.text.trim()) && !turn.streaming && !turn.error && !turn.transient
@@ -340,7 +349,12 @@ const Bubble = memo(function Bubble({
           ) : turn.error ? (
             <div className={cn(!compact && 'max-w-[720px]')}>
               <div className="rounded-[16px] border border-danger/30 bg-danger/10 px-4 py-3 text-[13px] text-danger">
-                {turn.text}
+                <p role="alert">{turn.text}</p>
+                {onRetry && (
+                  <Button variant="ghost" size="sm" onClick={onRetry} className="mt-2">
+                    <ArrowClockwise size={14} /> Retry
+                  </Button>
+                )}
               </div>
             </div>
           ) : (
