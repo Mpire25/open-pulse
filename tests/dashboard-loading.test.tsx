@@ -89,10 +89,47 @@ describe('dashboard loading presentation', () => {
     })
   })
 
-  test('menu bar summaries retain their existing loading text', () => {
+  test('menu bar summaries use blank skeletons and restore them for an uncached date', () => {
     withClient((render) => {
-      const html = render(<DashboardSummary {...props} metric="sleepMinutes" presentation="compact" />)
-      expect(text(html)).toContain('Loading…')
+      for (const metric of METRIC_KEYS) {
+        const html = render(<DashboardSummary {...props} metric={metric} presentation="compact" />)
+        expect(text(html)).toBe(METRICS[metric].shortLabel ?? METRICS[metric].label)
+        expect(skeletonCount(html)).toBe(2)
+        expect(html).toContain('aria-busy="true"')
+        expect(html).toContain('disabled=""')
+      }
+    })
+    withClient((render, client) => {
+      seedMetric(client, 'weightKg', 77.3)
+      const loaded = render(<DashboardSummary {...props} metric="weightKg" presentation="compact" />)
+      expect(text(loaded)).toContain('77.3')
+      expect(skeletonCount(loaded)).toBe(0)
+      expect(loaded).not.toContain('disabled=""')
+      const pending = render(<DashboardSummary {...props} date="2026-10-03" metric="weightKg" presentation="compact" />)
+      expect(skeletonCount(pending)).toBe(2)
+      expect(text(pending)).toBe(METRICS.weightKg.shortLabel ?? METRICS.weightKg.label)
+    })
+  })
+
+  test('menu bar rings and sleep stages show skeletons while pending and retain resolved empty states', () => {
+    withClient((render, client) => {
+      const ring = <DashboardRing {...props} metric="steps" compact />
+      const pending = render(ring)
+      expect(text(pending)).toBe('')
+      expect(skeletonCount(pending)).toBeGreaterThan(0)
+      expect(pending).toContain('width:116px;height:116px')
+      seedMetric(client, 'steps', 0)
+      expect(text(render(ring))).toContain('0% of 10,000')
+      expect(skeletonCount(render(ring))).toBe(0)
+
+      const sleep = <DashboardChart {...props} widget={{ kind: 'sleepStages' }} onSleep={noop} compact />
+      const loadingSleep = render(sleep)
+      expect(text(loadingSleep)).not.toContain('Loading')
+      expect(text(loadingSleep)).toContain('Sleep stages')
+      expect(skeletonCount(loadingSleep)).toBe(5)
+      client.setQueryData(['sleep-day', date], null)
+      expect(text(render(sleep))).toContain('Sleep stages unavailable')
+      expect(skeletonCount(render(sleep))).toBe(0)
     })
   })
 

@@ -18,7 +18,7 @@ import { ColumnChart, IntradayLine, ProgressRing, TrendLine } from './charts'
 import { DrillHeader, DrillPanel, Panel } from './Panel'
 import { MetricStat } from './MetricStat'
 import { SleepStages, STAGE_COLOR, STAGE_LABEL } from './SleepStages'
-import { CARD_HEIGHT, SkeletonChart, SkeletonRing, SkeletonRows, SkeletonText } from './Skeleton'
+import { CARD_HEIGHT, SkeletonBlock, SkeletonChart, SkeletonRing, SkeletonRows, SkeletonText } from './Skeleton'
 import { WorkoutList } from './WorkoutList'
 
 export type DashboardOpenMetric = (metric: MetricKey, range: MetricRange, date?: string) => void
@@ -103,12 +103,12 @@ export function DashboardRing({
         disabled={reading.pending}
         onClick={() => onOpen(metric, 'D', date)}
       >
-        {reading.pending && !compact ? (
+        {reading.pending ? (
           <SkeletonRing
-            size={120}
-            stroke={14}
-            className="home-goal-ring"
-            contentClassName="home-goal-skeleton-content"
+            size={compact ? 116 : 120}
+            stroke={compact ? 10 : 14}
+            className={compact ? undefined : 'home-goal-ring'}
+            contentClassName={compact ? undefined : 'home-goal-skeleton-content'}
           />
         ) : (
           <ProgressRing
@@ -142,7 +142,7 @@ export function DashboardRing({
           </ProgressRing>
         )}
         {compact ? (
-          <small>{caption}</small>
+          <small>{reading.pending ? <SkeletonText className="h-2 w-16" /> : caption}</small>
         ) : reading.pending ? (
           <SkeletonText className="home-goal-skeleton-label" />
         ) : (
@@ -195,16 +195,23 @@ export function DashboardSummary({
           type="button"
           onClick={open}
           aria-label={`Open ${def.shortLabel ?? def.label} details`}
+          aria-busy={reading.pending || reading.comparisonPending}
+          disabled={reading.pending}
         >
           <span>
             <Icon size={14} color={def.color} />
             {def.shortLabel ?? def.label}
           </span>
           <strong>
-            {value}
-            {reading.value !== null && def.unit ? ` ${def.unit}` : ''}
+            {reading.pending ? (
+              <SkeletonText className="h-3.5 w-16 max-w-full" />
+            ) : (
+              `${value}${reading.value !== null && def.unit ? ` ${def.unit}` : ''}`
+            )}
           </strong>
-          <small title={reading.detailSub}>{reading.pending || reading.comparisonPending ? '' : reading.compactSub}</small>
+          <small title={reading.detailSub}>
+            {reading.pending || reading.comparisonPending ? <SkeletonText className="h-2 w-20 max-w-full" /> : reading.compactSub}
+          </small>
         </button>
       ) : (
         <button
@@ -480,7 +487,7 @@ function SleepWidget({ date, enabled = true, compact, onSleep }: ChartProps): Re
   const stageTotal = STAGES.reduce((total, stage) => total + (night?.stageMinutes[stage] ?? 0), 0)
   if (compact)
     return (
-      <section className="menu-section menu-sleep">
+      <section className="menu-section menu-sleep" aria-busy={sleep.isPending}>
         <button
           type="button"
           className="menu-section-title"
@@ -492,10 +499,10 @@ function SleepWidget({ date, enabled = true, compact, onSleep }: ChartProps): Re
         </button>
         {sleep.isError ? (
           <Retry onRetry={() => void sleep.refetch()} />
-        ) : stageTotal > 0 ? (
+        ) : sleep.isPending || stageTotal > 0 ? (
           <>
             <div className="menu-stage-bar" aria-hidden>
-              {STAGES.map((stage) => (
+              {sleep.isPending ? <SkeletonBlock className="h-full w-full" /> : STAGES.map((stage) => (
                 <span
                   key={stage}
                   style={{ background: STAGE_COLOR[stage], flex: night?.stageMinutes[stage] ?? 0 }}
@@ -506,17 +513,17 @@ function SleepWidget({ date, enabled = true, compact, onSleep }: ChartProps): Re
               {STAGES.map((stage) => (
                 <div key={stage}>
                   <span>
-                    <i style={{ background: STAGE_COLOR[stage] }} />
+                    <i style={{ background: sleep.isPending ? 'rgb(255 255 255 / 0.055)' : STAGE_COLOR[stage] }} />
                     {STAGE_LABEL[stage]}
                   </span>
-                  <strong>{formatMinutes(night?.stageMinutes[stage] ?? 0)}</strong>
+                  <strong>{sleep.isPending ? <SkeletonText className="h-2.5 w-10" /> : formatMinutes(night?.stageMinutes[stage] ?? 0)}</strong>
                 </div>
               ))}
             </div>
           </>
         ) : (
           <p className="menu-muted">
-            {sleep.isPending ? 'Loading sleep stages…' : 'Sleep stages unavailable'}
+            Sleep stages unavailable
           </p>
         )}
       </section>
