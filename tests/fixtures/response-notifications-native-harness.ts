@@ -61,7 +61,7 @@ test('Electron adapter suppresses only focused visible windows, handles clicks a
   mock.module('../../src/main/store', () => ({ getResponseNotificationPreferences: readPreferences }))
   const { createResponseNotifications } = await import('../../src/main/response-notifications')
   const opened: Array<[number, string]> = []
-  const controller = createResponseNotifications((senderId, chatId) => { opened.push([senderId, chatId]) })
+  const controller = createResponseNotifications((senderId, chatId) => { opened.push([senderId, chatId]) }, () => 'Weekly sleep comparison')
   const complete = (runId: string) => {
     controller.observe(1, { type: 'done', outcome: 'completed', chatId: 'chat-a', runId, text: 'Private details', parts: [] })
     controller.acknowledge(1, 'chat-a', runId)
@@ -92,7 +92,7 @@ test('Electron adapter suppresses only focused visible windows, handles clicks a
     query: 'How did I sleep?', text: '**Seven hours** last night.'
   })
   controller.acknowledge(1, 'chat-a', 'preview')
-  expect(notifications[3].options).toEqual({ title: 'How did I sleep?', body: 'Seven hours last night.', silent: true, groupId: 'openpulse-chat-chat-a' })
+  expect(notifications[3].options).toEqual({ title: 'Weekly sleep comparison', body: 'Seven hours last night.', silent: true, groupId: 'openpulse-chat-chat-a' })
   expect(notifications[3].shown).toBe(true)
   controller.clearPreviews()
   expect(notifications[3].closed).toBe(true)

@@ -45,7 +45,11 @@ function excerpt(text: string, limit: number): string {
 }
 
 /** Only called for opted-in previews; never fetches links or generates a summary. */
-export function responseNotificationContent(query: string, answer: string): { title: string; body: string } {
+export function responseNotificationTitle(chatTitle: string): string {
+  return excerpt(chatTitle, 80) || 'OpenPulse'
+}
+
+export function responseNotificationContent(chatTitle: string, answer: string): { title: string; body: string } {
   let body = ''
   try {
     body = excerpt(plainText(markdown.parse(answer)), 240)
@@ -53,7 +57,7 @@ export function responseNotificationContent(query: string, answer: string): { ti
     // A malformed or excessively complex answer must not fail chat completion.
   }
   return {
-    title: excerpt(query, 80) || 'OpenPulse',
+    title: responseNotificationTitle(chatTitle),
     body: body || 'Your response is ready. Open the chat to view it.'
   }
 }

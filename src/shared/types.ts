@@ -429,6 +429,8 @@ export interface AssistantModel {
   id: string
   label: string
   efforts?: ReasoningEffort[]
+  /** Catalog metadata for background naming; does not change assistant settings. */
+  supportsNoReasoning?: true
 }
 export interface ModelCatalog {
   models: AssistantModel[]
@@ -662,6 +664,8 @@ export interface ChatSessionMessage extends ChatMessage {
 export interface ChatSession {
   id: string
   title: string
+  /** Only new chats opt into one naming attempt. Missing means legacy history. */
+  titleGeneration?: 'waiting' | 'attempted' | 'generated'
   createdAt: string
   updatedAt: string
   /** Pinned chats surface at the top and are exempt from retention cleanup. */
@@ -670,6 +674,8 @@ export interface ChatSession {
   kept?: boolean
   messages: ChatSessionMessage[]
 }
+
+export type ChatTitleUpdate = Pick<ChatSession, 'id' | 'title' | 'titleGeneration'>
 
 export interface ChatHistorySnapshot {
   sessions: ChatSession[]

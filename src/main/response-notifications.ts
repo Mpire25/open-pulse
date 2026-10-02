@@ -3,10 +3,12 @@ import { ResponseNotificationController } from './response-notification-controll
 import { getResponseNotificationPreferences } from './store'
 
 export function createResponseNotifications(
-  openChat: (senderId: number, chatId: string) => void
+  openChat: (senderId: number, chatId: string) => void,
+  chatTitle: (senderId: number, chatId: string) => string | undefined = () => undefined
 ): ResponseNotificationController {
   return new ResponseNotificationController({
     preferences: getResponseNotificationPreferences,
+    chatTitle,
     isFocused: (senderId) => {
       const sender = webContents.fromId(senderId)
       const win = sender && BrowserWindow.fromWebContents(sender)

@@ -14,6 +14,8 @@ function harness() {
   let now = 1_000
   let supported = true
   let fails = false
+  const titles = new Map([['chat-a', 'Weekly sleep comparison'], ['chat-b', 'Daily steps']])
+  let titleReads = 0
   const notifications: Array<{
     options: { title: string; body: string; silent: boolean; groupId: string }
     click: () => void
@@ -24,6 +26,7 @@ function harness() {
   const opened: Array<[number, string]> = []
   const controller = new ResponseNotificationController({
     preferences: () => ({ enabled, sound, previews }),
+    chatTitle: (_senderId, chatId) => { titleReads++; return titles.get(chatId) },
     isFocused: () => focused,
     now: () => now,
     openChat: (senderId, chatId) => { opened.push([senderId, chatId]) },
@@ -43,6 +46,8 @@ function harness() {
   }
   return {
     controller, notifications, opened, complete,
+    setTitle: (chatId: string, title: string) => { titles.set(chatId, title) },
+    titleReads: () => titleReads,
     setEnabled: (value: boolean) => { enabled = value },
     setPreviews: (value: boolean) => { previews = value },
     setSound: (value: boolean) => { sound = value },
@@ -54,7 +59,7 @@ function harness() {
 }
 
 describe('AI response notifications', () => {
-  test('previews use the query and formatted final answer, with one notification per response grouped by chat', () => {
+  test('previews use the stable chat name and formatted final answer, with one notification per response grouped by chat', () => {
     const h = harness()
     h.setPreviews(true)
     h.controller.observe(1, success(), { query: 'How did I sleep?', text: 'You averaged **7h 12m** per night.' })
@@ -64,12 +69,41 @@ describe('AI response notifications', () => {
     h.controller.observe(1, success('chat-b', 'run-c'), { query: 'Show my steps', text: '' })
     h.controller.acknowledge(1, 'chat-b', 'run-c')
     expect(h.notifications).toHaveLength(3)
-    expect(h.notifications[0].options).toEqual({ title: 'How did I sleep?', body: 'You averaged 7h 12m per night.', silent: true, groupId: 'openpulse-chat-chat-a' })
-    expect(h.notifications[1].options).toMatchObject({ title: 'And last week?', body: 'You averaged 6h 47m.', groupId: 'openpulse-chat-chat-a' })
-    expect(h.notifications[2].options).toMatchObject({ title: 'Show my steps', body: 'Your response is ready. Open the chat to view it.', groupId: 'openpulse-chat-chat-b' })
+    expect(h.notifications[0].options).toEqual({ title: 'Weekly sleep comparison', body: 'You averaged 7h 12m per night.', silent: true, groupId: 'openpulse-chat-chat-a' })
+    expect(h.notifications[1].options).toMatchObject({ title: 'Weekly sleep comparison', body: 'You averaged 6h 47m.', groupId: 'openpulse-chat-chat-a' })
+    expect(h.notifications[2].options).toMatchObject({ title: 'Daily steps', body: 'Your response is ready. Open the chat to view it.', groupId: 'openpulse-chat-chat-b' })
     expect(h.notifications.every((entry) => entry.shows === 1 && entry.closes === 0)).toBe(true)
     h.notifications[1].click()
     expect(h.opened).toEqual([[1, 'chat-a']])
+  })
+
+  test('uses a name generated before acknowledgement, and never reissues a banner for later naming', () => {
+    const h = harness(); h.setPreviews(true)
+    h.setTitle('chat-a', 'Compare my sleep this week')
+    h.controller.observe(1, success(), { query: 'Latest query is not the title', text: 'Answer.' })
+    h.setTitle('chat-a', 'Weekly sleep comparison')
+    h.controller.acknowledge(1, 'chat-a', 'run-a')
+    expect(h.notifications[0].options.title).toBe('Weekly sleep comparison')
+    h.setTitle('chat-a', 'Later name')
+    expect(h.notifications).toHaveLength(1)
+    expect(h.notifications[0].options.title).toBe('Weekly sleep comparison')
+  })
+
+  test('notification does not wait for naming and falls back to the first prompt', () => {
+    const h = harness(); h.setPreviews(true)
+    h.setTitle('chat-a', 'Compare my sleep this week')
+    h.controller.observe(1, success(), { query: 'What about yesterday?', text: 'Your answer.' })
+    h.controller.acknowledge(1, 'chat-a', 'run-a')
+    expect(h.notifications[0].options.title).toBe('Compare my sleep this week')
+    expect(h.notifications[0].shows).toBe(1)
+  })
+
+  test('previews disabled never look up or expose the chat title', () => {
+    const h = harness()
+    h.controller.observe(1, success(), { query: 'Private question', text: 'Private answer' })
+    h.controller.acknowledge(1, 'chat-a', 'run-a')
+    expect(h.titleReads()).toBe(0)
+    expect(h.notifications[0].options.title).toBe('OpenPulse')
   })
 
   test('both query and answer stay generic without opt-in, including preference changes before acknowledgement', () => {

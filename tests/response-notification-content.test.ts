@@ -9,7 +9,7 @@ test('preview removes Markdown formatting, links, images and table syntax while 
   })
 })
 
-test('preview truncates query and response without splitting emoji or combining characters', () => {
+test('preview truncates chat name and response without splitting emoji or combining characters', () => {
   const emoji = '👩🏽‍⚕️'
   const result = responseNotificationContent(emoji.repeat(81), 'e\u0301'.repeat(241))
   expect(result.title).toBe(emoji.repeat(79) + '…')

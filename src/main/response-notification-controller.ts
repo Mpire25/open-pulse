@@ -1,5 +1,5 @@
 import type { AiEvent } from '../shared/types'
-import { responseNotificationContent } from './response-notification-content'
+import { responseNotificationContent, responseNotificationTitle } from './response-notification-content'
 
 interface Completion {
   senderId: number
@@ -15,6 +15,7 @@ interface NotificationHandle {
 
 interface Dependencies {
   preferences: () => { enabled: boolean; sound: boolean; previews: boolean }
+  chatTitle: (senderId: number, chatId: string) => string | undefined
   isFocused: (senderId: number) => boolean
   openChat: (senderId: number, chatId: string) => void
   create: (
@@ -52,7 +53,8 @@ export class ResponseNotificationController {
     }
     const completion = { senderId, chatId: event.chatId, runId: event.runId, expiresAt: now + 60_000 }
     const { enabled, previews } = this.dependencies.preferences()
-    const preview = enabled && previews && answer ? responseNotificationContent(answer.query, answer.text) : undefined
+    const preview = enabled && previews && answer
+      ? responseNotificationContent(this.dependencies.chatTitle(senderId, event.chatId) ?? '', answer.text) : undefined
     this.seen.set(key, completion)
     this.pending.set(key, { ...completion, preview })
     // Only the pending acknowledgement retains a bounded opted-in excerpt.
@@ -79,7 +81,9 @@ export class ResponseNotificationController {
       this.dependencies.openChat(senderId, chatId)
     }
     try {
-      const content = previews && completion.preview ? completion.preview : { title: 'OpenPulse', body: 'Your AI response is ready.' }
+      const content = previews && completion.preview
+        ? { ...completion.preview, title: responseNotificationTitle(this.dependencies.chatTitle(senderId, chatId) ?? completion.preview.title) }
+        : { title: 'OpenPulse', body: 'Your AI response is ready.' }
       const notification = this.dependencies.create(
         { ...content, silent: !sound, groupId: `openpulse-chat-${chatId}` }, click, finished
       )

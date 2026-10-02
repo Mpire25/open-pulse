@@ -13,6 +13,7 @@ import type {
   ChatRetention,
   ChatSession,
   ChatSessionMessage,
+  ChatTitleUpdate,
   CodexAuthStatus,
   ModelCatalog,
   GoogleAuthStatus,
@@ -150,6 +151,11 @@ const api = {
     disconnect: (): Promise<{ warning?: string }> => ipcRenderer.invoke('codex:disconnect')
   },
   chats: {
+    onTitleChanged: (callback: (title: ChatTitleUpdate) => void): (() => void) => {
+      const listener = (_event: unknown, title: ChatTitleUpdate): void => callback(title)
+      ipcRenderer.on('chats:title-changed', listener)
+      return () => ipcRenderer.removeListener('chats:title-changed', listener)
+    },
     list: (): Promise<ChatHistorySnapshot> => ipcRenderer.invoke('chats:list'),
     create: (id?: string): Promise<ChatSession> => ipcRenderer.invoke('chats:create', id),
     update: (id: string, messages: ChatSessionMessage[]): Promise<ChatSession> =>

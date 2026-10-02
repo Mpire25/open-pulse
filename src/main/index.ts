@@ -7,7 +7,7 @@ import menuBarIcon from '../../build/menu-barTemplate.png?asset'
 import menuBarIconRetina from '../../build/menu-barTemplate@2x.png?asset'
 import { getMenuBarEnabled } from './store'
 import { installWindowActivation } from './window-activation'
-import { registerIpc, registerTrustedRenderer } from './ipc'
+import { getCachedChatTitle, registerIpc, registerTrustedRenderer } from './ipc'
 import { createResponseNotifications } from './response-notifications'
 import { createRendererTarget, safeExternalUrl, type RendererTarget } from './renderer-security'
 
@@ -66,7 +66,7 @@ const responseNotifications = createResponseNotifications((senderId, chatId) => 
   win.show()
   win.focus()
   closeMenuPanel()
-})
+}, getCachedChatTitle)
 
 function createWindow(target: RendererTarget, panel = false): BrowserWindow {
   const win = new BrowserWindow({

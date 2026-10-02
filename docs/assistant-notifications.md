@@ -3,20 +3,26 @@
 Enable **Settings → Assistant notifications → Notify when a response finishes**.
 Notifications, sound, and **Show message previews** are off by default. With
 previews off, the banner says **OpenPulse — Your AI response is ready.** Both the
-query and answer remain hidden.
+chat name and answer remain hidden.
 
-Enable **Show message previews** to use the latest query as the title (up to 80
+Enable **Show message previews** to use the chat name as the title (up to 80
 visible characters) and the final answer as the body (up to 240 visible
 characters). Long text ends with an ellipsis, preserving emoji and combining
 characters. Markdown formatting is removed; links show their labels, and images,
 raw HTML, and footnotes are omitted. Interim tool commentary is excluded. Answers
 without text use **Your response is ready. Open the chat to view it.**
 
+New chats use their first-prompt fallback until automatic naming finishes. The
+latest available name is read from memory when the banner is created; delivery
+never waits for naming. A later name does not reissue an existing banner. Naming
+adds up to two naming requests per new chat independently of notifications, as described
+in [Assistant chat names](assistant-chat-names.md).
+
 Previews may expose health information on the desktop or lock screen. Only a
 bounded excerpt is retained while waiting for the renderer acknowledgement, and
 only when notifications and previews are enabled. Turning previews off clears
-pending excerpts and dismisses delivered preview banners. No extra model request
-is made, no links are fetched, and delivery does not read encrypted credentials.
+pending excerpts and dismisses delivered preview banners. Notification delivery
+makes no model request, fetches no links, and does not read encrypted credentials.
 
 One separate notification is sent for each successfully completed response after
 the renderer accepts it. Notifications are grouped by chat using Electron's
@@ -70,14 +76,16 @@ Manual acceptance steps:
 9. Delete a notified chat or sign out: its existing banner is dismissed and
    cannot navigate to another conversation.
 10. Enable **Show message previews**, send a query, and switch apps: the banner
-    title contains the query and its body shows the final answer excerpt. Repeat
+    title contains the chat name and its body shows the final answer excerpt. Repeat
     in the same chat: both responses have separate notifications grouped in
     Notification Centre when OS grouping is enabled. Click either to open that chat.
-11. Try a long query/answer, formatted text, and a visual-only answer: check
+11. Try a long chat name/answer, formatted text, and a visual-only answer: check
     readable excerpts with ellipses and the visual fallback. macOS may display
     fewer characters depending on banner size.
 12. Turn previews off: existing preview banners disappear and future completions
     use generic titles and bodies. The notification/sound preferences are preserved.
+13. Re-enable previews and complete an answer before naming finishes: the notification uses the
+    first-prompt fallback promptly, without a second banner when the title updates.
 
 Handle any macOS permission or Keychain prompts personally. Native acceptance
 has not been automated against the user's running app or account.

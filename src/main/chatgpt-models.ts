@@ -12,9 +12,48 @@ import {
 } from './codex-auth'
 import { getLocalValue, setLocalValue } from './store'
 import { TokenExchangeError, CHATGPT_RESOURCE } from './chatgpt-protocol'
-import { responseError } from './chatgpt-responses'
+import { ChatGPTRequestError, responseError } from './chatgpt-responses'
+import { CHAT_TITLE_MODEL, type ChatTitleModel } from './chat-title-generator'
 const MAX_AGE = 6 * 60 * 60_000
 const pending = new Map<string, Promise<ModelCatalog>>()
+
+export function selectChatTitleModels(models: AssistantModel[], assistantModel: string): ChatTitleModel[] {
+  const minimum = (model?: AssistantModel): ChatTitleModel['reasoningEffort'] => {
+    if (model?.supportsNoReasoning) return 'none'
+    return (['low', 'medium', 'high', 'xhigh', 'max'] as const).find((effort) => model?.efforts?.includes(effort)) ?? 'low'
+  }
+  const luna = models.find((model) => model.id === CHAT_TITLE_MODEL)
+  const result: ChatTitleModel[] = []
+  if (luna) {
+    const supportsLow = luna.efforts?.includes('low') || (!luna.efforts && !luna.supportsNoReasoning)
+    result.push({ model: luna.id, reasoningEffort: supportsLow ? 'low' : minimum(luna) })
+  }
+  if (!result.some((model) => model.model === assistantModel) && ASSISTANT_MODEL_PATTERN.test(assistantModel)) {
+    result.push({ model: assistantModel, reasoningEffort: minimum(models.find((model) => model.id === assistantModel)) })
+  }
+  return result
+}
+
+/** Reuses the foreground run's credentials; never opens secure storage. */
+export async function getChatTitleModels(
+  tokens: { accessToken: string; clientId: string }, assistantModel: string, signal: AbortSignal
+): Promise<ChatTitleModel[]> {
+  const cached = getLocalValue<ModelCatalog>(`chatgpt-models:${tokens.clientId}`)
+  let models = cached?.models
+  if (!cached?.fetchedAt || cached.stale || Date.now() - cached.fetchedAt >= MAX_AGE) {
+    try {
+      const response = await fetch(`${CHATGPT_RESOURCE}/models`, {
+        headers: { authorization: `Bearer ${tokens.accessToken}` }, signal
+      })
+      if (!response.ok) throw responseError(await response.json().catch(() => null), response.status, response.headers.get('x-request-id'))
+      models = parseModels(await response.json())
+    } catch (error) {
+      if (signal.aborted || (error instanceof ChatGPTRequestError && error.stopInference)) throw error
+      models = (cached?.models ?? []).filter((model) => model.id === assistantModel)
+    }
+  }
+  return selectChatTitleModels(models ?? [], assistantModel)
+}
 
 export function parseModels(value: unknown): AssistantModel[] {
   if (
@@ -65,7 +104,9 @@ export function parseModels(value: unknown): AssistantModel[] {
             : model.slug,
         ...(efforts.length
           ? { efforts: ['auto' as const, ...new Set(efforts)] }
-          : {})
+          : {}),
+        ...(levels.some((level) => typeof level === 'string' ? level === 'none' : level?.effort === 'none')
+          ? { supportsNoReasoning: true as const } : {})
       }
     ]
   })

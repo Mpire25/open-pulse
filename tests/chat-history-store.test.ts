@@ -3,6 +3,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { ChatHistoryStore } from '../src/main/chat-history-store'
+import { normalizeGeneratedTitle } from '../src/main/chat-title-generator'
 import { expiringChatCount } from '../src/shared/chat'
 import type { ChatRetention, ChatSession, ChatSessionMessage } from '../src/shared/types'
 
@@ -88,6 +89,30 @@ describe('encrypted chat history store', () => {
     expect(restored.snapshot('account-a').sessions[0].title).toBe('Compare my sleep and recovery this month')
     expect(restored.snapshot('account-b').sessions).toEqual([])
     expect(restored.snapshot('account-a').persistence).toBe('encrypted')
+  })
+
+  test('generated Unicode titles survive saving and reloading without shortening or splitting characters', () => {
+    for (const title of ['e\u0301'.repeat(80), 'हि'.repeat(80), 'ก้'.repeat(80), '👩🏽‍⚕️'.repeat(80), 'a'.repeat(79) + '😀']) {
+      expect(normalizeGeneratedTitle(title)).toBe(title)
+      const path = temporaryPath()
+      const store = new ChatHistoryStore(path, encryptedAdapter())
+      const chat = store.create('account-a')
+      const message = userMessage('Compare my sleep')
+      store.update('account-a', chat.id, [message])
+      expect(store.claimTitle('account-a', chat.id, message.id)).toBe(true)
+      const named = store.completeTitle('account-a', chat.id, message, title)
+
+      const restored = new ChatHistoryStore(path, encryptedAdapter())
+      expect(restored.snapshot('account-a').sessions[0]).toEqual(named)
+      expect(restored.claimTitle('account-a', chat.id, message.id)).toBe(false)
+    }
+  })
+
+  test('loading oversized stored titles keeps the first 80 whole visible characters', () => {
+    const title = 'a'.repeat(79) + '👩🏽‍⚕️'
+    const path = seedHistory([agedSession(0, { title: `  ${title} extra  ` })])
+    const restored = new ChatHistoryStore(path, encryptedAdapter())
+    expect(restored.snapshot('account-a').sessions[0].title).toBe(title)
   })
 
   test('never writes sensitive history when encryption is unavailable', () => {

@@ -106,7 +106,7 @@ function ResponseNotificationsCard({ settings, onSettingsChange }: {
     <div className="flex items-center justify-between gap-6">
       <div>
         <label htmlFor="response-notification-previews" className="text-[13px] font-medium text-ink">Show message previews</label>
-        <p id="response-notification-previews-description" className="mt-1 text-[12px] leading-relaxed text-ink-dim">Show your query and a short answer preview. This may reveal health information on your desktop or lock screen. Turn off to use generic notifications.</p>
+        <p id="response-notification-previews-description" className="mt-1 text-[12px] leading-relaxed text-ink-dim">Show the chat name and a short answer preview. This may reveal health information on your desktop or lock screen. Turn off to use generic notifications.</p>
       </div>
       <Switch id="response-notification-previews" checked={settings.responseNotificationPreviews} disabled={saving || !settings.responseNotificationsEnabled} aria-describedby="response-notification-previews-description" onCheckedChange={(previews) => void change({ responseNotificationPreviews: previews })} />
     </div>

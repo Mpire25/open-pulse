@@ -2,7 +2,7 @@
 import { afterAll, afterEach, beforeEach, expect, test } from 'bun:test'
 import { Window } from 'happy-dom'
 import React, { act } from 'react'
-import type { AiEvent, ChatSession, ChatSessionMessage } from '../../src/shared/types'
+import type { AiEvent, ChatSession, ChatSessionMessage, ChatTitleUpdate } from '../../src/shared/types'
 import type { ChatController } from '../../src/renderer/src/hooks/useChat'
 
 const dom = new Window({ url: 'http://localhost:49173' })
@@ -17,6 +17,7 @@ let container: HTMLDivElement
 let chat: ChatController
 let receive: (event: AiEvent) => void
 let accountChanged: () => void
+let titleChanged: (title: ChatTitleUpdate) => void
 let sends: Array<[string, string]>
 let ready: Array<[string, string]>
 let failPersistence: boolean
@@ -33,6 +34,7 @@ beforeEach(async () => {
   const sessions = new Map(['chat-a', 'chat-b'].map((id) => [id, session(id)]))
   Object.assign(dom, { pulse: {
     chats: {
+      onTitleChanged: (callback: typeof titleChanged) => { titleChanged = callback; return () => {} },
       list: async () => ({ sessions: [...sessions.values()], persistence: 'memory' }),
       update: async (id: string, messages: ChatSessionMessage[]) => {
         if (failPersistence) throw new Error('Synthetic history write failure')
@@ -58,6 +60,20 @@ async function send() {
   const [chatId, runId] = sends.at(-1)!
   return { chatId, runId }
 }
+
+test('title updates preserve streaming text and survive a stale completion save', async () => {
+  const ids = await send()
+  await act(async () => receive({ ...ids, type: 'delta', text: 'Partial answer' }))
+  await act(async () => titleChanged({ id: 'chat-a', title: 'Weekly steps comparison', titleGeneration: 'generated' }))
+  expect(chat.sessions.find((session) => session.id === 'chat-a')?.title).toBe('Weekly steps comparison')
+  expect(container.textContent).toContain('Partial answer')
+  expect(chat.busy).toBe(true)
+  await act(async () => receive({ ...ids, type: 'done', outcome: 'completed', text: 'Complete answer', parts: [] }))
+  expect(chat.sessions.find((session) => session.id === 'chat-a')?.title).toBe('Weekly steps comparison')
+  expect(container.textContent).toContain('Complete answer')
+  await act(async () => titleChanged({ id: 'deleted', title: 'Late title', titleGeneration: 'generated' }))
+  expect(chat.sessions.some((session) => session.id === 'deleted')).toBe(false)
+})
 
 test('accepted successful response is available and acknowledged once even if persistence fails', async () => {
   const ids = await send()

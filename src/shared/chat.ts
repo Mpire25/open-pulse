@@ -1,4 +1,4 @@
-import type { ChatRetention, ChatSession } from './types'
+import type { ChatRetention, ChatSession, ChatTitleUpdate } from './types'
 
 const DEFAULT_CHAT_TITLE = 'New chat'
 
@@ -45,6 +45,13 @@ export function generateChatTitle(text: string): string {
   if (sentence.length <= 48) return sentence
   const clipped = sentence.slice(0, 48).replace(/\s+\S*$/, '').trim()
   return `${clipped || sentence.slice(0, 48).trim()}…`
+}
+
+/** A save started before naming finished must not restore the fallback title. */
+export function mergeChatTitle(current: ChatTitleUpdate, incoming: ChatTitleUpdate): ChatTitleUpdate {
+  return current.titleGeneration === 'generated' && incoming.titleGeneration !== 'generated'
+    ? { id: incoming.id, title: current.title, titleGeneration: current.titleGeneration }
+    : incoming
 }
 
 export interface InterruptedTurnState {
