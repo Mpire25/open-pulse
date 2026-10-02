@@ -57,7 +57,7 @@ export function chooseDashboardWidget(
     const groups = new Map<string, MenuItemConstructorOptions[]>()
     for (const widget of widgetOptions(slot.kind, surface)) {
       const description = 'metric' in widget ? METRIC_DESCRIPTIONS[widget.metric] : null
-      const group = description?.domain ?? 'other'
+      const group = description?.domain ?? (widget.kind === 'sleepStages' ? 'sleep' : 'other')
       const suffix = widget.kind === 'trend'
         ? ` — Last ${widget.days} days`
         : widget.kind === 'intraday' ? ' — Throughout the day' : ''
