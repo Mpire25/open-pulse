@@ -117,7 +117,8 @@ eligibility and usage limits are controlled by ChatGPT.
 Existing installations need a one-time reconnect. Chats, health data, and saved
 assistant settings are preserved. OpenPulse keeps one ChatGPT session; account
 selection happens on the ChatGPT site. Signing out revokes the renewable session
-when reachable and removes its local credentials.
+when reachable and clears its local tokens. A single issued client ID and verified
+identity remain protected for returning sign-in; no account list is kept.
 
 The model picker loads the connected account's catalog from `/v1/models`, refreshes
 on launch and when opening settings after six hours, and offers **Refresh models**.

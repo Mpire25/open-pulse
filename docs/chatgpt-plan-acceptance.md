@@ -22,10 +22,10 @@ packaged app before considering live account acceptance finished.
 8. With a previously cached catalog, disconnect the network and refresh models.
    Cached choices should remain with a stale/error message; the selection should
    not change. Restore the network and refresh successfully.
-9. Sign out, then sign in with a different account on the ChatGPT site. Confirm
-   its model catalog replaces the previous choices and no account selector appears.
-10. Sign out. Confirm the local session is removed and unconfirmed remote
-    revocation is disclosed.
+9. Sign out, then sign in again on the ChatGPT site. Confirm the existing
+   OpenPulse registration is reused and no account selector appears in OpenPulse.
+10. Sign out. Confirm local tokens are cleared, only the single registration
+    identity remains for reauthorization, and unconfirmed remote revocation is disclosed.
 
 No automated step should approve, dismiss, or retry Keychain authentication.
 See the official [ChatGPT plan flow](https://developers.openai.com/siwc/token-sharing-open-source/sign-in)

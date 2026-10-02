@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, mock, test } from 'bun:test'
-import { TokenExchangeError } from '../../src/main/chatgpt-protocol'
+import { TokenExchangeError, validateCallback as validateRealCallback } from '../../src/main/chatgpt-protocol'
 import type { CodexTokens } from '../../src/main/codex-auth'
 const originalFetch = globalThis.fetch
 const secrets = new Map<string, unknown>(),
@@ -8,6 +8,9 @@ let exchange: (body: URLSearchParams) => Promise<unknown>
 let subject = 'user-a',
   scopes = 'chatgpt.tokens.use.direct offline_access'
 let callbackFailure = false
+let omitClientId = false
+let differentClient = false
+let authorizationRequests: URLSearchParams[] = []
 let exchanges = 0
 mock.module('electron', () => ({
   shell: {
@@ -19,6 +22,7 @@ mock.module('electron', () => ({
       expect(authorization.searchParams.get('resource')).toBe(
         'https://api.openai.com/v1'
       )
+      authorizationRequests.push(new URLSearchParams(authorization.search))
       const callback = new URL(authorization.searchParams.get('redirect_uri')!)
       expect(callback.hostname).toBe('127.0.0.1')
       expect(callback.port).not.toBe('1455')
@@ -27,17 +31,17 @@ mock.module('electron', () => ({
           ? 'wrong'
           : authorization.searchParams.get('state')!,
         code: 'test-code',
-        client_id:
+        ...(omitClientId ? {} : { client_id: differentClient ? 'issued-b' :
           authorization.searchParams.get('client_id') === 'dynamic_agent_client'
             ? 'issued-a'
-            : authorization.searchParams.get('client_id')!
+            : authorization.searchParams.get('client_id')! })
       }).toString()
       const response = await originalFetch(callback)
-      expect(response.status).toBe(callbackFailure ? 400 : 200)
+      expect(response.status).toBe((callbackFailure || differentClient) ? 400 : 200)
       expect(response.headers.get('content-type')).toBe('text/html; charset=utf-8')
       expect(response.headers.get('cache-control')).toBe('no-store')
       const page = await response.text()
-      expect(page).toContain(callbackFailure ? 'Sign-in interrupted' : 'Authorization received')
+      expect(page).toContain((callbackFailure || differentClient) ? 'Sign-in interrupted' : 'Authorization received')
       expect(page).toContain('Return to OpenPulse')
       expect(page).not.toContain(callback.searchParams.get('state')!)
     }
@@ -60,17 +64,7 @@ mock.module('../../src/main/chatgpt-protocol', () => ({
   CHATGPT_SCOPE:
     'openid profile email offline_access resource.invoke chatgpt.tokens.use.direct',
   PLAN_SCOPE: 'chatgpt.tokens.use.direct',
-  validateCallback: (
-    params: URLSearchParams,
-    state: string,
-    saved?: string
-  ) => {
-    if (params.get('state') !== state) throw new Error('OAuth state mismatch.')
-    return {
-      code: params.get('code'),
-      clientId: params.get('client_id') ?? saved
-    }
-  },
+  validateCallback: validateRealCallback,
   verifyIdentity: async () => ({ subject, email: 'test@example.invalid' }),
   exchangeToken: async (body: URLSearchParams) => {
     exchanges++
@@ -105,6 +99,9 @@ beforeEach(() => {
   subject = 'user-a'
   scopes = 'chatgpt.tokens.use.direct offline_access'
   callbackFailure = false
+  omitClientId = false
+  differentClient = false
+  authorizationRequests = []
   exchanges = 0
   exchange = async () => ({
     access_token: 'new-access',
@@ -140,12 +137,18 @@ test('failed callback never exchanges tokens or deletes the existing session', a
   expect(exchanges).toBe(0)
   expect((await auth.getCodexTokens())?.accessToken).toBe('test-access')
 })
-test('browser sign-in replaces the single session with the chosen identity', async () => {
+test('returning sign-in cannot overwrite the single registration with another identity', async () => {
   seed()
   subject = 'other-user'
-  expect(await auth.connectCodex()).toMatchObject({ signedIn: true })
-  expect((await auth.getCodexTokens())?.subject).toBe('other-user')
-  expect((secrets.get(KEY) as CodexTokens).subject).toBe('other-user')
+  await expect(auth.connectCodex()).rejects.toThrow('different identity')
+  expect((await auth.getCodexTokens())?.subject).toBe('user-a')
+})
+test('a changed callback client ID is rejected before token exchange', async () => {
+  seed()
+  differentClient = true
+  await expect(auth.connectCodex()).rejects.toThrow('registration changed')
+  expect(exchanges).toBe(0)
+  expect((await auth.getCodexTokens())?.accessToken).toBe('test-access')
 })
 test('old registration storage migrates only the active session', async () => {
   seed()
@@ -160,7 +163,7 @@ test('old registration storage migrates only the active session', async () => {
   })
   expect((await auth.getCodexTokens())?.subject).toBe('user-a')
   expect(secrets.has('chatgpt-plan-registrations')).toBe(false)
-  expect(secrets.get(KEY)).toEqual(active)
+  expect((secrets.get(KEY) as { tokens: unknown }).tokens).toEqual(active)
   expect('accounts' in auth.getCodexStatus()).toBe(false)
 })
 test('new sign-in removes old registrations so sign-out cannot restore them', async () => {
@@ -173,7 +176,7 @@ test('new sign-in removes old registrations so sign-out cannot restore them', as
   globalThis.fetch = (async () => new Response('', { status: 200 })) as typeof fetch
   await auth.disconnectCodex()
   expect(auth.getCodexStatus().signedIn).toBe(false)
-  expect(secrets.has(KEY)).toBe(false)
+  expect((secrets.get(KEY) as { tokens?: unknown }).tokens).toBeUndefined()
 })
 test('missing plan consent retains identity without enabling inference', async () => {
   scopes = 'openid email offline_access'
@@ -225,9 +228,9 @@ test('terminal refresh rejection clears credentials, temporary failures preserve
   }
   await expect(auth.getCodexTokens()).rejects.toThrow('no longer valid')
   expect(auth.getCodexStatus().signedIn).toBe(false)
-  expect(secrets.has(KEY)).toBe(false)
+  expect((secrets.get(KEY) as { tokens?: unknown }).tokens).toBeUndefined()
 })
-test('disconnect revokes and removes the single session', async () => {
+test('disconnect revokes and clears tokens while retaining one registration', async () => {
   seed()
   globalThis.fetch = (async (input, init) => {
     expect(String(input)).toBe('https://auth.openai.com/revoke')
@@ -240,8 +243,40 @@ test('disconnect revokes and removes the single session', async () => {
   expect(auth.getCodexStatus()).toMatchObject({
     signedIn: false
   })
-  expect(secrets.has(KEY)).toBe(false)
+  expect((secrets.get(KEY) as { tokens?: unknown }).tokens).toBeUndefined()
   expect(auth.getCodexStatus().activeRegistration).toBeUndefined()
+})
+test('returning sign-in reuses the issued client and accepts a callback without client_id', async () => {
+  await auth.connectCodex()
+  expect(authorizationRequests[0].get('client_id')).toBe('dynamic_agent_client')
+  expect(authorizationRequests[0].get('agent_name_hint')).toBe('OpenPulse')
+  const hostId = authorizationRequests[0].get('ext_agent_host_id')
+  globalThis.fetch = (async () => new Response('', { status: 200 })) as typeof fetch
+  await auth.disconnectCodex()
+  expect(secrets.get(KEY)).toEqual({ clientId: 'issued-a', subject: 'user-a', needsPlanConsent: false })
+  expect(auth.getCodexStatus().email).toBeUndefined()
+  expect(auth.getCodexStatus().signedIn).toBe(false)
+  omitClientId = true
+  exchange = async (body) => {
+    expect(body.get('client_id')).toBe('issued-a')
+    return { access_token: 'returning-access', refresh_token: 'returning-refresh', id_token: 'returning-id', expires_in: 3600, scope: scopes, token_type: 'Bearer' }
+  }
+  expect(await auth.connectCodex()).toMatchObject({ connected: true })
+  expect(authorizationRequests[1].get('client_id')).toBe('issued-a')
+  expect(authorizationRequests[1].has('agent_name_hint')).toBe(false)
+  expect(authorizationRequests[1].has('id_token_hint')).toBe(false)
+  expect(authorizationRequests[1].get('ext_agent_host_id')).toBe(hostId)
+  expect(authorizationRequests[1].get('state')).not.toBe(authorizationRequests[0].get('state'))
+})
+test('sign-in after declined plan consent requests consent using the same registration', async () => {
+  scopes = 'openid email offline_access'
+  await auth.connectCodex()
+  globalThis.fetch = (async () => new Response('', { status: 200 })) as typeof fetch
+  await auth.disconnectCodex()
+  scopes += ' chatgpt.tokens.use.direct'
+  expect(await auth.connectCodex()).toMatchObject({ connected: true })
+  expect(authorizationRequests[1].get('prompt')).toBe('consent')
+  expect(authorizationRequests[1].get('client_id')).toBe('issued-a')
 })
 test('model catalog preserves ordering, filters hidden/duplicate/invalid models and handles new IDs', () => {
   expect(
