@@ -32,7 +32,19 @@ export function AssistantView({
   const [historyOpen, setHistoryOpen] = useState(false)
   const closeTimer = useRef<number | null>(null)
   const historyRef = useRef<HTMLElement>(null)
+  const historyTriggerRef = useRef<HTMLButtonElement>(null)
+  const pointerPosition = useRef<{ x: number; y: number } | null>(null)
   const deleteDialogOpen = useRef(false)
+
+  const pointerOverHistory = (): boolean => {
+    const position = pointerPosition.current
+    if (!position) return false
+    return [historyRef.current, historyTriggerRef.current].some((element) => {
+      if (!element) return false
+      const rect = element.getBoundingClientRect()
+      return position.x >= rect.left && position.x < rect.right && position.y >= rect.top && position.y < rect.bottom
+    })
+  }
 
   const cancelClose = (): void => {
     if (closeTimer.current != null) {
@@ -66,8 +78,24 @@ export function AssistantView({
     const onKey = (event: KeyboardEvent): void => {
       if (event.key === 'Escape' && !event.defaultPrevented && !deleteDialogOpen.current) setHistoryOpen(false)
     }
+    // Track the pointer over the portal too; the modal overlay hides the
+    // sheet from hover events until the dialog has finished closing.
+    const onPointer = (event: PointerEvent): void => {
+      pointerPosition.current = { x: event.clientX, y: event.clientY }
+      if (deleteDialogOpen.current) return
+      // Removing an overlay under a stationary pointer does not guarantee
+      // a new mouse-enter/leave pair for the uncovered sheet.
+      if (pointerOverHistory()) cancelClose()
+      else if (closeTimer.current == null) scheduleClose()
+    }
     window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
+    document.addEventListener('pointermove', onPointer, true)
+    document.addEventListener('pointerdown', onPointer, true)
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      document.removeEventListener('pointermove', onPointer, true)
+      document.removeEventListener('pointerdown', onPointer, true)
+    }
   }, [historyOpen])
 
   return (
@@ -99,6 +127,7 @@ export function AssistantView({
             <Plus size={15} />
           </button>
           <button
+            ref={historyTriggerRef}
             type="button"
             onMouseEnter={openHistory}
             onMouseLeave={scheduleClose}
@@ -173,6 +202,15 @@ export function AssistantView({
               onDeleteDialogOpenChange={(open) => {
                 deleteDialogOpen.current = open
                 if (open) cancelClose()
+              }}
+              onDeleteDialogCloseAutoFocus={(event, openedWithKeyboard) => {
+                if (openedWithKeyboard) return
+                // Pointer use should resume hover dismissal, rather than
+                // focus a row and pin the sheet open. Keyboard use keeps the
+                // shared dialog's row/fallback focus restoration.
+                event.preventDefault()
+                historyTriggerRef.current?.focus({ preventScroll: true })
+                if (!pointerOverHistory()) scheduleClose()
               }}
             />
           </motion.aside>

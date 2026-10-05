@@ -10,6 +10,7 @@ interface ChatHistoryProps {
   chat: ChatController
   onNavigate?: () => void
   onDeleteDialogOpenChange?: (open: boolean) => void
+  onDeleteDialogCloseAutoFocus?: (event: Event, openedWithKeyboard: boolean) => void
 }
 
 function relativeTime(value: string): string {
@@ -53,10 +54,11 @@ function groupSessions(sessions: ChatSession[]): SessionGroup[] {
   return groups
 }
 
-export function ChatHistory({ chat, onNavigate, onDeleteDialogOpenChange }: ChatHistoryProps): React.JSX.Element {
+export function ChatHistory({ chat, onNavigate, onDeleteDialogOpenChange, onDeleteDialogCloseAutoFocus }: ChatHistoryProps): React.JSX.Element {
   const [deleteTarget, setDeleteTarget] = useState<ChatSession | null>(null)
   const historyRef = useRef<HTMLDivElement>(null)
   const deleteTriggerRef = useRef<HTMLButtonElement | null>(null)
+  const deleteOpenedWithKeyboard = useRef(true)
 
   const closeDeleteDialog = (): void => {
     setDeleteTarget(null)
@@ -85,8 +87,9 @@ export function ChatHistory({ chat, onNavigate, onDeleteDialogOpenChange }: Chat
                     }}
                     onPin={() => void chat.pin(session.id, !session.pinned)}
                     onKeep={() => void chat.keep(session.id, !session.kept)}
-                    onDelete={(button) => {
+                    onDelete={(button, openedWithKeyboard) => {
                       deleteTriggerRef.current = button
+                      deleteOpenedWithKeyboard.current = openedWithKeyboard
                       setDeleteTarget(session)
                       onDeleteDialogOpenChange?.(true)
                     }}
@@ -114,6 +117,11 @@ export function ChatHistory({ chat, onNavigate, onDeleteDialogOpenChange }: Chat
             className="fixed left-1/2 top-1/2 z-50 w-[min(380px,calc(100vw-32px))] -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-hairline bg-panel p-5 shadow-2xl outline-none"
             onEscapeKeyDown={(event) => event.stopPropagation()}
             onCloseAutoFocus={(event) => {
+              onDeleteDialogCloseAutoFocus?.(event, deleteOpenedWithKeyboard.current)
+              if (event.defaultPrevented) {
+                deleteTriggerRef.current = null
+                return
+              }
               // Rows open this shared dialog without a Radix Dialog.Trigger.
               event.preventDefault()
               const trigger = deleteTriggerRef.current
@@ -156,7 +164,7 @@ interface SessionRowProps {
   onSelect: () => void
   onPin: () => void
   onKeep: () => void
-  onDelete: (button: HTMLButtonElement) => void
+  onDelete: (button: HTMLButtonElement, openedWithKeyboard: boolean) => void
 }
 
 function SessionRow({ session, selected, streaming, onSelect, onPin, onKeep, onDelete }: SessionRowProps): React.JSX.Element {
@@ -215,7 +223,7 @@ function SessionRow({ session, selected, streaming, onSelect, onPin, onKeep, onD
           type="button"
           title="Delete chat"
           aria-label={`Delete ${session.title}`}
-          onClick={(event) => onDelete(event.currentTarget)}
+          onClick={(event) => onDelete(event.currentTarget, event.detail === 0)}
           className="grid size-7 shrink-0 place-items-center rounded-lg text-ink-faint transition-colors hover:bg-danger/10 hover:text-danger"
         >
           <Trash size={13} />
