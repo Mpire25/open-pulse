@@ -6,7 +6,7 @@ import type { ChatController } from '../../src/renderer/src/hooks/useChat'
 import type { ChatSession } from '../../src/shared/types'
 
 const dom = new Window({ url: 'http://localhost:49173' })
-for (const name of ['window', 'document', 'navigator', 'HTMLElement', 'Element', 'Node', 'NodeFilter', 'SVGElement', 'Document', 'HTMLInputElement', 'HTMLButtonElement', 'HTMLSelectElement', 'Event', 'CustomEvent', 'KeyboardEvent', 'MouseEvent', 'MutationObserver', 'getComputedStyle', 'requestAnimationFrame', 'cancelAnimationFrame']) {
+for (const name of ['window', 'document', 'navigator', 'HTMLElement', 'Element', 'Node', 'NodeFilter', 'SVGElement', 'Document', 'HTMLInputElement', 'HTMLButtonElement', 'HTMLSelectElement', 'Event', 'CustomEvent', 'KeyboardEvent', 'MouseEvent', 'PointerEvent', 'MutationObserver', 'getComputedStyle', 'requestAnimationFrame', 'cancelAnimationFrame']) {
   Object.defineProperty(globalThis, name, { configurable: true, value: name === 'window' ? dom : (dom as unknown as Record<string, unknown>)[name] })
 }
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
@@ -19,8 +19,8 @@ let root: ReturnType<typeof createRoot>
 let container: HTMLDivElement
 let deletions: string[]
 
-function Harness({ full = false }: { full?: boolean }) {
-  const [sessions, setSessions] = useState<ChatSession[]>(['Alpha', 'Beta'].map((title, i) => ({ id: String(i), title, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), messages: [] })))
+function Harness({ full = false, single = false }: { full?: boolean; single?: boolean }) {
+  const [sessions, setSessions] = useState<ChatSession[]>((single ? ['Alpha'] : ['Alpha', 'Beta']).map((title, i) => ({ id: String(i), title, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), messages: [] })))
   const chat: ChatController = {
     sessions, activeChatId: '0', turns: [], busy: false, loading: false, streamingChatIds: [],
     select: () => {}, send: () => {}, stop: () => {}, create: async () => {}, pin: async () => {}, keep: async () => {}, refresh: async () => {}, reload: async () => {},
@@ -121,3 +121,90 @@ for (const close of ['Cancel', 'Escape']) {
     expect(deletions).toEqual([])
   })
 }
+
+async function pointerClick(target: Element, x = 450, y = 350) {
+  await act(async () => {
+    target.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerType: 'mouse', clientX: x, clientY: y }))
+    target.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerType: 'mouse', clientX: x, clientY: y }))
+    target.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 1, clientX: x, clientY: y }))
+  })
+  await settle()
+}
+
+async function openPointerDelete(single = false) {
+  await act(async () => root.render(<Harness full single={single} />))
+  await act(async () => button('Conversation history').click())
+  await settle()
+  // happy-dom has no layout; provide the positions used by pointer events.
+  Object.defineProperty(container.querySelector('aside'), 'getBoundingClientRect', {
+    value: () => ({ left: 600, right: 900, top: 100, bottom: 700 })
+  })
+  Object.defineProperty(button('Conversation history'), 'getBoundingClientRect', {
+    value: () => ({ left: 850, right: 880, top: 20, bottom: 50 })
+  })
+  await pointerClick(button('Delete Alpha'), 850, 150)
+  expect(document.querySelector('[role="dialog"]')).not.toBeNull()
+  await act(async () => {
+    container.querySelector('aside')!.dispatchEvent(new MouseEvent('mouseout', { bubbles: true, relatedTarget: button('Cancel') }))
+    await new Promise(resolve => setTimeout(resolve, 350))
+  })
+  expect(document.querySelector('[role="dialog"]')).not.toBeNull()
+}
+
+async function waitForHistoryClose() {
+  await act(async () => { await new Promise(resolve => setTimeout(resolve, 350)) })
+}
+
+for (const close of ['Cancel', 'Delete', 'outside', 'Escape']) {
+  test(`pointer-opened Assistant history closes after ${close} with the mouse outside`, async () => {
+    await openPointerDelete()
+    if (close === 'outside') {
+      await pointerClick(document.querySelector('[data-state="open"][class*="inset-0"]')!)
+    } else if (close === 'Escape') {
+      await act(async () => {
+        document.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientX: 450, clientY: 350 }))
+        document.activeElement!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }))
+      })
+      await settle()
+    } else {
+      await pointerClick(button(close))
+    }
+    expect(document.querySelector('[role="dialog"]')).toBeNull()
+    await waitForHistoryClose()
+    expect(button('Conversation history').getAttribute('aria-expanded')).toBe('false')
+    expect(document.activeElement).toBe(button('Conversation history'))
+    expect(deletions).toEqual(close === 'Delete' ? ['0'] : [])
+  })
+}
+
+test('pointer deletion of the final chat also closes Assistant history', async () => {
+  await openPointerDelete(true)
+  await pointerClick(button('Delete'))
+  expect(document.querySelector('[role="dialog"]')).toBeNull()
+  await waitForHistoryClose()
+  expect(button('Conversation history').getAttribute('aria-expanded')).toBe('false')
+  expect(deletions).toEqual(['0'])
+})
+
+test('history stays open under the pointer after dismissal, then closes on leaving', async () => {
+  await openPointerDelete()
+  await pointerClick(document.querySelector('[data-state="open"][class*="inset-0"]')!, 700, 400)
+  expect(document.querySelector('[role="dialog"]')).toBeNull()
+  await waitForHistoryClose()
+  expect(button('Conversation history').getAttribute('aria-expanded')).toBe('true')
+  await act(async () => {
+    document.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientX: 450, clientY: 350 }))
+  })
+  await waitForHistoryClose()
+  expect(button('Conversation history').getAttribute('aria-expanded')).toBe('false')
+})
+
+test('returning to history during the close delay keeps it open', async () => {
+  await openPointerDelete()
+  await pointerClick(button('Cancel'))
+  await act(async () => {
+    document.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientX: 700, clientY: 400 }))
+  })
+  await waitForHistoryClose()
+  expect(button('Conversation history').getAttribute('aria-expanded')).toBe('true')
+})
