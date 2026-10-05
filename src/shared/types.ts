@@ -428,6 +428,8 @@ export interface AssistantModel {
   id: string
   label: string
   efforts?: ReasoningEffort[]
+  /** OpenAI's default, retained only when it is one of the advertised efforts. */
+  defaultEffort?: ReasoningEffort
   /** Also supports older cached catalogs that kept none outside the effort list. */
   supportsNoReasoning?: true
 }
@@ -437,8 +439,8 @@ export interface ModelCatalog {
   stale: boolean
   error?: string
   registrationId?: string
-  /** Refresh older catalogs that filtered tiers or added an Automatic choice. */
-  effortsVersion?: 2
+  /** Refresh older catalogs that filtered tiers, added Automatic, or omitted defaults. */
+  effortsVersion?: 3
 }
 
 /** Rejects pasted prose before it becomes a guaranteed 400 at send time. */

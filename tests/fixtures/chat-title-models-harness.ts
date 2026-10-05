@@ -23,7 +23,7 @@ test('fresh account catalog is reused without credential reads or network calls'
   cached = { models: [
     { id: 'gpt-6-astra', label: 'Astra', efforts: ['high', 'low'] },
     { id: 'gpt-5.6-luna', label: 'Luna', efforts: ['low'] }
-  ], stale: false, fetchedAt: Date.now(), effortsVersion: 2 }
+  ], stale: false, fetchedAt: Date.now(), effortsVersion: 3 }
   expect(await getChatTitleModels(tokens, 'gpt-6-astra', signal())).toEqual([
     { model: 'gpt-5.6-luna', reasoningEffort: 'low' }, { model: 'gpt-6-astra', reasoningEffort: 'high' }
   ])
@@ -86,4 +86,18 @@ test('effort discovery retains new tiers in response order without accepting mal
   expect(selectChatTitleModels(models, 'future-model')).toEqual([{ model: 'future-model', reasoningEffort: 'ultra' }])
   expect(selectChatTitleModels([{ id: 'gpt-5.6-luna', label: 'Luna' }], 'gpt-5.6-luna'))
     .toEqual([{ model: 'gpt-5.6-luna', reasoningEffort: undefined }])
+})
+
+test('only supported catalog defaults are retained, while naming keeps the first advertised effort', () => {
+  const models = parseModels({ models: [
+    { slug: 'future-model', visibility: 'list', supported_reasoning_levels: ['low', { effort: 'new-tier' }], default_reasoning_level: 'new-tier' },
+    { slug: 'unsupported-default', visibility: 'list', supported_reasoning_levels: ['low'], default_reasoning_level: 'medium' },
+    { slug: 'missing-default', visibility: 'list', supported_reasoning_levels: ['low'] },
+    { slug: 'invalid-default', visibility: 'list', supported_reasoning_levels: ['low'], default_reasoning_level: { effort: 'low' } },
+    { slug: 'legacy-default', visibility: 'list', supported_reasoning_levels: ['auto', 'low'], default_reasoning_level: 'auto' },
+    { slug: 'missing-levels', visibility: 'list', default_reasoning_level: 'medium' }
+  ] })
+  expect(models[0].defaultEffort).toBe('new-tier')
+  expect(models.slice(1).every((model) => model.defaultEffort === undefined)).toBe(true)
+  expect(selectChatTitleModels(models, 'future-model')).toEqual([{ model: 'future-model', reasoningEffort: 'low' }])
 })

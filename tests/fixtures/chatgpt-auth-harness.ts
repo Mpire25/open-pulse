@@ -372,19 +372,19 @@ test('catalog refresh caches per registration and falls back without erasing suc
   expect((await getChatGPTModels()).models).toEqual([])
 })
 
-test('older catalogs refresh to recover new effort levels and remove synthetic Automatic', async () => {
+test.each([undefined, 1, 2])('older catalog version %s refreshes to recover new levels and defaults', async (effortsVersion) => {
   seed()
   local.set('chatgpt-models:issued-a', {
     models: [{ id: 'future-model', label: 'Future', efforts: ['auto', 'max'] }],
-    fetchedAt: Date.now(), stale: false, registrationId: 'issued-a', effortsVersion: 1
+    fetchedAt: Date.now(), stale: false, registrationId: 'issued-a', effortsVersion
   })
   let requests = 0
   globalThis.fetch = (async () => {
     requests++
-    return Response.json({ models: [{ slug: 'future-model', visibility: 'list', supported_reasoning_levels: ['max', 'ultra'] }] })
+    return Response.json({ models: [{ slug: 'future-model', visibility: 'list', supported_reasoning_levels: ['max', 'ultra'], default_reasoning_level: 'ultra' }] })
   }) as typeof fetch
   expect(await getChatGPTModels()).toMatchObject({
-    effortsVersion: 2, models: [{ id: 'future-model', efforts: ['max', 'ultra'] }]
+    effortsVersion: 3, models: [{ id: 'future-model', efforts: ['max', 'ultra'], defaultEffort: 'ultra' }]
   })
   await getChatGPTModels()
   expect(requests).toBe(1)

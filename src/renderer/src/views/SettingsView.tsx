@@ -400,6 +400,10 @@ function AssistantCard({
   const presets = catalog.models
   const presetIds = new Set(presets.map((m) => m.id))
   const effortsForModel = (model: string): ReasoningEffort[] => (presets.find((m) => m.id === model)?.efforts ?? []).filter((effort) => effort !== 'auto')
+  const defaultEffortForModel = (model: string): ReasoningEffort | undefined => {
+    const effort = presets.find((m) => m.id === model)?.defaultEffort
+    return effort && effortsForModel(model).includes(effort) ? effort : undefined
+  }
   const refreshModels = async (force = false): Promise<void> => {
     const sequence = ++catalogSequence.current
     setLoading(true)
@@ -450,7 +454,7 @@ function AssistantCard({
   // retried after another catalog load, never in a state-update loop.
   useEffect(() => {
     if (assistant.reasoningEffort && assistant.reasoningEffort !== 'auto') return
-    const effort = effortsForModel(assistant.model)[0]
+    const effort = defaultEffortForModel(assistant.model)
     if (effort) void persist({ ...assistant, reasoningEffort: effort })
   }, [catalog])
 
@@ -461,7 +465,7 @@ function AssistantCard({
       model,
       reasoningEffort: assistant.reasoningEffort && supported.includes(assistant.reasoningEffort)
         ? assistant.reasoningEffort
-        : supported[0]
+        : defaultEffortForModel(model)
     })
   }
 
