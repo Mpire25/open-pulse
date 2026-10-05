@@ -97,7 +97,8 @@ test('ID tokens require a valid signature, issuer, audience, expiry and nonce', 
   ).rejects.toThrow()
 })
 
-test('automatic reasoning omits the override and local tools are namespaced', () => {
+test('missing and legacy effort selections omit the override and local tools are namespaced', () => {
+  expect(reasoningOptions({ model: 'future' })).toEqual({})
   expect(
     reasoningOptions({ model: 'future', reasoningEffort: 'auto' })
   ).toEqual({})

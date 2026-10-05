@@ -3,7 +3,7 @@ export const RESPONSES_URL = 'https://api.openai.com/v1/responses'
 export function reasoningOptions(
   assistant: AssistantSettings
 ): Record<string, unknown> {
-  return assistant.reasoningEffort === 'auto'
+  return !assistant.reasoningEffort || assistant.reasoningEffort === 'auto'
     ? {}
     : { reasoning: { effort: assistant.reasoningEffort } }
 }
@@ -48,7 +48,7 @@ export function responseError(
     subscription_sharing_usage_unavailable:
       'ChatGPT usage availability could not be checked. Try again later.',
     subscription_sharing_unsupported_capability:
-      'This model or ChatGPT plan does not support a requested capability. Try Automatic reasoning or another model.',
+      'This model or ChatGPT plan does not support a requested capability. Choose a supported reasoning level or another model.',
     subscription_sharing_route_not_supported:
       'The ChatGPT plan request route is not supported.',
     subscription_sharing_invalid_user:
@@ -68,7 +68,7 @@ export function responseError(
           : status === 503
             ? 'ChatGPT plan routing is temporarily unavailable. Try again later.'
             : status === 400
-              ? 'ChatGPT rejected the model, reasoning setting, or request capability. Try Automatic reasoning or another model.'
+              ? 'ChatGPT rejected the model, reasoning setting, or request capability. Choose a supported reasoning level or another model.'
               : 'ChatGPT could not complete the request.'
   const safe = (s: unknown): string =>
     typeof s === 'string' && /^[\w.:-]{1,120}$/.test(s) ? s : ''

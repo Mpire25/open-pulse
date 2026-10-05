@@ -10,8 +10,8 @@ packaged app before considering live account acceptance finished.
    stop on the first authentication or decryption failure.
 3. Confirm the active account and plan-enabled state. If plan consent was not
    granted, the app should explain that signing out and signing in again is needed.
-4. Confirm models load, refresh the catalog, and select a model. Leave reasoning
-   on **Automatic** initially. Discovery is a catalog, not proof of inference
+4. Confirm models load, refresh the catalog, and select a model and one of its
+   advertised reasoning levels. Discovery is a catalog, not proof of inference
    access; send a simple message and wait for a completed answer.
 5. Request a health summary, then a question needing external research. Confirm
    local tool results, visualizations, web citations when supplied, and that

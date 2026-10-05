@@ -409,7 +409,7 @@ export const DEFAULT_GOALS: Goals = {
   sleepMinutes: 8 * 60
 }
 
-// Automatic omits the effort override; explicit tiers come from the model catalog.
+// Explicit tiers come from the model catalog; no tier is invented locally.
 export type ReasoningEffort = string
 
 /** Validate the shape of an effort ID without restricting OpenAI's tier names. */
@@ -417,12 +417,11 @@ export const REASONING_EFFORT_PATTERN = /^[a-z][a-z0-9_-]{0,63}$/
 
 export interface AssistantSettings {
   model: string
-  reasoningEffort: ReasoningEffort
+  reasoningEffort?: ReasoningEffort
 }
 
 export const DEFAULT_ASSISTANT: AssistantSettings = {
-  model: 'gpt-5.6-terra',
-  reasoningEffort: 'auto'
+  model: 'gpt-5.6-terra'
 }
 
 export interface AssistantModel {
@@ -438,8 +437,8 @@ export interface ModelCatalog {
   stale: boolean
   error?: string
   registrationId?: string
-  /** Refresh catalogs produced by the old fixed effort whitelist. */
-  effortsVersion?: 1
+  /** Refresh older catalogs that filtered tiers or added an Automatic choice. */
+  effortsVersion?: 2
 }
 
 /** Rejects pasted prose before it becomes a guaranteed 400 at send time. */

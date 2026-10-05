@@ -145,8 +145,8 @@ on launch and when opening settings after six hours, and offers **Refresh models
 Saved catalogs are scoped to the account registration. Network failures retain
 cached choices, and refreshed lists never silently change your selected model.
 Reasoning choices follow each model's catalog metadata, including newly added
-levels. **Automatic** uses the model's default. **Custom…** accepts manual model
-IDs; models without catalog metadata offer Automatic only.
+levels. **Custom…** accepts manual model IDs; models without catalog metadata
+offer no reasoning choices and send no effort override.
 
 If secure credential storage is unavailable or fails, OpenPulse stops using it
 for the session and does not fall back to plaintext. Handle any Keychain prompts

@@ -62,7 +62,7 @@ function normalizeAssistant(raw?: Partial<AssistantSettings>): AssistantSettings
   return {
     model: ASSISTANT_MODEL_PATTERN.test(model) ? model : DEFAULT_ASSISTANT.model,
     reasoningEffort:
-      typeof effort === 'string' && REASONING_EFFORT_PATTERN.test(effort)
+      typeof effort === 'string' && effort !== 'auto' && REASONING_EFFORT_PATTERN.test(effort)
         ? effort : DEFAULT_ASSISTANT.reasoningEffort
   }
 }

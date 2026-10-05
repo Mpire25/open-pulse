@@ -80,7 +80,7 @@ test('failed notification preference save leaves the switch unchanged and report
 })
 beforeEach(() => {
   backendStatus = { connected: false }; disconnects = 0; modelRequests = 0
-  modelResult = { models: [{ id: 'future-model', label: 'Future Model', efforts: ['auto', 'low'] }], stale: false }
+  modelResult = { models: [{ id: 'future-model', label: 'Future Model', efforts: ['low'] }], stale: false }
   Object.assign(dom, { pulse: {
     app: { platform: 'linux' }, settings: { update: async () => settings },
     codex: {
@@ -178,8 +178,8 @@ test('model controls appear after the account catalog loads', async () => {
 test('catalog effort levels display and persist without a fixed list, and model changes reset unsupported levels', async () => {
   backendStatus = connected
   modelResult = { models: [
-    { id: 'future-model', label: 'Future Model', efforts: ['auto', 'ultra', 'new-tier', 'none'] },
-    { id: 'other-model', label: 'Other Model', efforts: ['auto', 'medium'] }
+    { id: 'future-model', label: 'Future Model', efforts: ['ultra', 'new-tier', 'none'] },
+    { id: 'other-model', label: 'Other Model', efforts: ['medium'] }
   ], stale: false }
   let saved = { ...settings, assistant: { model: 'future-model', reasoningEffort: 'auto' } }
   window.pulse.settings.update = async (patch) => { saved = { ...saved, ...patch }; return saved }
@@ -187,19 +187,21 @@ test('catalog effort levels display and persist without a fixed list, and model 
   expect(Boolean(button('Ultra'))).toBe(true)
   expect(Boolean(button('New Tier'))).toBe(true)
   expect(Boolean(button('None'))).toBe(true)
+  expect(Boolean(button('Automatic'))).toBe(false)
+  expect(saved.assistant.reasoningEffort).toBe('ultra')
   expect(Boolean(button('Low'))).toBe(false)
   await act(async () => button('Ultra')!.click())
   expect(saved.assistant).toEqual({ model: 'future-model', reasoningEffort: 'ultra' })
   await act(async () => button('New Tier')!.click())
   expect(saved.assistant.reasoningEffort).toBe('new-tier')
   await act(async () => button('Other Model')!.click())
-  expect(saved.assistant).toEqual({ model: 'other-model', reasoningEffort: 'auto' })
+  expect(saved.assistant).toEqual({ model: 'other-model', reasoningEffort: 'medium' })
   expect(Boolean(button('Medium'))).toBe(true)
   expect(Boolean(button('Ultra'))).toBe(false)
   expect(Boolean(button('New Tier'))).toBe(false)
 })
 
-test('custom models use their own metadata and fall back to Automatic when metadata is absent', async () => {
+test('custom models use their own metadata and offer no effort choices when metadata is absent', async () => {
   backendStatus = connected
   let saved = { ...settings, assistant: { model: 'future-model', reasoningEffort: 'low' } }
   window.pulse.settings.update = async (patch) => { saved = { ...saved, ...patch }; return saved }
@@ -213,7 +215,28 @@ test('custom models use their own metadata and fall back to Automatic when metad
     input.dispatchEvent(new Event('input', { bubbles: true }))
   })
   await act(async () => button('Apply')!.click())
-  expect(saved.assistant).toEqual({ model: 'unknown-model', reasoningEffort: 'auto' })
-  expect(Boolean(button('Automatic'))).toBe(true)
+  expect(saved.assistant).toEqual({ model: 'unknown-model', reasoningEffort: undefined })
+  expect(Boolean(button('Automatic'))).toBe(false)
   expect(Boolean(button('Low'))).toBe(false)
+  expect(document.body.textContent).toContain('OpenAI has not provided reasoning levels for this model.')
+})
+
+test('missing effort selections adopt the first catalog level without adding Automatic', async () => {
+  backendStatus = connected
+  let saved: AppSettings = { ...settings, assistant: { model: 'future-model' } }
+  window.pulse.settings.update = async (patch) => { saved = { ...saved, ...patch }; return saved }
+  await act(async () => root.render(<Harness initialSettings={saved} />))
+  expect(saved.assistant.reasoningEffort).toBe('low')
+  expect(Boolean(button('Automatic'))).toBe(false)
+  expect(Boolean(button('Low'))).toBe(true)
+})
+
+test('failed migration saves report the error without repeatedly retrying', async () => {
+  backendStatus = connected
+  let attempts = 0
+  window.pulse.settings.update = async () => { attempts++; throw new Error('Synthetic migration save failure') }
+  await act(async () => root.render(<Harness initialSettings={{ ...settings, assistant: { model: 'future-model', reasoningEffort: 'auto' } }} />))
+  expect(attempts).toBe(1)
+  expect(document.body.textContent).toContain('Synthetic migration save failure')
+  expect(Boolean(button('Automatic'))).toBe(false)
 })

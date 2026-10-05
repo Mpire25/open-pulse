@@ -19,7 +19,7 @@ const pending = new Map<string, Promise<ModelCatalog>>()
 export function selectChatTitleModels(models: AssistantModel[], assistantModel: string): ChatTitleModel[] {
   const catalogEffort = (model?: AssistantModel): ChatTitleModel['reasoningEffort'] => {
     if (model?.supportsNoReasoning) return 'none'
-    return model?.efforts?.find((effort) => effort !== 'auto') ?? 'auto'
+    return model?.efforts?.find((effort) => effort !== 'auto')
   }
   const luna = models.find((model) => model.id === CHAT_TITLE_MODEL)
   const result: ChatTitleModel[] = []
@@ -38,7 +38,7 @@ export async function getChatTitleModels(
 ): Promise<ChatTitleModel[]> {
   const cached = getLocalValue<ModelCatalog>(`chatgpt-models:${tokens.clientId}`)
   let models = cached?.models
-  if (cached?.effortsVersion !== 1 || !cached.fetchedAt || cached.stale || Date.now() - cached.fetchedAt >= MAX_AGE) {
+  if (cached?.effortsVersion !== 2 || !cached.fetchedAt || cached.stale || Date.now() - cached.fetchedAt >= MAX_AGE) {
     try {
       const response = await fetch(`${CHATGPT_RESOURCE}/models`, {
         headers: { authorization: `Bearer ${tokens.accessToken}` }, signal
@@ -101,7 +101,7 @@ export function parseModels(value: unknown): AssistantModel[] {
             ? model.display_name
             : model.slug,
         ...(efforts.length
-          ? { efforts: ['auto' as const, ...new Set(efforts)] }
+          ? { efforts: [...new Set(efforts)] }
           : {}),
         ...(levels.some((level) => typeof level === 'string' ? level === 'none' : level?.effort === 'none')
           ? { supportsNoReasoning: true as const } : {})
@@ -121,7 +121,7 @@ export async function getChatGPTModels(force = false): Promise<ModelCatalog> {
     }
   const key = `chatgpt-models:${status.activeRegistration}`
   const cached = getLocalValue<ModelCatalog>(key)
-  if (!force && cached?.effortsVersion === 1 && cached.fetchedAt && Date.now() - cached.fetchedAt < MAX_AGE)
+  if (!force && cached?.effortsVersion === 2 && cached.fetchedAt && Date.now() - cached.fetchedAt < MAX_AGE)
     return cached
   let tokens
   try {
@@ -164,7 +164,7 @@ export async function getChatGPTModels(force = false): Promise<ModelCatalog> {
         fetchedAt: Date.now(),
         stale: false,
         registrationId: tokens.clientId,
-        effortsVersion: 1
+        effortsVersion: 2
       }
     } catch (error) {
       catalog = {

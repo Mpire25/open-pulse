@@ -5,7 +5,7 @@ import { DEFAULT_CHAT_TITLE, generateChatTitle } from '../shared/chat'
 export const CHAT_TITLE_MODEL = 'gpt-5.6-luna'
 export interface ChatTitleModel {
   model: string
-  reasoningEffort: ReasoningEffort
+  reasoningEffort?: ReasoningEffort
 }
 const MAX_TITLE_CHARACTERS = 80
 const segments = new Intl.Segmenter(undefined, { granularity: 'grapheme' })
@@ -19,7 +19,7 @@ export function normalizeGeneratedTitle(value: string): string | null {
 }
 
 /** Standalone inference: never receives health tools, datasets or prior turns. */
-export async function generateChatName(accessToken: string, prompt: string, signal: AbortSignal, selection: ChatTitleModel = { model: CHAT_TITLE_MODEL, reasoningEffort: 'auto' }): Promise<string | null> {
+export async function generateChatName(accessToken: string, prompt: string, signal: AbortSignal, selection: ChatTitleModel = { model: CHAT_TITLE_MODEL }): Promise<string | null> {
   const response = await fetch(RESPONSES_URL, {
     method: 'POST', signal,
     headers: { authorization: `Bearer ${accessToken}`, 'content-type': 'application/json', accept: 'text/event-stream' },
