@@ -7,12 +7,11 @@ import {
   CHAT_RETENTIONS,
   DEFAULT_ASSISTANT,
   DEFAULT_GOALS,
-  REASONING_EFFORTS,
+  REASONING_EFFORT_PATTERN,
   type AppSettings,
   type AssistantSettings,
   type ChatRetention,
-  type Goals,
-  type ReasoningEffort
+  type Goals
 } from '../shared/types'
 
 interface StoreFile {
@@ -59,11 +58,12 @@ function normalizeGoals(raw?: Partial<Goals>): Goals {
 
 function normalizeAssistant(raw?: Partial<AssistantSettings>): AssistantSettings {
   const model = String(raw?.model ?? '').trim()
-  const effort = raw?.reasoningEffort as ReasoningEffort | undefined
+  const effort = raw?.reasoningEffort
   return {
     model: ASSISTANT_MODEL_PATTERN.test(model) ? model : DEFAULT_ASSISTANT.model,
     reasoningEffort:
-      effort && REASONING_EFFORTS.includes(effort) ? effort : DEFAULT_ASSISTANT.reasoningEffort
+      typeof effort === 'string' && effort !== 'auto' && REASONING_EFFORT_PATTERN.test(effort)
+        ? effort : DEFAULT_ASSISTANT.reasoningEffort
   }
 }
 

@@ -345,7 +345,7 @@ test('model catalog preserves ordering, filters hidden/duplicate/invalid models 
       ]
     })
   ).toEqual([
-    { id: 'future-model', label: 'Future', efforts: ['auto', 'low'] },
+    { id: 'future-model', label: 'Future', efforts: ['low', 'new-tier'] },
     { id: 'other', label: 'other' }
   ])
 })
@@ -370,6 +370,24 @@ test('catalog refresh caches per registration and falls back without erasing suc
   })
   seed({ clientId: 'issued-b', subject: 'user-b', accessToken: 'other' })
   expect((await getChatGPTModels()).models).toEqual([])
+})
+
+test.each([undefined, 1, 2])('older catalog version %s refreshes to recover new levels and defaults', async (effortsVersion) => {
+  seed()
+  local.set('chatgpt-models:issued-a', {
+    models: [{ id: 'future-model', label: 'Future', efforts: ['auto', 'max'] }],
+    fetchedAt: Date.now(), stale: false, registrationId: 'issued-a', effortsVersion
+  })
+  let requests = 0
+  globalThis.fetch = (async () => {
+    requests++
+    return Response.json({ models: [{ slug: 'future-model', visibility: 'list', supported_reasoning_levels: ['max', 'ultra'], default_reasoning_level: 'ultra' }] })
+  }) as typeof fetch
+  expect(await getChatGPTModels()).toMatchObject({
+    effortsVersion: 3, models: [{ id: 'future-model', efforts: ['max', 'ultra'], defaultEffort: 'ultra' }]
+  })
+  await getChatGPTModels()
+  expect(requests).toBe(1)
 })
 
 test('an offline refresh keeps the cached model catalog available', async () => {

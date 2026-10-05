@@ -13,8 +13,6 @@ import { GoogleSetup } from '@/components/GoogleSetup'
 import { cn } from '@/lib/utils'
 import {
   ASSISTANT_MODEL_PATTERN,
-  DEFAULT_ASSISTANT,
-  REASONING_EFFORTS,
   type AppSettings,
   type AssistantSettings,
   type ModelCatalog,
@@ -343,13 +341,8 @@ function ChatRetentionCard({
   )
 }
 
-const EFFORT_LABELS: Record<ReasoningEffort, string> = {
-  auto: 'Automatic',
-  low: 'Low',
-  medium: 'Medium',
-  high: 'High',
-  xhigh: 'Extra high',
-  max: 'Max'
+function effortLabel(effort: ReasoningEffort): string {
+  return effort.replace(/[-_]+/g, ' ').replace(/\b[a-z]/g, (letter) => letter.toUpperCase())
 }
 
 function Pill({
@@ -406,7 +399,11 @@ function AssistantCard({
   const [customModel, setCustomModel] = useState(settings.assistant.model)
   const presets = catalog.models
   const presetIds = new Set(presets.map((m) => m.id))
-  const effortsForModel = (model: string): ReasoningEffort[] => presets.find((m) => m.id === model)?.efforts ?? ['auto']
+  const effortsForModel = (model: string): ReasoningEffort[] => (presets.find((m) => m.id === model)?.efforts ?? []).filter((effort) => effort !== 'auto')
+  const defaultEffortForModel = (model: string): ReasoningEffort | undefined => {
+    const effort = presets.find((m) => m.id === model)?.defaultEffort
+    return effort && effortsForModel(model).includes(effort) ? effort : undefined
+  }
   const refreshModels = async (force = false): Promise<void> => {
     const sequence = ++catalogSequence.current
     setLoading(true)
@@ -431,7 +428,7 @@ function AssistantCard({
   const trimmedCustomModel = customModel.trim()
   const customDirty = trimmedCustomModel !== assistant.model
   const customValid = ASSISTANT_MODEL_PATTERN.test(trimmedCustomModel)
-  const efforts = custom ? REASONING_EFFORTS : effortsForModel(assistant.model)
+  const efforts = effortsForModel(assistant.model)
 
   const persist = async (nextAssistant: AssistantSettings): Promise<void> => {
     const sequence = ++saveSequence.current
@@ -453,14 +450,22 @@ function AssistantCard({
     setCustomModel(savedIsCustom ? next.assistant.model : '')
   }
 
+  // Migrate legacy/default selections on catalog load. A failed save is only
+  // retried after another catalog load, never in a state-update loop.
+  useEffect(() => {
+    if (assistant.reasoningEffort && assistant.reasoningEffort !== 'auto') return
+    const effort = defaultEffortForModel(assistant.model)
+    if (effort) void persist({ ...assistant, reasoningEffort: effort })
+  }, [catalog])
+
   // Unknown capability ladders use the server default.
   const selectModel = (model: string): void => {
     const supported = effortsForModel(model)
     void persist({
       model,
-      reasoningEffort: supported.includes(assistant.reasoningEffort)
+      reasoningEffort: assistant.reasoningEffort && supported.includes(assistant.reasoningEffort)
         ? assistant.reasoningEffort
-        : DEFAULT_ASSISTANT.reasoningEffort
+        : defaultEffortForModel(model)
     })
   }
 
@@ -470,7 +475,7 @@ function AssistantCard({
 
   const applyCustomModel = (): void => {
     if (!customValid || !customDirty) return
-    void persist({ ...assistant, model: trimmedCustomModel })
+    selectModel(trimmedCustomModel)
   }
 
   if (!codex.connected || (loading && catalog.models.length === 0)) {
@@ -558,9 +563,9 @@ function AssistantCard({
       </div>
 
       <div className="flex flex-col gap-2">
-        {!loading && !efforts.includes(assistant.reasoningEffort) && <p className="text-[12px] text-ink-faint">Saved effort: {EFFORT_LABELS[assistant.reasoningEffort]}. Choose Automatic to use the model’s default.</p>}
+        {!loading && assistant.reasoningEffort && assistant.reasoningEffort !== 'auto' && !efforts.includes(assistant.reasoningEffort) && <p className="text-[12px] text-ink-faint">Saved effort: {effortLabel(assistant.reasoningEffort)}. Choose a level supported by this model.</p>}
         <span className="text-[11px] font-medium text-ink-faint">Reasoning effort</span>
-        <div className="flex w-fit flex-wrap rounded-xl border border-hairline bg-white/[0.03] p-0.5">
+        {efforts.length > 0 && <div className="flex w-fit flex-wrap rounded-xl border border-hairline bg-white/[0.03] p-0.5">
           {efforts.map((effort) => (
             <Pill
               key={effort}
@@ -568,12 +573,14 @@ function AssistantCard({
               layoutId="assistant-effort-active"
               onClick={() => selectEffort(effort)}
             >
-              {EFFORT_LABELS[effort]}
+              {effortLabel(effort)}
             </Pill>
           ))}
-        </div>
+        </div>}
         <p className="text-[11px] text-ink-faint">
-          Higher effort digs deeper on complex questions and takes longer to answer.
+          {efforts.length > 0
+            ? 'Higher effort digs deeper on complex questions and takes longer to answer.'
+            : 'OpenAI has not provided reasoning levels for this model.'}
         </p>
       </div>
     </Card>

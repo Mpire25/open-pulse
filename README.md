@@ -144,8 +144,11 @@ The model picker loads the connected account's catalog from `/v1/models`, refres
 on launch and when opening settings after six hours, and offers **Refresh models**.
 Saved catalogs are scoped to the account registration. Network failures retain
 cached choices, and refreshed lists never silently change your selected model.
-**Automatic** reasoning uses the model's default when capability metadata is
-missing; **Custom…** remains available for manual model IDs and effort overrides.
+Reasoning choices follow each model's catalog metadata, including newly added
+levels. Unset or legacy Automatic preferences adopt the model's advertised default
+when available; otherwise requests leave the effort unset. Supported saved choices
+are preserved when switching models. **Custom…** accepts manual model IDs;
+models without catalog metadata offer no reasoning choices and send no effort override.
 
 If secure credential storage is unavailable or fails, OpenPulse stops using it
 for the session and does not fall back to plaintext. Handle any Keychain prompts
