@@ -48,8 +48,10 @@ Built with Electron + React 19, Radix primitives, Tailwind v4, and Framer Motion
 - **Assistant notifications** — opt in under Settings to receive a generic desktop
   notification when an answer finishes while you are away from that chat. Click
   to open the conversation. Sound and message previews are separately opt-in.
-  Previews show your query and a short answer excerpt; with previews off, both
-  remain generic. Each response gets a separate notification, grouped by chat.
+  Previews show the chat name and a short final-answer excerpt; with previews
+  off, the title and body remain generic. Each response gets a separate
+  notification, grouped by chat. See [Assistant notifications](docs/assistant-notifications.md)
+  for preview privacy and native acceptance details.
   The chat window must stay open or minimized: closing it cancels its
   response. Stopped, failed, and tool-limit responses do not notify.
 
