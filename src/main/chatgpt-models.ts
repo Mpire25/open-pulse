@@ -1,9 +1,8 @@
 import type {
   AssistantModel,
-  ModelCatalog,
-  ReasoningEffort
+  ModelCatalog
 } from '../shared/types'
-import { ASSISTANT_MODEL_PATTERN, REASONING_EFFORTS } from '../shared/types'
+import { ASSISTANT_MODEL_PATTERN, REASONING_EFFORT_PATTERN } from '../shared/types'
 import {
   getCodexAuthGeneration,
   getCodexStatus,
@@ -18,18 +17,17 @@ const MAX_AGE = 6 * 60 * 60_000
 const pending = new Map<string, Promise<ModelCatalog>>()
 
 export function selectChatTitleModels(models: AssistantModel[], assistantModel: string): ChatTitleModel[] {
-  const minimum = (model?: AssistantModel): ChatTitleModel['reasoningEffort'] => {
+  const catalogEffort = (model?: AssistantModel): ChatTitleModel['reasoningEffort'] => {
     if (model?.supportsNoReasoning) return 'none'
-    return (['low', 'medium', 'high', 'xhigh', 'max'] as const).find((effort) => model?.efforts?.includes(effort)) ?? 'low'
+    return model?.efforts?.find((effort) => effort !== 'auto') ?? 'auto'
   }
   const luna = models.find((model) => model.id === CHAT_TITLE_MODEL)
   const result: ChatTitleModel[] = []
   if (luna) {
-    const supportsLow = luna.efforts?.includes('low') || (!luna.efforts && !luna.supportsNoReasoning)
-    result.push({ model: luna.id, reasoningEffort: supportsLow ? 'low' : minimum(luna) })
+    result.push({ model: luna.id, reasoningEffort: catalogEffort(luna) })
   }
   if (!result.some((model) => model.model === assistantModel) && ASSISTANT_MODEL_PATTERN.test(assistantModel)) {
-    result.push({ model: assistantModel, reasoningEffort: minimum(models.find((model) => model.id === assistantModel)) })
+    result.push({ model: assistantModel, reasoningEffort: catalogEffort(models.find((model) => model.id === assistantModel)) })
   }
   return result
 }
@@ -40,7 +38,7 @@ export async function getChatTitleModels(
 ): Promise<ChatTitleModel[]> {
   const cached = getLocalValue<ModelCatalog>(`chatgpt-models:${tokens.clientId}`)
   let models = cached?.models
-  if (!cached?.fetchedAt || cached.stale || Date.now() - cached.fetchedAt >= MAX_AGE) {
+  if (cached?.effortsVersion !== 1 || !cached.fetchedAt || cached.stale || Date.now() - cached.fetchedAt >= MAX_AGE) {
     try {
       const response = await fetch(`${CHATGPT_RESOURCE}/models`, {
         headers: { authorization: `Bearer ${tokens.accessToken}` }, signal
@@ -91,8 +89,8 @@ export function parseModels(value: unknown): AssistantModel[] {
             : undefined
       return typeof effort === 'string' &&
         effort !== 'auto' &&
-        REASONING_EFFORTS.includes(effort as ReasoningEffort)
-        ? [effort as ReasoningEffort]
+        REASONING_EFFORT_PATTERN.test(effort)
+        ? [effort]
         : []
     })
     return [
@@ -123,7 +121,7 @@ export async function getChatGPTModels(force = false): Promise<ModelCatalog> {
     }
   const key = `chatgpt-models:${status.activeRegistration}`
   const cached = getLocalValue<ModelCatalog>(key)
-  if (!force && cached?.fetchedAt && Date.now() - cached.fetchedAt < MAX_AGE)
+  if (!force && cached?.effortsVersion === 1 && cached.fetchedAt && Date.now() - cached.fetchedAt < MAX_AGE)
     return cached
   let tokens
   try {
@@ -165,7 +163,8 @@ export async function getChatGPTModels(force = false): Promise<ModelCatalog> {
         models,
         fetchedAt: Date.now(),
         stale: false,
-        registrationId: tokens.clientId
+        registrationId: tokens.clientId,
+        effortsVersion: 1
       }
     } catch (error) {
       catalog = {

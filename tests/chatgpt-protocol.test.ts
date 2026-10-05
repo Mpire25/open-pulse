@@ -104,6 +104,12 @@ test('automatic reasoning omits the override and local tools are namespaced', ()
   expect(reasoningOptions({ model: 'future', reasoningEffort: 'low' })).toEqual(
     { reasoning: { effort: 'low' } }
   )
+  expect(reasoningOptions({ model: 'future', reasoningEffort: 'ultra' })).toEqual(
+    { reasoning: { effort: 'ultra' } }
+  )
+  expect(reasoningOptions({ model: 'future', reasoningEffort: 'new-tier' })).toEqual(
+    { reasoning: { effort: 'new-tier' } }
+  )
   expect(localToolNamespace([])).toEqual([])
   expect(
     localToolNamespace([{ type: 'function', name: 'health' }])

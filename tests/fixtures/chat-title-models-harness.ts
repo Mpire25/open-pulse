@@ -23,12 +23,12 @@ test('fresh account catalog is reused without credential reads or network calls'
   cached = { models: [
     { id: 'gpt-6-astra', label: 'Astra', efforts: ['auto', 'high', 'low'] },
     { id: 'gpt-5.6-luna', label: 'Luna', efforts: ['auto', 'low'] }
-  ], stale: false, fetchedAt: Date.now() }
+  ], stale: false, fetchedAt: Date.now(), effortsVersion: 1 }
   expect(await getChatTitleModels(tokens, 'gpt-6-astra', signal())).toEqual([
-    { model: 'gpt-5.6-luna', reasoningEffort: 'low' }, { model: 'gpt-6-astra', reasoningEffort: 'low' }
+    { model: 'gpt-5.6-luna', reasoningEffort: 'low' }, { model: 'gpt-6-astra', reasoningEffort: 'high' }
   ])
   cached.models = [{ id: 'gpt-6-astra', label: 'Astra', efforts: ['auto', 'high', 'medium'] }]
-  expect(await getChatTitleModels(tokens, 'gpt-6-astra', signal())).toEqual([{ model: 'gpt-6-astra', reasoningEffort: 'medium' }])
+  expect(await getChatTitleModels(tokens, 'gpt-6-astra', signal())).toEqual([{ model: 'gpt-6-astra', reasoningEffort: 'high' }])
 })
 
 test('missing or stale catalog is discovered with the existing run token and cancellation signal', async () => {
@@ -42,7 +42,7 @@ test('missing or stale catalog is discovered with the existing run token and can
     return Response.json({ models: [{ slug: 'gpt-5.6-luna', visibility: 'list', supported_reasoning_levels: ['low'] }] })
   }) as typeof fetch
   expect(await getChatTitleModels(tokens, 'gpt-6-astra', requestSignal)).toEqual([
-    { model: 'gpt-5.6-luna', reasoningEffort: 'low' }, { model: 'gpt-6-astra', reasoningEffort: 'low' }
+    { model: 'gpt-5.6-luna', reasoningEffort: 'low' }, { model: 'gpt-6-astra', reasoningEffort: 'auto' }
   ])
   cached = { models: [], stale: true, fetchedAt: Date.now() }
   expect((await getChatTitleModels(tokens, 'gpt-6-astra', requestSignal))[0].model).toBe('gpt-5.6-luna')
@@ -56,11 +56,11 @@ test('catalog failures make no second attempt', async () => {
   expect(calls).toBe(1)
 })
 
-test('backup uses none when advertised, without adding a new assistant UI setting', () => {
+test('none is preserved from the catalog and used for naming when advertised', () => {
   const models = parseModels({ models: [
     { slug: 'gpt-5.6-sol', visibility: 'list', supported_reasoning_levels: ['high', { effort: 'none' }, 'low'] }
   ] })
-  expect(models[0].efforts).toEqual(['auto', 'high', 'low'])
+  expect(models[0].efforts).toEqual(['auto', 'high', 'none', 'low'])
   expect(models[0].supportsNoReasoning).toBe(true)
   expect(selectChatTitleModels(models, 'gpt-5.6-sol')).toEqual([{ model: 'gpt-5.6-sol', reasoningEffort: 'none' }])
 })
@@ -73,6 +73,17 @@ test('selected Luna is not duplicated as its own backup', () => {
 test('temporary catalog failure uses the selected assistant with no credential or catalog retry', async () => {
   let calls = 0
   globalThis.fetch = (async () => { calls++; throw new TypeError('Network unavailable') }) as typeof fetch
-  expect(await getChatTitleModels(tokens, 'gpt-6-astra', signal())).toEqual([{ model: 'gpt-6-astra', reasoningEffort: 'low' }])
+  expect(await getChatTitleModels(tokens, 'gpt-6-astra', signal())).toEqual([{ model: 'gpt-6-astra', reasoningEffort: 'auto' }])
   expect(calls).toBe(1)
+})
+
+test('effort discovery retains new tiers in response order without accepting malformed IDs', () => {
+  const models = parseModels({ models: [{
+    slug: 'future-model', visibility: 'list',
+    supported_reasoning_levels: ['auto', 'ultra', { effort: 'new-tier' }, 'ultra', null, 42, {}, { effort: false }, '', 'bad tier']
+  }] })
+  expect(models[0].efforts).toEqual(['auto', 'ultra', 'new-tier'])
+  expect(selectChatTitleModels(models, 'future-model')).toEqual([{ model: 'future-model', reasoningEffort: 'ultra' }])
+  expect(selectChatTitleModels([{ id: 'gpt-5.6-luna', label: 'Luna' }], 'gpt-5.6-luna'))
+    .toEqual([{ model: 'gpt-5.6-luna', reasoningEffort: 'auto' }])
 })

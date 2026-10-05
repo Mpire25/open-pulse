@@ -14,7 +14,6 @@ import { cn } from '@/lib/utils'
 import {
   ASSISTANT_MODEL_PATTERN,
   DEFAULT_ASSISTANT,
-  REASONING_EFFORTS,
   type AppSettings,
   type AssistantSettings,
   type ModelCatalog,
@@ -343,13 +342,8 @@ function ChatRetentionCard({
   )
 }
 
-const EFFORT_LABELS: Record<ReasoningEffort, string> = {
-  auto: 'Automatic',
-  low: 'Low',
-  medium: 'Medium',
-  high: 'High',
-  xhigh: 'Extra high',
-  max: 'Max'
+function effortLabel(effort: ReasoningEffort): string {
+  return effort === 'auto' ? 'Automatic' : effort.replace(/[-_]+/g, ' ').replace(/\b[a-z]/g, (letter) => letter.toUpperCase())
 }
 
 function Pill({
@@ -431,7 +425,7 @@ function AssistantCard({
   const trimmedCustomModel = customModel.trim()
   const customDirty = trimmedCustomModel !== assistant.model
   const customValid = ASSISTANT_MODEL_PATTERN.test(trimmedCustomModel)
-  const efforts = custom ? REASONING_EFFORTS : effortsForModel(assistant.model)
+  const efforts = effortsForModel(assistant.model)
 
   const persist = async (nextAssistant: AssistantSettings): Promise<void> => {
     const sequence = ++saveSequence.current
@@ -470,7 +464,7 @@ function AssistantCard({
 
   const applyCustomModel = (): void => {
     if (!customValid || !customDirty) return
-    void persist({ ...assistant, model: trimmedCustomModel })
+    selectModel(trimmedCustomModel)
   }
 
   if (!codex.connected || (loading && catalog.models.length === 0)) {
@@ -558,7 +552,7 @@ function AssistantCard({
       </div>
 
       <div className="flex flex-col gap-2">
-        {!loading && !efforts.includes(assistant.reasoningEffort) && <p className="text-[12px] text-ink-faint">Saved effort: {EFFORT_LABELS[assistant.reasoningEffort]}. Choose Automatic to use the model’s default.</p>}
+        {!loading && !efforts.includes(assistant.reasoningEffort) && <p className="text-[12px] text-ink-faint">Saved effort: {effortLabel(assistant.reasoningEffort)}. Choose Automatic to use the model’s default.</p>}
         <span className="text-[11px] font-medium text-ink-faint">Reasoning effort</span>
         <div className="flex w-fit flex-wrap rounded-xl border border-hairline bg-white/[0.03] p-0.5">
           {efforts.map((effort) => (
@@ -568,7 +562,7 @@ function AssistantCard({
               layoutId="assistant-effort-active"
               onClick={() => selectEffort(effort)}
             >
-              {EFFORT_LABELS[effort]}
+              {effortLabel(effort)}
             </Pill>
           ))}
         </div>

@@ -29,9 +29,9 @@ let modelResult: unknown
 let root: ReturnType<typeof createRoot>
 let container: HTMLDivElement
 
-function Harness(): React.JSX.Element {
+function Harness({ initialSettings = settings }: { initialSettings?: AppSettings }): React.JSX.Element {
   const [status, setStatus] = useState(backendStatus)
-  const [preferences, setPreferences] = useState(settings)
+  const [preferences, setPreferences] = useState(initialSettings)
   publish = setStatus
   return <SettingsView settings={preferences} google={{ connected: true }} codex={status} onSettingsChange={setPreferences} onGoogleChange={() => {}} onCodexChange={setStatus} />
 }
@@ -173,4 +173,47 @@ test('model controls appear after the account catalog loads', async () => {
   expect(Boolean(button('Refresh models'))).toBe(true)
   await act(async () => { backendStatus = { connected: false }; publish(backendStatus) })
   expect(Boolean(button('Future Model'))).toBe(false)
+})
+
+test('catalog effort levels display and persist without a fixed list, and model changes reset unsupported levels', async () => {
+  backendStatus = connected
+  modelResult = { models: [
+    { id: 'future-model', label: 'Future Model', efforts: ['auto', 'ultra', 'new-tier', 'none'] },
+    { id: 'other-model', label: 'Other Model', efforts: ['auto', 'medium'] }
+  ], stale: false }
+  let saved = { ...settings, assistant: { model: 'future-model', reasoningEffort: 'auto' } }
+  window.pulse.settings.update = async (patch) => { saved = { ...saved, ...patch }; return saved }
+  await act(async () => root.render(<Harness initialSettings={saved} />))
+  expect(Boolean(button('Ultra'))).toBe(true)
+  expect(Boolean(button('New Tier'))).toBe(true)
+  expect(Boolean(button('None'))).toBe(true)
+  expect(Boolean(button('Low'))).toBe(false)
+  await act(async () => button('Ultra')!.click())
+  expect(saved.assistant).toEqual({ model: 'future-model', reasoningEffort: 'ultra' })
+  await act(async () => button('New Tier')!.click())
+  expect(saved.assistant.reasoningEffort).toBe('new-tier')
+  await act(async () => button('Other Model')!.click())
+  expect(saved.assistant).toEqual({ model: 'other-model', reasoningEffort: 'auto' })
+  expect(Boolean(button('Medium'))).toBe(true)
+  expect(Boolean(button('Ultra'))).toBe(false)
+  expect(Boolean(button('New Tier'))).toBe(false)
+})
+
+test('custom models use their own metadata and fall back to Automatic when metadata is absent', async () => {
+  backendStatus = connected
+  let saved = { ...settings, assistant: { model: 'future-model', reasoningEffort: 'low' } }
+  window.pulse.settings.update = async (patch) => { saved = { ...saved, ...patch }; return saved }
+  await act(async () => root.render(<Harness initialSettings={saved} />))
+  await act(async () => button('Custom…')!.click())
+  expect(Boolean(button('Low'))).toBe(true)
+  expect(Boolean(button('High'))).toBe(false)
+  const input = document.querySelector('input[placeholder="model-id"]') as HTMLInputElement
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, 'unknown-model')
+    input.dispatchEvent(new Event('input', { bubbles: true }))
+  })
+  await act(async () => button('Apply')!.click())
+  expect(saved.assistant).toEqual({ model: 'unknown-model', reasoningEffort: 'auto' })
+  expect(Boolean(button('Automatic'))).toBe(true)
+  expect(Boolean(button('Low'))).toBe(false)
 })

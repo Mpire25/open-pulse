@@ -27,7 +27,7 @@ test('standalone Luna request uses only the bounded first prompt and waits for t
   }) as typeof fetch
   expect(await generateChatName('synthetic-token', 'Compare my sleep '.repeat(500), new AbortController().signal)).toBe('Weekly sleep comparison')
   expect(body.model).toBe('gpt-5.6-luna')
-  expect(body.reasoning).toEqual({ effort: 'low' })
+  expect(body).not.toHaveProperty('reasoning')
   expect(body.store).toBe(false)
   expect(body.stream).toBe(true)
   expect(body.tools).toEqual([])

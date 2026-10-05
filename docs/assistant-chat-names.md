@@ -2,7 +2,7 @@
 
 New chats immediately use a shortened version of the first prompt. Alongside the
 first authenticated response, OpenPulse makes a separate GPT-5.6 Luna request
-with low reasoning to generate a short title. Only the first prompt (at most
+using its advertised reasoning levels to generate a short title. Only the first prompt (at most
 4,000 characters) is sent: no prior turns, health datasets, or tools.
 
 The naming job shares the foreground run's authenticated credentials, checks
@@ -13,8 +13,9 @@ This route rejects `max_output_tokens`; output is constrained by the title
 instructions, local validation/stream limits and request deadlines instead.
 
 If Luna is unavailable, fails, times out, or returns an invalid title, OpenPulse
-tries the selected assistant model once, at its lowest advertised reasoning
-level (including none when available; low when catalog metadata is absent).
+tries the selected assistant model once. Each naming request uses none when
+advertised, otherwise the first explicit level in the catalog's order. If no
+effort metadata is available, it leaves the effort unset for the model's default.
 The assistant model is captured from the normal run, so a settings change
 mid-response does not change the backup. A model is never attempted twice.
 Authentication, permission and usage-limit failures stop without a backup call.

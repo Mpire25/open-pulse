@@ -409,11 +409,11 @@ export const DEFAULT_GOALS: Goals = {
   sleepMinutes: 8 * 60
 }
 
-// Automatic omits the effort override. Explicit tiers are the levels supported
-// by OpenPulse; unknown catalog tiers can still use the server default.
-export type ReasoningEffort = 'auto' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'
+// Automatic omits the effort override; explicit tiers come from the model catalog.
+export type ReasoningEffort = string
 
-export const REASONING_EFFORTS: ReasoningEffort[] = ['auto', 'low', 'medium', 'high', 'xhigh', 'max']
+/** Validate the shape of an effort ID without restricting OpenAI's tier names. */
+export const REASONING_EFFORT_PATTERN = /^[a-z][a-z0-9_-]{0,63}$/
 
 export interface AssistantSettings {
   model: string
@@ -429,7 +429,7 @@ export interface AssistantModel {
   id: string
   label: string
   efforts?: ReasoningEffort[]
-  /** Catalog metadata for background naming; does not change assistant settings. */
+  /** Also supports older cached catalogs that kept none outside the effort list. */
   supportsNoReasoning?: true
 }
 export interface ModelCatalog {
@@ -438,6 +438,8 @@ export interface ModelCatalog {
   stale: boolean
   error?: string
   registrationId?: string
+  /** Refresh catalogs produced by the old fixed effort whitelist. */
+  effortsVersion?: 1
 }
 
 /** Rejects pasted prose before it becomes a guaranteed 400 at send time. */
