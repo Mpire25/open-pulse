@@ -46,6 +46,7 @@ Built with Electron + React 19, Radix primitives, Tailwind v4, and Framer Motion
   is needed. Available as a full page and as a slide-over panel on every view,
   with account-scoped conversation history, automatic chat names, retry for
   failed or timed-out answers, and editing/resending your latest message.
+  Pin or keep chats to protect them from configurable retention cleanup.
 - **Assistant notifications** — opt in under Settings to receive a generic desktop
   notification when an answer finishes while you are away from that chat. Click
   to open the conversation. Sound and message previews are separately opt-in.
@@ -176,6 +177,20 @@ and **Send** to submit the revised text. Both actions replace that message's
 answer rather than adding a duplicate user message; earlier exchanges remain.
 A manually stopped response does not offer Retry, but its prompt can be edited
 and resent.
+
+### Chat retention
+
+In **Settings → Chat retention**, choose **Until next launch**, **24 hours**,
+**7 days**, **30 days**, or **Forever** (the default). Timed policies use the
+chat's last activity; **Until next launch** removes chats whose last activity
+predates the current app launch. Pinned chats and chats marked **Keep chat** in
+history are exempt from automatic cleanup. You can still delete them manually.
+
+The setting applies across all stored accounts. Before a change deletes chats,
+OpenPulse shows the number that will be permanently removed and asks you to
+confirm. Cleanup runs when the policy changes and when history is loaded or
+refreshed, including at app startup. Deleted chats cannot be recovered by
+switching back to **Forever**.
 
 ## How data flows
 
