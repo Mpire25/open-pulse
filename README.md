@@ -44,12 +44,16 @@ Built with Electron + React 19, Radix primitives, Tailwind v4, and Framer Motion
   and devices. Answers can include trusted, navigable cards and charts derived
   from the returned data, plus web research when current external guidance
   is needed. Available as a full page and as a slide-over panel on every view,
-  with account-scoped conversation history, pinning, and deletion.
+  with account-scoped conversation history, automatic chat names, retry for
+  failed or timed-out answers, and editing/resending your latest message.
+  Pin or keep chats to protect them from configurable retention cleanup.
 - **Assistant notifications** — opt in under Settings to receive a generic desktop
   notification when an answer finishes while you are away from that chat. Click
   to open the conversation. Sound and message previews are separately opt-in.
-  Previews show your query and a short answer excerpt; with previews off, both
-  remain generic. Each response gets a separate notification, grouped by chat.
+  Previews show the chat name and a short final-answer excerpt; with previews
+  off, the title and body remain generic. Each response gets a separate
+  notification, grouped by chat. See [Assistant notifications](docs/assistant-notifications.md)
+  for preview privacy and native acceptance details.
   The chat window must stay open or minimized: closing it cancels its
   response. Stopped, failed, and tool-limit responses do not notify.
 
@@ -153,6 +157,40 @@ models without catalog metadata offer no reasoning choices and send no effort ov
 If secure credential storage is unavailable or fails, OpenPulse stops using it
 for the session and does not fall back to plaintext. Handle any Keychain prompts
 manually. No credential, ID token, or authorization URL should be logged.
+
+See the [ChatGPT plan acceptance checklist](docs/chatgpt-plan-acceptance.md) for
+packaged-app checks covering sign-in, model access, persistence, and sign-out.
+
+### Chat names, retry, and editing
+
+New chats immediately show a shortened version of your first prompt. Automatic
+naming then uses GPT-5.6 Luna, with at most one backup request to your selected
+assistant model. These requests use your ChatGPT plan and send only the first
+prompt, capped at 4,000 characters; they include no prior turns or health-tool
+results. Naming does not delay the answer, and the prompt-based title stays if
+naming fails. Existing chats are not automatically renamed. See
+[Assistant chat names](docs/assistant-chat-names.md) for limits and acceptance checks.
+
+When the latest answer fails or times out, use **Retry** to resend its prompt.
+Once that chat is idle, you can also use **Edit message** on your latest message
+and **Send** to submit the revised text. Both actions replace that message's
+answer rather than adding a duplicate user message; earlier exchanges remain.
+A manually stopped response does not offer Retry, but its prompt can be edited
+and resent.
+
+### Chat retention
+
+In **Settings → Chat retention**, choose **Until next launch**, **24 hours**,
+**7 days**, **30 days**, or **Forever** (the default). Timed policies use the
+chat's last activity; **Until next launch** removes chats whose last activity
+predates the current app launch. Pinned chats and chats marked **Keep chat** in
+history are exempt from automatic cleanup. You can still delete them manually.
+
+The setting applies across all stored accounts. Before a change deletes chats,
+OpenPulse shows the number that will be permanently removed and asks you to
+confirm. Cleanup runs when the policy changes and when history is loaded or
+refreshed, including at app startup. Deleted chats cannot be recovered by
+switching back to **Forever**.
 
 ## How data flows
 

@@ -7,8 +7,9 @@ using its advertised reasoning levels to generate a short title. Only the first 
 
 The naming job shares the foreground run's authenticated credentials, checks
 the account's model catalog, and has a 20-second total deadline with at most
-10 seconds per model. It uses the public Responses API with streaming and
-storage disabled. Naming uses the connected ChatGPT plan, with no separate API key.
+10 seconds per model. It uses the public Responses API with streaming enabled
+(`stream: true`) and server-side storage disabled (`store: false`). Naming uses
+the connected ChatGPT plan, with no separate API key.
 This route rejects `max_output_tokens`; output is constrained by the title
 instructions, local validation/stream limits and request deadlines instead.
 
