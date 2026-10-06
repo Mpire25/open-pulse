@@ -11,7 +11,12 @@ import { ColumnChart, IntradayLine, ProgressRing, TrendLine } from '@/components
 import { DeltaChip } from '@/components/DeltaChip'
 import { CARD_HEIGHT, SkeletonBlock, SkeletonChart, SkeletonRing, SkeletonText } from '@/components/Skeleton'
 import { ErrorState } from '@/components/ErrorState'
-import { useActivityIntraday, useHeartDetail, useIntraday, useSeries } from '@/hooks/useHealth'
+import {
+  isNutritionBreakdownMetric,
+  NutritionBreakdownPanel,
+  NutritionBreakdownSkeleton
+} from '@/components/NutritionBreakdown'
+import { useActivityIntraday, useHeartDetail, useIntraday, useNutritionLogs, useSeries } from '@/hooks/useHealth'
 import { METRICS } from '@/lib/metric-registry'
 import {
   aggregatePoints,
@@ -39,7 +44,8 @@ import type {
   ActivityIntradayResult,
   Goals,
   HeartDetailResult,
-  MetricKey
+  MetricKey,
+  NutritionLogEntry
 } from '@shared/types'
 import { cn } from '@/lib/utils'
 
@@ -145,6 +151,8 @@ export function MetricDetailView({
   const intraday = useIntraday(date, wantsIntraday, intradayScope)
   const activityIntraday = useActivityIntraday(date, activityMetric ?? 'distanceKm', wantsActivityIntraday)
   const heartDetail = useHeartDetail(date, heartMetric ?? 'restingHeartRate', wantsHeartDetail)
+  const wantsNutritionLogs = range === 'D' && isNutritionBreakdownMetric(metricKey)
+  const nutritionLogs = useNutritionLogs(date, wantsNutritionLogs)
 
   const days = series.data?.days
   const shown = rangeEnding(date, spec.days)
@@ -163,7 +171,8 @@ export function MetricDetailView({
     series.isPending ||
     (wantsIntraday && intraday.isPending) ||
     (wantsActivityIntraday && activityIntraday.isPending) ||
-    (wantsHeartDetail && heartDetail.isPending)
+    (wantsHeartDetail && heartDetail.isPending) ||
+    (wantsNutritionLogs && nutritionLogs.isPending)
   const lastResolvedContent = useRef<{
     date: string
     range: MetricRange
@@ -191,6 +200,9 @@ export function MetricDetailView({
         heartDetailData={wantsHeartDetail ? heartDetail.data : undefined}
         heartDetailPending={wantsHeartDetail && heartDetail.isPending}
         heartDetailError={wantsHeartDetail && heartDetail.isError}
+        nutritionLogsData={wantsNutritionLogs ? nutritionLogs.data : undefined}
+        nutritionLogsPending={wantsNutritionLogs && nutritionLogs.isPending}
+        nutritionLogsError={wantsNutritionLogs && nutritionLogs.isError}
         onSelectDate={onSelectDate}
       />
     ) : (
@@ -319,6 +331,7 @@ function MetricDetailSkeleton({
           {breakdownCount > 0 && <ActivityBreakdownSkeleton count={breakdownCount} />}
         </Panel>
         )}
+        {isNutritionBreakdownMetric(metricKey) && <NutritionBreakdownSkeleton />}
         <HistoryListSkeleton />
       </>
     )
@@ -432,6 +445,9 @@ function DayDetail({
   heartDetailData,
   heartDetailPending,
   heartDetailError,
+  nutritionLogsData,
+  nutritionLogsPending,
+  nutritionLogsError,
   onSelectDate
 }: {
   metricKey: MetricKey
@@ -446,6 +462,9 @@ function DayDetail({
   heartDetailData?: HeartDetailResult
   heartDetailPending: boolean
   heartDetailError: boolean
+  nutritionLogsData?: NutritionLogEntry[]
+  nutritionLogsPending: boolean
+  nutritionLogsError: boolean
   onSelectDate: (date: string) => void
 }): React.JSX.Element {
   const def = METRICS[metricKey]
@@ -589,6 +608,18 @@ function DayDetail({
 
       {metricKey === 'restingHeartRate' && (
         <HeartZonesPanel data={heartDetailData} pending={heartDetailPending} error={heartDetailError} />
+      )}
+
+      {isNutritionBreakdownMetric(metricKey) && (
+        <motion.div custom={3} variants={fade} initial="hidden" animate="show">
+          <NutritionBreakdownPanel
+            metricKey={metricKey}
+            dayTotal={value}
+            entries={nutritionLogsData}
+            pending={nutritionLogsPending}
+            error={nutritionLogsError}
+          />
+        </motion.div>
       )}
 
       <HistoryList metricKey={metricKey} rows={[...points].reverse()} selected={date} onSelectDate={onSelectDate} />

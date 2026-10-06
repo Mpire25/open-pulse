@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import { gramsFromNutrientNode, nutrientGrams, nutrientMineralGrams } from '../src/main/nutrition'
+import { nutritionBreakdown } from '../src/shared/nutrition'
 
 describe('nutrition rollup normalization', () => {
   test('reads the existing gramsSum response shape', () => {
@@ -41,4 +42,56 @@ describe('nutrition rollup normalization', () => {
   test('returns null when the nutrient is absent', () => {
     expect(nutrientGrams({ carbohydrate: { gramsSum: 210 } }, ['protein'])).toBeNull()
   })
+})
+
+describe('nutrition breakdown', () => {
+  const entry = (id: string, calories: number | null, startTime = '2026-10-06T08:00:00Z') => ({
+    id,
+    startTime,
+    endTime: startTime,
+    foodName: id,
+    mealType: null,
+    servingLabel: null,
+    calories,
+    proteinG: null,
+    carbsG: null,
+    fatG: null,
+    fiberG: null,
+    saturatedFatG: null,
+    sodiumG: null,
+    sugarG: null
+  })
+
+  test('ranks foods by contribution and counts foods with nothing recorded', () => {
+    const result = nutritionBreakdown(
+      [entry('toast', 200), entry('coffee', 0), entry('pasta', 600), entry('water', null)],
+      'calories',
+      800,
+      8
+    )
+    expect(result.items.map((item) => [item.entry.id, item.share])).toEqual([['pasta', 0.75], ['toast', 0.25]])
+    expect(result.unattributed).toBeNull()
+    expect(result.emptyCount).toBe(2)
+  })
+
+  test('reports a day total above the logged sum as unattributed', () => {
+    const result = nutritionBreakdown([entry('toast', 300)], 'calories', 400, 4)
+    expect(result.unattributed).toBe(100)
+    expect(result.unattributedShare).toBe(0.25)
+    expect(result.items[0].share).toBe(0.75)
+  })
+
+  test('ignores small gaps and logged sums above the day total', () => {
+    expect(nutritionBreakdown([entry('toast', 398)], 'calories', 400, 4).unattributed).toBeNull()
+    const over = nutritionBreakdown([entry('a', 300), entry('b', 200)], 'calories', 400, 4)
+    expect(over.unattributed).toBeNull()
+    expect(over.items.map((item) => item.share)).toEqual([0.6, 0.4])
+  })
+})
+
+test('nutrition breakdown attributes the whole day total when no foods are logged', () => {
+  const result = nutritionBreakdown([], 'calories', 400, 4)
+  expect(result.items).toEqual([])
+  expect(result.unattributed).toBe(400)
+  expect(result.unattributedShare).toBe(1)
 })
