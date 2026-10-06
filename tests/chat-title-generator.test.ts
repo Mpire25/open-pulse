@@ -82,6 +82,7 @@ function harness(timeoutMs = 10_000) {
   let models: ChatTitleModel[] = [{ model: 'gpt-5.6-luna', reasoningEffort: 'low' }]
   let outcomes: Array<string | null | Error | 'timeout'> | undefined
   const selections: ChatTitleModel[] = []
+  const prompts: string[] = []
   let current = true
   let failures = 0
   const published: ChatTitleUpdate[] = []
@@ -91,7 +92,7 @@ function harness(timeoutMs = 10_000) {
     complete: (scope, id, prompt, title) => store.completeTitle(scope, id, prompt, title),
     models: async () => { modelCalls++; return available ? models : [] },
     generate: async (_token, prompt, signal, selection) => {
-      expect(prompt).toBe(message.text)
+      prompts.push(prompt)
       generateCalls++
       selections.push(selection)
       if (outcomes) {
@@ -107,7 +108,7 @@ function harness(timeoutMs = 10_000) {
   })
   controller.remember(1, 'health-account-a', session)
   const start = () => controller.start(1, chat.id, { accessToken: 'synthetic', clientId: 'registration' }, parent.signal, () => current, 'gpt-6-astra')
-  return { controller, store, session, message, published, parent, start, path, encryption, selections,
+  return { controller, store, session, message, published, parent, start, path, encryption, selections, prompts,
     setModels: (value: ChatTitleModel[]) => { models = value },
     outcomes: (value: Array<string | null | Error | 'timeout'>) => { outcomes = value },
     resolve: (title: string | null) => resolve(title),
@@ -208,6 +209,46 @@ describe('chat title lifecycle', () => {
     expect(h.calls().generateCalls).toBe(1)
     expect(h.published).toHaveLength(0)
     expect(h.controller.title(1, 'chat-a')).toBe(h.session.title)
+  })
+
+  test('editing the first prompt renames the chat from the new text', async () => {
+    const h = harness(); h.outcomes(['Weekly sleep comparison', 'Monthly step trends'])
+    await h.start()
+    const answer = { id: 'answer', role: 'assistant' as const, text: 'Your sleep improved.', createdAt: h.message.createdAt }
+    h.store.update('health-account-a', 'chat-a', [h.message, answer])
+    const edited = { ...h.message, text: 'Show my step trends this month' }
+    const saved = h.store.update('health-account-a', 'chat-a', [edited])
+    // The previous generated name stays until the new one arrives.
+    expect(saved).toMatchObject({ title: 'Weekly sleep comparison', titleGeneration: 'waiting' })
+    h.controller.remember(1, 'health-account-a', saved)
+    await h.start()
+    expect(h.prompts).toEqual([h.message.text, edited.text])
+    expect(h.published.map((title) => title.title)).toEqual(['Weekly sleep comparison', 'Monthly step trends'])
+    expect(h.store.snapshot('health-account-a').sessions[0]).toMatchObject({ title: 'Monthly step trends', titleGeneration: 'generated' })
+  })
+
+  test('follow-up edits and unchanged first prompts keep the existing name', async () => {
+    const h = harness(); h.outcomes(['Weekly sleep comparison'])
+    await h.start()
+    const answer = { id: 'answer', role: 'assistant' as const, text: 'Your sleep improved.', createdAt: h.message.createdAt }
+    const followUp = { id: 'prompt-b', role: 'user' as const, text: 'And last week?', createdAt: h.message.createdAt }
+    h.store.update('health-account-a', 'chat-a', [h.message, answer, followUp])
+    const saved = h.store.update('health-account-a', 'chat-a', [h.message, answer, { ...followUp, text: 'And last month?' }])
+    expect(saved).toMatchObject({ title: 'Weekly sleep comparison', titleGeneration: 'generated' })
+  })
+
+  test('an edit before naming finishes discards the stale name', async () => {
+    // The stale request only settles when aborted; the fresh one names the chat.
+    const h = harness(); h.outcomes(['timeout', 'Monthly step trends'])
+    const stale = h.start(); await Promise.resolve(); await Promise.resolve()
+    const edited = { ...h.message, text: 'Show my step trends this month' }
+    const saved = h.store.update('health-account-a', 'chat-a', [edited])
+    expect(saved).toMatchObject({ title: 'Show my step trends this month', titleGeneration: 'waiting' })
+    h.controller.remember(1, 'health-account-a', saved)
+    await Promise.all([stale, h.start()])
+    expect(h.prompts).toEqual([h.message.text, edited.text])
+    expect(h.published.map((title) => title.title)).toEqual(['Monthly step trends'])
+    expect(h.calls().failures).toBe(0)
   })
 
   test('legacy chats and empty drafts never start a naming request', async () => {
