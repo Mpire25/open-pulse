@@ -192,10 +192,19 @@ export class ChatHistoryStore {
 
   update(accountScope: string, id: string, messages: ChatSessionMessage[]): ChatSession {
     const session = this.find(accountScope, id)
+    const previousFirst = session.messages.find((message) => message.role === 'user')
     session.messages = normalizeMessages(messages)
     const firstUserMessage = session.messages.find((message) => message.role === 'user')
     if (firstUserMessage && session.title === DEFAULT_CHAT_TITLE) {
       session.title = generateChatTitle(firstUserMessage.text)
+    }
+    // Editing the first prompt renames the chat from the new text. A generated
+    // name stays visible until its replacement lands, so a failed retry never
+    // leaves a worse title behind. Legacy chats were never named and stay so.
+    if (session.titleGeneration && firstUserMessage && previousFirst?.id === firstUserMessage.id &&
+      previousFirst.text !== firstUserMessage.text) {
+      if (session.titleGeneration !== 'generated') session.title = generateChatTitle(firstUserMessage.text)
+      session.titleGeneration = 'waiting'
     }
     session.updatedAt = isoNow()
     this.persist()

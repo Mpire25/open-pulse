@@ -105,6 +105,8 @@ export class ChatTitleController {
     const signal = AbortSignal.any([controller.signal, parentSignal])
     const timeoutMs = this.dependencies.timeoutMs ?? 20_000
     const timer = setTimeout(() => controller.abort('deadline'), timeoutMs)
+    // An edited first prompt supersedes any naming still running for the old one.
+    this.jobs.get(key)?.abort('superseded')
     this.jobs.set(key, controller)
     try {
       if (!this.dependencies.claim(candidate.scope, chatId, candidate.message.id)) return
