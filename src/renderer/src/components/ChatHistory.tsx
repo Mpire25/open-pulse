@@ -167,6 +167,38 @@ interface SessionRowProps {
   onDelete: (button: HTMLButtonElement, openedWithKeyboard: boolean) => void
 }
 
+function SessionTitle({ title }: { title: string }): React.JSX.Element {
+  const [display, setDisplay] = useState({ title, previous: null as string | null, revision: 0 })
+
+  // Capture changes only while this row is mounted. Opening history should
+  // show the current name immediately, without replaying an earlier rename.
+  if (display.title !== title) {
+    setDisplay({ title, previous: display.title, revision: display.revision + 1 })
+  }
+
+  return (
+    <span aria-hidden="true" className="min-w-0 flex-1 overflow-hidden whitespace-nowrap text-[12px] font-medium [mask-image:linear-gradient(to_right,black_calc(100%_-_10px),transparent)]">
+      <span
+        key={display.revision}
+        className={cn('relative block', display.previous !== null && 'chat-title-sweep')}
+        onAnimationEnd={(event) => {
+          if (event.target !== event.currentTarget || event.animationName !== 'chat-title-sweep') return
+          setDisplay((current) => current.revision === display.revision
+            ? { ...current, previous: null }
+            : current)
+        }}
+      >
+        {display.previous !== null && (
+          <span className="chat-title-previous pointer-events-none absolute inset-0 overflow-hidden">
+            {display.previous}
+          </span>
+        )}
+        <span className={cn('block', display.previous !== null && 'chat-title-next')}>{display.title}</span>
+      </span>
+    </span>
+  )
+}
+
 function SessionRow({ session, selected, streaming, onSelect, onPin, onKeep, onDelete }: SessionRowProps): React.JSX.Element {
   return (
     <div
@@ -180,12 +212,11 @@ function SessionRow({ session, selected, streaming, onSelect, onPin, onKeep, onD
       <button
         type="button"
         onClick={onSelect}
+        aria-label={session.title}
         className="flex min-w-0 flex-1 items-center gap-2 rounded-[10px] py-2.5 pl-3 pr-1 text-left outline-none focus-visible:ring-1 focus-visible:ring-accent/50"
       >
         {streaming && <span className="size-1.5 shrink-0 animate-pulse rounded-full bg-accent" />}
-        <span className="min-w-0 flex-1 overflow-hidden whitespace-nowrap text-[12px] font-medium [mask-image:linear-gradient(to_right,black_calc(100%_-_10px),transparent)]">
-          {session.title}
-        </span>
+        <SessionTitle title={session.title} />
       </button>
       {/* Only the visible trailing content takes up space, so the fade stays
           close to the timestamp at rest and the actions on hover or focus. */}

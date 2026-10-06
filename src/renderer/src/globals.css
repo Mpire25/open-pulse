@@ -530,6 +530,37 @@ body {
   }
 }
 
+/* One shared fade edge replaces the old chat name with the new name from
+   left to right. The row's outer mask still handles overflow at its edge. */
+@property --chat-title-edge {
+  syntax: '<percentage>';
+  inherits: true;
+  initial-value: -16%;
+}
+
+.chat-title-sweep {
+  animation: chat-title-sweep 1s cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+.chat-title-previous {
+  mask-image: linear-gradient(to right, transparent calc(var(--chat-title-edge) - 8%), black calc(var(--chat-title-edge) + 8%));
+}
+
+.chat-title-next {
+  mask-image: linear-gradient(to right, black calc(var(--chat-title-edge) - 8%), transparent calc(var(--chat-title-edge) + 8%));
+}
+
+@keyframes chat-title-sweep {
+  from { --chat-title-edge: -16%; }
+  to { --chat-title-edge: 116%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-title-sweep { animation-duration: 1ms; }
+  .chat-title-previous { display: none; }
+  .chat-title-next { mask-image: none; }
+}
+
 /* Understated overlay scrollbars, like AppKit */
 *::-webkit-scrollbar {
   width: 9px;
