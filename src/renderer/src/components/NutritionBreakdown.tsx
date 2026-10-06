@@ -52,7 +52,7 @@ export function NutritionBreakdownPanel({
   const formatAmount = (value: number): string =>
     isSodium ? value.toFixed(2) : value < 1 ? value.toFixed(1) : def.format(value)
   const tolerance = Math.max((dayTotal ?? 0) * 0.01, isSodium ? 0.01 : 1)
-  const breakdown = entries?.length ? nutritionBreakdown(entries, key, dayTotal, tolerance) : null
+  const breakdown = nutritionBreakdown(entries ?? [], key, dayTotal, tolerance)
   const label = def.label.toLowerCase()
 
   return (
@@ -60,7 +60,7 @@ export function NutritionBreakdownPanel({
       <SectionHeader title="Breakdown" hint={HINT} />
       {error ? (
         <EmptyMessage>Food logs could not be loaded for this day.</EmptyMessage>
-      ) : !breakdown ? (
+      ) : !entries?.length && breakdown.unattributed == null ? (
         <EmptyMessage>No foods logged for this day.</EmptyMessage>
       ) : breakdown.items.length === 0 && breakdown.unattributed == null ? (
         <EmptyMessage>None of this day’s logged foods recorded {label}.</EmptyMessage>

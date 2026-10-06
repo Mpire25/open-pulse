@@ -88,3 +88,10 @@ describe('nutrition breakdown', () => {
     expect(over.items.map((item) => item.share)).toEqual([0.6, 0.4])
   })
 })
+
+test('nutrition breakdown attributes the whole day total when no foods are logged', () => {
+  const result = nutritionBreakdown([], 'calories', 400, 4)
+  expect(result.items).toEqual([])
+  expect(result.unattributed).toBe(400)
+  expect(result.unattributedShare).toBe(1)
+})
