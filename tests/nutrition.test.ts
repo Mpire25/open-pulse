@@ -69,7 +69,7 @@ describe('nutrition breakdown', () => {
       800,
       8
     )
-    expect(result.items.map((item) => [item.entry.id, item.share])).toEqual([['pasta', 0.75], ['toast', 0.25]])
+    expect(result.items.map((item) => [item.foodName, item.share])).toEqual([['pasta', 0.75], ['toast', 0.25]])
     expect(result.unattributed).toBeNull()
     expect(result.emptyCount).toBe(2)
   })
@@ -86,6 +86,26 @@ describe('nutrition breakdown', () => {
     const over = nutritionBreakdown([entry('a', 300), entry('b', 200)], 'calories', 400, 4)
     expect(over.unattributed).toBeNull()
     expect(over.items.map((item) => item.share)).toEqual([0.6, 0.4])
+  })
+
+  test('combines repeat logs of the same food across meals', () => {
+    const result = nutritionBreakdown(
+      [
+        { ...entry('Potatoes', 150, '2026-10-06T08:00:00Z'), id: 'a', mealType: 'BREAKFAST' },
+        { ...entry('toast', 200, '2026-10-06T08:05:00Z'), id: 'b' },
+        { ...entry('potatoes ', 150, '2026-10-06T13:00:00Z'), id: 'c', mealType: 'LUNCH' },
+        { ...entry('Potatoes', null, '2026-10-06T19:00:00Z'), id: 'd', mealType: 'DINNER' }
+      ],
+      'calories',
+      500,
+      5
+    )
+    expect(result.items.map((item) => [item.foodName, item.value, item.entries.map((log) => log.id)])).toEqual([
+      ['Potatoes', 300, ['a', 'c', 'd']],
+      ['toast', 200, ['b']]
+    ])
+    expect(result.items[0].share).toBe(0.6)
+    expect(result.emptyCount).toBe(0)
   })
 })
 
