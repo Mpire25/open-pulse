@@ -5,7 +5,12 @@ import { Panel, SectionHeader } from '@/components/Panel'
 import { CARD_HEIGHT, SkeletonBlock, SkeletonText } from '@/components/Skeleton'
 import { METRICS } from '@/lib/metric-registry'
 import { formatClock } from '@/lib/format'
-import { nutritionBreakdown, nutritionMealGroup, type NutritionValueKey } from '@shared/nutrition'
+import {
+  NUTRITION_MEAL_GROUPS,
+  nutritionBreakdown,
+  nutritionMealGroup,
+  type NutritionValueKey
+} from '@shared/nutrition'
 import type { MetricKey, NutritionLogEntry } from '@shared/types'
 
 export const NUTRITION_BREAKDOWN_KEYS: Partial<Record<MetricKey, NutritionValueKey>> = {
@@ -24,6 +29,15 @@ export function isNutritionBreakdownMetric(metricKey: MetricKey): boolean {
 }
 
 const HINT = 'Logged foods, largest contribution first'
+
+function foodDetail(logs: NutritionLogEntry[]): string {
+  if (logs.length === 1) {
+    const [log] = logs
+    return [nutritionMealGroup(log.mealType), formatClock(log.startTime), log.servingLabel].filter(Boolean).join(' · ')
+  }
+  const meals = new Set(logs.map((log) => nutritionMealGroup(log.mealType)))
+  return `${NUTRITION_MEAL_GROUPS.filter((meal) => meals.has(meal)).join(', ')} · ${logs.length} logs`
+}
 
 function formatShare(share: number): string {
   if (share <= 0) return '0%'
@@ -66,15 +80,11 @@ export function NutritionBreakdownPanel({
         <EmptyMessage>None of this day’s logged foods recorded {label}.</EmptyMessage>
       ) : (
         <div className="-mx-5 divide-y divide-hairline border-t border-hairline">
-          {breakdown.items.map(({ entry, value, share }) => (
+          {breakdown.items.map(({ foodName, entries: logs, value, share }) => (
             <BreakdownRow
-              key={entry.id}
-              name={entry.foodName}
-              detail={[
-                nutritionMealGroup(entry.mealType),
-                formatClock(entry.startTime),
-                entry.servingLabel
-              ].filter(Boolean).join(' · ')}
+              key={logs[0].id}
+              name={foodName}
+              detail={foodDetail(logs)}
               amount={formatAmount(value)}
               unit={def.unit}
               share={share}
@@ -136,7 +146,7 @@ function BreakdownRow({
       <div className="mt-2 h-1 overflow-hidden rounded-full bg-white/[0.04]">
         <div
           className="h-full rounded-full"
-          style={{ width: `${Math.min(share, 1) * 100}%`, background: color, }}
+          style={{ width: `${Math.min(share, 1) * 100}%`, background: color }}
         />
       </div>
     </div>

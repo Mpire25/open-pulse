@@ -36,7 +36,9 @@ export function nutritionTotals(entries: NutritionLogEntry[]): AssistantNutritio
 }
 
 export interface NutritionBreakdownItem {
-  entry: NutritionLogEntry
+  foodName: string
+  /** Every log of this food for the day, earliest first. */
+  entries: NutritionLogEntry[]
   value: number
   /** Fraction (0–1) of the day's total. */
   share: number
@@ -53,6 +55,7 @@ export interface NutritionBreakdown {
 
 /**
  * Ranks a day's logged foods by how much they contributed to one nutrient.
+ * Repeat logs of the same food (by name, across meals) are combined.
  * `dayTotal` is the rollup shown on the page; when it exceeds the logged sum
  * by more than `tolerance`, the gap is reported as unattributed.
  */
@@ -62,22 +65,28 @@ export function nutritionBreakdown(
   dayTotal: number | null,
   tolerance: number
 ): NutritionBreakdown {
-  const valued = entries.flatMap((entry) => {
-    const value = entry[key]
-    return value != null && value > 0 ? [{ entry, value }] : []
-  })
-  const logged = valued.reduce((sum, item) => sum + item.value, 0)
+  const foods = new Map<string, { foodName: string; entries: NutritionLogEntry[]; value: number }>()
+  for (const entry of [...entries].sort((a, b) => Date.parse(a.startTime) - Date.parse(b.startTime))) {
+    const name = entry.foodName.trim().toLowerCase()
+    const food = foods.get(name) ?? { foodName: entry.foodName, entries: [], value: 0 }
+    food.entries.push(entry)
+    food.value += entry[key] != null && entry[key] > 0 ? entry[key] : 0
+    foods.set(name, food)
+  }
+  const valued = [...foods.values()].filter((food) => food.value > 0)
+  const logged = valued.reduce((sum, food) => sum + food.value, 0)
   const gap = dayTotal != null ? dayTotal - logged : 0
   const unattributed = gap > tolerance ? gap : null
   const denominator = Math.max(logged + (unattributed ?? 0), 0)
   const share = (value: number): number => denominator > 0 ? value / denominator : 0
 
   return {
+    // Map order is first-logged order, so equal values keep the earlier food first.
     items: valued
-      .map((item) => ({ ...item, share: share(item.value) }))
-      .sort((a, b) => b.value - a.value || Date.parse(a.entry.startTime) - Date.parse(b.entry.startTime)),
+      .map((food) => ({ ...food, share: share(food.value) }))
+      .sort((a, b) => b.value - a.value),
     unattributed,
     unattributedShare: unattributed != null ? share(unattributed) : 0,
-    emptyCount: entries.length - valued.length
+    emptyCount: foods.size - valued.length
   }
 }
