@@ -1,10 +1,25 @@
 import { afterEach, beforeEach, expect, mock, test } from 'bun:test'
+import * as http from 'node:http'
+import type { AddressInfo } from 'node:net'
 const originalFetch = globalThis.fetch
 const secrets = new Map<string, unknown>()
 let scenario: 'success' | 'denied' | 'missing-code' = 'success'
 let exchanges = 0
 let pages: { status: number; headers: Headers; body: string }[] = []
 let callbacks: Promise<void> = Promise.resolve()
+let server: http.Server
+
+// Listen on a free port instead of the fixed redirect port, so a running OpenPulse can't collide.
+const realCreateServer = http.createServer
+mock.module('node:http', () => ({
+  ...http,
+  createServer: (...args: Parameters<typeof http.createServer>) => {
+    server = realCreateServer(...args)
+    const listen = server.listen.bind(server) as (...rest: unknown[]) => http.Server
+    server.listen = ((_port: number, ...rest: unknown[]) => listen(0, ...rest)) as typeof server.listen
+    return server
+  }
+}))
 
 async function hit(url: URL, method = 'GET'): Promise<void> {
   const response = await originalFetch(url, { method })
@@ -21,6 +36,7 @@ async function sendCallbacks(url: string): Promise<void> {
   const authorization = new URL(url)
   const state = authorization.searchParams.get('state')!
   const callback = new URL(authorization.searchParams.get('redirect_uri')!)
+  callback.port = String((server.address() as AddressInfo).port)
   // Stray requests on the fixed port must not settle the sign-in.
   callback.search = new URLSearchParams({ state: 'foreign', code: 'stray-code' }).toString()
   await hit(callback)
