@@ -121,21 +121,27 @@ export async function connectGoogle(): Promise<GoogleAuthStatus> {
         res.writeHead(404).end()
         return
       }
+      const fail = (): void => {
+        res.writeHead(400, OAUTH_CALLBACK_HEADERS).end(oauthCallbackPage('failed', 'Google Health'))
+      }
+      // Requests without our state aren't from this sign-in; ignore them so a stray hit on
+      // the fixed port can't cancel the flow.
+      if (url.searchParams.get('state') !== state) {
+        fail()
+        return
+      }
       const err = url.searchParams.get('error')
-      const returnedState = url.searchParams.get('state')
       const authCode = url.searchParams.get('code')
-      const failure = err
-        ? new Error(`Google sign-in failed: ${err}`)
-        : returnedState !== state
-          ? new Error('OAuth state mismatch.')
-          : !authCode
-            ? new Error('Google did not return an authorization code.')
-            : null
-      res
-        .writeHead(failure ? 400 : 200, OAUTH_CALLBACK_HEADERS)
-        .end(oauthCallbackPage(failure ? 'failed' : 'received', 'Google Health'))
-      if (failure) settleReject(failure)
-      else settleResolve(authCode!)
+      if (err) {
+        fail()
+        settleReject(new Error(`Google sign-in failed: ${err}`))
+      } else if (!authCode) {
+        fail()
+        settleReject(new Error('Google did not return an authorization code.'))
+      } else {
+        res.writeHead(200, OAUTH_CALLBACK_HEADERS).end(oauthCallbackPage('received', 'Google Health'))
+        settleResolve(authCode)
+      }
     })
 
     const cleanup = (): void => {
