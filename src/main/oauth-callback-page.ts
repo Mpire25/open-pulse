@@ -1,10 +1,10 @@
 /** Static local callback page; OAuth parameters never appear in the HTML. */
-export function chatGPTCallbackPage(outcome: 'received' | 'failed'): string {
+export function oauthCallbackPage(outcome: 'received' | 'failed', service: string): string {
   const failed = outcome === 'failed'
   const title = failed ? 'Sign-in interrupted' : 'Return to OpenPulse'
   const message = failed
     ? 'We couldn’t complete authorization. Return to the app and try signing in again.'
-    : 'Authorization received. OpenPulse will finish connecting your ChatGPT plan in the app.'
+    : `Authorization received. OpenPulse will finish connecting ${service} in the app.`
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -50,7 +50,7 @@ export function chatGPTCallbackPage(outcome: 'received' | 'failed'): string {
 </html>`
 }
 
-export const CHATGPT_CALLBACK_HEADERS = {
+export const OAUTH_CALLBACK_HEADERS = {
   'content-type': 'text/html; charset=utf-8',
   'cache-control': 'no-store',
   'referrer-policy': 'no-referrer',

@@ -2,6 +2,7 @@ import { shell } from 'electron'
 import { createServer } from 'node:http'
 import { createPkcePair, randomState, decodeJwtPayload } from './pkce'
 import { googleAccountScope } from './google-account-scope'
+import { oauthCallbackPage, OAUTH_CALLBACK_HEADERS } from './oauth-callback-page'
 import { getSecret, setSecret, deleteSecret, getSettings, getGoogleClientSecret } from './store'
 import type { GoogleAuthStatus } from '../shared/types'
 
@@ -30,11 +31,6 @@ const GOOGLE_SIGN_IN_TIMEOUT_MS = 60_000
 const GOOGLE_REDIRECT_PORT = 42813
 const GOOGLE_REDIRECT_PATH = '/oauth/callback'
 const GOOGLE_REDIRECT_URI = `http://127.0.0.1:${GOOGLE_REDIRECT_PORT}${GOOGLE_REDIRECT_PATH}`
-
-const LANDING_HTML = `<!doctype html><meta charset="utf-8"><title>OpenPulse</title>
-<body style="font-family:-apple-system,system-ui;background:#0a0a0c;color:#f5f5f7;display:grid;place-items:center;height:100vh;margin:0">
-<div style="text-align:center"><h2 style="font-weight:600">Connected to Google Health</h2>
-<p style="color:#a1a1a8">You can close this window and return to OpenPulse.</p></div></body>`
 
 let activeConnectReject: ((err: Error) => void) | null = null
 let authGeneration = 0
@@ -125,14 +121,21 @@ export async function connectGoogle(): Promise<GoogleAuthStatus> {
         res.writeHead(404).end()
         return
       }
-      res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' }).end(LANDING_HTML)
       const err = url.searchParams.get('error')
       const returnedState = url.searchParams.get('state')
       const authCode = url.searchParams.get('code')
-      if (err) settleReject(new Error(`Google sign-in failed: ${err}`))
-      else if (returnedState !== state) settleReject(new Error('OAuth state mismatch.'))
-      else if (!authCode) settleReject(new Error('Google did not return an authorization code.'))
-      else settleResolve(authCode)
+      const failure = err
+        ? new Error(`Google sign-in failed: ${err}`)
+        : returnedState !== state
+          ? new Error('OAuth state mismatch.')
+          : !authCode
+            ? new Error('Google did not return an authorization code.')
+            : null
+      res
+        .writeHead(failure ? 400 : 200, OAUTH_CALLBACK_HEADERS)
+        .end(oauthCallbackPage(failure ? 'failed' : 'received', 'Google Health'))
+      if (failure) settleReject(failure)
+      else settleResolve(authCode!)
     })
 
     const cleanup = (): void => {
