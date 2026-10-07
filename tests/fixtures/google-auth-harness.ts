@@ -8,6 +8,7 @@ let exchanges = 0
 let pages: { status: number; headers: Headers; body: string }[] = []
 let callbacks: Promise<void> = Promise.resolve()
 let server: http.Server
+let redirectUri: string | null = null
 
 // Listen on a free port instead of the fixed redirect port, so a running OpenPulse can't collide.
 const realCreateServer = http.createServer
@@ -35,7 +36,8 @@ mock.module('electron', () => ({
 async function sendCallbacks(url: string): Promise<void> {
   const authorization = new URL(url)
   const state = authorization.searchParams.get('state')!
-  const callback = new URL(authorization.searchParams.get('redirect_uri')!)
+  redirectUri = authorization.searchParams.get('redirect_uri')
+  const callback = new URL(redirectUri!)
   callback.port = String((server.address() as AddressInfo).port)
   // Stray requests on the fixed port must not settle the sign-in.
   callback.search = new URLSearchParams({ state: 'foreign', code: 'stray-code' }).toString()
@@ -88,6 +90,8 @@ afterEach(() => {
 test('successful callback shows the themed page after ignoring stray requests', async () => {
   expect(await auth.connectGoogle()).toMatchObject({ connected: true })
   await callbacks
+  // Must match the redirect URI registered in Google Cloud.
+  expect(redirectUri).toBe('http://127.0.0.1:42813/oauth/callback')
   expect(exchanges).toBe(1)
   expect(pages).toHaveLength(3)
   expectPage(pages[0], 400, 'Sign-in interrupted')
