@@ -117,7 +117,7 @@ export async function connectGoogle(): Promise<GoogleAuthStatus> {
 
     const server = createServer((req, res) => {
       const url = new URL(req.url ?? '/', 'http://127.0.0.1')
-      if (url.pathname !== GOOGLE_REDIRECT_PATH) {
+      if (req.method !== 'GET' || url.pathname !== GOOGLE_REDIRECT_PATH) {
         res.writeHead(404).end()
         return
       }
