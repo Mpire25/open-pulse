@@ -176,7 +176,7 @@ export async function connectGoogle(): Promise<GoogleAuthStatus> {
 
     timer = setTimeout(
       () => {
-        settleReject(new Error('Timed out waiting for Google sign-in. Check the Client ID, then try again.'))
+        settleReject(new Error('Timed out waiting for Google sign-in. Finish signing in from the most recent browser tab and check the Client ID, then try again.'))
       },
       GOOGLE_SIGN_IN_TIMEOUT_MS
     )
