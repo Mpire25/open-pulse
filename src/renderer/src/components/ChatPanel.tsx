@@ -34,7 +34,8 @@ import type { ChatController, ChatTurn } from '@/hooks/useChat'
 import {
   CHAT_TURN_TOP_INSET,
   chatResponseSpacerHeight,
-  latestChatExchange
+  latestChatExchange,
+  nextChatFollowState
 } from '@/lib/chat-scroll'
 import { cn } from '@/lib/utils'
 import type { AssistantAction } from '@shared/types'
@@ -173,27 +174,23 @@ export function ChatPanel({
   const handleConversationScroll = useCallback((): void => {
     const container = scrollRef.current
     if (!container) return
-    const scrolledUp = container.scrollTop < lastScrollTopRef.current
+    const previousTop = lastScrollTopRef.current
     lastScrollTopRef.current = container.scrollTop
-    if (performance.now() < programmaticScrollUntilRef.current) return
     const assistantId = anchoredAssistantRef.current
     if (!assistantId) return
-    if (scrolledUp) {
-      followStreamRef.current = false
-      return
-    }
     const assistantElement = container.querySelector<HTMLElement>(`[data-turn-id="${assistantId}"]`)
     if (!assistantElement) return
-    const visibleBottom = container.scrollTop + container.clientHeight
     const assistantBottom =
       assistantElement.getBoundingClientRect().bottom - container.getBoundingClientRect().top + container.scrollTop
-    followStreamRef.current = visibleBottom >= assistantBottom - 80
-  }, [])
-
-  const handleConversationWheel = useCallback((event: React.WheelEvent<HTMLDivElement>): void => {
-    if (event.deltaY >= 0) return
-    programmaticScrollUntilRef.current = 0
-    followStreamRef.current = false
+    followStreamRef.current = nextChatFollowState({
+      following: followStreamRef.current,
+      previousTop,
+      top: container.scrollTop,
+      maxTop: container.scrollHeight - container.clientHeight,
+      visibleBottom: container.scrollTop + container.clientHeight,
+      responseBottom: assistantBottom,
+      programmatic: performance.now() < programmaticScrollUntilRef.current
+    })
   }, [])
 
   useEffect(() => {
@@ -263,7 +260,6 @@ export function ChatPanel({
       <div
         ref={scrollRef}
         onScroll={handleConversationScroll}
-        onWheel={handleConversationWheel}
         className="flex-1 overflow-y-auto pb-4"
       >
         {empty ? (
