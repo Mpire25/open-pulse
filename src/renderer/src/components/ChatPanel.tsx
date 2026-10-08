@@ -107,6 +107,7 @@ export function ChatPanel({
   const anchoredAssistantRef = useRef<string | null>(null)
   const followStreamRef = useRef(true)
   const programmaticScrollUntilRef = useRef(0)
+  const lastScrollTopRef = useRef(0)
   const handleAssistantAction = useCallback((action: AssistantAction): void => {
     actionRef.current(action)
   }, [])
@@ -170,16 +171,29 @@ export function ChatPanel({
   }, [activeChatId, busy, turns])
 
   const handleConversationScroll = useCallback((): void => {
-    if (performance.now() < programmaticScrollUntilRef.current) return
     const container = scrollRef.current
+    if (!container) return
+    const scrolledUp = container.scrollTop < lastScrollTopRef.current
+    lastScrollTopRef.current = container.scrollTop
+    if (performance.now() < programmaticScrollUntilRef.current) return
     const assistantId = anchoredAssistantRef.current
-    if (!container || !assistantId) return
+    if (!assistantId) return
+    if (scrolledUp) {
+      followStreamRef.current = false
+      return
+    }
     const assistantElement = container.querySelector<HTMLElement>(`[data-turn-id="${assistantId}"]`)
     if (!assistantElement) return
     const visibleBottom = container.scrollTop + container.clientHeight
     const assistantBottom =
       assistantElement.getBoundingClientRect().bottom - container.getBoundingClientRect().top + container.scrollTop
     followStreamRef.current = visibleBottom >= assistantBottom - 80
+  }, [])
+
+  const handleConversationWheel = useCallback((event: React.WheelEvent<HTMLDivElement>): void => {
+    if (event.deltaY >= 0) return
+    programmaticScrollUntilRef.current = 0
+    followStreamRef.current = false
   }, [])
 
   useEffect(() => {
@@ -246,7 +260,12 @@ export function ChatPanel({
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div ref={scrollRef} onScroll={handleConversationScroll} className="flex-1 overflow-y-auto pb-4">
+      <div
+        ref={scrollRef}
+        onScroll={handleConversationScroll}
+        onWheel={handleConversationWheel}
+        className="flex-1 overflow-y-auto pb-4"
+      >
         {empty ? (
           <div className={cn('h-full', compact ? 'px-4' : 'mx-auto w-full max-w-[820px] px-6')}>
             <EmptyState compact={compact} onPick={(s) => send(s)} />
