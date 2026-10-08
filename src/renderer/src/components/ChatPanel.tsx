@@ -33,7 +33,9 @@ import { AssistantResponseParts } from '@/components/AssistantResponseParts'
 import type { ChatController, ChatTurn } from '@/hooks/useChat'
 import {
   CHAT_TURN_TOP_INSET,
+  USER_SCROLL_GRACE_MS,
   chatResponseSpacerHeight,
+  chatFollowAfterUserScroll,
   latestChatExchange
 } from '@/lib/chat-scroll'
 import { cn } from '@/lib/utils'
@@ -107,6 +109,9 @@ export function ChatPanel({
   const anchoredAssistantRef = useRef<string | null>(null)
   const followStreamRef = useRef(true)
   const programmaticScrollUntilRef = useRef(0)
+  const lastScrollTopRef = useRef(0)
+  const userScrollUntilRef = useRef(0)
+  const pointerScrollRef = useRef(false)
   const handleAssistantAction = useCallback((action: AssistantAction): void => {
     actionRef.current(action)
   }, [])
@@ -169,17 +174,47 @@ export function ChatPanel({
     }
   }, [activeChatId, busy, turns])
 
+  // Only scrolls that follow real user input can change following; the app's own
+  // scrolls, scroll anchoring and clamping move scrollTop without user intent.
+  const markUserScroll = useCallback((): void => {
+    userScrollUntilRef.current = performance.now() + USER_SCROLL_GRACE_MS
+  }, [])
+
+  const handleConversationPointerDown = useCallback((): void => {
+    pointerScrollRef.current = true
+  }, [])
+
+  useEffect(() => {
+    const release = (): void => {
+      pointerScrollRef.current = false
+    }
+    window.addEventListener('pointerup', release)
+    window.addEventListener('pointercancel', release)
+    return () => {
+      window.removeEventListener('pointerup', release)
+      window.removeEventListener('pointercancel', release)
+    }
+  }, [])
+
   const handleConversationScroll = useCallback((): void => {
-    if (performance.now() < programmaticScrollUntilRef.current) return
     const container = scrollRef.current
+    if (!container) return
+    const previousTop = lastScrollTopRef.current
+    lastScrollTopRef.current = container.scrollTop
+    if (!pointerScrollRef.current && performance.now() >= userScrollUntilRef.current) return
     const assistantId = anchoredAssistantRef.current
-    if (!container || !assistantId) return
+    if (!assistantId) return
     const assistantElement = container.querySelector<HTMLElement>(`[data-turn-id="${assistantId}"]`)
     if (!assistantElement) return
-    const visibleBottom = container.scrollTop + container.clientHeight
     const assistantBottom =
       assistantElement.getBoundingClientRect().bottom - container.getBoundingClientRect().top + container.scrollTop
-    followStreamRef.current = visibleBottom >= assistantBottom - 80
+    followStreamRef.current = chatFollowAfterUserScroll({
+      previousTop,
+      top: container.scrollTop,
+      maxTop: container.scrollHeight - container.clientHeight,
+      visibleBottom: container.scrollTop + container.clientHeight,
+      responseBottom: assistantBottom
+    })
   }, [])
 
   useEffect(() => {
@@ -246,7 +281,15 @@ export function ChatPanel({
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div ref={scrollRef} onScroll={handleConversationScroll} className="flex-1 overflow-y-auto pb-4">
+      <div
+        ref={scrollRef}
+        onScroll={handleConversationScroll}
+        onWheel={markUserScroll}
+        onTouchMove={markUserScroll}
+        onKeyDown={markUserScroll}
+        onPointerDown={handleConversationPointerDown}
+        className="flex-1 overflow-y-auto pb-4"
+      >
         {empty ? (
           <div className={cn('h-full', compact ? 'px-4' : 'mx-auto w-full max-w-[820px] px-6')}>
             <EmptyState compact={compact} onPick={(s) => send(s)} />

@@ -1,5 +1,7 @@
 export const CHAT_TURN_TOP_INSET = 12
+export const USER_SCROLL_GRACE_MS = 250
 const CHAT_TURN_TRAILING_SPACE = 40
+const CHAT_FOLLOW_RESUME_DISTANCE = 80
 
 export interface ScrollableChatTurn {
   id: string
@@ -19,4 +21,19 @@ export function latestChatExchange<T extends ScrollableChatTurn>(
 
 export function chatResponseSpacerHeight(viewportHeight: number, exchangeHeight: number): number {
   return Math.max(0, viewportHeight - exchangeHeight - CHAT_TURN_TRAILING_SPACE)
+}
+
+export interface ChatUserScroll {
+  previousTop: number
+  top: number
+  maxTop: number
+  visibleBottom: number
+  responseBottom: number
+}
+
+export function chatFollowAfterUserScroll(scroll: ChatUserScroll): boolean {
+  // A drop while pinned at maxTop is the browser clamping after content shrank.
+  const scrolledUp = scroll.top < scroll.previousTop && scroll.top < scroll.maxTop - 1
+  if (scrolledUp) return false
+  return scroll.visibleBottom >= scroll.responseBottom - CHAT_FOLLOW_RESUME_DISTANCE
 }
