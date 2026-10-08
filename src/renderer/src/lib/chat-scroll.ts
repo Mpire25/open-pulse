@@ -1,4 +1,5 @@
 export const CHAT_TURN_TOP_INSET = 12
+export const USER_SCROLL_GRACE_MS = 250
 const CHAT_TURN_TRAILING_SPACE = 40
 const CHAT_FOLLOW_RESUME_DISTANCE = 80
 
@@ -22,21 +23,17 @@ export function chatResponseSpacerHeight(viewportHeight: number, exchangeHeight:
   return Math.max(0, viewportHeight - exchangeHeight - CHAT_TURN_TRAILING_SPACE)
 }
 
-export interface ChatScrollSample {
-  following: boolean
+export interface ChatUserScroll {
   previousTop: number
   top: number
   maxTop: number
   visibleBottom: number
   responseBottom: number
-  programmatic: boolean
 }
 
-export function nextChatFollowState(sample: ChatScrollSample): boolean {
-  // Programmatic scrolls only move down, so any upward move is the user. A drop
-  // while pinned at maxTop is the browser clamping after content shrank.
-  const scrolledUp = sample.top < sample.previousTop && sample.top < sample.maxTop - 1
+export function chatFollowAfterUserScroll(scroll: ChatUserScroll): boolean {
+  // A drop while pinned at maxTop is the browser clamping after content shrank.
+  const scrolledUp = scroll.top < scroll.previousTop && scroll.top < scroll.maxTop - 1
   if (scrolledUp) return false
-  if (sample.programmatic) return sample.following
-  return sample.visibleBottom >= sample.responseBottom - CHAT_FOLLOW_RESUME_DISTANCE
+  return scroll.visibleBottom >= scroll.responseBottom - CHAT_FOLLOW_RESUME_DISTANCE
 }
