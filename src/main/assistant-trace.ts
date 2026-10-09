@@ -51,15 +51,31 @@ export interface AssistantRunTrace {
   finish(outcome: string, error?: string): void
 }
 
-const IDENTIFIER = /^[A-Za-z0-9_:.-]{1,64}$/
+// Reviewed against AGENT_TOOLS and PRESENTATION_TOOL. Free-text fields such as
+// query, title and labels must never be added, even if their values look like IDs.
+const STRUCTURAL_KEYS = new Set([
+  'metrics', 'metric', 'startDate', 'endDate', 'date', 'days',
+  'operation', 'detail', 'signal', 'datasetId', 'type', 'scope', 'mealGroup',
+  'sessionId', 'entryId', 'workoutId',
+  'currentStartDate', 'currentEndDate', 'currentAggregation',
+  'previousStartDate', 'previousEndDate', 'previousAggregation'
+])
+const STRUCTURAL_VALUE = /^(?:\d{4}-\d{2}-\d{2}|[A-Za-z0-9][A-Za-z0-9_:.-]{0,63})$/
+
+function textLength(value: string): string {
+  return `[text:${value.length}]`
+}
 
 /** Keeps dates, enum values and identifiers; replaces free text with its length. */
-export function traceArgs(value: unknown): unknown {
-  if (typeof value === 'string') return IDENTIFIER.test(value) ? value : `[text:${value.length}]`
-  if (typeof value === 'number' || typeof value === 'boolean' || value == null) return value
-  if (Array.isArray(value)) return value.map(traceArgs)
+export function traceArgs(value: unknown, parentKey = ''): unknown {
+  if (typeof value === 'string') {
+    return STRUCTURAL_KEYS.has(parentKey) && STRUCTURAL_VALUE.test(value) ? value : textLength(value)
+  }
+  if (typeof value === 'number') return STRUCTURAL_KEYS.has(parentKey) ? value : '[number]'
+  if (typeof value === 'boolean' || value == null) return value
+  if (Array.isArray(value)) return value.map((item) => traceArgs(item, parentKey))
   if (typeof value === 'object') {
-    return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, traceArgs(item)]))
+    return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, traceArgs(item, key)]))
   }
   return null
 }
@@ -75,7 +91,8 @@ export function traceToolResult(output: string): Record<string, unknown> {
   }
   if (parsed == null || typeof parsed !== 'object' || Array.isArray(parsed)) return result
   for (const [key, value] of Object.entries(parsed as Record<string, unknown>)) {
-    if (key === 'error' && typeof value === 'string') result.error = value
+    // Validation/API errors may echo tool arguments or response bodies.
+    if (key === 'error' && typeof value === 'string') result.error = textLength(value)
     else if (key === 'requestedRange' || key === 'range' || key === 'observations') result[key] = value
     else if (key === 'displayed' || key === 'searched' || key === 'datasetId') result[key] = value
     else if (Array.isArray(value)) result[`${key}Count`] = value.length
@@ -145,10 +162,13 @@ export function startAssistantRunTrace(meta: {
       }
     },
     toolCall({ turn, name, args, startedAt: callStartedAt, output }) {
+      const query = (args as { query?: unknown } | null)?.query
       toolCalls.push({
         turn,
         name,
-        args: name === 'research_web' ? traceArgs({ query: (args as { query?: unknown })?.query }) : traceArgs(args),
+        args: name === 'research_web'
+          ? { query: textLength(typeof query === 'string' ? query : '') }
+          : traceArgs(args),
         durationMs: Date.now() - callStartedAt,
         result: traceToolResult(output)
       })
@@ -160,7 +180,8 @@ export function startAssistantRunTrace(meta: {
         at: new Date(startedAt).toISOString(),
         ...meta,
         outcome,
-        ...(error ? { error } : {}),
+        // runChat can forward parse failures and other errors containing input.
+        ...(error ? { error: textLength(error) } : {}),
         durationMs: Date.now() - startedAt,
         requests,
         toolCalls
