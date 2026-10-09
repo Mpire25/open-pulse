@@ -834,6 +834,12 @@ function sleepByDate(points: RawDataPoint[]): Map<string, SleepDay> {
   return new Map(groupSleepDays(sessions).map((day) => [day.date, day]))
 }
 
+function matchesStoredSleepSummary(date: string, day: SleepDay | null): boolean {
+  const values = peekDay(date)?.values
+  return (day?.minutesAsleep ?? null) === (values?.sleepMinutes ?? null)
+    && (day?.efficiency ?? null) === (values?.sleepEfficiency ?? null)
+}
+
 function ensureSleepSummaryRange(
   token: string,
   start: string,
@@ -866,6 +872,12 @@ function ensureSleepSummaryRange(
         sleepMinutes: night?.minutesAsleep ?? null,
         sleepEfficiency: night?.efficiency ?? null
       })) changed = true
+      if ((fetchedAt(SLEEP_DETAIL_GROUP, date) ?? 0) > 0
+        && !matchesStoredSleepSummary(date, cachedSleepDay(peekDay(date)))) {
+        // Keep the cached stages visible, but recheck the superseded detail.
+        markFetched(SLEEP_DETAIL_GROUP, [date], 0)
+        changed = true
+      }
     }
     markFetched(SLEEP_SUMMARY_GROUP, dates, requestedAt)
     return changed
@@ -901,6 +913,7 @@ function ensureSleepRange(
     const summaryDates = new Set(
       detailDates.filter((date) => !hasNewerFetch(SLEEP_SUMMARY_GROUP, date, requestedAt))
     )
+    const staleDetailDates: string[] = []
     let changed = false
     for (const date of detailDates) {
       const night = byDate.get(date) ?? null
@@ -909,8 +922,13 @@ function ensureSleepRange(
         sleepMinutes: night?.minutesAsleep ?? null,
         sleepEfficiency: night?.efficiency ?? null
       })) changed = true
+      if (!matchesStoredSleepSummary(date, night)) staleDetailDates.push(date)
     }
     markFetched(SLEEP_DETAIL_GROUP, detailDates, requestedAt)
+    if (staleDetailDates.length) {
+      markFetched(SLEEP_DETAIL_GROUP, staleDetailDates, 0)
+      changed = true
+    }
     markFetched(SLEEP_SUMMARY_GROUP, [...summaryDates], requestedAt)
     return changed
   }, signal)
