@@ -1849,9 +1849,9 @@ export async function getDevices(force = false, signal?: AbortSignal): Promise<P
   }
 }
 
-// A tracker that was offline uploads the missed days when it next syncs, so
-// days the archive already settled can change. When the latest sync jumps
-// forward by more than this, recheck every day the gap covered.
+// Recheck days between observed tracker syncs when the latest sync timestamp
+// advances by at least six hours since the app last looked. This also happens
+// when the app was simply closed overnight, even if the tracker stayed online.
 const DEVICE_SYNC_GAP_MS = 6 * 60 * 60_000
 
 function noteDeviceSync(devices: PairedDevice[]): void {
