@@ -8,7 +8,7 @@ import type { AgentDataset } from './assistant-presentation'
 import { shiftIsoDate } from './health-api'
 import { healthAgentModelData } from './health-agent-analysis'
 import { dailyPayload, METRIC_UNITS } from './health-agent-tools'
-import { getNutritionLogs, getSeries, getSleepRange, getWorkoutsRange } from './health-service'
+import { getArchivedHealthHistory, getNutritionLogs, getSeries, getSleepRange } from './health-service'
 
 export const HEALTH_TABLE_DATASET_ID = 'health-table'
 export const HEALTH_TABLE_DAYS = 180
@@ -58,14 +58,14 @@ export async function buildHealthTable(
   const foodDates = Array.from({ length: FOOD_LOG_DAYS }, (_, index) => shiftIsoDate(today, -index)).reverse()
 
   // History comes straight from the archive; today is refreshed before answering.
-  const [history, latest, workouts, lastNight, food] = await Promise.all([
-    getSeries(candidates, start, today, false, signal, { mode: 'background', priority: 0 }),
+  const [archive, latest, lastNight, food] = await Promise.all([
+    getArchivedHealthHistory(candidates, start, today),
     getSeries(candidates, today, today, false, signal, { mode: 'await', priority: 0 }),
-    getWorkoutsRange(start, today, false, signal, { mode: 'background', priority: 0 }),
     getSleepRange(today, today, false, signal, { mode: 'await', priority: 0 }),
     Promise.all(foodDates.map((date) => getNutritionLogs(date, signal).catch(() => null)))
   ])
   signal.throwIfAborted()
+  const { series: history, workouts } = archive
   const datasets = new Map<string, AgentDataset>()
   datasets.set(SLEEP_DATASET_ID, {
     tool: 'query_sleep',

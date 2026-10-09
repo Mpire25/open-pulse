@@ -18,6 +18,7 @@ mock.module('electron', () => ({
 }))
 
 const {
+  getArchivedHealthHistory,
   getDevices,
   getIntraday,
   getSeries,
@@ -38,7 +39,7 @@ const {
 const { disconnectCodex, getCodexTokens } = await import('../src/main/codex-auth')
 const { runHealthAgentTool } = await import('../src/main/health-agent-tools')
 const { shiftIsoDate } = await import('../src/main/health-api')
-const { fetchedAt, markFetched, peekDay } = await import('../src/main/metric-store')
+const { fetchedAt, markFetched, mergeValues, peekDay } = await import('../src/main/metric-store')
 const { setSecret, deleteSecret, updateSettings } = await import('../src/main/store')
 
 const HOME_METRICS: MetricKey[] = [
@@ -144,6 +145,23 @@ describe('health request budgets', () => {
       'Google Health is not connected'
     )
     await expect(getIntraday('2026-07-01')).rejects.toThrow('Google Health is not connected')
+    expect(requests).toHaveLength(0)
+  })
+
+  test('assistant history snapshots use only the archive even when the window is cold', async () => {
+    const date = '2026-07-01'
+    const start = shiftIsoDate(date, -179)
+    const cold = getArchivedHealthHistory(['steps', 'weightKg'], start, date)
+    expect(Object.keys(cold.series.days)).toHaveLength(180)
+    expect(cold.series.days[date]).toEqual({ steps: null, weightKg: null })
+    expect(cold.workouts.workouts).toEqual([])
+    mergeValues(date, { steps: 42 })
+    const warm = getArchivedHealthHistory(['steps'], start, date)
+    expect(warm.series.days[date].steps).toBe(42)
+    // A snapshot's values do not change when a later background sync updates the archive.
+    mergeValues(date, { steps: 99 })
+    expect(warm.series.days[date].steps).toBe(42)
+    await new Promise((resolve) => setTimeout(resolve, 10))
     expect(requests).toHaveLength(0)
   })
 

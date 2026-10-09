@@ -571,6 +571,15 @@ export function createHealthFixture(record: HealthCallListener, now = evalNow, o
   }
 
   return {
+    async getArchivedHealthHistory(metrics: MetricKey[], start: string, end: string) {
+      // Match the pure archive snapshot: record what was supplied, without lookup latency.
+      const cached = createHealthFixture(record, now)
+      const [series, workouts] = await Promise.all([
+        cached.getSeries(metrics, start, end, false, undefined, { mode: 'background' }),
+        cached.getWorkoutsRange(start, end, false, undefined, { mode: 'background' })
+      ])
+      return { series, workouts }
+    },
     async getSeries(metrics: MetricKey[], start: string, end: string, _force?: boolean, _signal?: AbortSignal, sync: ReadOptions = {}): Promise<SeriesResult> {
       const [s, e] = clampRange(start, end)
       await read({ fn: 'getSeries', metrics: [...metrics], start: s, end: e, mode: sync.mode })

@@ -17,15 +17,20 @@ mock.module('../../src/main/health-agent-tools', () => ({
   METRIC_UNITS: { steps: 'steps' },
   dailyPayload: (metrics: MetricKey[], result: unknown) => ({ metrics, ...(result as object) })
 }))
+const readSeries = async (metrics: MetricKey[], start: string, end: string, mode: string) => {
+  calls.push({ start, end, mode })
+  const result = await fixture.getSeries(metrics, start, end)
+  for (const day of Object.values(result.days)) { day.weightKg = null; day.steps = mode === 'await' ? 20 : 10 }
+  cancel?.abort()
+  return result
+}
 mock.module('../../src/main/health-service', () => ({
   ...fixture,
-  getSeries: async (metrics: MetricKey[], start: string, end: string, _force: boolean, signal: AbortSignal, options: { mode: string }) => {
-    calls.push({ start, end, mode: options.mode })
-    const result = await fixture.getSeries(metrics, start, end)
-    for (const day of Object.values(result.days)) { day.weightKg = null; day.steps = options.mode === 'await' ? 20 : 10 }
-    cancel?.abort()
-    return result
-  },
+  getArchivedHealthHistory: async (metrics: MetricKey[], start: string, end: string) => ({
+    series: await readSeries(metrics, start, end, 'background'),
+    workouts: await fixture.getWorkoutsRange(start, end)
+  }),
+  getSeries: (metrics: MetricKey[], start: string, end: string) => readSeries(metrics, start, end, 'await'),
   getNutritionLogs: async (date: string) => {
     if (failFood && date === dateAgo(2)) throw new Error('Food lookup unavailable')
     return fixture.getNutritionLogs(date)
