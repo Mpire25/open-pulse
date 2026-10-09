@@ -188,6 +188,11 @@ function isFresh(group: string, date: string, now = Date.now()): boolean {
   return isPartialFetchCoolingDown(fetchedAt(partialFetchGroupId(group), date), now)
 }
 
+function hasNewerFetch(group: string, date: string, requestedAt: number): boolean {
+  return (fetchedAt(group, date) ?? 0) > requestedAt
+    || (fetchedAt(partialFetchGroupId(group), date) ?? 0) > requestedAt
+}
+
 /** Small spans are what the user is looking at; long spans are backfill. */
 function spanPriority(days: number): Priority {
   if (days <= 2) return 0
@@ -750,21 +755,23 @@ function ensureGroup(
   signal?: AbortSignal
 ): Promise<void> {
   return syncDays(group.id, start, end, force, generation, options, async (span, priority, spanSignal) => {
+    const requestedAt = Date.now()
     const result = await group.fetch(token, span.start, shiftIsoDate(span.end, 1), priority, spanSignal)
     assertCurrentAccount(generation)
     const complete = result instanceof Map
     const map = complete ? result : result.values
+    const dates = span.dates.filter((date) => !hasNewerFetch(group.id, date, requestedAt))
     let changed = false
-    for (const date of span.dates) {
+    for (const date of dates) {
       if (mergeValues(date, valuesToMerge(group.metrics, map.get(date), complete))) changed = true
     }
     const partialGroup = partialFetchGroupId(group.id)
     if (complete) {
-      clearFetched(partialGroup, span.dates)
-      markFetched(group.id, span.dates)
+      clearFetched(partialGroup, dates)
+      markFetched(group.id, dates, requestedAt)
     } else {
-      clearFetched(group.id, span.dates)
-      markFetched(partialGroup, span.dates)
+      clearFetched(group.id, dates)
+      markFetched(partialGroup, dates, requestedAt)
     }
     return changed
   }, signal)
@@ -837,6 +844,7 @@ function ensureSleepSummaryRange(
   signal?: AbortSignal
 ): Promise<void> {
   return syncDays(SLEEP_SUMMARY_GROUP, start, end, force, generation, options, async (span, priority, spanSignal) => {
+    const requestedAt = Date.now()
     const points = await listData(
       token,
       'sleep',
@@ -850,15 +858,16 @@ function ensureSleepSummaryRange(
     )
     assertCurrentAccount(generation)
     const byDate = sleepByDate(points)
+    const dates = span.dates.filter((date) => !hasNewerFetch(SLEEP_SUMMARY_GROUP, date, requestedAt))
     let changed = false
-    for (const date of span.dates) {
+    for (const date of dates) {
       const night = byDate.get(date)
       if (mergeValues(date, {
         sleepMinutes: night?.minutesAsleep ?? null,
         sleepEfficiency: night?.efficiency ?? null
       })) changed = true
     }
-    markFetched(SLEEP_SUMMARY_GROUP, span.dates)
+    markFetched(SLEEP_SUMMARY_GROUP, dates, requestedAt)
     return changed
   }, signal)
 }
@@ -873,6 +882,7 @@ function ensureSleepRange(
   signal?: AbortSignal
 ): Promise<void> {
   return syncDays(SLEEP_DETAIL_GROUP, start, end, force, generation, options, async (span, priority, spanSignal) => {
+    const requestedAt = Date.now()
     const points = await listData(
       token,
       'sleep',
@@ -885,8 +895,12 @@ function ensureSleepRange(
     )
     assertCurrentAccount(generation)
     const byDate = sleepByDate(points)
+    const dates = span.dates.filter((date) =>
+      !hasNewerFetch(SLEEP_DETAIL_GROUP, date, requestedAt)
+      && !hasNewerFetch(SLEEP_SUMMARY_GROUP, date, requestedAt)
+    )
     let changed = false
-    for (const date of span.dates) {
+    for (const date of dates) {
       const night = byDate.get(date) ?? null
       if (setSleep(date, night)) changed = true
       if (mergeValues(date, {
@@ -894,8 +908,8 @@ function ensureSleepRange(
         sleepEfficiency: night?.efficiency ?? null
       })) changed = true
     }
-    markFetched(SLEEP_DETAIL_GROUP, span.dates)
-    markFetched(SLEEP_SUMMARY_GROUP, span.dates)
+    markFetched(SLEEP_DETAIL_GROUP, dates, requestedAt)
+    markFetched(SLEEP_SUMMARY_GROUP, dates, requestedAt)
     return changed
   }, signal)
 }
@@ -1130,6 +1144,7 @@ function ensureWorkoutsRange(
   signal?: AbortSignal
 ): Promise<void> {
   return syncDays(WORKOUTS_GROUP, start, end, force, generation, options, async (span, priority, spanSignal) => {
+    const requestedAt = Date.now()
     const points = await listData(
       token,
       'exercise',
@@ -1151,12 +1166,13 @@ function ensureWorkoutsRange(
       list.push(workout)
       byDate.set(date, list)
     }
+    const dates = span.dates.filter((date) => !hasNewerFetch(WORKOUTS_GROUP, date, requestedAt))
     let changed = false
-    for (const date of span.dates) {
+    for (const date of dates) {
       const list = (byDate.get(date) ?? []).sort((a, b) => a.startTime.localeCompare(b.startTime))
       if (setWorkouts(date, list)) changed = true
     }
-    markFetched(WORKOUTS_GROUP, span.dates)
+    markFetched(WORKOUTS_GROUP, dates, requestedAt)
     return changed
   }, signal)
 }

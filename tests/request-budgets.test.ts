@@ -38,7 +38,7 @@ const {
 const { disconnectCodex, getCodexTokens } = await import('../src/main/codex-auth')
 const { runHealthAgentTool } = await import('../src/main/health-agent-tools')
 const { shiftIsoDate } = await import('../src/main/health-api')
-const { fetchedAt, markFetched } = await import('../src/main/metric-store')
+const { fetchedAt, markFetched, peekDay } = await import('../src/main/metric-store')
 const { setSecret, deleteSecret, updateSettings } = await import('../src/main/store')
 
 const HOME_METRICS: MetricKey[] = [
@@ -782,6 +782,47 @@ describe('health data freshness', () => {
     ;(release as () => void)()
     await changed
     expect((await getSeries(['steps'], date, date)).days[date].steps).toBe(2000)
+  })
+
+  test('a delayed background response cannot overwrite a newer assistant read', async () => {
+    const date = shiftIsoDate(localToday(), -20)
+    let releaseBackground!: () => void
+    let backgroundStarted!: () => void
+    const started = new Promise<void>((resolve) => { backgroundStarted = resolve })
+    globalThis.fetch = (async (input: string | URL | Request) => {
+      requests.push(String(input))
+      if (requests.length === 2) {
+        await new Promise<void>((resolve) => {
+          releaseBackground = resolve
+          backgroundStarted()
+        })
+        return stepsResponse(date, 1500)
+      }
+      return stepsResponse(date, requests.length === 1 ? 1000 : 2000)
+    }) as typeof fetch
+
+    await getSeries(['steps'], date, date)
+    markFetched('steps', [date], Date.now() - 8 * 24 * 60 * 60_000)
+    expect((await getSeries(['steps'], date, date)).days[date].steps).toBe(1000)
+    await started
+    try {
+      const output = JSON.parse(await runHealthAgentTool(
+        'query_daily_metrics',
+        { metrics: ['steps'], startDate: date, endDate: date },
+        new AbortController().signal
+      )) as { days: Record<string, { steps: number }> }
+      expect(output.days[date].steps).toBe(2000)
+      const newerTimestamp = fetchedAt('steps', date)
+
+      releaseBackground()
+      // Let the released response and its archive writes finish.
+      await new Promise((resolve) => setTimeout(resolve, 0))
+      expect(peekDay(date)?.values.steps).toBe(2000)
+      expect(fetchedAt('steps', date)).toBe(newerTimestamp)
+      expect(requests).toHaveLength(3)
+    } finally {
+      releaseBackground()
+    }
   })
 
   test('assistant reads wait for stale days to be rechecked', async () => {
