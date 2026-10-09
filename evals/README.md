@@ -30,6 +30,7 @@ bun run eval --ref 158b596             # another version, e.g. before a change
 bun run eval --cases trend,simple      # some categories or case ids
 bun run eval --repeat 3                # each case three times
 bun run eval --compare evals/results/a.json --compare evals/results/b.json
+bun run eval --rescore evals/results/a.json   # re-check saved answers after changing checks
 bun run eval --sign-out                # revoke and delete the eval session
 ```
 

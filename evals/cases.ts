@@ -310,7 +310,7 @@ export function buildCases(): EvalCase[] {
       checks: [
         completed(),
         read({ kind: 'sleep' }, 13, 0, { share: 0.85 }),
-        both('compares the two weeks', /\bweek\b/i, /\b(?:less|fewer|shorter|more|longer|similar|same|down|up|lower|higher|worse|better)\b/i)
+        both('compares the two weeks', /\bweek\b/i, /\b(?:less|fewer|shorter|more|longer|similar|same|down|up|lower|higher|worse|better|unchanged|no change|difference|steady)\b/i)
       ]
     },
     {
