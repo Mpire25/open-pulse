@@ -1,5 +1,6 @@
 import { METRIC_KEYS, type MetricKey } from '../shared/types'
 import {
+  type SyncOptions,
   getBodyMeasurements,
   getDevices,
   getIntraday,
@@ -11,6 +12,10 @@ import {
 import { shiftIsoDate } from './health-api'
 import { pearsonCorrelation, summarizeMetricPoints } from './health-agent-analysis'
 import { DAILY_METRICS_TOOL_DESCRIPTION, SLEEP_TOOL_DESCRIPTION } from './health-agent-date-semantics'
+
+// The assistant answers from what it reads, so it waits for stale days to be
+// rechecked rather than taking archived values, and the user is waiting on it.
+const ASSISTANT_SYNC: SyncOptions = { mode: 'await', priority: 0 }
 
 export interface AgentToolSpec {
   type: 'function'
@@ -250,7 +255,7 @@ export async function runHealthAgentTool(
     case 'query_daily_metrics': {
       const metrics = parseMetrics(args.metrics, 8)
       const { start, end } = parseRange(args, 120)
-      return JSON.stringify(dailyPayload(metrics, await getSeries(metrics, start, end, false, signal)))
+      return JSON.stringify(dailyPayload(metrics, await getSeries(metrics, start, end, false, signal, ASSISTANT_SYNC)))
     }
     case 'analyze_daily_metrics': {
       const metrics = parseMetrics(args.metrics, 2)
@@ -262,7 +267,7 @@ export async function runHealthAgentTool(
       if (operation === 'correlation' && metrics.length !== 2) {
         throw new Error('Correlation requires exactly two metrics.')
       }
-      const result = await getSeries(metrics, start, end, false, signal)
+      const result = await getSeries(metrics, start, end, false, signal, ASSISTANT_SYNC)
       const dates = Object.keys(result.days).sort()
       const summaries = Object.fromEntries(
         metrics.map((metric) => [
@@ -313,7 +318,7 @@ export async function runHealthAgentTool(
       if (args.detail !== 'summary' && args.detail !== 'detailed') {
         throw new Error('Unsupported sleep detail level.')
       }
-      const result = await getSleepRange(start, end, false, signal)
+      const result = await getSleepRange(start, end, false, signal, ASSISTANT_SYNC)
       return JSON.stringify({
         source: result.source,
         requestedRange: { start, end },
@@ -326,7 +331,7 @@ export async function runHealthAgentTool(
     }
     case 'query_workouts': {
       const { start, end } = parseRange(args, 90)
-      const result = await getWorkoutsRange(start, end, false, signal)
+      const result = await getWorkoutsRange(start, end, false, signal, ASSISTANT_SYNC)
       return JSON.stringify({
         source: result.source,
         requestedRange: { start, end },

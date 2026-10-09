@@ -18,13 +18,16 @@ mock.module('electron', () => ({
 }))
 
 const {
+  getDevices,
   getIntraday,
   getSeries,
   getSleepRange,
   getWorkoutHeartRate,
   getWorkoutsRange,
   isHealthCacheTimestampFresh,
-  resetHealthAccount
+  onHealthDataChanged,
+  resetHealthAccount,
+  syncRecentHistory
 } = await import('../src/main/health-service')
 const {
   disconnectGoogle,
@@ -35,7 +38,7 @@ const {
 const { disconnectCodex, getCodexTokens } = await import('../src/main/codex-auth')
 const { runHealthAgentTool } = await import('../src/main/health-agent-tools')
 const { shiftIsoDate } = await import('../src/main/health-api')
-const { markFetched } = await import('../src/main/metric-store')
+const { fetchedAt, markFetched } = await import('../src/main/metric-store')
 const { setSecret, deleteSecret, updateSettings } = await import('../src/main/store')
 
 const HOME_METRICS: MetricKey[] = [
@@ -536,7 +539,7 @@ describe('health request budgets', () => {
     expect(requests[0]).toContain('/heart-rate/dataPoints:rollUp')
   })
 
-  test('applies the normal freshness windows to workout heart-rate cache timestamps', () => {
+  test('rechecks every age of cached data, less often the older it is', () => {
     const now = Date.now()
     const today = new Date(now)
     const todayDate = [
@@ -544,14 +547,28 @@ describe('health request budgets', () => {
       String(today.getMonth() + 1).padStart(2, '0'),
       String(today.getDate()).padStart(2, '0')
     ].join('-')
-    const recentDate = shiftIsoDate(todayDate, -1)
-    const settledDate = shiftIsoDate(todayDate, -3)
+    const hour = 60 * 60_000
+    const day = 24 * hour
 
     expect(isHealthCacheTimestampFresh(todayDate, now - 60_000, now)).toBe(true)
     expect(isHealthCacheTimestampFresh(todayDate, now - 2 * 60_000, now)).toBe(false)
-    expect(isHealthCacheTimestampFresh(recentDate, now - 29 * 60_000, now)).toBe(true)
-    expect(isHealthCacheTimestampFresh(recentDate, now - 30 * 60_000, now)).toBe(false)
-    expect(isHealthCacheTimestampFresh(settledDate, 0, now)).toBe(true)
+    for (const recentDate of [shiftIsoDate(todayDate, -1), shiftIsoDate(todayDate, -3)]) {
+      expect(isHealthCacheTimestampFresh(recentDate, now - 29 * 60_000, now)).toBe(true)
+      expect(isHealthCacheTimestampFresh(recentDate, now - 30 * 60_000, now)).toBe(false)
+    }
+    for (const weekDate of [shiftIsoDate(todayDate, -4), shiftIsoDate(todayDate, -14)]) {
+      expect(isHealthCacheTimestampFresh(weekDate, now - 23 * hour, now)).toBe(true)
+      expect(isHealthCacheTimestampFresh(weekDate, now - day, now)).toBe(false)
+    }
+    for (const historyDate of [shiftIsoDate(todayDate, -15), shiftIsoDate(todayDate, -179)]) {
+      expect(isHealthCacheTimestampFresh(historyDate, now - 6 * day, now)).toBe(true)
+      expect(isHealthCacheTimestampFresh(historyDate, now - 7 * day, now)).toBe(false)
+    }
+    const archivedDate = shiftIsoDate(todayDate, -180)
+    expect(isHealthCacheTimestampFresh(archivedDate, now - 29 * day, now)).toBe(true)
+    expect(isHealthCacheTimestampFresh(archivedDate, now - 30 * day, now)).toBe(false)
+    // Settled history is no longer trusted forever.
+    expect(isHealthCacheTimestampFresh(archivedDate, 0, now)).toBe(false)
   })
 
   test('surfaces Google refresh failures instead of substituting generated data', async () => {
@@ -715,4 +732,112 @@ describe('health request budgets', () => {
     await expect(second).resolves.toMatchObject({ source: 'live' })
     expect(requests).toHaveLength(1)
   })
+})
+
+describe('health data freshness', () => {
+  function localToday(): string {
+    const now = new Date()
+    return [
+      now.getFullYear(),
+      String(now.getMonth() + 1).padStart(2, '0'),
+      String(now.getDate()).padStart(2, '0')
+    ].join('-')
+  }
+
+  function stepsResponse(date: string, steps: number): Response {
+    const [year, month, day] = date.split('-').map(Number)
+    return new Response(JSON.stringify({
+      rollupDataPoints: [{ civilStartTime: { date: { year, month, day } }, steps: { countSum: String(steps) } }]
+    }), { status: 200 })
+  }
+
+  function changeNotification(): Promise<void> {
+    return new Promise((resolve) => onHealthDataChanged(() => {
+      onHealthDataChanged(null)
+      resolve()
+    }))
+  }
+
+  afterEach(() => onHealthDataChanged(null))
+
+  test('shows stored days at once and rechecks stale ones in the background', async () => {
+    const date = shiftIsoDate(localToday(), -20)
+    let steps = 1000
+    let release: (() => void) | null = null
+    globalThis.fetch = (async (input: string | URL | Request) => {
+      requests.push(String(input))
+      if (release === null && steps === 2000) await new Promise<void>((resolve) => { release = resolve })
+      return stepsResponse(date, steps)
+    }) as typeof fetch
+
+    // Never fetched: the first read waits for Google.
+    expect((await getSeries(['steps'], date, date)).days[date].steps).toBe(1000)
+
+    // Past its weekly recheck, the stored value is served while Google is asked again.
+    markFetched('steps', [date], Date.now() - 8 * 24 * 60 * 60_000)
+    steps = 2000
+    const changed = changeNotification()
+    expect((await getSeries(['steps'], date, date)).days[date].steps).toBe(1000)
+    while (!release) await new Promise((resolve) => setTimeout(resolve, 5))
+    ;(release as () => void)()
+    await changed
+    expect((await getSeries(['steps'], date, date)).days[date].steps).toBe(2000)
+  })
+
+  test('assistant reads wait for stale days to be rechecked', async () => {
+    const date = shiftIsoDate(localToday(), -20)
+    let steps = 1000
+    globalThis.fetch = (async (input: string | URL | Request) => {
+      requests.push(String(input))
+      return stepsResponse(date, steps)
+    }) as typeof fetch
+    await getSeries(['steps'], date, date)
+    markFetched('steps', [date], Date.now() - 8 * 24 * 60 * 60_000)
+    steps = 2000
+
+    const output = JSON.parse(await runHealthAgentTool(
+      'query_daily_metrics',
+      { metrics: ['steps'], startDate: date, endDate: date },
+      new AbortController().signal
+    )) as { days: Record<string, { steps: number }> }
+    expect(output.days[date].steps).toBe(2000)
+  })
+
+  test('a tracker sync after a long gap rechecks every day the gap covered', async () => {
+    const today = localToday()
+    let lastSyncTime = new Date(Date.now() - 10 * 24 * 60 * 60_000).toISOString()
+    globalThis.fetch = (async (input: string | URL | Request) => {
+      requests.push(String(input))
+      if (String(input).includes('/pairedDevices')) {
+        return new Response(JSON.stringify({ pairedDevices: [{ deviceVersion: 'Air', lastSyncTime }] }), { status: 200 })
+      }
+      return new Response(JSON.stringify({ dataPoints: [], rollupDataPoints: [] }), { status: 200 })
+    }) as typeof fetch
+
+    await getDevices(true)
+    const insideGap = shiftIsoDate(today, -8)
+    const beforeGap = shiftIsoDate(today, -12)
+    markFetched('steps', [insideGap, beforeGap])
+
+    lastSyncTime = new Date().toISOString()
+    const changed = changeNotification()
+    await getDevices(true)
+    await changed
+    expect(fetchedAt('steps', insideGap)).toBe(0)
+    expect(fetchedAt('steps', beforeGap)).not.toBe(0)
+  })
+
+  test('the background sync fills the rolling window once, then only rechecks what is due', async () => {
+    await syncRecentHistory()
+    const firstSweep = requests.length
+    expect(firstSweep).toBeGreaterThan(0)
+
+    // Range requests per data type (a few types are capped at two weeks per
+    // request), not one request per day.
+    expect(firstSweep).toBeLessThanOrEqual(60)
+
+    requests = []
+    await syncRecentHistory()
+    expect(requests).toEqual([])
+  }, 60_000)
 })

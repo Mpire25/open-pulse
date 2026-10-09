@@ -38,6 +38,8 @@ export interface DayRecord {
 interface Archive {
   version: number
   days: Record<string, DayRecord>
+  /** Latest tracker sync seen (epoch ms), used to spot days a late sync may have changed. */
+  deviceLastSync?: number
 }
 
 const VERSION = 1
@@ -56,7 +58,11 @@ function load(): Archive {
       const plain = safeStorage.decryptString(readFileSync(filePath()))
       const parsed = JSON.parse(plain) as Partial<Archive>
       if (parsed.version === VERSION && parsed.days && typeof parsed.days === 'object') {
-        archive = { version: VERSION, days: parsed.days as Record<string, DayRecord> }
+        archive = {
+          version: VERSION,
+          days: parsed.days as Record<string, DayRecord>,
+          ...(typeof parsed.deviceLastSync === 'number' ? { deviceLastSync: parsed.deviceLastSync } : {})
+        }
       }
     }
   } catch (err) {
@@ -105,21 +111,34 @@ export function clearFetched(group: string, dates: string[]): void {
   scheduleSave()
 }
 
-export function mergeValues(date: string, values: DayValues): void {
-  Object.assign(dayRecord(date).values, values)
+/** Returns whether any stored value changed. */
+export function mergeValues(date: string, values: DayValues): boolean {
+  const record = dayRecord(date)
+  const changed = Object.entries(values).some(
+    ([metric, value]) => (record.values[metric as keyof DayValues] ?? null) !== (value ?? null)
+  )
+  Object.assign(record.values, values)
   scheduleSave()
+  return changed
 }
 
-export function setSleep(date: string, day: SleepDay | null): void {
+/** Returns whether the stored sleep changed. */
+export function setSleep(date: string, day: SleepDay | null): boolean {
   const record = dayRecord(date)
+  const changed = JSON.stringify(record.sleepDay ?? null) !== JSON.stringify(day)
   record.sleepDay = day
   delete record.sleep
   scheduleSave()
+  return changed
 }
 
-export function setWorkouts(date: string, workouts: Workout[]): void {
-  dayRecord(date).workouts = workouts
+/** Returns whether the stored workouts changed. */
+export function setWorkouts(date: string, workouts: Workout[]): boolean {
+  const record = dayRecord(date)
+  const changed = JSON.stringify(record.workouts ?? []) !== JSON.stringify(workouts)
+  record.workouts = workouts
   scheduleSave()
+  return changed
 }
 
 export function setIntradaySteps(date: string, stepsHourly: HourlySteps[]): void {
@@ -172,9 +191,34 @@ export function archivedMetricCoverage(): Record<string, ArchivedMetricCoverage>
   return coverage
 }
 
+// Stale days keep their fetch entries at timestamp 0: still known, so views
+// show the stored values while they revalidate, but older than any TTL.
+function markRecordStale(record: DayRecord): void {
+  for (const group of Object.keys(record.fetched)) record.fetched[group] = 0
+}
+
 /** Refresh: keep values (views stay populated) but force the next query to refetch. */
 export function markAllStale(): void {
-  for (const record of Object.values(load().days)) record.fetched = {}
+  for (const record of Object.values(load().days)) markRecordStale(record)
+  scheduleSave()
+}
+
+/** A late tracker sync may have changed these days; recheck them on next use. */
+export function markDaysStale(dates: string[]): void {
+  for (const date of dates) {
+    const record = load().days[date]
+    if (record) markRecordStale(record)
+  }
+  scheduleSave()
+}
+
+export function deviceLastSync(): number | null {
+  return load().deviceLastSync ?? null
+}
+
+export function setDeviceLastSync(at: number): void {
+  load().deviceLastSync = at
+  scheduleSave()
 }
 
 /** Disconnect: drop everything, including the encrypted file on disk. */

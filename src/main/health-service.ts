@@ -53,8 +53,10 @@ import {
 } from './health-api'
 import {
   clearFetched,
+  deviceLastSync,
   fetchedAt,
   markAllStale,
+  markDaysStale,
   markFetched,
   mergeValues,
   peekDay,
@@ -62,12 +64,14 @@ import {
   setHeartDetail,
   setIntradayHeart,
   setIntradaySteps,
+  setDeviceLastSync,
   setSleep,
   setWorkouts,
   wipeArchive
 } from './metric-store'
 import {
   contiguousDateSpans,
+  type DateSpan,
   isPartialFetchCoolingDown,
   partialFetchGroupId,
   valuesToMerge
@@ -156,14 +160,26 @@ function normalizeRange(start: string, end: string): [string, string] {
   return [s, e]
 }
 
+// Older days change less often but still can — late tracker syncs, backdated
+// weight or food logs, reprocessed sleep — so every age gets rechecked, just
+// less often the older it is.
 const TTL_TODAY_MS = 2 * 60_000
 const TTL_RECENT_MS = 30 * 60_000 // late device syncs still land on recent days
+const TTL_WEEKS_MS = 24 * 60 * 60_000
+const TTL_HISTORY_MS = 7 * 24 * 60 * 60_000
+const TTL_ARCHIVE_MS = 30 * 24 * 60 * 60_000
+
+/** The rolling window the background sync keeps current. */
+export const RECENT_HISTORY_DAYS = 180
 
 export function isHealthCacheTimestampFresh(date: string, at: number, now = Date.now()): boolean {
   const today = isoDate(new Date(now))
-  if (date >= today) return now - at < TTL_TODAY_MS
-  if (date >= shiftIsoDate(today, -2)) return now - at < TTL_RECENT_MS
-  return true // settled history: only a forced refresh refetches
+  const age = now - at
+  if (date >= today) return age < TTL_TODAY_MS
+  if (date >= shiftIsoDate(today, -3)) return age < TTL_RECENT_MS
+  if (date >= shiftIsoDate(today, -14)) return age < TTL_WEEKS_MS
+  if (date >= shiftIsoDate(today, -(RECENT_HISTORY_DAYS - 1))) return age < TTL_HISTORY_MS
+  return age < TTL_ARCHIVE_MS
 }
 
 function isFresh(group: string, date: string, now = Date.now()): boolean {
@@ -177,6 +193,110 @@ function spanPriority(days: number): Priority {
   if (days <= 2) return 0
   if (days <= 31) return 1
   return 2
+}
+
+export interface SyncOptions {
+  /**
+   * 'background' (the default) answers from the archive and rechecks stale
+   * days afterwards, notifying views if anything changed. 'await' fetches every
+   * stale day first. Days never fetched are always awaited.
+   */
+  mode?: 'await' | 'background'
+  /** Overrides the span-size priority, e.g. for an answer the user is waiting on. */
+  priority?: Priority
+  /** Notify views when this sync changes stored data. */
+  notify?: boolean
+}
+
+type SpanFetcher = (span: DateSpan, priority: Priority, signal?: AbortSignal) => Promise<boolean>
+
+let healthDataChangedListener: (() => void) | null = null
+let healthDataChangedTimer: NodeJS.Timeout | null = null
+
+/** Called (debounced) when a background recheck changes data views may show. */
+export function onHealthDataChanged(listener: (() => void) | null): void {
+  healthDataChangedListener = listener
+}
+
+function notifyHealthDataChanged(): void {
+  if (healthDataChangedTimer) return
+  healthDataChangedTimer = setTimeout(() => {
+    healthDataChangedTimer = null
+    healthDataChangedListener?.()
+  }, 300)
+}
+
+const revalidatingDays = new Set<string>()
+const revalidationControllers = new Set<AbortController>()
+
+function fetchSpans(
+  dates: string[],
+  options: SyncOptions,
+  fetchSpan: SpanFetcher,
+  signal?: AbortSignal
+): Promise<boolean> {
+  return Promise.all(
+    contiguousDateSpans(dates).map((span) =>
+      fetchSpan(span, options.priority ?? spanPriority(span.dates.length), signal)
+    )
+  ).then((changes) => changes.some(Boolean))
+}
+
+/** Rechecks days views already show without making them wait. */
+function revalidateInBackground(
+  groupId: string,
+  dates: string[],
+  generation: number,
+  options: SyncOptions,
+  fetchSpan: SpanFetcher
+): void {
+  const pending = dates.filter((date) => !revalidatingDays.has(`${groupId}:${date}`))
+  if (!pending.length) return
+  const keys = pending.map((date) => `${groupId}:${date}`)
+  for (const key of keys) revalidatingDays.add(key)
+  const controller = new AbortController()
+  revalidationControllers.add(controller)
+  fetchSpans(pending, options, fetchSpan, controller.signal)
+    .then((changed) => {
+      if (changed && generation === healthAccountGeneration) notifyHealthDataChanged()
+    }, (error) => {
+      if (controller.signal.aborted || error instanceof HealthAccountChangedError) return
+      console.error(`[health] background recheck of ${groupId} failed:`, error)
+    })
+    .finally(() => {
+      revalidationControllers.delete(controller)
+      for (const key of keys) revalidatingDays.delete(key)
+    })
+}
+
+/**
+ * Makes a fetch group current for [start, end]: never-fetched days are fetched
+ * before returning; stale days are fetched first or rechecked in the
+ * background, depending on the mode.
+ */
+async function syncDays(
+  groupId: string,
+  start: string,
+  end: string,
+  force: boolean,
+  generation: number,
+  options: SyncOptions,
+  fetchSpan: SpanFetcher,
+  signal?: AbortSignal
+): Promise<void> {
+  const stale = listDates(start, end).filter((d) => force || !isFresh(groupId, d))
+  if (stale.length === 0) return
+  const background = !force && (options.mode ?? 'background') === 'background'
+  const known = (date: string): boolean =>
+    fetchedAt(groupId, date) != null || fetchedAt(partialFetchGroupId(groupId), date) != null
+  const now = background ? stale.filter((date) => !known(date)) : stale
+  if (background) {
+    const later = stale.filter(known)
+    if (later.length) revalidateInBackground(groupId, later, generation, options, fetchSpan)
+  }
+  if (now.length === 0) return
+  const changed = await fetchSpans(now, options, fetchSpan, signal)
+  if (changed && options.notify && generation === healthAccountGeneration) notifyHealthDataChanged()
 }
 
 function num(value: unknown): number | null {
@@ -616,34 +736,27 @@ const SLEEP_METRICS: MetricKey[] = ['sleepMinutes', 'sleepEfficiency']
 // Group syncing
 
 /**
- * Makes `group` fresh for every day in [start, end]. Fetches one span that
- * covers all missing days; days that come back empty are stored as explicit
- * nulls so they count as known.
+ * Makes `group` fresh for every day in [start, end]. Days that come back empty
+ * are stored as explicit nulls so they count as known.
  */
-async function ensureGroup(
+function ensureGroup(
   token: string,
   group: FetchGroup,
   start: string,
   end: string,
   force: boolean,
   generation: number,
+  options: SyncOptions,
   signal?: AbortSignal
 ): Promise<void> {
-  const missing = listDates(start, end).filter((d) => force || !isFresh(group.id, d))
-  if (missing.length === 0) return
-  await Promise.all(contiguousDateSpans(missing).map(async (span) => {
-    const result = await group.fetch(
-      token,
-      span.start,
-      shiftIsoDate(span.end, 1),
-      spanPriority(span.dates.length),
-      signal
-    )
+  return syncDays(group.id, start, end, force, generation, options, async (span, priority, spanSignal) => {
+    const result = await group.fetch(token, span.start, shiftIsoDate(span.end, 1), priority, spanSignal)
     assertCurrentAccount(generation)
     const complete = result instanceof Map
     const map = complete ? result : result.values
+    let changed = false
     for (const date of span.dates) {
-      mergeValues(date, valuesToMerge(group.metrics, map.get(date), complete))
+      if (mergeValues(date, valuesToMerge(group.metrics, map.get(date), complete))) changed = true
     }
     const partialGroup = partialFetchGroupId(group.id)
     if (complete) {
@@ -653,7 +766,8 @@ async function ensureGroup(
       clearFetched(group.id, span.dates)
       markFetched(partialGroup, span.dates)
     }
-  }))
+    return changed
+  }, signal)
 }
 
 const inFlight = new Map<string, SharedOperation<void>>()
@@ -687,14 +801,19 @@ function ensureGroupOnce(
   end: string,
   force: boolean,
   generation: number,
+  options: SyncOptions,
   signal?: AbortSignal
 ): Promise<void> {
-  const key = `${generation}:${group.id}:${start}:${end}:${force}`
+  const key = `${generation}:${group.id}:${start}:${end}:${force}:${syncOptionsKey(options)}`
   return sharedHealthOperation(
     key,
     signal,
-    (sharedSignal) => ensureGroup(token, group, start, end, force, generation, sharedSignal)
+    (sharedSignal) => ensureGroup(token, group, start, end, force, generation, options, sharedSignal)
   )
+}
+
+function syncOptionsKey(options: SyncOptions): string {
+  return `${options.mode ?? 'background'}:${options.priority ?? ''}:${options.notify ? 'notify' : ''}`
 }
 
 // ---------------------------------------------------------------------------
@@ -708,17 +827,16 @@ function sleepByDate(points: RawDataPoint[]): Map<string, SleepDay> {
   return new Map(groupSleepDays(sessions).map((day) => [day.date, day]))
 }
 
-async function ensureSleepSummaryRange(
+function ensureSleepSummaryRange(
   token: string,
   start: string,
   end: string,
   force: boolean,
   generation: number,
+  options: SyncOptions,
   signal?: AbortSignal
 ): Promise<void> {
-  const missing = listDates(start, end).filter((d) => force || !isFresh(SLEEP_SUMMARY_GROUP, d))
-  if (missing.length === 0) return
-  await Promise.all(contiguousDateSpans(missing).map(async (span) => {
+  return syncDays(SLEEP_SUMMARY_GROUP, start, end, force, generation, options, async (span, priority, spanSignal) => {
     const points = await listData(
       token,
       'sleep',
@@ -726,34 +844,35 @@ async function ensureSleepSummaryRange(
       span.start,
       shiftIsoDate(span.end, 1),
       'google-wearables',
-      spanPriority(span.dates.length),
-      signal,
+      priority,
+      spanSignal,
       SLEEP_SUMMARY_FIELDS
     )
     assertCurrentAccount(generation)
     const byDate = sleepByDate(points)
+    let changed = false
     for (const date of span.dates) {
       const night = byDate.get(date)
-      mergeValues(date, {
+      if (mergeValues(date, {
         sleepMinutes: night?.minutesAsleep ?? null,
         sleepEfficiency: night?.efficiency ?? null
-      })
+      })) changed = true
     }
     markFetched(SLEEP_SUMMARY_GROUP, span.dates)
-  }))
+    return changed
+  }, signal)
 }
 
-async function ensureSleepRange(
+function ensureSleepRange(
   token: string,
   start: string,
   end: string,
   force: boolean,
   generation: number,
+  options: SyncOptions,
   signal?: AbortSignal
 ): Promise<void> {
-  const missing = listDates(start, end).filter((d) => force || !isFresh(SLEEP_DETAIL_GROUP, d))
-  if (missing.length === 0) return
-  await Promise.all(contiguousDateSpans(missing).map(async (span) => {
+  return syncDays(SLEEP_DETAIL_GROUP, start, end, force, generation, options, async (span, priority, spanSignal) => {
     const points = await listData(
       token,
       'sleep',
@@ -761,22 +880,24 @@ async function ensureSleepRange(
       span.start,
       shiftIsoDate(span.end, 1),
       'google-wearables',
-      spanPriority(span.dates.length),
-      signal
+      priority,
+      spanSignal
     )
     assertCurrentAccount(generation)
     const byDate = sleepByDate(points)
+    let changed = false
     for (const date of span.dates) {
       const night = byDate.get(date) ?? null
-      setSleep(date, night)
-      mergeValues(date, {
+      if (setSleep(date, night)) changed = true
+      if (mergeValues(date, {
         sleepMinutes: night?.minutesAsleep ?? null,
         sleepEfficiency: night?.efficiency ?? null
-      })
+      })) changed = true
     }
     markFetched(SLEEP_DETAIL_GROUP, span.dates)
     markFetched(SLEEP_SUMMARY_GROUP, span.dates)
-  }))
+    return changed
+  }, signal)
 }
 
 function ensureSleepOnce(
@@ -785,13 +906,14 @@ function ensureSleepOnce(
   end: string,
   force: boolean,
   generation: number,
+  options: SyncOptions,
   signal?: AbortSignal
 ): Promise<void> {
-  const key = `${generation}:${SLEEP_DETAIL_GROUP}:${start}:${end}:${force}`
+  const key = `${generation}:${SLEEP_DETAIL_GROUP}:${start}:${end}:${force}:${syncOptionsKey(options)}`
   return sharedHealthOperation(
     key,
     signal,
-    (sharedSignal) => ensureSleepRange(token, start, end, force, generation, sharedSignal)
+    (sharedSignal) => ensureSleepRange(token, start, end, force, generation, options, sharedSignal)
   )
 }
 
@@ -801,13 +923,14 @@ function ensureSleepSummaryOnce(
   end: string,
   force: boolean,
   generation: number,
+  options: SyncOptions,
   signal?: AbortSignal
 ): Promise<void> {
-  const key = `${generation}:${SLEEP_SUMMARY_GROUP}:${start}:${end}:${force}`
+  const key = `${generation}:${SLEEP_SUMMARY_GROUP}:${start}:${end}:${force}:${syncOptionsKey(options)}`
   return sharedHealthOperation(
     key,
     signal,
-    (sharedSignal) => ensureSleepSummaryRange(token, start, end, force, generation, sharedSignal)
+    (sharedSignal) => ensureSleepSummaryRange(token, start, end, force, generation, options, sharedSignal)
   )
 }
 
@@ -997,17 +1120,16 @@ function mapWorkout(point: RawDataPoint): Workout | null {
 
 const WORKOUTS_GROUP = 'workouts-v2'
 
-async function ensureWorkoutsRange(
+function ensureWorkoutsRange(
   token: string,
   start: string,
   end: string,
   force: boolean,
   generation: number,
+  options: SyncOptions,
   signal?: AbortSignal
 ): Promise<void> {
-  const missing = listDates(start, end).filter((d) => force || !isFresh(WORKOUTS_GROUP, d))
-  if (missing.length === 0) return
-  await Promise.all(contiguousDateSpans(missing).map(async (span) => {
+  return syncDays(WORKOUTS_GROUP, start, end, force, generation, options, async (span, priority, spanSignal) => {
     const points = await listData(
       token,
       'exercise',
@@ -1015,8 +1137,8 @@ async function ensureWorkoutsRange(
       span.start,
       shiftIsoDate(span.end, 1),
       'all-sources',
-      spanPriority(span.dates.length),
-      signal
+      priority,
+      spanSignal
     )
     assertCurrentAccount(generation)
     const byDate = new Map<string, Workout[]>()
@@ -1029,12 +1151,14 @@ async function ensureWorkoutsRange(
       list.push(workout)
       byDate.set(date, list)
     }
+    let changed = false
     for (const date of span.dates) {
       const list = (byDate.get(date) ?? []).sort((a, b) => a.startTime.localeCompare(b.startTime))
-      setWorkouts(date, list)
+      if (setWorkouts(date, list)) changed = true
     }
     markFetched(WORKOUTS_GROUP, span.dates)
-  }))
+    return changed
+  }, signal)
 }
 
 const workoutTrackCache = new Map<string, WorkoutTrackResult>()
@@ -1069,7 +1193,7 @@ export async function getWorkoutHeartRate(
 
   let workout = peekDay(d)?.workouts?.find((candidate) => candidate.id === workoutId)
   if (!workout) {
-    await ensureWorkoutsRange(token, d, d, false, generation, signal)
+    await ensureWorkoutsRange(token, d, d, false, generation, { mode: 'await' }, signal)
     assertCurrentAccount(generation)
     workout = peekDay(d)?.workouts?.find((candidate) => candidate.id === workoutId)
   }
@@ -1384,7 +1508,8 @@ export async function getSeries(
   start: string,
   end: string,
   force = false,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  options: SyncOptions = {}
 ): Promise<SeriesResult> {
   const generation = healthAccountGeneration
   const [s, e] = normalizeRange(start, end)
@@ -1393,7 +1518,7 @@ export async function getSeries(
 
   const groups = [...new Set(metrics.map((m) => GROUP_BY_METRIC.get(m)).filter((g): g is FetchGroup => g != null))]
   const jobs: Array<Promise<unknown>> = groups.map((group) =>
-    ensureGroupOnce(token, group, s, e, force, generation, signal).catch((err) => {
+    ensureGroupOnce(token, group, s, e, force, generation, options, signal).catch((err) => {
       rethrowIfAborted(err)
       console.error(`[health] ${group.id} failed for ${s}..${e}:`, err)
       return 'failed'
@@ -1401,7 +1526,7 @@ export async function getSeries(
   )
   if (metrics.some((m) => SLEEP_METRICS.includes(m))) {
     jobs.push(
-      ensureSleepSummaryOnce(token, s, e, force, generation, signal).catch((err) => {
+      ensureSleepSummaryOnce(token, s, e, force, generation, options, signal).catch((err) => {
         rethrowIfAborted(err)
         console.error(`[health] sleep failed for ${s}..${e}:`, err)
         return 'failed'
@@ -1430,14 +1555,15 @@ export async function getSleepRange(
   start: string,
   end: string,
   force = false,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  options: SyncOptions = {}
 ): Promise<SleepRangeResult> {
   const generation = healthAccountGeneration
   const [s, e] = normalizeRange(start, end)
   const token = await requireGoogleAccessToken()
   assertCurrentAccount(generation)
   try {
-    await ensureSleepOnce(token, s, e, force, generation, signal)
+    await ensureSleepOnce(token, s, e, force, generation, options, signal)
   } catch (err) {
     rethrowIfAborted(err)
     console.error(`[health] sleep range failed for ${s}..${e}:`, err)
@@ -1453,14 +1579,15 @@ export async function getWorkoutsRange(
   start: string,
   end: string,
   force = false,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  options: SyncOptions = {}
 ): Promise<WorkoutsResult> {
   const generation = healthAccountGeneration
   const [s, e] = normalizeRange(start, end)
   const token = await requireGoogleAccessToken()
   assertCurrentAccount(generation)
   try {
-    await ensureWorkoutsRange(token, s, e, force, generation, signal)
+    await ensureWorkoutsRange(token, s, e, force, generation, options, signal)
   } catch (err) {
     rethrowIfAborted(err)
     console.error(`[health] workouts failed for ${s}..${e}:`, err)
@@ -1696,6 +1823,7 @@ export async function getDevices(force = false, signal?: AbortSignal): Promise<P
     }))
     assertCurrentAccount(generation)
     devicesCache = { generation, devices, fetchedAt: Date.now() }
+    noteDeviceSync(devices)
     return devices
   } catch (err) {
     assertCurrentAccount(generation)
@@ -1703,6 +1831,54 @@ export async function getDevices(force = false, signal?: AbortSignal): Promise<P
     console.error('[health] devices failed:', err)
     return devicesCache?.generation === generation ? devicesCache.devices : []
   }
+}
+
+// A tracker that was offline uploads the missed days when it next syncs, so
+// days the archive already settled can change. When the latest sync jumps
+// forward by more than this, recheck every day the gap covered.
+const DEVICE_SYNC_GAP_MS = 6 * 60 * 60_000
+
+function noteDeviceSync(devices: PairedDevice[]): void {
+  const syncs = devices.map((device) => Date.parse(device.lastSync ?? '')).filter(Number.isFinite)
+  if (!syncs.length) return
+  const latest = Math.max(...syncs)
+  const previous = deviceLastSync()
+  if (previous != null && latest <= previous) return
+  setDeviceLastSync(latest)
+  if (previous == null || latest - previous < DEVICE_SYNC_GAP_MS) return
+  const dates = listDates(isoDate(new Date(previous)), isoDate(new Date(latest)))
+  markDaysStale(dates)
+  for (const cache of [nutritionRawCache, weightRawCache, heartThresholdRawCache]) {
+    for (const date of dates) cache.delete(date)
+  }
+  notifyHealthDataChanged()
+}
+
+/**
+ * Keeps the last RECENT_HISTORY_DAYS of daily metrics, sleep and workouts
+ * current, at the lowest request priority, so charts and the assistant
+ * read from disk instead of waiting on Google.
+ */
+export async function syncRecentHistory(signal?: AbortSignal): Promise<void> {
+  const generation = healthAccountGeneration
+  const token = await getGoogleAccessToken()
+  if (!token) return
+  assertCurrentAccount(generation)
+  await getDevices(false, signal)
+  const end = todayIso()
+  const start = shiftIsoDate(end, -(RECENT_HISTORY_DAYS - 1))
+  const options: SyncOptions = { mode: 'await', priority: 2, notify: true }
+  const results = await Promise.allSettled([
+    ...GROUPS.map((group) => ensureGroupOnce(token, group, start, end, false, generation, options, signal)),
+    ensureSleepSummaryOnce(token, start, end, false, generation, options, signal),
+    ensureWorkoutsRange(token, start, end, false, generation, options, signal)
+  ])
+  for (const result of results) {
+    if (result.status === 'rejected') rethrowIfAborted(result.reason)
+  }
+  assertCurrentAccount(generation)
+  const failures = results.filter((result) => result.status === 'rejected')
+  if (failures.length) console.warn(`[health] background sync: ${failures.length} of ${results.length} reads failed`)
 }
 
 // ---------------------------------------------------------------------------
@@ -1724,6 +1900,9 @@ export function clearHealthCache(): void {
 export function resetHealthAccount(): void {
   healthAccountGeneration += 1
   abortSharedOperations(inFlight.values())
+  for (const controller of revalidationControllers) controller.abort()
+  revalidationControllers.clear()
+  revalidatingDays.clear()
   abortSharedOperations(nutritionRawInFlight.values())
   abortSharedOperations(weightRawInFlight.values())
   abortSharedOperations(heartThresholdRawInFlight.values())
