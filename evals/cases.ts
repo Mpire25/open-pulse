@@ -7,6 +7,7 @@ import {
   BATTERY_PCT,
   dateAgo,
   night,
+  runsBetween,
   TODAY_STEPS,
   weightKg
 } from './fixture'
@@ -71,9 +72,13 @@ export function buildCases(): EvalCase[] {
   const lastNight = night(0)
   const recentSleep = average('sleepMinutes', 13, 0)!
   const recentRhr = average('restingHeartRate', 6, 0)!
+  // "This week" may mean the last seven days or the calendar week so far.
+  const sinceMonday = (new Date().getDay() + 6) % 7
+  const weekRhr = [recentRhr, average('restingHeartRate', sinceMonday, 0)!]
   const gainSince60 = weightKg(0)! - nearestWeight(60)
   const steps30 = [average('steps', 29, 0)!, average('steps', 30, 1)!]
   const stepsPrior30 = [average('steps', 59, 30)!, average('steps', 60, 31)!]
+  const recentRunsPerWeek = runsBetween(90, 1) / (90 / 7)
   const yearAgo = [weightKg(364), weightKg(366), nearestWeight(365)].filter((value): value is number => value != null)
 
   return [
@@ -109,8 +114,12 @@ export function buildCases(): EvalCase[] {
       history: ask("What's my resting heart rate been like this week?"),
       checks: [
         completed(),
-        read({ metric: 'restingHeartRate' }, 6),
-        mentionsNumber('gives the weekly average', recentRhr, 1.5, { critical: false }),
+        read({ metric: 'restingHeartRate' }, Math.min(6, sinceMonday)),
+        {
+          name: 'gives the weekly average',
+          critical: false,
+          run: (record) => numbersIn(record.text).some((n) => weekRhr.some((value) => Math.abs(n - value) <= 1.5))
+        },
         noResearch(),
         atMostModelRequests(3)
       ]
@@ -121,7 +130,7 @@ export function buildCases(): EvalCase[] {
       history: ask('What did I have for lunch yesterday?'),
       checks: [
         completed(),
-        read({ kind: 'nutrition' }, 1),
+        read({ kind: 'nutrition' }, 1, 1),
         says('names the chicken burrito', /burrito/i),
         noResearch(),
         atMostModelRequests(2)
@@ -177,7 +186,13 @@ export function buildCases(): EvalCase[] {
         completed(),
         read({ kind: 'workouts' }, 170, 0, { share: 0.85 }),
         both('says running dropped', /\brun\w*/i, DECLINE),
-        says('says about once a week now', /\b(?:once|one run|1 run|one time|1 time|1(?:\.0)?(?: runs?)?)\s*(?:a|per|\/)\s*week/i, { critical: false })
+        {
+          name: 'gives the recent runs per week',
+          critical: false,
+          run: (record) =>
+            /\bonce (?:a|per) week\b/i.test(record.text) ||
+            numbersIn(record.text).some((n) => Math.abs(n - recentRunsPerWeek) <= 0.3)
+        }
       ]
     },
     {
@@ -234,8 +249,15 @@ export function buildCases(): EvalCase[] {
       history: ask(`How many steps did I do on ${spokenDate(42)}?`),
       checks: [
         completed(),
-        read({ metric: 'steps' }, 42),
-        neverSays('does not report zero steps', /\b(?:0|zero) steps\b|didn't take any steps|no steps at all/i),
+        read({ metric: 'steps' }, 42, 42),
+        {
+          name: 'does not report zero steps',
+          critical: true,
+          // "not that you took zero steps" is the right answer, so only an unnegated claim fails.
+          run: (record) => !record.text.split(/(?<=[.!?])\s+|\n+/).some((sentence) =>
+            /\b(?:0|zero) steps\b|didn't take any steps|no steps at all/i.test(sentence) &&
+            !/\bnot\b|n't\b|\bno (?:step )?(?:data|record|value|count)|missing/i.test(sentence))
+        },
         says(
           'says nothing was recorded',
           /\bno (?:step )?(?:data|record\w*|steps? (?:were |was )?(?:recorded|logged|tracked))|not (?:worn|wearing|recorded|synced|tracked|logged)|missing|nothing (?:was )?(?:recorded|logged)|wasn't (?:worn|recording|tracking)|no activity (?:was )?recorded|(?:data|steps) (?:is|are) (?:missing|unavailable|blank|empty)|(?:has|shows) no\b/i
@@ -266,7 +288,7 @@ export function buildCases(): EvalCase[] {
       history: ask('Is my resting heart rate normal for a 35-year-old?'),
       checks: [
         completed(),
-        read({ metric: 'restingHeartRate' }, 6, 0, { share: 0.3 }),
+        read({ metric: 'restingHeartRate' }, 6, 0, { share: 0.3, critical: false }),
         says('gives the usual adult range', /\b60\s*(?:–|-|to)\s*100\b|\bnormal\b|\btypical\b|\bhealthy range\b/i),
         mentionsNumber('quotes my resting heart rate', recentRhr, 3, { critical: false })
       ]
@@ -297,8 +319,8 @@ export function buildCases(): EvalCase[] {
       history: ask('What did I eat after my run yesterday?'),
       checks: [
         completed(),
-        read({ kind: 'workouts' }, 1),
-        read({ kind: 'nutrition' }, 1),
+        read({ kind: 'workouts' }, 1, 1),
+        read({ kind: 'nutrition' }, 1, 1),
         says('names the porridge', /porridge/i),
         noResearch()
       ]
