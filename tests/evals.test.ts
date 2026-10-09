@@ -9,6 +9,7 @@ import {
   dateAgo,
   dayValues,
   GAP,
+  pinEvalNow,
   runsBetween,
   TODAY_STEPS,
   weightKg,
@@ -81,6 +82,35 @@ describe('eval fixture', () => {
       const localStart = `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, '0')}-${String(start.getDate()).padStart(2, '0')}`
       expect(session.startCivilDate).toBe(localStart)
       expect(session.startCivilMinute).toBe(start.getHours() * 60 + start.getMinutes())
+    }
+  })
+
+  test('hourly data agrees with daily totals at every run hour', async () => {
+    try {
+      for (let hour = 0; hour < 24; hour++) {
+        pinEvalNow(new Date(2026, 9, 9, hour, 30))
+        const calls: HealthCall[] = []
+        const fixture = createHealthFixture((call) => calls.push(call))
+        for (const daysAgo of [0, 1, 42, 80, 180, 364, 401]) {
+          const date = dateAgo(daysAgo)
+          const daily = (await fixture.getSeries(['steps'], date, date)).days[date].steps
+          const hourly = (await fixture.getIntraday(date, false, undefined, 'steps')).stepsHourly
+          const total = hourly.reduce((sum, item) => sum + item.steps, 0)
+          expect(total).toBe(daily ?? 0)
+          expect(hourly.every((item) => Number.isInteger(item.steps) && item.steps >= 0)).toBe(true)
+          if (daily == null) expect(hourly).toEqual([])
+          if (daysAgo === 0) {
+            expect(hourly.filter((item) => item.hour > hour).every((item) => item.steps === 0)).toBe(true)
+            const evalCase = buildCases().find((item) => item.id === 'steps-today')!
+            expect(score(evalCase, record({
+              text: `You've done ${total.toLocaleString('en-GB')} steps so far today.`,
+              healthCalls: calls.filter((call) => call.fn.startsWith('getIntraday'))
+            })).passed).toBe(true)
+          }
+        }
+      }
+    } finally {
+      pinEvalNow(null)
     }
   })
 })

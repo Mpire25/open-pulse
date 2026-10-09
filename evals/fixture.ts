@@ -486,8 +486,22 @@ function hourlySteps(daysAgo: number, now: Date): HourlySteps[] {
   const weights = Array.from({ length: 24 }, (_, hour) =>
     hour < 7 || hour > 22 ? 0 : 1 + (hour === 7 && isRunDay(daysAgo) ? 12 : 0) + Math.abs(noise('hourly', daysAgo * 24 + hour))
   ).map((weight, hour) => (hour <= lastHour ? weight : 0))
-  const sum = weights.reduce((a, b) => a + b, 0) || 1
-  return weights.map((weight, hour) => ({ hour, steps: round((weight / sum) * total) }))
+  let sum = weights.reduce((a, b) => a + b, 0)
+  // Today's fixed partial total still exists before the usual activity hours.
+  // Put it in the current hour rather than returning a contradictory zero.
+  if (sum === 0) {
+    weights[lastHour] = 1
+    sum = 1
+  }
+  let cumulativeWeight = 0
+  let allocated = 0
+  return weights.map((weight, hour) => {
+    cumulativeWeight += weight
+    const cumulativeSteps = round((cumulativeWeight / sum) * total)
+    const count = cumulativeSteps - allocated
+    allocated = cumulativeSteps
+    return { hour, steps: count }
+  })
 }
 
 function heartRate(daysAgo: number, now: Date): HeartRatePoint[] {
