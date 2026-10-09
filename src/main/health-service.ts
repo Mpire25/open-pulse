@@ -209,8 +209,6 @@ export interface SyncOptions {
   mode?: 'await' | 'background'
   /** Overrides the span-size priority, e.g. for an answer the user is waiting on. */
   priority?: Priority
-  /** Notify views when this sync changes stored data. */
-  notify?: boolean
 }
 
 type SpanFetcher = (span: DateSpan, priority: Priority, signal?: AbortSignal) => Promise<boolean>
@@ -218,7 +216,7 @@ type SpanFetcher = (span: DateSpan, priority: Priority, signal?: AbortSignal) =>
 let healthDataChangedListener: (() => void) | null = null
 let healthDataChangedTimer: NodeJS.Timeout | null = null
 
-/** Called (debounced) when a background recheck changes data views may show. */
+/** Called (debounced) when a fetch changes data views may show. */
 export function onHealthDataChanged(listener: (() => void) | null): void {
   healthDataChangedListener = listener
 }
@@ -247,7 +245,7 @@ async function fetchSpans(
     )
   )
   const changed = results.some((result) => result.status === 'fulfilled' && result.value)
-  if (changed && options.notify && generation === healthAccountGeneration) notifyHealthDataChanged()
+  if (changed && generation === healthAccountGeneration) notifyHealthDataChanged()
   const failure = results.find((result) => result.status === 'rejected')
   if (failure?.status === 'rejected') throw failure.reason
 }
@@ -266,7 +264,7 @@ function revalidateInBackground(
   for (const key of keys) revalidatingDays.add(key)
   const controller = new AbortController()
   revalidationControllers.add(controller)
-  fetchSpans(pending, generation, { ...options, notify: true }, fetchSpan, controller.signal)
+  fetchSpans(pending, generation, options, fetchSpan, controller.signal)
     .catch((error) => {
       if (controller.signal.aborted || error instanceof HealthAccountChangedError) return
       console.error(`[health] background recheck of ${groupId} failed:`, error)
@@ -822,7 +820,7 @@ function ensureGroupOnce(
 }
 
 function syncOptionsKey(options: SyncOptions): string {
-  return `${options.mode ?? 'background'}:${options.priority ?? ''}:${options.notify ? 'notify' : ''}`
+  return `${options.mode ?? 'background'}:${options.priority ?? ''}`
 }
 
 // ---------------------------------------------------------------------------
@@ -1885,7 +1883,7 @@ export async function syncRecentHistory(signal?: AbortSignal): Promise<void> {
   await getDevices(false, signal)
   const end = todayIso()
   const start = shiftIsoDate(end, -(RECENT_HISTORY_DAYS - 1))
-  const options: SyncOptions = { mode: 'await', priority: 2, notify: true }
+  const options: SyncOptions = { mode: 'await', priority: 2 }
   const results = await Promise.allSettled([
     ...GROUPS.map((group) => ensureGroupOnce(token, group, start, end, false, generation, options, signal)),
     ensureSleepSummaryOnce(token, start, end, false, generation, options, signal),

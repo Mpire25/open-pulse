@@ -758,7 +758,12 @@ describe('health data freshness', () => {
     }))
   }
 
-  afterEach(() => onHealthDataChanged(null))
+  afterEach(async () => {
+    onHealthDataChanged(null)
+    // Changed awaited reads now notify too; let their debounce finish before
+    // a following test installs its listener.
+    await new Promise((resolve) => setTimeout(resolve, 350))
+  })
 
   test('shows stored days at once and rechecks stale ones in the background', async () => {
     const date = shiftIsoDate(localToday(), -20)
@@ -836,6 +841,8 @@ describe('health data freshness', () => {
     }) as typeof fetch
     await getSeries(['steps'], start, start)
     await getSeries(['steps'], end, end)
+    // Finish the notifications from seeding the archive before observing the recheck.
+    await new Promise((resolve) => setTimeout(resolve, 350))
     markFetched('steps', [start, end], Date.now() - 8 * 24 * 60 * 60_000)
     // The fresh middle date splits the stale days into independent spans.
     markFetched('steps', [middle])
@@ -886,6 +893,30 @@ describe('health data freshness', () => {
       new AbortController().signal
     )) as { days: Record<string, { steps: number }> }
     expect(output.days[date].steps).toBe(2000)
+  })
+
+  test('assistant reads notify when they change archived values', async () => {
+    const date = shiftIsoDate(localToday(), -20)
+    let steps = 1000
+    globalThis.fetch = (async (input: string | URL | Request) => {
+      requests.push(String(input))
+      return stepsResponse(date, steps)
+    }) as typeof fetch
+    const seeded = changeNotification()
+    await getSeries(['steps'], date, date)
+    await seeded
+    markFetched('steps', [date], Date.now() - 8 * 24 * 60 * 60_000)
+    steps = 2000
+
+    const changed = changeNotification()
+    const output = JSON.parse(await runHealthAgentTool(
+      'query_daily_metrics',
+      { metrics: ['steps'], startDate: date, endDate: date },
+      new AbortController().signal
+    )) as { days: Record<string, { steps: number }> }
+    expect(output.days[date].steps).toBe(2000)
+    await changed
+    expect(peekDay(date)?.values.steps).toBe(2000)
   })
 
   test('a tracker sync after a long gap rechecks every day the gap covered', async () => {
