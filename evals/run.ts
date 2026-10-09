@@ -8,7 +8,7 @@ import { parseArgs } from 'node:util'
 import { DEFAULT_ASSISTANT, type AssistantSettings } from '../src/shared/types'
 import { buildCases, CATEGORIES, type EvalCase } from './cases'
 import { appAssistantSettings, hasSessionFile, loadAssistant, sessionDir } from './runtime'
-import { pool, runCase, score, type CaseResult, type ResultsFile } from './runner'
+import { pool, recordFromRun, runCase, score, type CaseResult, type ResultsFile } from './runner'
 
 const REPO = resolve(import.meta.dir, '..')
 const RESULTS_DIR = join(REPO, 'evals', 'results')
@@ -26,6 +26,7 @@ const { values: options } = parseArgs({
     'sign-in': { type: 'boolean', default: false },
     'sign-out': { type: 'boolean', default: false },
     compare: { type: 'string', multiple: true },
+    rescore: { type: 'string' },
     verbose: { type: 'boolean', short: 'v', default: false },
     help: { type: 'boolean', short: 'h', default: false }
   }
@@ -43,6 +44,7 @@ const HELP = `Usage: bun run eval [options]
   --effort <level>     Reasoning effort (default: the effort set in the app)
   --label <name>       Name for the results file
   --compare <a> <b>    Compare two results files (pass --compare twice)
+  --rescore <file>     Score a saved results file again with the current checks
   -v, --verbose        Print every answer
 `
 
@@ -147,6 +149,20 @@ function compare(paths: string[]): void {
   )
 }
 
+/** Saves a re-scored copy next to the original; answers are not re-generated. */
+function rescore(path: string, verbose: boolean): void {
+  const results = JSON.parse(readFileSync(path, 'utf8')) as ResultsFile
+  const cases = new Map(buildCases().map((evalCase) => [evalCase.id, evalCase]))
+  results.cases = results.cases.flatMap((result) => {
+    const evalCase = cases.get(result.id)
+    return evalCase ? [{ ...result, runs: result.runs.map((run) => ({ ...score(evalCase, recordFromRun(run)), requests: run.requests })) }] : []
+  })
+  const file = path.replace(/(?:-rescored)?\.json$/, '-rescored.json')
+  writeFileSync(file, `${JSON.stringify(results, null, 2)}\n`)
+  printResults(results, verbose)
+  console.log(`\nSaved ${file}`)
+}
+
 // ---------------------------------------------------------------------------
 // Checkouts
 
@@ -194,6 +210,10 @@ async function main(): Promise<void> {
   if (options.compare) {
     if (options.compare.length !== 2) throw new Error('Pass --compare twice: --compare before.json --compare after.json')
     compare(options.compare)
+    return
+  }
+  if (options.rescore) {
+    rescore(options.rescore, options.verbose ?? false)
     return
   }
 

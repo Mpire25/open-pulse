@@ -5,7 +5,7 @@ import { randomUUID } from 'node:crypto'
 import type { WebContents } from 'electron'
 import type { AiEvent, AssistantVisualPart } from '../src/shared/types'
 import type { EvalCase } from './cases'
-import type { RunRecord } from './checks'
+import type { ModelRequest, RunRecord } from './checks'
 import { runContext, type AssistantUnderTest, type RunContext } from './runtime'
 
 export const RUN_TIMEOUT_MS = 6 * 60_000
@@ -37,6 +37,8 @@ export interface CaseRun {
   outputTokens: number
   reasoningTokens: number
   visuals: string[]
+  /** Per-request detail; absent in results saved before it was recorded. */
+  requests?: Array<Omit<ModelRequest, 'startedAt'>>
 }
 
 export interface CaseResult {
@@ -85,7 +87,30 @@ export function score(evalCase: EvalCase, record: RunRecord): CaseRun {
     cachedTokens: sum((request) => request.cachedTokens),
     outputTokens: sum((request) => request.outputTokens),
     reasoningTokens: sum((request) => request.reasoningTokens),
-    visuals: record.parts.map((part) => (part as { type?: string }).type ?? 'visual')
+    visuals: record.parts.map((part) => (part as { type?: string }).type ?? 'visual'),
+    requests: record.modelRequests.map(({ startedAt: _startedAt, ...request }) => request)
+  }
+}
+
+/** Rebuilds what a saved run recorded, so it can be scored again with updated checks. */
+export function recordFromRun(run: CaseRun): RunRecord {
+  // Older results kept only totals: rebuild the request count and put the token totals on the first.
+  const requests: ModelRequest[] = run.requests?.map((request) => ({ ...request, startedAt: 0 })) ?? [
+    ...Array.from({ length: run.modelRequests }, () => ({ kind: 'agent' as const, tools: [], startedAt: 0, functionCalls: [] })),
+    ...Array.from({ length: run.researchRequests }, () => ({ kind: 'research' as const, tools: [], startedAt: 0, functionCalls: [] }))
+  ].map((request, index) => index === 0
+    ? { ...request, inputTokens: run.inputTokens, cachedTokens: run.cachedTokens, outputTokens: run.outputTokens, reasoningTokens: run.reasoningTokens }
+    : request)
+  return {
+    text: run.text,
+    parts: run.visuals.map((type) => ({ type }) as unknown as RunRecord['parts'][number]),
+    outcome: run.outcome,
+    error: run.error,
+    healthCalls: run.healthCalls,
+    modelRequests: requests,
+    toolEvents: run.toolCalls,
+    totalMs: run.totalMs,
+    firstTextMs: run.firstTextMs
   }
 }
 
