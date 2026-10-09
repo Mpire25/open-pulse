@@ -37,6 +37,11 @@ export interface CaseRun {
   outputTokens: number
   reasoningTokens: number
   visuals: string[]
+  /**
+   * Started after the local date changed during the run: the assistant's
+   * "today" no longer matches the fixture's, so the result is unreliable.
+   */
+  afterMidnight?: boolean
   /** Per-request detail; absent in results saved before it was recorded. */
   requests?: Array<Omit<ModelRequest, 'startedAt'>>
 }

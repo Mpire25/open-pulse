@@ -38,9 +38,9 @@ The model and reasoning effort default to the ones set in the app; override
 them with `--model` and `--effort`. Results are saved in `evals/results/`
 (git-ignored) and contain only synthetic data.
 
-Calendar dates stay pinned to the run's start for the assistant, fixture and
-checks. Elapsed-time measurements, token expiry and JWT validation continue
-using real time.
+The test data and checks use the date the run started. The assistant reads the
+real clock, so a conversation that starts after midnight is flagged in the
+report as unreliable.
 
 ## Scoring
 

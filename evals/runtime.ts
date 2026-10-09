@@ -20,7 +20,7 @@ import {
   type AssistantSettings
 } from '../src/shared/types'
 import type { ModelRequest } from './checks'
-import { cachedCoverage, createHealthFixture, evalNow, type HealthCall } from './fixture'
+import { cachedCoverage, createHealthFixture, type HealthCall } from './fixture'
 
 const RESPONSES_URL = 'https://api.openai.com/v1/responses'
 // OPENPULSE_EVALS_DIR moves the session elsewhere (the offline tests use a temp dir).
@@ -40,35 +40,6 @@ export interface RunContext {
 }
 
 export const runContext = new AsyncLocalStorage<RunContext>()
-
-let calendarClockInstalled = false
-
-/**
- * Freeze no-argument Date construction to the fixture's run date, including
- * in older checkouts. Date.now remains real for latency and token expiry;
- * explicit timestamps and calendar-date construction keep their usual meaning.
- */
-async function installEvalCalendarClock(): Promise<void> {
-  if (calendarClockInstalled) return
-  // jose defaults JWT validation to new Date(), so give its real verifier an
-  // explicit wall-clock date before installing the synthetic calendar clock.
-  const jose = await import('jose')
-  const realJwtVerify = jose.jwtVerify
-  mock.module('jose', () => ({
-    ...jose,
-    jwtVerify: (
-      token: Parameters<typeof realJwtVerify>[0],
-      key: Parameters<typeof realJwtVerify>[1],
-      options?: Parameters<typeof realJwtVerify>[2]
-    ) => realJwtVerify(token, key, { ...options, currentDate: new Date(Date.now()) })
-  }))
-  globalThis.Date = new Proxy(globalThis.Date, {
-    construct: (target, args, newTarget) =>
-      Reflect.construct(target, args.length ? args : [evalNow().getTime()], newTarget),
-    apply: () => evalNow().toString()
-  })
-  calendarClockInstalled = true
-}
 
 // ---------------------------------------------------------------------------
 // The eval's private session store (0600, outside the repository)
@@ -225,7 +196,6 @@ export interface AssistantUnderTest {
 
 export async function loadAssistant(root: string, assistant: AssistantSettings): Promise<AssistantUnderTest> {
   const main = join(root, 'src', 'main')
-  await installEvalCalendarClock()
 
   mock.module('electron', () => ({
     shell: {

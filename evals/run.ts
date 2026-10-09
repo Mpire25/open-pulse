@@ -7,7 +7,7 @@ import { join, resolve } from 'node:path'
 import { parseArgs } from 'node:util'
 import { ASSISTANT_MODEL_PATTERN, REASONING_EFFORT_PATTERN, type AssistantSettings } from '../src/shared/types'
 import { buildCases, CATEGORIES, type EvalCase } from './cases'
-import { pinEvalNow } from './fixture'
+import { isoDay, pinEvalNow } from './fixture'
 import { appAssistantSettings, hasSessionFile, loadAssistant, sessionDir } from './runtime'
 import { pool, recordFromRun, runCase, score, type CaseResult, type ResultsFile } from './runner'
 
@@ -103,6 +103,7 @@ function printResults(results: ResultsFile, verbose: boolean): void {
       const failed = run.checks.filter((check) => !check.passed)
       for (const check of failed) console.log(`    ${check.critical ? '✗' : '·'} ${check.name}`)
       if (run.error) console.log(`    ! ${run.error}`)
+      if (run.afterMidnight) console.log("    ! started after midnight, so the assistant's today did not match the test data")
       if (verbose) console.log(`    ${run.text.replace(/\n+/g, '\n    ')}\n`)
     }
   }
@@ -116,6 +117,8 @@ function printResults(results: ResultsFile, verbose: boolean): void {
         `median ${seconds(summary.medianMs).padStart(6)}  first text ${seconds(summary.medianFirstTextMs).padStart(6)}`
     )
   }
+  const late = results.cases.flatMap((result) => result.runs).filter((run) => run.afterMidnight).length
+  if (late) console.log(`! ${late} conversation${late === 1 ? '' : 's'} started after midnight and may be wrongly scored; re-run them.\n`)
   const total = summarise(results.cases)
   console.log(
     `${'overall'.padEnd(14)} pass ${percent(total.passRate).padStart(4)}  score ${percent(total.score).padStart(4)}  ` +
@@ -278,8 +281,10 @@ async function main(): Promise<void> {
     console.log(`Running ${jobs.length} conversations against ${results.label} (${commit.slice(0, 7)}) with ${results.model} (${results.reasoningEffort})…`)
     let finished = 0
     await pool(jobs, Number(options.concurrency) || 4, async ({ evalCase, attempt }) => {
+      // The assistant takes "today" from the real clock; the fixture and checks stay on the start date.
+      const afterMidnight = isoDay(new Date()) !== isoDay(startedAt)
       const record = await runCase(assistant, evalCase, attempt)
-      const run = score(evalCase, record)
+      const run = { ...score(evalCase, record), ...(afterMidnight ? { afterMidnight } : {}) }
       results.cases.find((result) => result.id === evalCase.id)!.runs.push(run)
       finished++
       console.log(`  [${finished}/${jobs.length}] ${run.passed ? '✓' : '✗'} ${evalCase.id} (${seconds(run.totalMs)})`)
