@@ -72,6 +72,17 @@ describe('eval fixture', () => {
     expect((await fixture.getWorkoutsRange(dateAgo(1), dateAgo(1))).workouts[0].distanceKm).toBe(6.2)
     expect(calls.map((call) => call.fn)).toEqual(['getSeries', 'getNutritionLogs', 'getSleepRange', 'getWorkoutsRange'])
   })
+
+  test('dates a bedtime after midnight on the day it happened', async () => {
+    const fixture = createHealthFixture(() => {})
+    for (const daysAgo of [0, 30]) {
+      const session = (await fixture.getSleepRange(dateAgo(daysAgo), dateAgo(daysAgo))).days[0].sessions[0]
+      const start = new Date(session.startTime)
+      const localStart = `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, '0')}-${String(start.getDate()).padStart(2, '0')}`
+      expect(session.startCivilDate).toBe(localStart)
+      expect(session.startCivilMinute).toBe(start.getHours() * 60 + start.getMinutes())
+    }
+  })
 })
 
 describe('eval checks', () => {

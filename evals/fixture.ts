@@ -412,7 +412,8 @@ function sleepNight(daysAgo: number, now: Date): SleepNight | null {
     date,
     startTime,
     endTime,
-    startCivilDate: dateAgo(daysAgo + 1, now),
+    // A bedtime after midnight falls on the night's end date, not the evening before.
+    startCivilDate: dateAgo(daysAgo + 1 - Math.floor(startMinute / 1440), now),
     startCivilMinute: startMinute % 1440,
     endCivilMinute: (startMinute + summary.minutesInSleepPeriod) % 1440,
     minutesAsleep: summary.minutesAsleep,
