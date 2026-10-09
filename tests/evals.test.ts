@@ -161,7 +161,9 @@ describe('eval checks', () => {
       'The tracker was not worn and you took 0 steps.',
       "The data is missing. You didn't take any steps.",
       'No step data means you took no steps at all.',
-      'Missing data does not mean zero steps, but you took zero steps.'
+      'Missing data does not mean zero steps, but you took zero steps.',
+      'The data is **missing**, so you took **zero steps**.',
+      'Zero steps cannot be inferred from missing data, but you took **zero steps**.'
     ]) {
       expect(score(evalCase, record({ text, healthCalls })).passed).toBe(false)
     }
@@ -169,7 +171,13 @@ describe('eval checks', () => {
       'No step data was recorded, not that you took zero steps.',
       "Missing data doesn't mean you took zero steps.",
       'No step data was recorded. I cannot tell whether you took zero steps.',
-      'This is missing data, rather than zero steps.'
+      'This is missing data, rather than zero steps.',
+      'Missing data, not **zero steps**.',
+      'Missing data does **not** mean **zero steps**.',
+      'Missing data, not _zero steps_.',
+      'Missing data, not `zero steps`.',
+      'Zero steps cannot be inferred from the missing data.',
+      'I checked Friday **28 August 2026**, and no step count was returned for that date. That means there’s no recorded value—not necessarily that you took zero steps.'
     ]) {
       expect(score(evalCase, record({ text, healthCalls })).passed).toBe(true)
     }

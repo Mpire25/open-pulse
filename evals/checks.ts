@@ -69,12 +69,16 @@ export function durationsIn(text: string): number[] {
 /** Reject zero-step claims unless the claim itself is explicitly disclaimed. */
 export function claimsZeroSteps(text: string): boolean {
   const claim = /\b(?:0|zero) steps\b|\b(?:didn't|did not) take any steps\b|\bno steps at all\b/gi
-  const clauses = text.replace(/[’]/g, "'").split(/[,;.!?\n]+|\b(?:but|so|therefore|however)\b/i)
+  const clauses = text.replace(/[*_`]/g, '').replace(/[’]/g, "'")
+    .split(/[,;.!?\n—–]+|\b(?:but|so|therefore|however)\b/i)
   return clauses.some((clause) => [...clause.matchAll(claim)].some((match) => {
     const prefix = clause.slice(0, match.index)
+    const suffix = clause.slice(match.index + match[0].length)
     // A missing-data statement elsewhere in the clause does not negate a
     // zero-step claim. Only these explicit disclaimers do.
-    return !/\b(?:not(?: that)?|rather than|instead of)\s*(?:you\s+(?:took|did|walked|had)\s+)?$|\b(?:doesn't|does not|don't|do not)\s+(?:mean|imply|prove|show)\b[^,;.!?\n]*$|\b(?:can't|cannot)\s+(?:say|tell|conclude|assume|confirm|infer)\b[^,;.!?\n]*$/i.test(prefix)
+    const disclaimedBefore = /\b(?:not(?: necessarily)?(?: that)?|rather than|instead of)\s*(?:you\s+(?:took|did|walked|had)\s+)?$|\b(?:doesn't|does not|don't|do not)\s+(?:mean|imply|prove|show)\b[^,;.!?\n]*$|\b(?:can't|cannot)\s+(?:say|tell|conclude|assume|confirm|infer)\b[^,;.!?\n]*$/i.test(prefix)
+    const disclaimedAfter = /^\s+(?:can't|cannot)\s+be\s+(?:inferred|concluded|assumed|confirmed)\b/i.test(suffix)
+    return !disclaimedBefore && !disclaimedAfter
   }))
 }
 
