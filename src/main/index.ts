@@ -10,6 +10,7 @@ import { installWindowActivation } from './window-activation'
 import { getCachedChatTitle, registerIpc, registerTrustedRenderer } from './ipc'
 import { createResponseNotifications } from './response-notifications'
 import { configureAssistantTrace } from './assistant-trace'
+import { startHealthBackgroundSync } from './health-sync-scheduler'
 import { createRendererTarget, safeExternalUrl, type RendererTarget } from './renderer-security'
 
 const PRODUCTION_CSP =
@@ -314,6 +315,8 @@ app.whenReady().then(() => {
   installApplicationMenu(target)
   createWindow(target)
   applyMenuBarPreference(target, getMenuBarEnabled())
+  const stopHealthSync = startHealthBackgroundSync()
+  app.once('before-quit', stopHealthSync)
 })
 
 app.once('before-quit', () => { quitting = true; responseNotifications.clear(); tray?.destroy(); tray = null })

@@ -38,6 +38,7 @@ import {
   getWorkoutHeartRate,
   getWorkoutTrack,
   getWorkoutsRange,
+  onHealthDataChanged,
   resetHealthAccount
 } from './health-service'
 import { setApiActivityListener } from './health-api'
@@ -360,6 +361,8 @@ export function registerIpc(commands: { open: (destination: MenuBarDestination) 
   setApiActivityListener((pending) => {
     sendToTrustedRenderers('health:activity', { pending })
   })
+  // A background recheck changed stored data, so every window refetches.
+  onHealthDataChanged(() => sendToTrustedRenderers('health:invalidated'))
 
   handle('ai:send', (event, chatId: string, runId: string, history: ChatMessage[]) => {
     chatTitles.rememberFallback(event.sender.id, chatId, history.find((message) => message.role === 'user')?.text ?? '')
