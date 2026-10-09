@@ -76,7 +76,7 @@ export function claimsZeroSteps(text: string): boolean {
     const suffix = clause.slice(match.index + match[0].length)
     // A missing-data statement elsewhere in the clause does not negate a
     // zero-step claim. Only these explicit disclaimers do.
-    const disclaimedBefore = /\b(?:not(?: necessarily)?(?: that)?|rather than|instead of)\s*(?:you\s+(?:took|did|walked|had)\s+)?$|\b(?:doesn't|does not|don't|do not)\s+(?:mean|imply|prove|show)\b[^,;.!?\n]*$|\b(?:can't|cannot)\s+(?:say|tell|conclude|assume|confirm|infer)\b[^,;.!?\n]*$/i.test(prefix)
+    const disclaimedBefore = /\b(?:not(?: necessarily)?(?: that)?|rather than|instead of)\s*(?:you\s+(?:took|did|walked|had)\s+)?$|\b(?:not|rather than|instead of)(?:\s+(?:a|an|the|count|value|reading|total|record|of|showing|being|recorded as|logged as))+\s*$|\b(?:doesn't|does not|don't|do not)\s+(?:mean|imply|prove|show)\b[^,;.!?\n]*$|\b(?:can't|cannot)\s+(?:say|tell|conclude|assume|confirm|infer)\b[^,;.!?\n]*$/i.test(prefix)
     const disclaimedAfter = /^\s+(?:can't|cannot)\s+be\s+(?:inferred|concluded|assumed|confirmed)\b/i.test(suffix)
     return !disclaimedBefore && !disclaimedAfter
   }))

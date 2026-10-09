@@ -177,6 +177,9 @@ describe('eval checks', () => {
       'Missing data, not _zero steps_.',
       'Missing data, not `zero steps`.',
       'Zero steps cannot be inferred from the missing data.',
+      'That’s a missing entry, not a count of zero steps.',
+      'The entry is missing, rather than showing zero steps.',
+      'No step count was recorded for that day—the entry is blank, not zero.',
       'I checked Friday **28 August 2026**, and no step count was returned for that date. That means there’s no recorded value—not necessarily that you took zero steps.'
     ]) {
       expect(score(evalCase, record({ text, healthCalls })).passed).toBe(true)

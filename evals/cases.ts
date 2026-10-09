@@ -264,7 +264,7 @@ export function buildCases(): EvalCase[] {
         },
         says(
           'says nothing was recorded',
-          /\bno (?:step )?(?:data|record\w*|steps? (?:were |was )?(?:recorded|logged|tracked))|not (?:worn|wearing|recorded|synced|tracked|logged)|missing|nothing (?:was )?(?:recorded|logged)|wasn't (?:worn|recording|tracking)|no activity (?:was )?recorded|(?:data|steps) (?:is|are) (?:missing|unavailable|blank|empty)|(?:has|shows) no\b/i
+          /\bno (?:step )?(?:data|count|record\w*|steps? (?:were |was )?(?:recorded|logged|tracked))|not (?:worn|wearing|recorded|synced|tracked|logged)|missing|nothing (?:was )?(?:recorded|logged)|wasn't (?:worn|recording|tracking)|no activity (?:was )?recorded|(?:data|steps) (?:is|are) (?:missing|unavailable|blank|empty)|(?:has|shows) no\b/i
         )
       ]
     },
@@ -275,7 +275,8 @@ export function buildCases(): EvalCase[] {
       checks: [
         completed(),
         neverSays('never claims the data is missing', CLAIMS_NO_DATA),
-        read({ kind: 'body' }, 368, 362, { share: 0.6 }),
+        // The answer is what matters: a table reaching back a year can answer without a lookup.
+        read({ kind: 'body' }, 368, 362, { share: 0.6, critical: false }),
         {
           name: 'gives the weight from a year ago',
           critical: true,
