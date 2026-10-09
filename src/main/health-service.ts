@@ -234,17 +234,22 @@ function notifyHealthDataChanged(): void {
 const revalidatingDays = new Set<string>()
 const revalidationControllers = new Set<AbortController>()
 
-function fetchSpans(
+async function fetchSpans(
   dates: string[],
+  generation: number,
   options: SyncOptions,
   fetchSpan: SpanFetcher,
   signal?: AbortSignal
-): Promise<boolean> {
-  return Promise.all(
+): Promise<void> {
+  const results = await Promise.allSettled(
     contiguousDateSpans(dates).map((span) =>
       fetchSpan(span, options.priority ?? spanPriority(span.dates.length), signal)
     )
-  ).then((changes) => changes.some(Boolean))
+  )
+  const changed = results.some((result) => result.status === 'fulfilled' && result.value)
+  if (changed && options.notify && generation === healthAccountGeneration) notifyHealthDataChanged()
+  const failure = results.find((result) => result.status === 'rejected')
+  if (failure?.status === 'rejected') throw failure.reason
 }
 
 /** Rechecks days views already show without making them wait. */
@@ -261,10 +266,8 @@ function revalidateInBackground(
   for (const key of keys) revalidatingDays.add(key)
   const controller = new AbortController()
   revalidationControllers.add(controller)
-  fetchSpans(pending, options, fetchSpan, controller.signal)
-    .then((changed) => {
-      if (changed && generation === healthAccountGeneration) notifyHealthDataChanged()
-    }, (error) => {
+  fetchSpans(pending, generation, { ...options, notify: true }, fetchSpan, controller.signal)
+    .catch((error) => {
       if (controller.signal.aborted || error instanceof HealthAccountChangedError) return
       console.error(`[health] background recheck of ${groupId} failed:`, error)
     })
@@ -300,8 +303,7 @@ async function syncDays(
     if (later.length) revalidateInBackground(groupId, later, generation, options, fetchSpan)
   }
   if (now.length === 0) return
-  const changed = await fetchSpans(now, options, fetchSpan, signal)
-  if (changed && options.notify && generation === healthAccountGeneration) notifyHealthDataChanged()
+  await fetchSpans(now, generation, options, fetchSpan, signal)
 }
 
 function num(value: unknown): number | null {

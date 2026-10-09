@@ -1,4 +1,4 @@
-import { afterAll, afterEach, beforeEach, describe, expect, mock, test } from 'bun:test'
+import { afterAll, afterEach, beforeEach, describe, expect, mock, spyOn, test } from 'bun:test'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -822,6 +822,50 @@ describe('health data freshness', () => {
       expect(requests).toHaveLength(3)
     } finally {
       releaseBackground()
+    }
+  })
+
+  test('notifies once for a changed span even when another span fails, and still logs the failure', async () => {
+    const start = shiftIsoDate(localToday(), -22)
+    const middle = shiftIsoDate(start, 1)
+    const end = shiftIsoDate(start, 2)
+    globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+      requests.push(String(input))
+      const day = JSON.parse(String(init?.body)).range.start.date.day
+      return stepsResponse(day === Number(start.slice(-2)) ? start : end, 1000)
+    }) as typeof fetch
+    await getSeries(['steps'], start, start)
+    await getSeries(['steps'], end, end)
+    markFetched('steps', [start, end], Date.now() - 8 * 24 * 60 * 60_000)
+    // The fresh middle date splits the stale days into independent spans.
+    markFetched('steps', [middle])
+    requests = []
+    globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+      requests.push(String(input))
+      const day = JSON.parse(String(init?.body)).range.start.date.day
+      if (day === Number(start.slice(-2))) return new Response('span unavailable', { status: 503 })
+      return stepsResponse(end, 2000)
+    }) as typeof fetch
+
+    let notifications = 0
+    let notified!: () => void
+    const notification = new Promise<void>((resolve) => { notified = resolve })
+    onHealthDataChanged(() => { notifications++; notified() })
+    const errors = spyOn(console, 'error').mockImplementation(() => undefined)
+    try {
+      const cached = await getSeries(['steps'], start, end)
+      expect(cached.days[end].steps).toBe(1000)
+      await notification
+      await new Promise((resolve) => setTimeout(resolve, 350))
+      expect(peekDay(end)?.values.steps).toBe(2000)
+      expect(peekDay(start)?.values.steps).toBe(1000)
+      expect(notifications).toBe(1)
+      expect(requests).toHaveLength(2)
+      expect(errors).toHaveBeenCalledTimes(1)
+      expect(errors.mock.calls[0][0]).toBe('[health] background recheck of steps failed:')
+      expect(errors.mock.calls[0][1]).toHaveProperty('status', 503)
+    } finally {
+      errors.mockRestore()
     }
   })
 
