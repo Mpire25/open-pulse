@@ -830,6 +830,59 @@ describe('health data freshness', () => {
     }
   })
 
+  test('a newer sleep summary read does not stop an older detail read storing the night', async () => {
+    const date = shiftIsoDate(localToday(), -20)
+    const night = shiftIsoDate(date, -1)
+    const sleepResponse = (minutesAsleep: number): Response => {
+      const [year, month, day] = date.split('-').map(Number)
+      const [startYear, startMonth, startDay] = night.split('-').map(Number)
+      return new Response(JSON.stringify({
+        dataPoints: [{
+          sleep: {
+            interval: {
+              startTime: `${night}T22:30:00Z`,
+              endTime: `${date}T06:30:00Z`,
+              civilStartTime: { date: { year: startYear, month: startMonth, day: startDay }, time: { hours: 22, minutes: 30 } },
+              civilEndTime: { date: { year, month, day }, time: { hours: 6, minutes: 30 } }
+            },
+            type: 'STAGES',
+            stages: [{ type: 'DEEP', startTime: `${night}T23:00:00Z`, endTime: `${night}T23:30:00Z` }],
+            metadata: { main: true },
+            summary: { minutesAsleep: String(minutesAsleep), minutesInSleepPeriod: '480' }
+          }
+        }]
+      }), { status: 200 })
+    }
+    let releaseDetail!: () => void
+    let detailStarted!: () => void
+    const started = new Promise<void>((resolve) => { detailStarted = resolve })
+    globalThis.fetch = (async (input: string | URL | Request) => {
+      requests.push(String(input))
+      if (requests.length === 1) {
+        await new Promise<void>((resolve) => {
+          releaseDetail = resolve
+          detailStarted()
+        })
+        return sleepResponse(440)
+      }
+      return sleepResponse(450)
+    }) as typeof fetch
+
+    const detail = getSleepRange(date, date)
+    await started
+    try {
+      expect((await getSeries(['sleepMinutes'], date, date)).days[date].sleepMinutes).toBe(450)
+    } finally {
+      releaseDetail()
+    }
+
+    const nights = (await detail).days
+    expect(nights.map((day) => day.date)).toEqual([date])
+    expect(peekDay(date)?.sleepDay?.sessions[0]?.stages).toHaveLength(1)
+    expect(peekDay(date)?.values.sleepMinutes).toBe(450)
+    expect(requests).toHaveLength(2)
+  })
+
   test('notifies once for a changed span even when another span fails, and still logs the failure', async () => {
     const start = shiftIsoDate(localToday(), -22)
     const middle = shiftIsoDate(start, 1)

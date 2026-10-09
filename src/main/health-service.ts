@@ -895,21 +895,23 @@ function ensureSleepRange(
     )
     assertCurrentAccount(generation)
     const byDate = sleepByDate(points)
-    const dates = span.dates.filter((date) =>
-      !hasNewerFetch(SLEEP_DETAIL_GROUP, date, requestedAt)
-      && !hasNewerFetch(SLEEP_SUMMARY_GROUP, date, requestedAt)
+    // A newer summary-only read must not stop the stages being stored, so
+    // the detail and the summary values are each guarded by their own group.
+    const detailDates = span.dates.filter((date) => !hasNewerFetch(SLEEP_DETAIL_GROUP, date, requestedAt))
+    const summaryDates = new Set(
+      detailDates.filter((date) => !hasNewerFetch(SLEEP_SUMMARY_GROUP, date, requestedAt))
     )
     let changed = false
-    for (const date of dates) {
+    for (const date of detailDates) {
       const night = byDate.get(date) ?? null
       if (setSleep(date, night)) changed = true
-      if (mergeValues(date, {
+      if (summaryDates.has(date) && mergeValues(date, {
         sleepMinutes: night?.minutesAsleep ?? null,
         sleepEfficiency: night?.efficiency ?? null
       })) changed = true
     }
-    markFetched(SLEEP_DETAIL_GROUP, dates, requestedAt)
-    markFetched(SLEEP_SUMMARY_GROUP, dates, requestedAt)
+    markFetched(SLEEP_DETAIL_GROUP, detailDates, requestedAt)
+    markFetched(SLEEP_SUMMARY_GROUP, [...summaryDates], requestedAt)
     return changed
   }, signal)
 }
