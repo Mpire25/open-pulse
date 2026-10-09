@@ -1,5 +1,13 @@
 .menu-dashboard { height: 100%; overflow-y: auto; background: var(--color-canvas); line-height: 1.35; color: var(--color-ink); }
 .menu-dashboard:focus { outline: none; }
+/* Preload the popup without animating its placeholders. Settings previews omit this marker. */
+.menu-dashboard[data-panel-hidden] *,
+.menu-dashboard[data-panel-hidden]::before,
+.menu-dashboard[data-panel-hidden]::after,
+.menu-dashboard[data-panel-hidden] *::before,
+.menu-dashboard[data-panel-hidden] *::after {
+  animation-play-state: paused !important;
+}
 .menu-content { display: flex; flex-direction: column; padding: 12px 20px; }
 .menu-content > * { flex-shrink: 0; }
 .menu-dashboard button { cursor: pointer; }

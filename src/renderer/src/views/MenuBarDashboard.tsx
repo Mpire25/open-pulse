@@ -112,7 +112,7 @@ export default function MenuBarDashboard(): React.JSX.Element {
   }, [client])
 
   return (
-    <main className="menu-dashboard" ref={panelRef} tabIndex={-1}>
+    <main className="menu-dashboard" data-panel-hidden={!visible || undefined} ref={panelRef} tabIndex={-1}>
       <div className="menu-content" ref={contentRef}>
         <header className="menu-header">
           <button className="menu-brand" onClick={() => open('home')} aria-label="Open OpenPulse">
