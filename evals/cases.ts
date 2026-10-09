@@ -15,6 +15,7 @@ import {
 import {
   atMostModelRequests,
   CLAIMS_NO_DATA,
+  claimsZeroSteps,
   completed,
   mentionsDuration,
   mentionsNumber,
@@ -254,10 +255,7 @@ export function buildCases(): EvalCase[] {
         {
           name: 'does not report zero steps',
           critical: true,
-          // "not that you took zero steps" is the right answer, so only an unnegated claim fails.
-          run: (record) => !record.text.split(/(?<=[.!?])\s+|\n+/).some((sentence) =>
-            /\b(?:0|zero) steps\b|didn't take any steps|no steps at all/i.test(sentence) &&
-            !/\bnot\b|n't\b|\bno (?:step )?(?:data|record|value|count)|missing/i.test(sentence))
+          run: (record) => !claimsZeroSteps(record.text)
         },
         says(
           'says nothing was recorded',

@@ -66,6 +66,18 @@ export function durationsIn(text: string): number[] {
   return found
 }
 
+/** Reject zero-step claims unless the claim itself is explicitly disclaimed. */
+export function claimsZeroSteps(text: string): boolean {
+  const claim = /\b(?:0|zero) steps\b|\b(?:didn't|did not) take any steps\b|\bno steps at all\b/gi
+  const clauses = text.replace(/[’]/g, "'").split(/[,;.!?\n]+|\b(?:but|so|therefore|however)\b/i)
+  return clauses.some((clause) => [...clause.matchAll(claim)].some((match) => {
+    const prefix = clause.slice(0, match.index)
+    // A missing-data statement elsewhere in the clause does not negate a
+    // zero-step claim. Only these explicit disclaimers do.
+    return !/\b(?:not(?: that)?|rather than|instead of)\s*(?:you\s+(?:took|did|walked|had)\s+)?$|\b(?:doesn't|does not|don't|do not)\s+(?:mean|imply|prove|show)\b[^,;.!?\n]*$|\b(?:can't|cannot)\s+(?:say|tell|conclude|assume|confirm|infer)\b[^,;.!?\n]*$/i.test(prefix)
+  }))
+}
+
 // ---------------------------------------------------------------------------
 // What was read
 

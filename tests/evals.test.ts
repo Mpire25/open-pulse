@@ -123,6 +123,28 @@ describe('eval checks', () => {
     expect(completed().run(record({ outcome: 'error', text: 'partial' }))).toBe(false)
   })
 
+  test('missing data cannot excuse an invented zero-step count', () => {
+    const evalCase = buildCases().find((item) => item.id === 'steps-on-gap-day')!
+    const healthCalls: HealthCall[] = [{ fn: 'getSeries', metrics: ['steps'], start: dateAgo(42), end: dateAgo(42) }]
+    for (const text of [
+      'There is no step data for that date, so you took zero steps.',
+      'The tracker was not worn and you took 0 steps.',
+      "The data is missing. You didn't take any steps.",
+      'No step data means you took no steps at all.',
+      'Missing data does not mean zero steps, but you took zero steps.'
+    ]) {
+      expect(score(evalCase, record({ text, healthCalls })).passed).toBe(false)
+    }
+    for (const text of [
+      'No step data was recorded, not that you took zero steps.',
+      "Missing data doesn't mean you took zero steps.",
+      'No step data was recorded. I cannot tell whether you took zero steps.',
+      'This is missing data, rather than zero steps.'
+    ]) {
+      expect(score(evalCase, record({ text, healthCalls })).passed).toBe(true)
+    }
+  })
+
   test('every case builds with defined expectations', () => {
     const cases = buildCases()
     expect(new Set(cases.map((item) => item.id)).size).toBe(cases.length)
