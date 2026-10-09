@@ -28,6 +28,7 @@ const { values: options } = parseArgs({
     'sign-out': { type: 'boolean', default: false },
     compare: { type: 'string', multiple: true },
     rescore: { type: 'string' },
+    instant: { type: 'boolean', default: false },
     verbose: { type: 'boolean', short: 'v', default: false },
     help: { type: 'boolean', short: 'h', default: false }
   }
@@ -46,6 +47,7 @@ const HELP = `Usage: bun run eval [options]
   --label <name>       Name for the results file
   --compare <a> <b>    Compare two results files (pass --compare twice)
   --rescore <file>     Score a saved results file again with the current checks
+  --instant            Return health data instantly instead of with app-like delays
   -v, --verbose        Print every answer
 `
 
@@ -243,7 +245,7 @@ async function main(): Promise<void> {
   process.once('SIGINT', interrupt)
   process.once('SIGTERM', interrupt)
   try {
-    const assistant = await loadAssistant(target.root, assistantSettings)
+    const assistant = await loadAssistant(target.root, assistantSettings, { latency: !options.instant })
 
     if (options['sign-out']) {
       const result = await assistant.disconnectCodex()

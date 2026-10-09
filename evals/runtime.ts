@@ -20,7 +20,7 @@ import {
   type AssistantSettings
 } from '../src/shared/types'
 import type { ModelRequest } from './checks'
-import { cachedCoverage, createHealthFixture, type HealthCall } from './fixture'
+import { cachedCoverage, createHealthFixture, evalNow, type HealthCall } from './fixture'
 
 const RESPONSES_URL = 'https://api.openai.com/v1/responses'
 // OPENPULSE_EVALS_DIR moves the session elsewhere (the offline tests use a temp dir).
@@ -194,7 +194,11 @@ export interface AssistantUnderTest {
   getCodexStatus: typeof import('../src/main/codex-auth').getCodexStatus
 }
 
-export async function loadAssistant(root: string, assistant: AssistantSettings): Promise<AssistantUnderTest> {
+export async function loadAssistant(
+  root: string,
+  assistant: AssistantSettings,
+  options: { latency?: boolean } = {}
+): Promise<AssistantUnderTest> {
   const main = join(root, 'src', 'main')
 
   mock.module('electron', () => ({
@@ -247,7 +251,7 @@ export async function loadAssistant(root: string, assistant: AssistantSettings):
     }
   }))
 
-  const fixture = createHealthFixture((call) => runContext.getStore()?.healthCalls.push(call))
+  const fixture = createHealthFixture((call) => runContext.getStore()?.healthCalls.push(call), evalNow, options)
   mock.module(join(main, 'health-service.ts'), () => fixture)
   mock.module(join(main, 'metric-store.ts'), () => ({ archivedMetricCoverage: () => cachedCoverage() }))
 

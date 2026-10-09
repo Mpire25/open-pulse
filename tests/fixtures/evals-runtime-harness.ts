@@ -72,7 +72,7 @@ test('runs a case through the real assistant loop and scores it', async () => {
 
   expect(record.outcome).toBe('completed')
   expect(record.text).toContain(TODAY_STEPS.toLocaleString('en-GB'))
-  expect(record.healthCalls).toEqual([{ fn: 'getSeries', metrics: ['steps'], start: dateAgo(0), end: dateAgo(0) }])
+  expect(record.healthCalls).toEqual([{ fn: 'getSeries', metrics: ['steps'], start: dateAgo(0), end: dateAgo(0), mode: 'await' }])
   expect(record.modelRequests).toHaveLength(2)
   expect(record.modelRequests[0]).toMatchObject({
     kind: 'agent',

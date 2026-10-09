@@ -226,3 +226,15 @@ test('a pinned eval date keeps rescoring stable on later days', async () => {
     pinEvalNow(null)
   }
 })
+
+test('lookup delays follow where the app would read from', async () => {
+  const { lookupDelayMs } = await import('../evals/fixture')
+  const archive = lookupDelayMs({ fn: 'getSeries', start: dateAgo(29), end: dateAgo(0), mode: 'background' })
+  const freshToday = lookupDelayMs({ fn: 'getSeries', start: dateAgo(0), end: dateAgo(0), mode: 'await' })
+  const settled = lookupDelayMs({ fn: 'getSeries', start: dateAgo(60), end: dateAgo(30), mode: 'await' })
+  const lastYear = lookupDelayMs({ fn: 'getSeries', start: dateAgo(393), end: dateAgo(380), mode: 'await' })
+  expect(archive).toBeLessThan(settled)
+  expect(settled).toBeLessThan(freshToday)
+  expect(lastYear).toBeGreaterThan(settled)
+  expect(lookupDelayMs({ fn: 'getIntraday:steps', date: dateAgo(1) })).toBeGreaterThan(settled)
+})
