@@ -85,6 +85,13 @@ export function buildCases(): EvalCase[] {
   const restingHeartRateToday = average('restingHeartRate', 0, 0)!
   const lastYearRhr = average('restingHeartRate', 393, 380)!
   const dinnerThreeWeeksAgo = mealName(21, 'DINNER')!
+  const yearAgoDatePatterns = [364, 366].filter((days) => weightKg(days) != null).map((days) => {
+    const date = dateAgo(days)
+    const [year, month, day] = date.split('-').map(Number)
+    const label = new Date(year, month - 1, day).toLocaleDateString('en-GB', { month: 'long' })
+    const monthPattern = `${label.slice(0, 3)}(?:${label.slice(3)})?`
+    return new RegExp(`${date}|\\b${day}(?:st|nd|rd|th)?\\s+${monthPattern}\\b|\\b${monthPattern}\\s+${day}(?:st|nd|rd|th)?\\b`, 'i')
+  })
   const yearAgo = [weightKg(364), weightKg(366), nearestWeight(365)].filter((value): value is number => value != null)
 
   return [
@@ -277,6 +284,11 @@ export function buildCases(): EvalCase[] {
         neverSays('never claims the data is missing', CLAIMS_NO_DATA),
         // The answer is what matters: a table reaching back a year can answer without a lookup.
         read({ kind: 'body' }, 368, 362, { share: 0.6, critical: false }),
+        {
+          name: 'labels the actual nearby observation date',
+          critical: true,
+          run: (record) => yearAgoDatePatterns.some((pattern) => pattern.test(record.text))
+        },
         {
           name: 'gives the weight from a year ago',
           critical: true,

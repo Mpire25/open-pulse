@@ -251,3 +251,11 @@ test('reports the largest main-agent health payload without counting research co
   ] }))
   expect(result.dataChars).toBe(250)
 })
+
+test('a nearby weight answer must name its actual observation date', () => {
+  const evalCase = buildCases().find((item) => item.id === 'weight-a-year-ago')!
+  const dateCheck = evalCase.checks.find((check) => check.name === 'labels the actual nearby observation date')!
+  expect(weightKg(365)).toBeNull()
+  expect(dateCheck.run(record({ text: `Your nearest weigh-in was ${weightKg(364)} kg on ${dateAgo(364)}.` }))).toBe(true)
+  expect(dateCheck.run(record({ text: `You weighed ${weightKg(364)} kg on ${dateAgo(365)}.` }))).toBe(false)
+})
