@@ -13,6 +13,8 @@ import { getNutritionLogs, getSeries, getSleepRange, getWorkoutsRange } from './
 export const HEALTH_TABLE_DATASET_ID = 'health-table'
 export const HEALTH_TABLE_DAYS = 180
 const FOOD_LOG_DAYS = 7
+const SLEEP_DATASET_ID = 'health-table-sleep'
+const WORKOUT_DATASET_ID = 'health-table-workouts'
 
 const KEY_METRICS: MetricKey[] = [
   'steps',
@@ -65,6 +67,14 @@ export async function buildHealthTable(
   ])
   signal.throwIfAborted()
   const datasets = new Map<string, AgentDataset>()
+  datasets.set(SLEEP_DATASET_ID, {
+    tool: 'query_sleep',
+    data: { source: lastNight.source, requestedRange: { start: today, end: today }, nights: lastNight.days.flatMap((day) => [...day.sessions].sort((a, b) => Number(b.id === day.mainSessionId) - Number(a.id === day.mainSessionId))) }
+  })
+  datasets.set(WORKOUT_DATASET_ID, { tool: 'query_workouts', data: workouts })
+  for (const day of food) {
+    if (day) datasets.set(`health-table-food-${day.date}`, { tool: 'query_nutrition_logs', data: day })
+  }
   const series: SeriesResult = { ...history, days: { ...history.days, ...latest.days } }
   const dates = Object.keys(series.days).sort()
   // A metric the user never records costs nothing.
@@ -75,6 +85,7 @@ export async function buildHealthTable(
     [
       localDate(workout.startTime),
       clock(workout.startTime),
+      `id=${JSON.stringify(workout.id)}`,
       JSON.stringify(workout.name),
       `${workout.durationMin} min`,
       workout.distanceKm == null ? null : `${workout.distanceKm} km`,
@@ -87,6 +98,7 @@ export async function buildHealthTable(
       [
         day!.date,
         clock(entry.startTime),
+        `id=${JSON.stringify(entry.id)}`,
         entry.mealType ?? 'MEAL',
         JSON.stringify(entry.foodName),
         entry.calories == null ? null : `${entry.calories} kcal`,
@@ -112,12 +124,12 @@ export async function buildHealthTable(
     'DAILY',
     ['date', ...metrics].join(','),
     ...rows,
-    `WORKOUTS (${start} to ${today})`,
+    `WORKOUTS (${start} to ${today}), datasetId "${WORKOUT_DATASET_ID}"`,
     ...(workoutLines.length ? workoutLines : ['No cached workouts; query_workouts can check the requested range.']),
     `FOOD LOG (${foodDates[0]} to ${today})`,
-    ...food.flatMap((day, index) => day ? [`${day.date}${day.entries.length ? '' : ' (no entries returned)'}`] : [`${foodDates[index]}: food log unavailable; use query_nutrition_logs if needed.`]),
+    ...food.flatMap((day, index) => day ? [`${day.date}: datasetId "health-table-food-${day.date}"${day.entries.length ? '' : ' (no entries returned)'}`] : [`${foodDates[index]}: food log unavailable; use query_nutrition_logs if needed.`]),
     ...foodLines,
-    `LAST NIGHT, wake date ${today}`,
+    `LAST NIGHT, datasetId "${SLEEP_DATASET_ID}", wake date ${today}${main ? `, main sessionId=${JSON.stringify(main.id)}` : ''}`,
     sleepLine,
     '</OPENPULSE_HEALTH_DATA>'
   ].join('\n')

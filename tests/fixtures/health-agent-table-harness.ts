@@ -47,6 +47,8 @@ test('uses 180 archived days and fresh today, drops empty columns and preserves 
   expect(daily.days[dateAgo(1)].steps).toBe(10)
   expect(table.text).toContain(`${dateAgo(0)},20,`)
   expect(table.text).toContain('not zero or proof that no record exists')
+  expect(table.datasets.get('health-table-sleep')!.tool).toBe('query_sleep')
+  expect(table.datasets.get(`health-table-food-${dateAgo(1)}`)!.tool).toBe('query_nutrition_logs')
 })
 
 test('a failed food day is unavailable, while successful days remain usable', async () => {
@@ -54,6 +56,8 @@ test('a failed food day is unavailable, while successful days remain usable', as
   try {
     const table = await buildHealthTable(dateAgo(0), new AbortController().signal)
     expect(table.text).toContain(`${dateAgo(2)}: food log unavailable`)
+    expect(table.datasets.has(`health-table-food-${dateAgo(2)}`)).toBe(false)
+    expect(table.datasets.has(`health-table-food-${dateAgo(1)}`)).toBe(true)
   } finally { failFood = false }
 })
 

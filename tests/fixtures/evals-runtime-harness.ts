@@ -133,3 +133,25 @@ test('uses a prompt dataset for a card and returns validated facts before the an
     expect(record.healthCalls.filter((call) => call.fn === 'getSeries')).toHaveLength(2)
   } finally { respond = null }
 })
+
+test('prefetched sleep, food and workout records render trusted cards', async () => {
+  const { buildHealthTable } = await import('../../src/main/health-agent-table')
+  const { resolvePresentation } = await import('../../src/main/assistant-presentation')
+  const table = await buildHealthTable(dateAgo(0), new AbortController().signal)
+  const sleep = resolvePresentation({ sleepCards: [{ datasetId: 'health-table-sleep', date: dateAgo(0), sessionId: null }] }, table.datasets)
+  expect(sleep[0].type).toBe('sleep-card')
+  const foodId = `health-table-food-${dateAgo(1)}`
+  const food = table.datasets.get(foodId)!.data as { entries: Array<{ id: string; foodName: string }> }
+  const entry = food.entries.find((item) => item.foodName === 'Chicken burrito')!
+  expect(table.text).toContain(`id=${JSON.stringify(entry.id)}`)
+  for (const scope of ['meal', 'item', 'day']) {
+    const nutrition = resolvePresentation({ nutritionCards: [{ datasetId: foodId, date: dateAgo(1), scope, mealGroup: 'Lunch', entryId: entry.id }] }, table.datasets)
+    expect(nutrition[0].type).toBe('nutrition-card')
+  }
+  const workouts = table.datasets.get('health-table-workouts')!.data as { workouts: Array<{ id: string }> }
+  const workout = resolvePresentation({ workouts: [{ datasetId: 'health-table-workouts', workoutId: workouts.workouts[0].id }] }, table.datasets)
+  expect(workout[0].type).toBe('workout-card')
+  const controller = new AbortController()
+  controller.abort()
+  await expect(buildHealthTable(dateAgo(0), controller.signal)).rejects.toThrow()
+})
