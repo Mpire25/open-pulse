@@ -88,9 +88,11 @@ describe('eval fixture', () => {
 describe('eval checks', () => {
   test('reads numbers and durations the way answers write them', () => {
     expect(numbersIn('You did 4,213 steps, about 6.2 km.')).toEqual([4213, 6.2])
-    for (const text of ['6h 5m', '6 hours and 5 minutes', '6 hr 5 min', '365 minutes', '6:05', '6h05']) {
+    expect(numbersIn('Between 61-63 bpm, and 7,800-9,600 steps; -2 kg.')).toEqual([61, 63, 7800, 9600, -2])
+    for (const text of ['6h 5m', '6 hours and 5 minutes', '6 hr 5 min', '365 minutes', '6h05']) {
       expect(durationsIn(text)).toContain(365)
     }
+    expect(durationsIn('You woke at 06:05.')).toEqual([])
     expect(mentionsDuration('slept', 365, 5).run(record({ text: 'You slept 6 hours 2 minutes.' }))).toBe(true)
   })
 
@@ -103,6 +105,9 @@ describe('eval checks', () => {
     expect(datesRead(calls, { metric: 'weightKg' }).size).toBe(60)
     expect(read({ metric: 'weightKg' }, 56).run(record({ healthCalls: calls }))).toBe(true)
     expect(read({ metric: 'steps' }, 56).run(record({ healthCalls: calls }))).toBe(false)
+    // Hourly steps for a day count as reading that day's steps.
+    const hourly: HealthCall[] = [{ fn: 'getIntraday:steps', date: dateAgo(0) }]
+    expect(read({ metric: 'steps' }, 0).run(record({ healthCalls: hourly }))).toBe(true)
   })
 
   test('a case fails only on critical checks', () => {

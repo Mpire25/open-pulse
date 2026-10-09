@@ -41,24 +41,27 @@ export interface Check {
 // ---------------------------------------------------------------------------
 // Reading answers
 
-/** Every number in the text, with thousands separators removed. */
+/**
+ * Every number in the text, with thousands separators removed. A hyphen right
+ * after a digit is a range ("61-63") or a date, not a minus sign.
+ */
 export function numbersIn(text: string): number[] {
-  return [...text.replace(/(\d),(?=\d{3}\b)/g, '$1').matchAll(/-?\d+(?:\.\d+)?/g)].map((match) => Number(match[0]))
+  return [...text.replace(/(\d),(?=\d{3}\b)/g, '$1').matchAll(/(?<!\d)-?\d+(?:\.\d+)?/g)].map((match) => Number(match[0]))
 }
 
 /**
  * Every duration in the text, in minutes: "6h 5m", "6 hr 5 min", "6 hours and
- * 5 minutes", "6h05", "365 minutes", "6.1 hours".
+ * 5 minutes", "6h05", "365 minutes", "6.1 hours". "06:03" is a clock time, not
+ * a duration.
  */
 export function durationsIn(text: string): number[] {
   const found: number[] = []
   const pattern =
-    /(\d+(?:\.\d+)?)\s*(?:h|hr|hrs|hour|hours)\b(?:\s*(?:and\s*)?(\d{1,2})\s*(?:m|min|mins|minute|minutes)?\b)?|(\d+)\s*(?:m|min|mins|minute|minutes)\b|(\d{1,2}):(\d{2})\b|(\d+)h(\d{2})\b/gi
+    /(\d+(?:\.\d+)?)\s*(?:h|hr|hrs|hour|hours)\b(?:\s*(?:and\s*)?(\d{1,2})\s*(?:m|min|mins|minute|minutes)?\b)?|(\d+)\s*(?:m|min|mins|minute|minutes)\b|(\d+)h(\d{2})\b/gi
   for (const match of text.matchAll(pattern)) {
     if (match[1] != null) found.push(Number(match[1]) * 60 + Number(match[2] ?? 0))
     else if (match[3] != null) found.push(Number(match[3]))
     else if (match[4] != null) found.push(Number(match[4]) * 60 + Number(match[5]))
-    else if (match[6] != null) found.push(Number(match[6]) * 60 + Number(match[7]))
   }
   return found
 }
@@ -82,6 +85,7 @@ export function datesRead(calls: HealthCall[], signal: Signal): Set<string> {
     const matches =
       'metric' in signal
         ? (call.fn === 'getSeries' && call.metrics?.includes(signal.metric as never)) ||
+          (signal.metric === 'steps' && (call.fn === 'getIntraday:steps' || call.fn === 'getIntraday:both')) ||
           (call.fn === 'getBodyMeasurements' && ['weightKg', 'bodyFatPct', 'bmi'].includes(signal.metric)) ||
           (call.fn === 'getSleepRange' && ['sleepMinutes', 'sleepEfficiency'].includes(signal.metric)) ||
           (call.fn === 'getNutritionLogs' && signal.metric === 'caloriesIn')
