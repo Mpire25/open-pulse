@@ -6,6 +6,8 @@ import { dateAgo, datesBetween, type HealthCall } from './fixture'
 
 export interface ModelRequest {
   /** 'agent' for the main loop, 'research' for the isolated web-search call. */
+  /** Health data carried by this request, in characters. */
+  dataChars?: number
   kind: 'agent' | 'research'
   tools: string[]
   toolChoice?: string

@@ -113,6 +113,17 @@ function toolNames(tools: unknown): string[] {
   })
 }
 
+/** How much health data a request carries: developer data blocks and tool results. */
+function healthDataChars(input: unknown): number {
+  if (!Array.isArray(input)) return 0
+  return input.reduce((total: number, item) => {
+    const entry = item as { type?: string; role?: string; output?: unknown; content?: Array<{ text?: unknown }> }
+    if (entry.type === 'function_call_output') return total + String(entry.output ?? '').length
+    if (entry.role === 'developer') return total + (entry.content ?? []).reduce((sum, part) => sum + String(part.text ?? '').length, 0)
+    return total
+  }, 0)
+}
+
 async function readStream(stream: ReadableStream<Uint8Array>, request: ModelRequest): Promise<void> {
   const reader = stream.getReader()
   const decoder = new TextDecoder()
@@ -168,6 +179,7 @@ function installFetchRecorder(): void {
     const body = bodyOf(init)
     const tools = toolNames(body?.tools)
     const request: ModelRequest = {
+      dataChars: healthDataChars(body?.input),
       kind: tools.includes('web_search') ? 'research' : 'agent',
       tools,
       toolChoice: typeof body?.tool_choice === 'string' ? body.tool_choice : undefined,

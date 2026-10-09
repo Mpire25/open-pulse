@@ -241,3 +241,13 @@ test('lookup delays follow where the app would read from', async () => {
   expect(lastYear).toBeGreaterThan(settled)
   expect(lookupDelayMs({ fn: 'getIntraday:steps', date: dateAgo(1) })).toBeGreaterThan(settled)
 })
+
+test('reports the largest main-agent health payload without counting research context', () => {
+  const evalCase = buildCases().find((item) => item.id === 'steps-today')!
+  const result = score(evalCase, record({ modelRequests: [
+    { kind: 'agent', tools: [], startedAt: 0, functionCalls: [], dataChars: 100 },
+    { kind: 'agent', tools: [], startedAt: 0, functionCalls: [], dataChars: 250 },
+    { kind: 'research', tools: [], startedAt: 0, functionCalls: [], dataChars: 999 }
+  ] }))
+  expect(result.dataChars).toBe(250)
+})
