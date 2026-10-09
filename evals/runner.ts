@@ -132,7 +132,7 @@ export async function runCase(assistant: AssistantUnderTest, evalCase: EvalCase,
   const sender = new EvalSender()
   const chatId = `eval-${evalCase.id}-${attempt}-${randomUUID().slice(0, 8)}`
   const runId = randomUUID()
-  const context: RunContext = { healthCalls: [], modelRequests: [] }
+  const context: RunContext = { healthCalls: [], modelRequests: [], recordings: [] }
   const startedAt = Date.now()
   let firstTextMs: number | undefined
   sender.send = (channel: string, event: AiEvent) => {
@@ -154,6 +154,11 @@ export async function runCase(assistant: AssistantUnderTest, evalCase: EvalCase,
   } finally {
     clearTimeout(timer)
   }
+  // Usage arrives in each stream's last event; wait for the recorder to read it.
+  await Promise.race([
+    Promise.allSettled(context.recordings),
+    new Promise((resolve) => setTimeout(resolve, 10_000))
+  ])
   const done = sender.events.find((event) => event.type === 'done')
   const failure = sender.events.find((event) => event.type === 'error' || event.type === 'interrupted')
   return {

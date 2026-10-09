@@ -13,7 +13,12 @@ import { AsyncLocalStorage } from 'node:async_hooks'
 import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
-import type { AssistantSettings } from '../src/shared/types'
+import {
+  ASSISTANT_MODEL_PATTERN,
+  DEFAULT_ASSISTANT,
+  REASONING_EFFORT_PATTERN,
+  type AssistantSettings
+} from '../src/shared/types'
 import type { ModelRequest } from './checks'
 import { cachedCoverage, createHealthFixture, type HealthCall } from './fixture'
 
@@ -30,6 +35,8 @@ function sessionFile(): string {
 export interface RunContext {
   healthCalls: HealthCall[]
   modelRequests: ModelRequest[]
+  /** The recorder's reads of each response stream, awaited before scoring. */
+  recordings: Array<Promise<void>>
 }
 
 export const runContext = new AsyncLocalStorage<RunContext>()
@@ -63,14 +70,26 @@ export function hasSessionFile(): boolean {
   return existsSync(sessionFile())
 }
 
-/** The model settings saved in the app, so evals match what the app uses. */
-export function appAssistantSettings(): Partial<AssistantSettings> {
+/**
+ * The model settings saved in the app, normalised the way the app does, so
+ * evals use what the app uses. Invalid saved values fall back to the defaults.
+ */
+export function appAssistantSettings(): AssistantSettings {
+  let saved: Partial<AssistantSettings> = {}
   try {
     const path = join(homedir(), 'Library', 'Application Support', 'OpenPulse', 'pulse-store.json')
-    const parsed = JSON.parse(readFileSync(path, 'utf8')) as { settings?: { assistant?: Partial<AssistantSettings> } }
-    return parsed.settings?.assistant ?? {}
+    saved = (JSON.parse(readFileSync(path, 'utf8')) as { settings?: { assistant?: Partial<AssistantSettings> } }).settings?.assistant ?? {}
   } catch {
-    return {}
+    // No saved settings: use the defaults.
+  }
+  const model = String(saved.model ?? '').trim()
+  const effort = saved.reasoningEffort
+  return {
+    model: ASSISTANT_MODEL_PATTERN.test(model) ? model : DEFAULT_ASSISTANT.model,
+    reasoningEffort:
+      typeof effort === 'string' && effort !== 'auto' && REASONING_EFFORT_PATTERN.test(effort)
+        ? effort
+        : DEFAULT_ASSISTANT.reasoningEffort
   }
 }
 
@@ -159,7 +178,7 @@ function installFetchRecorder(): void {
     const response = await realFetch(input, init)
     if (!response.body) return response
     const [forApp, forRecorder] = response.body.tee()
-    void readStream(forRecorder, request)
+    context.recordings.push(readStream(forRecorder, request))
     return new Response(forApp, { status: response.status, statusText: response.statusText, headers: response.headers })
   }) as typeof fetch
 }

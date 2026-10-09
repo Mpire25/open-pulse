@@ -5,7 +5,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSyn
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { parseArgs } from 'node:util'
-import { DEFAULT_ASSISTANT, type AssistantSettings } from '../src/shared/types'
+import { ASSISTANT_MODEL_PATTERN, REASONING_EFFORT_PATTERN, type AssistantSettings } from '../src/shared/types'
 import { buildCases, CATEGORIES, type EvalCase } from './cases'
 import { pinEvalNow } from './fixture'
 import { appAssistantSettings, hasSessionFile, loadAssistant, sessionDir } from './runtime'
@@ -160,7 +160,8 @@ function rescore(path: string, verbose: boolean): void {
     const evalCase = cases.get(result.id)
     return evalCase ? [{ ...result, runs: result.runs.map((run) => ({ ...score(evalCase, recordFromRun(run)), requests: run.requests })) }] : []
   })
-  const file = path.replace(/(?:-rescored)?\.json$/, '-rescored.json')
+  // Never write over the input: the saved answers can't be regenerated.
+  const file = `${path.replace(/\.json$/i, '')}-rescored.json`
   writeFileSync(file, `${JSON.stringify(results, null, 2)}\n`)
   printResults(results, verbose)
   console.log(`\nSaved ${file}`)
@@ -220,14 +221,24 @@ async function main(): Promise<void> {
     return
   }
 
+  if (options.model && !ASSISTANT_MODEL_PATTERN.test(options.model)) throw new Error(`Invalid --model "${options.model}".`)
+  if (options.effort && (options.effort === 'auto' || !REASONING_EFFORT_PATTERN.test(options.effort))) {
+    throw new Error(`Invalid --effort "${options.effort}".`)
+  }
   const saved = appAssistantSettings()
   const assistantSettings: AssistantSettings = {
-    model: options.model ?? saved.model ?? DEFAULT_ASSISTANT.model,
-    reasoningEffort: (options.effort ?? saved.reasoningEffort ?? DEFAULT_ASSISTANT.reasoningEffort) as AssistantSettings['reasoningEffort']
+    model: options.model ?? saved.model,
+    reasoningEffort: (options.effort ?? saved.reasoningEffort) as AssistantSettings['reasoningEffort']
   }
 
   const ref = options.ref ?? 'HEAD'
   const target = options.ref ? await checkout(options.ref) : { root: REPO, remove: async () => {} }
+  // Ctrl+C must not leave a registered temporary worktree behind.
+  const interrupt = (): void => {
+    void target.remove().finally(() => process.exit(130))
+  }
+  process.once('SIGINT', interrupt)
+  process.once('SIGTERM', interrupt)
   try {
     const assistant = await loadAssistant(target.root, assistantSettings)
 
@@ -253,7 +264,7 @@ async function main(): Promise<void> {
     const repeat = Math.max(1, Number(options.repeat) || 1)
     const commit = await git(['rev-parse', 'HEAD'], target.root)
     const results: ResultsFile = {
-      label: options.label ?? (options.ref ? options.ref.replace(/[^\w.-]+/g, '-') : 'current'),
+      label: (options.label ?? options.ref ?? 'current').replace(/[^\w.-]+/g, '-'),
       ref,
       commit,
       model: assistantSettings.model,
