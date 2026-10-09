@@ -9,6 +9,7 @@ import { getMenuBarEnabled } from './store'
 import { installWindowActivation } from './window-activation'
 import { getCachedChatTitle, registerIpc, registerTrustedRenderer } from './ipc'
 import { createResponseNotifications } from './response-notifications'
+import { configureAssistantTrace } from './assistant-trace'
 import { createRendererTarget, safeExternalUrl, type RendererTarget } from './renderer-security'
 
 const PRODUCTION_CSP =
@@ -295,6 +296,7 @@ installWindowActivation(app, () => mainWindow ?? createWindow(rendererTarget()))
 
 app.whenReady().then(() => {
   const target = rendererTarget()
+  configureAssistantTrace(join(app.getPath('userData'), 'assistant-trace.jsonl'))
   applyContentSecurityPolicy(target)
   registerIpc({
     notifications: responseNotifications,
