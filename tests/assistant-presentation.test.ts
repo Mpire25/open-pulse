@@ -2,7 +2,6 @@ import { describe, expect, test } from 'bun:test'
 import {
   normalizePresentationAggregations,
   presentationFactsForModel,
-  resolveAutomaticPresentation,
   resolvePresentation,
   type AgentDataset
 } from '../src/main/assistant-presentation'
@@ -324,42 +323,6 @@ describe('assistant visual presentation', () => {
     ).toThrow('is not in dataset')
   })
 
-  test('adds a workout-card fallback for one unambiguous session', () => {
-    const datasets = new Map<string, AgentDataset>([
-      [
-        'workouts-1',
-        {
-          tool: 'query_workouts',
-          data: {
-            source: 'live',
-            workouts: [
-              {
-                id: 'strength-session',
-                name: 'Strength training',
-                startTime: '2026-07-27T17:30:00Z',
-                durationMin: 27,
-                elapsedDurationMin: 26.8,
-                calories: 157,
-                distanceKm: null,
-                avgHeartRate: 113,
-                steps: null,
-                activeZoneMinutes: 11
-              }
-            ]
-          }
-        }
-      ]
-    ])
-
-    expect(
-      resolveAutomaticPresentation('What were the details on that strength training session?', datasets)[0]
-    ).toMatchObject({
-      type: 'workout-card',
-      workout: { id: 'strength-session', name: 'Strength training' },
-      date: '2026-07-27'
-    })
-  })
-
   test('resolves a sleep-stage card only from a returned night', () => {
     const parts = resolvePresentation(
       { sleepCards: [{ datasetId: 'sleep-1', date: '2026-07-11' }] },
@@ -459,36 +422,6 @@ describe('assistant visual presentation', () => {
         datasets
       )[0]
     ).toMatchObject({ type: 'trend-chart', metric: 'restingHeartRate', observations: 4 })
-  })
-
-  test('builds a restrained sleep comparison fallback from sleep sessions', () => {
-    const datasets = new Map<string, AgentDataset>([
-      [
-        'sleep-1',
-        {
-          tool: 'query_sleep',
-          data: {
-            source: 'live',
-            requestedRange: { start: '2026-07-06', end: '2026-07-12' },
-            nights: [
-              { date: '2026-07-06', minutesAsleep: 420, efficiency: 95 },
-              { date: '2026-07-07', minutesAsleep: 450, efficiency: 96 },
-              { date: '2026-07-11', minutesAsleep: 498, efficiency: 97 }
-            ]
-          }
-        }
-      ]
-    ])
-
-    const parts = resolveAutomaticPresentation('How did I sleep this week compared to last night?', datasets)
-    expect(parts).toHaveLength(1)
-    expect(parts[0]).toMatchObject({
-      type: 'comparison',
-      metric: 'sleepMinutes',
-      current: { label: 'Last night', startDate: '2026-07-11', endDate: '2026-07-11', value: 498, aggregation: 'value' },
-      previous: { label: 'Earlier period', startDate: '2026-07-06', endDate: '2026-07-10', value: 435, aggregation: 'average' },
-      comparable: true
-    })
   })
 
   test('uses averages for unequal additive periods unless totals are explicit', () => {
@@ -597,67 +530,5 @@ describe('assistant visual presentation', () => {
     expect(() => resolvePresentation({
       comparisons: [{ ...comparison, metric: 'sleepEfficiency' }]
     }, datasets)).toThrow('cannot be meaningfully totalled')
-  })
-
-  test('adds a trend fallback but does not visualize an external guideline comparison', () => {
-    const datasets = dailyDatasets()
-    expect(resolveAutomaticPresentation('Is my sleep trending up or down?', datasets)).toHaveLength(1)
-    expect(resolveAutomaticPresentation('How do my steps compare with NHS recommendations?', datasets)).toEqual([])
-    expect(resolveAutomaticPresentation('What is my current health compared with NHS ideals?', datasets)).toEqual([])
-  })
-
-  test('uses the fast route intent to keep short-answer visuals deterministic', () => {
-    const exact = new Map<string, AgentDataset>([
-      [
-        'hrv-1',
-        {
-          tool: 'query_daily_metrics',
-          data: {
-            source: 'live',
-            requestedRange: { start: '2026-07-27', end: '2026-07-27' },
-            units: { hrvMs: 'ms' },
-            days: { '2026-07-27': { hrvMs: 41.2 } }
-          }
-        }
-      ]
-    ])
-
-    expect(resolveAutomaticPresentation('My HRV yesterday?', exact, 'exact-value')[0]).toMatchObject({
-      type: 'metric-card',
-      metric: 'hrvMs',
-      date: '2026-07-27',
-      value: 41.2
-    })
-    expect(resolveAutomaticPresentation('My steps for the last 4 days', dailyDatasets(), 'recent-range')[0]).toMatchObject({
-      type: 'trend-chart',
-      metric: 'steps',
-      observations: 4
-    })
-  })
-
-  test('adds a sleep-stage card fallback for a specific-night breakdown', () => {
-    expect(resolveAutomaticPresentation('How did I sleep last night?', sleepDatasets())[0]).toMatchObject({
-      type: 'sleep-card',
-      night: { date: '2026-07-11' }
-    })
-    expect(resolveAutomaticPresentation('How was my sleep yesterday night?', sleepDatasets(), 'exact-value')[0]).toMatchObject({
-      type: 'sleep-card',
-      night: { date: '2026-07-11' }
-    })
-    expect(resolveAutomaticPresentation('How did I sleep this week?', sleepDatasets())).toEqual([])
-  })
-
-  test('adds the matching nutrition card fallback without substituting a trend card', () => {
-    expect(resolveAutomaticPresentation('What did I eat for lunch?', nutritionDatasets())[0]).toMatchObject({
-      type: 'nutrition-card',
-      scope: 'meal',
-      title: 'Lunch'
-    })
-    expect(resolveAutomaticPresentation('Show the nutrition for my Greek yogurt', nutritionDatasets())[0]).toMatchObject({
-      type: 'nutrition-card',
-      scope: 'item',
-      title: 'Greek yogurt'
-    })
-    expect(resolveAutomaticPresentation('How was my nutrition this week?', nutritionDatasets())).toEqual([])
   })
 })

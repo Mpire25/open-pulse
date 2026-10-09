@@ -70,6 +70,12 @@ mock.module('../../src/main/health-agent-tools', () => ({
   }
 }))
 
+mock.module('../../src/main/metric-store', () => ({
+  archivedMetricCoverage: () => ({
+    weightKg: { days: 27, first: '2026-08-08', last: '2026-10-08' }
+  })
+}))
+
 mock.module('../../src/main/assistant-presentation', () => ({
   PRESENTATION_TOOL: {
     type: 'function',
@@ -80,7 +86,6 @@ mock.module('../../src/main/assistant-presentation', () => ({
   },
   normalizePresentationAggregations: (args: Record<string, unknown>) => args,
   presentationFactsForModel: () => [],
-  resolveAutomaticPresentation: () => [],
   resolvePresentation: () => []
 }))
 
@@ -230,7 +235,28 @@ describe('brokered Codex research orchestration', () => {
     expect(calls).toBe(2)
     expect(previews).toEqual([{ query: 'Analyse my steps and HRV together.', text: 'Your final analysis is ready.' }])
     // The existing chat transcript still receives all streamed text.
-    expect(sender.events.find((event) => event.type === 'done')).toMatchObject({ text: 'Checking your metrics first.Your final analysis is ready.' })
+    expect(sender.events.find((event) => event.type === 'done')).toMatchObject({ text: 'Checking your metrics first.\n\nYour final analysis is ready.' })
+
+  })
+
+  test('streams a paragraph break between text from separate turns', async () => {
+    const sender = new FakeSender()
+    let calls = 0
+    globalThis.fetch = (async () => {
+      if (++calls === 1) return sseResponse([
+        { type: 'response.output_text.delta', delta: 'I found the history.' },
+        { type: 'response.output_item.done', item: { type: 'function_call', name: 'query_daily_metrics', call_id: 'break-call', arguments: JSON.stringify({ metrics: ['steps'], startDate: '2026-07-01', endDate: '2026-07-07' }) } }
+      ])
+      return message('Your average was 9,000 steps.')
+    }) as typeof fetch
+    await runChat(sender as unknown as WebContents, 'break-chat', 'break-run', [
+      { role: 'user', text: 'What were my steps this week?' }
+    ])
+    const streamed = sender.events.flatMap((event) => (event.type === 'delta' ? [event.text] : [])).join('')
+    expect(streamed).toBe('I found the history.\n\nYour average was 9,000 steps.')
+    expect(sender.events.find((event) => event.type === 'done')).toMatchObject({
+      text: 'I found the history.\n\nYour average was 9,000 steps.'
+    })
   })
 
   test('records successful completion before delivering it to the renderer', async () => {
@@ -350,31 +376,41 @@ describe('brokered Codex research orchestration', () => {
     expect(sender.events.some((event) => event.type === 'error')).toBe(false)
   })
 
-  test('answers a high-confidence health request with one model turn', async () => {
+  test('gives a simple-sounding question the full toolset and data coverage', async () => {
     const sender = new FakeSender()
     let calls = 0
     globalThis.fetch = (async (_input, init) => {
       calls++
       const body = requestBody(init)
-      expect(toolNames(body)).toEqual([])
-      expect(body.tool_choice).toBe('none')
-      expect(String(body.instructions)).toContain('Answer directly')
-      expect(JSON.stringify(body.input)).toContain('OPENPULSE_PREFETCHED_HEALTH_DATA')
-      return message('You recorded 32 in the prefetched daily data.')
+      if (calls === 1) {
+        expect(toolNames(body)).toEqual(['query_daily_metrics', 'present_health_data', 'research_web'])
+        expect(body.tool_choice).toBe('auto')
+        expect(String(body.instructions)).toContain('Never say that data is missing')
+        const input = body.input as Array<{ role?: string; content?: Array<{ text?: string }> }>
+        const coverage = input.at(-2)
+        expect(coverage?.role).toBe('developer')
+        expect(coverage?.content?.[0]?.text).toContain('weightKg: 27 days, 2026-08-08 to 2026-10-08')
+        expect(input.at(-1)?.role).toBe('user')
+        return functionCall('query_daily_metrics', 'weight-call', {
+          metrics: ['weightKg', 'caloriesOut'],
+          startDate: '2026-08-08',
+          endDate: '2026-10-08'
+        })
+      }
+      return message('You gained 8.7 kg between 8 August and 30 September.')
     }) as typeof fetch
 
     await runChat(
       sender as unknown as WebContents,
-      'fast-chat',
-      'fast-run',
-      [{ role: 'user', text: 'What was my HRV yesterday?' }]
+      'weight-chat',
+      'weight-run',
+      [{ role: 'user', text: 'Take a look at my weight gain in the last couple months. How many calories was I burning per day?' }]
     )
 
-    expect(calls).toBe(1)
-    expect(sender.events.filter((event) => event.type === 'tool')).toHaveLength(1)
+    expect(calls).toBe(2)
     expect(sender.events.find((event) => event.type === 'done')).toMatchObject({
-      type: 'done',
-      text: 'You recorded 32 in the prefetched daily data.'
+      text: 'You gained 8.7 kg between 8 August and 30 September.',
+      outcome: 'completed'
     })
   })
 

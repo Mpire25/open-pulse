@@ -146,6 +146,32 @@ export function setHeartDetail(date: string, result: HeartDetailResult): void {
   scheduleSave()
 }
 
+export interface ArchivedMetricCoverage {
+  /** Days with a recorded value. */
+  days: number
+  first: string
+  last: string
+}
+
+/** Which daily metrics the archive holds values for, and over which dates. */
+export function archivedMetricCoverage(): Record<string, ArchivedMetricCoverage> {
+  const coverage: Record<string, ArchivedMetricCoverage> = {}
+  for (const [date, record] of Object.entries(load().days)) {
+    for (const [metric, value] of Object.entries(record.values)) {
+      if (value == null) continue
+      const entry = coverage[metric]
+      if (!entry) {
+        coverage[metric] = { days: 1, first: date, last: date }
+        continue
+      }
+      entry.days++
+      if (date < entry.first) entry.first = date
+      if (date > entry.last) entry.last = date
+    }
+  }
+  return coverage
+}
+
 /** Refresh: keep values (views stay populated) but force the next query to refetch. */
 export function markAllStale(): void {
   for (const record of Object.values(load().days)) record.fetched = {}
