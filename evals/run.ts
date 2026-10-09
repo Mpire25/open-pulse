@@ -7,6 +7,7 @@ import { join, resolve } from 'node:path'
 import { parseArgs } from 'node:util'
 import { DEFAULT_ASSISTANT, type AssistantSettings } from '../src/shared/types'
 import { buildCases, CATEGORIES, type EvalCase } from './cases'
+import { pinEvalNow } from './fixture'
 import { appAssistantSettings, hasSessionFile, loadAssistant, sessionDir } from './runtime'
 import { pool, recordFromRun, runCase, score, type CaseResult, type ResultsFile } from './runner'
 
@@ -152,6 +153,8 @@ function compare(paths: string[]): void {
 /** Saves a re-scored copy next to the original; answers are not re-generated. */
 function rescore(path: string, verbose: boolean): void {
   const results = JSON.parse(readFileSync(path, 'utf8')) as ResultsFile
+  // Judge the saved answers against the day they were given, not today.
+  pinEvalNow(new Date(results.startedAt))
   const cases = new Map(buildCases().map((evalCase) => [evalCase.id, evalCase]))
   results.cases = results.cases.flatMap((result) => {
     const evalCase = cases.get(result.id)
@@ -244,6 +247,8 @@ async function main(): Promise<void> {
       throw new Error('The eval ChatGPT session is not usable. Run: bun run eval --sign-in')
     }
 
+    const startedAt = new Date()
+    pinEvalNow(startedAt)
     const cases = selectCases(options.cases)
     const repeat = Math.max(1, Number(options.repeat) || 1)
     const commit = await git(['rev-parse', 'HEAD'], target.root)
@@ -253,7 +258,7 @@ async function main(): Promise<void> {
       commit,
       model: assistantSettings.model,
       reasoningEffort: assistantSettings.reasoningEffort ?? 'auto',
-      startedAt: new Date().toISOString(),
+      startedAt: startedAt.toISOString(),
       repeat,
       cases: cases.map((evalCase) => ({ id: evalCase.id, category: evalCase.category, runs: [] }))
     }

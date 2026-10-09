@@ -6,6 +6,7 @@ import {
   average,
   BATTERY_PCT,
   dateAgo,
+  evalNow,
   night,
   runsBetween,
   TODAY_STEPS,
@@ -73,7 +74,7 @@ export function buildCases(): EvalCase[] {
   const recentSleep = average('sleepMinutes', 13, 0)!
   const recentRhr = average('restingHeartRate', 6, 0)!
   // "This week" may mean the last seven days or the calendar week so far.
-  const sinceMonday = (new Date().getDay() + 6) % 7
+  const sinceMonday = (evalNow().getDay() + 6) % 7
   const weekRhr = [recentRhr, average('restingHeartRate', sinceMonday, 0)!]
   const gainSince60 = weightKg(0)! - nearestWeight(60)
   const steps30 = [average('steps', 29, 0)!, average('steps', 30, 1)!]

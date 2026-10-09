@@ -46,6 +46,19 @@ export const BATTERY_PCT = 64
 // ---------------------------------------------------------------------------
 // Dates
 
+// The eval's "today". Live runs pin it when they start, so every case sees the
+// same day; rescoring pins it to the original run's start so a saved answer is
+// judged against the dates it was given, not the dates on the day it is rescored.
+let pinnedNow: number | null = null
+
+export function pinEvalNow(at: Date | null): void {
+  pinnedNow = at ? at.getTime() : null
+}
+
+export function evalNow(): Date {
+  return pinnedNow == null ? new Date() : new Date(pinnedNow)
+}
+
 function pad(value: number): string {
   return String(value).padStart(2, '0')
 }
@@ -55,12 +68,12 @@ export function isoDay(date: Date): string {
 }
 
 /** The local civil date `daysAgo` days before today. */
-export function dateAgo(daysAgo: number, now = new Date()): string {
+export function dateAgo(daysAgo: number, now = evalNow()): string {
   return isoDay(new Date(now.getFullYear(), now.getMonth(), now.getDate() - daysAgo, 12))
 }
 
 /** Days between a local civil date and today (0 = today, negative = future). */
-export function daysAgoOf(date: string, now = new Date()): number {
+export function daysAgoOf(date: string, now = evalNow()): number {
   const [year, month, day] = date.split('-').map(Number)
   const target = Date.UTC(year, month - 1, day)
   const today = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate())
@@ -79,7 +92,7 @@ export function datesBetween(start: string, end: string): string[] {
 }
 
 /** ISO instant for a local wall-clock time on the day `daysAgo` days before today. */
-function localInstant(daysAgo: number, minuteOfDay: number, now = new Date()): string {
+function localInstant(daysAgo: number, minuteOfDay: number, now = evalNow()): string {
   return new Date(
     now.getFullYear(),
     now.getMonth(),
@@ -278,7 +291,7 @@ function mealsOn(daysAgo: number): Meal[] {
   return meals
 }
 
-export function nutritionEntries(daysAgo: number, now = new Date()): NutritionLogEntry[] {
+export function nutritionEntries(daysAgo: number, now = evalNow()): NutritionLogEntry[] {
   return mealsOn(daysAgo).map((meal, index) => {
     const start = localInstant(daysAgo, meal.minute, now)
     return {
@@ -308,7 +321,7 @@ export function caloriesIn(daysAgo: number): number | null {
 // ---------------------------------------------------------------------------
 // Daily values
 
-export function dayValues(daysAgo: number, now = new Date()): DayValues {
+export function dayValues(daysAgo: number, now = evalNow()): DayValues {
   const worn = trackerWorn(daysAgo)
   const stepCount = steps(daysAgo)
   const run = runOn(daysAgo)
@@ -504,7 +517,7 @@ export interface HealthCall {
 
 export type HealthCallListener = (call: HealthCall) => void
 
-export function createHealthFixture(record: HealthCallListener, now = () => new Date()) {
+export function createHealthFixture(record: HealthCallListener, now = evalNow) {
   const clampRange = (start: string, end: string): [string, string] => (start <= end ? [start, end] : [end, start])
 
   return {
@@ -591,7 +604,7 @@ export function createHealthFixture(record: HealthCallListener, now = () => new 
 }
 
 /** What the app's background sync would have cached: the last 180 days. */
-export function cachedCoverage(now = new Date()): Record<string, { days: number; first: string; last: string }> {
+export function cachedCoverage(now = evalNow()): Record<string, { days: number; first: string; last: string }> {
   const coverage: Record<string, { days: number; first: string; last: string }> = {}
   for (let d = 179; d >= 0; d--) {
     const values = dayValues(d, now)

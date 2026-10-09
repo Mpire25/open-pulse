@@ -131,3 +131,22 @@ test('runs the real assistant loop against the fixture offline', async () => {
   ])
   if (exitCode !== 0) throw new Error(`Eval runtime harness failed (${exitCode}).\n${stdout}\n${stderr}`)
 }, 30_000)
+
+test('a pinned eval date keeps rescoring stable on later days', async () => {
+  const { pinEvalNow } = await import('../evals/fixture')
+  const runDay = new Date(2026, 9, 9, 12)
+  try {
+    pinEvalNow(runDay)
+    const evalCase = buildCases().find((item) => item.id === 'steps-today')!
+    const saved = record({
+      text: `You've done ${TODAY_STEPS.toLocaleString('en-GB')} steps so far today.`,
+      healthCalls: [{ fn: 'getSeries', metrics: ['steps'], start: '2026-10-09', end: '2026-10-09' }]
+    })
+    expect(score(evalCase, saved).passed).toBe(true)
+    // Unpinned on a later day, the same answer would be judged against the 10th.
+    pinEvalNow(new Date(2026, 9, 10, 12))
+    expect(score(buildCases().find((item) => item.id === 'steps-today')!, saved).passed).toBe(false)
+  } finally {
+    pinEvalNow(null)
+  }
+})
