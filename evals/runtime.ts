@@ -48,8 +48,20 @@ let calendarClockInstalled = false
  * in older checkouts. Date.now remains real for latency and token expiry;
  * explicit timestamps and calendar-date construction keep their usual meaning.
  */
-function installEvalCalendarClock(): void {
+async function installEvalCalendarClock(): Promise<void> {
   if (calendarClockInstalled) return
+  // jose defaults JWT validation to new Date(), so give its real verifier an
+  // explicit wall-clock date before installing the synthetic calendar clock.
+  const jose = await import('jose')
+  const realJwtVerify = jose.jwtVerify
+  mock.module('jose', () => ({
+    ...jose,
+    jwtVerify: (
+      token: Parameters<typeof realJwtVerify>[0],
+      key: Parameters<typeof realJwtVerify>[1],
+      options?: Parameters<typeof realJwtVerify>[2]
+    ) => realJwtVerify(token, key, { ...options, currentDate: new Date(Date.now()) })
+  }))
   globalThis.Date = new Proxy(globalThis.Date, {
     construct: (target, args, newTarget) =>
       Reflect.construct(target, args.length ? args : [evalNow().getTime()], newTarget),
@@ -213,7 +225,7 @@ export interface AssistantUnderTest {
 
 export async function loadAssistant(root: string, assistant: AssistantSettings): Promise<AssistantUnderTest> {
   const main = join(root, 'src', 'main')
-  installEvalCalendarClock()
+  await installEvalCalendarClock()
 
   mock.module('electron', () => ({
     shell: {

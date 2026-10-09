@@ -39,7 +39,8 @@ them with `--model` and `--effort`. Results are saved in `evals/results/`
 (git-ignored) and contain only synthetic data.
 
 Calendar dates stay pinned to the run's start for the assistant, fixture and
-checks. Elapsed-time measurements and token expiry continue using real time.
+checks. Elapsed-time measurements, token expiry and JWT validation continue
+using real time.
 
 ## Scoring
 

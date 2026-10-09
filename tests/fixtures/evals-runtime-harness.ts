@@ -5,7 +5,8 @@ import { afterAll, expect, test } from 'bun:test'
 import { mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
-import { PLAN_SCOPE } from '../../src/main/chatgpt-protocol'
+import { generateKeyPair, SignJWT } from 'jose'
+import { CHATGPT_ISSUER, PLAN_SCOPE, verifyIdentity } from '../../src/main/chatgpt-protocol'
 
 const temporary = mkdtempSync(join(tmpdir(), 'openpulse-eval-session-'))
 const NativeDate = Date
@@ -126,6 +127,28 @@ test('keeps the assistant, tools and scoring on the run date across midnight', a
   } finally {
     pinEvalNow(null)
     wallTime = previousWallTime
+  }
+})
+
+test('JWT validation uses real time while the eval calendar is pinned', async () => {
+  const { privateKey, publicKey } = await generateKeyPair('RS256')
+  const now = Math.floor(Date.now() / 1000)
+  const sign = (claims: { exp: number; nbf?: number }): Promise<string> =>
+    new SignJWT({ sub: 'offline-subject', iat: now - 60, ...claims })
+      .setProtectedHeader({ alg: 'RS256' })
+      .setIssuer(CHATGPT_ISSUER)
+      .setAudience('offline-client')
+      .sign(privateKey)
+  const expired = await sign({ exp: now - 30 })
+  const valid = await sign({ nbf: now - 60, exp: now + 600 })
+  pinEvalNow(new NativeDate((now - 600) * 1000))
+  try {
+    await expect(verifyIdentity(expired, 'offline-client', undefined, async () => publicKey))
+      .rejects.toMatchObject({ code: 'ERR_JWT_EXPIRED' })
+    await expect(verifyIdentity(valid, 'offline-client', undefined, async () => publicKey))
+      .resolves.toMatchObject({ subject: 'offline-subject' })
+  } finally {
+    pinEvalNow(null)
   }
 })
 
