@@ -56,7 +56,7 @@ export function pinEvalNow(at: Date | null): void {
 }
 
 export function evalNow(): Date {
-  return pinnedNow == null ? new Date() : new Date(pinnedNow)
+  return new Date(pinnedNow ?? Date.now())
 }
 
 function pad(value: number): string {

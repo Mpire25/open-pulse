@@ -38,6 +38,9 @@ The model and reasoning effort default to the ones set in the app; override
 them with `--model` and `--effort`. Results are saved in `evals/results/`
 (git-ignored) and contain only synthetic data.
 
+Calendar dates stay pinned to the run's start for the assistant, fixture and
+checks. Elapsed-time measurements and token expiry continue using real time.
+
 ## Scoring
 
 Each case has deterministic checks (`cases.ts`), computed from the fixture

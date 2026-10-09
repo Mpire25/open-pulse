@@ -8,7 +8,16 @@ import { join, resolve } from 'node:path'
 import { PLAN_SCOPE } from '../../src/main/chatgpt-protocol'
 
 const temporary = mkdtempSync(join(tmpdir(), 'openpulse-eval-session-'))
-afterAll(() => rmSync(temporary, { recursive: true, force: true }))
+const NativeDate = Date
+let wallTime = Date.now()
+globalThis.Date = new Proxy(NativeDate, {
+  construct: (target, args, newTarget) => Reflect.construct(target, args.length ? args : [wallTime], newTarget),
+  get: (target, key, receiver) => key === 'now' ? () => wallTime : Reflect.get(target, key, receiver)
+})
+afterAll(() => {
+  globalThis.Date = NativeDate
+  rmSync(temporary, { recursive: true, force: true })
+})
 
 // Never touch the developer's real eval session.
 const sessionDir = join(temporary, 'session')
@@ -19,14 +28,14 @@ const tokens = {
   clientId: 'eval-client',
   subject: 'eval-subject',
   scopes: ['openid', PLAN_SCOPE],
-  expiresAt: Date.now() + 60 * 60_000
+  expiresAt: Date.now() + 48 * 60 * 60_000
 }
 writeFileSync(join(sessionDir, 'store.json'), JSON.stringify({
   secrets: { 'chatgpt-plan-session': { clientId: tokens.clientId, subject: tokens.subject, tokens } },
   local: {}
 }))
 
-const { dateAgo, TODAY_STEPS } = await import('../../evals/fixture')
+const { dateAgo, pinEvalNow, TODAY_STEPS } = await import('../../evals/fixture')
 
 function sse(events: unknown[]): Response {
   const all = [...events, { type: 'response.completed', response: { status: 'completed', usage: { input_tokens: 1200, input_tokens_details: { cached_tokens: 1024 }, output_tokens: 40, output_tokens_details: { reasoning_tokens: 12 } } } }]
@@ -43,13 +52,14 @@ globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) =>
   const body = JSON.parse(String(init?.body)) as Record<string, unknown>
   requests.push({ url, body })
   if (requests.length === 1) {
+    const today = String(body.instructions).match(/Today is (\d{4}-\d{2}-\d{2})/)![1]
     return sse([{
       type: 'response.output_item.done',
       item: {
         type: 'function_call',
         name: 'query_daily_metrics',
         call_id: 'call-1',
-        arguments: JSON.stringify({ metrics: ['steps'], startDate: dateAgo(0), endDate: dateAgo(0) })
+        arguments: JSON.stringify({ metrics: ['steps'], startDate: today, endDate: today })
       }
     }])
   }
@@ -89,6 +99,34 @@ test('runs a case through the real assistant loop and scores it', async () => {
   const result = score(evalCase, record)
   expect(result.passed).toBe(true)
   expect(result.checks.every((check) => check.passed)).toBe(true)
+})
+
+test('keeps the assistant, tools and scoring on the run date across midnight', async () => {
+  const previousWallTime = wallTime
+  const runStart = new NativeDate(wallTime)
+  runStart.setHours(23, 59, 0, 0)
+  pinEvalNow(runStart)
+  wallTime = new NativeDate(runStart.getFullYear(), runStart.getMonth(), runStart.getDate() + 1, 0, 1).getTime()
+  requests.length = 0
+  try {
+    const today = dateAgo(0)
+    expect(new Date().getTime()).toBe(runStart.getTime())
+    expect(Date()).toBe(runStart.toString())
+    expect(Date.now()).toBe(wallTime)
+    expect(new Date(wallTime).getTime()).toBe(wallTime)
+
+    const evalCase = buildCases().find((item) => item.id === 'steps-today')!
+    const record = await runCase(assistant, evalCase, 1)
+    expect(String(requests[0].body.instructions)).toContain(`Today is ${today}`)
+    expect(record.healthCalls).toEqual([{ fn: 'getSeries', metrics: ['steps'], start: today, end: today }])
+    const input = requests[1].body.input as Array<{ type: string; output?: string }>
+    const output = JSON.parse(input.find((item) => item.type === 'function_call_output')!.output!)
+    expect(output.days[today].steps).toBe(TODAY_STEPS)
+    expect(score(evalCase, record).passed).toBe(true)
+  } finally {
+    pinEvalNow(null)
+    wallTime = previousWallTime
+  }
 })
 
 test('keeps the eval session private', async () => {
