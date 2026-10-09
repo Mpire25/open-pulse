@@ -38,8 +38,9 @@ Built with Electron + React 19, Radix primitives, Tailwind v4, and Framer Motion
   breakdowns where the API supplies them.
 - **Devices** — paired trackers with battery level and state, last sync time,
   and hardware features.
-- **Assistant** — a streaming chat agent that uses focused tools to read and
-  analyze your real metrics across explicit date ranges, including trends and
+- **Assistant** — a streaming chat agent that receives 180 days of key daily
+  metrics, recent workouts, seven days of food logs and last night's sleep
+  with each message, and uses tools for older history and detailed analysis, including trends and
   relationships, sleep, workouts, intraday signals, nutrition, body readings,
   and devices. Answers can include trusted, navigable cards and charts derived
   from the returned data, plus web research when current external guidance
@@ -222,8 +223,12 @@ Renderer (React)  ──IPC──▶  Main process  ──HTTPS──▶  health
 - Production builds run under a strict Content-Security-Policy.
 - Google Health access uses read-only scopes; OpenPulse does not write health
   data back to your account.
-- When you use the assistant, the health metrics needed to answer your question
-  are sent to the public Responses API through your signed-in account.
+- When you use the assistant, a cached table of 180 days of nine key daily metrics,
+  workouts in that period, the last seven days of food logs and last night's
+  sleep is sent with every message to the public Responses API through your
+  signed-in account. Tools may send additional data needed by your question.
+  Empty metric columns are omitted; today's metrics are refreshed before
+  answering. If the table cannot be built, the assistant falls back to tools.
 
 ## Acknowledgements
 

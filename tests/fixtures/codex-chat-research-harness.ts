@@ -70,6 +70,12 @@ mock.module('../../src/main/health-agent-tools', () => ({
   }
 }))
 
+// Exercise the coverage fallback without loading the live health service.
+mock.module('../../src/main/health-agent-table', () => ({
+  HEALTH_TABLE_DATASET_ID: 'health-table',
+  buildHealthTable: async () => { throw new Error('Health snapshot unavailable') }
+}))
+
 mock.module('../../src/main/metric-store', () => ({
   archivedMetricCoverage: () => ({
     weightKg: { days: 27, first: '2026-08-08', last: '2026-10-08' }
@@ -310,7 +316,7 @@ describe('brokered Codex research orchestration', () => {
     await runChat(sender as unknown as WebContents, 'unfinished-chat', 'unfinished-run', [{ role: 'user', text: 'Analyse my steps and HRV together.' }])
     expect(requests).toBe(1)
     expect(sender.events.some((event) => event.type === 'done')).toBe(false)
-    expect(sender.events.some((event) => event.type === 'tool')).toBe(false)
+    expect(sender.events.some((event) => event.type === 'tool' && event.name !== 'read_health_table')).toBe(false)
     expect(sender.events.some((event) => event.type === 'error' || event.type === 'interrupted')).toBe(true)
   })
 
@@ -442,7 +448,7 @@ describe('brokered Codex research orchestration', () => {
     )
 
     expect(calls).toBe(2)
-    expect(sender.events.filter((event) => event.type === 'tool')).toHaveLength(1)
+    expect(sender.events.filter((event) => event.type === 'tool' && event.name !== 'read_health_table')).toHaveLength(1)
     expect(sender.events.find((event) => event.type === 'done')).toMatchObject({
       type: 'done',
       text: 'Your HRV yesterday was 41.2 ms.'

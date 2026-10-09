@@ -37,11 +37,14 @@ function sse(events: unknown[]): Response {
 }
 
 const requests: Array<{ url: string; body: Record<string, unknown> }> = []
+// A test can script its own responses; the default plays one tool call, then an answer.
+let respond: ((body: Record<string, unknown>) => Response) | null = null
 globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
   const url = String(input)
   if (url !== 'https://api.openai.com/v1/responses') throw new Error(`Unexpected request to ${url}`)
   const body = JSON.parse(String(init?.body)) as Record<string, unknown>
   requests.push({ url, body })
+  if (respond) return respond(body)
   if (requests.length === 1) {
     return sse([{
       type: 'response.output_item.done',
@@ -72,7 +75,7 @@ test('runs a case through the real assistant loop and scores it', async () => {
 
   expect(record.outcome).toBe('completed')
   expect(record.text).toContain(TODAY_STEPS.toLocaleString('en-GB'))
-  expect(record.healthCalls).toEqual([{ fn: 'getSeries', metrics: ['steps'], start: dateAgo(0), end: dateAgo(0), mode: 'await' }])
+  expect(record.healthCalls).toContainEqual({ fn: 'getSeries', metrics: ['steps'], start: dateAgo(0), end: dateAgo(0), mode: 'await' })
   expect(record.modelRequests).toHaveLength(2)
   expect(record.modelRequests[0]).toMatchObject({
     kind: 'agent',
@@ -98,4 +101,35 @@ test('keeps the eval session private', async () => {
   expect(statSync(sessionDir).mode & 0o777).toBe(0o700)
   expect(store.getLocalValue('chatgpt-host-id')).toBe('urn:uuid:eval')
   expect(store.getSecret<{ tokens: { accessToken: string } }>('chatgpt-plan-session')?.tokens.accessToken).toBe('eval-access-token')
+})
+
+test('uses a prompt dataset for a card and returns validated facts before the answer', async () => {
+  const text = `You've done ${TODAY_STEPS.toLocaleString('en-GB')} steps so far today.`
+  respond = () => requests.length === 1 ? sse([{
+    type: 'response.output_item.done',
+    item: { type: 'function_call', name: 'present_health_data', call_id: 'visual-1',
+      arguments: JSON.stringify({ metricCards: [{ datasetId: 'health-table', metric: 'steps', date: dateAgo(0) }] }) }
+  }]) : sse([
+    { type: 'response.output_text.delta', delta: text },
+    { type: 'response.output_item.done', item: { type: 'message', content: [{ type: 'output_text', text, annotations: [] }] } }
+  ])
+  requests.length = 0
+  try {
+    const evalCase = buildCases().find((item) => item.id === 'steps-today')!
+    const record = await runCase(assistant, evalCase, 0)
+    expect(record.outcome).toBe('completed')
+    expect(requests).toHaveLength(2)
+    const input = requests[0].body.input as Array<{ role?: string; content?: Array<{ text?: string }> }>
+    const table = input.find((item) => item.role === 'developer')?.content?.[0]?.text ?? ''
+    expect(table).toContain('<OPENPULSE_HEALTH_DATA>')
+    expect(table).toContain(`${dateAgo(0)},${TODAY_STEPS}`)
+    expect(String(requests[0].body.instructions)).toContain('do not call a tool to re-read data it already contains')
+    expect(record.healthCalls.some((call) => call.fn === 'getSeries' && call.mode === 'background' && call.start === dateAgo(179))).toBe(true)
+    expect(record.modelRequests[0].dataChars).toBe(table.length)
+    expect(record.parts).toHaveLength(1)
+    const output = (requests[1].body.input as Array<{ type: string; output?: string }>).find((item) => item.type === 'function_call_output')!
+    expect(JSON.parse(output.output!).validatedFacts).toBeDefined()
+    expect(score(evalCase, record).passed).toBe(true)
+    expect(record.healthCalls.filter((call) => call.fn === 'getSeries')).toHaveLength(2)
+  } finally { respond = null }
 })
