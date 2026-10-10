@@ -20,7 +20,7 @@ import {
   type AssistantSettings
 } from '../src/shared/types'
 import type { ModelRequest } from './checks'
-import { cachedCoverage, createHealthFixture, type HealthCall } from './fixture'
+import { cachedCoverage, createHealthFixture, evalNow, type HealthCall } from './fixture'
 
 const RESPONSES_URL = 'https://api.openai.com/v1/responses'
 // OPENPULSE_EVALS_DIR moves the session elsewhere (the offline tests use a temp dir).
@@ -113,6 +113,17 @@ function toolNames(tools: unknown): string[] {
   })
 }
 
+/** How much health data a request carries: developer data blocks and tool results. */
+function healthDataChars(input: unknown): number {
+  if (!Array.isArray(input)) return 0
+  return input.reduce((total: number, item) => {
+    const entry = item as { type?: string; role?: string; output?: unknown; content?: Array<{ text?: unknown }> }
+    if (entry.type === 'function_call_output') return total + String(entry.output ?? '').length
+    if (entry.role === 'developer') return total + (entry.content ?? []).reduce((sum, part) => sum + String(part.text ?? '').length, 0)
+    return total
+  }, 0)
+}
+
 async function readStream(stream: ReadableStream<Uint8Array>, request: ModelRequest): Promise<void> {
   const reader = stream.getReader()
   const decoder = new TextDecoder()
@@ -168,6 +179,7 @@ function installFetchRecorder(): void {
     const body = bodyOf(init)
     const tools = toolNames(body?.tools)
     const request: ModelRequest = {
+      dataChars: healthDataChars(body?.input),
       kind: tools.includes('web_search') ? 'research' : 'agent',
       tools,
       toolChoice: typeof body?.tool_choice === 'string' ? body.tool_choice : undefined,
@@ -194,7 +206,11 @@ export interface AssistantUnderTest {
   getCodexStatus: typeof import('../src/main/codex-auth').getCodexStatus
 }
 
-export async function loadAssistant(root: string, assistant: AssistantSettings): Promise<AssistantUnderTest> {
+export async function loadAssistant(
+  root: string,
+  assistant: AssistantSettings,
+  options: { latency?: boolean } = {}
+): Promise<AssistantUnderTest> {
   const main = join(root, 'src', 'main')
 
   mock.module('electron', () => ({
@@ -247,7 +263,7 @@ export async function loadAssistant(root: string, assistant: AssistantSettings):
     }
   }))
 
-  const fixture = createHealthFixture((call) => runContext.getStore()?.healthCalls.push(call))
+  const fixture = createHealthFixture((call) => runContext.getStore()?.healthCalls.push(call), evalNow, options)
   mock.module(join(main, 'health-service.ts'), () => fixture)
   mock.module(join(main, 'metric-store.ts'), () => ({ archivedMetricCoverage: () => cachedCoverage() }))
 

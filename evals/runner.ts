@@ -42,6 +42,8 @@ export interface CaseRun {
    * "today" no longer matches the fixture's, so the result is unreliable.
    */
   afterMidnight?: boolean
+  /** The most health data any of the run's requests carried, in characters. */
+  dataChars?: number
   /** Per-request detail; absent in results saved before it was recorded. */
   requests?: Array<Omit<ModelRequest, 'startedAt'>>
 }
@@ -93,6 +95,7 @@ export function score(evalCase: EvalCase, record: RunRecord): CaseRun {
     outputTokens: sum((request) => request.outputTokens),
     reasoningTokens: sum((request) => request.reasoningTokens),
     visuals: record.parts.map((part) => (part as { type?: string }).type ?? 'visual'),
+    dataChars: Math.max(0, ...record.modelRequests.filter((request) => request.kind === 'agent').map((request) => request.dataChars ?? 0)),
     requests: record.modelRequests.map(({ startedAt: _startedAt, ...request }) => request)
   }
 }

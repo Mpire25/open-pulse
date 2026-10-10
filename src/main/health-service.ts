@@ -1539,6 +1539,63 @@ async function ensureIntradayHeart(
 // ---------------------------------------------------------------------------
 // Public queries
 
+/** Guard request-local cached snapshots against a disconnect or account switch. */
+export function healthAccountSnapshotGuard(): () => void {
+  const generation = healthAccountGeneration
+  return () => assertCurrentAccount(generation)
+}
+
+/** Sleep detail already held locally; never obtains a token or schedules a fetch. */
+export function getArchivedSleepHistory(start: string, end: string): SleepRangeResult {
+  const dates = listDates(...normalizeRange(start, end))
+  return {
+    source: 'live',
+    provisionalDates: dates.filter((date) => {
+      const at = fetchedAt(SLEEP_DETAIL_GROUP, date)
+      return at == null || !isHealthCacheTimestampFresh(date, at)
+    }),
+    days: dates
+      .map((date) => cachedSleepDay(peekDay(date)))
+      .filter((day): day is SleepDay => day != null)
+  }
+}
+
+/** Populated cached values that need revalidation before being treated as current. */
+export function getHealthHistoryFreshness(metrics: MetricKey[], start: string, end: string): Record<string, MetricKey[]> {
+  const stale: Record<string, MetricKey[]> = {}
+  for (const date of listDates(...normalizeRange(start, end))) {
+    const values = peekDay(date)?.values
+    const missingFreshness = metrics.filter((metric) => {
+      if (values?.[metric] == null) return false
+      const group = SLEEP_METRICS.includes(metric) ? SLEEP_SUMMARY_GROUP : GROUP_BY_METRIC.get(metric)?.id
+      // Partial-fetch cooldown is not evidence that the stored value is complete.
+      const at = group ? fetchedAt(group, date) : null
+      return at == null || !isHealthCacheTimestampFresh(date, at)
+    })
+    if (missingFreshness.length) stale[date] = missingFreshness
+  }
+  return stale
+}
+
+/** A request-local snapshot; never fetches missing days or schedules a backfill. */
+export function getArchivedHealthHistory(
+  metrics: MetricKey[], start: string, end: string
+): { series: SeriesResult; workouts: WorkoutsResult; staleMetrics: Record<string, MetricKey[]> } {
+  const [s, e] = normalizeRange(start, end)
+  const days: DailySeries = {}
+  const workouts: Workout[] = []
+  for (const date of listDates(s, e)) {
+    const record = peekDay(date)
+    days[date] = Object.fromEntries(metrics.map((metric) => [metric, record?.values[metric] ?? null]))
+    workouts.push(...(record?.workouts ?? []))
+  }
+  return {
+    series: { source: 'live', start: s, end: e, days },
+    workouts: { source: 'live', workouts },
+    staleMetrics: getHealthHistoryFreshness(metrics, s, e)
+  }
+}
+
 export async function getSeries(
   metrics: MetricKey[],
   start: string,
@@ -1605,10 +1662,7 @@ export async function getSleepRange(
     console.error(`[health] sleep range failed for ${s}..${e}:`, err)
   }
   assertCurrentAccount(generation)
-  const days = listDates(s, e)
-    .map((d) => cachedSleepDay(peekDay(d)))
-    .filter((day): day is SleepDay => day != null)
-  return { source: 'live', days }
+  return getArchivedSleepHistory(s, e)
 }
 
 export async function getWorkoutsRange(
@@ -1792,6 +1846,11 @@ export async function getHeartDetail(
 export async function getNutritionLogs(date: string, signal?: AbortSignal): Promise<NutritionLogsResult> {
   const generation = healthAccountGeneration
   const [d] = normalizeRange(date, date)
+  signal?.throwIfAborted()
+  const cached = nutritionRawCache.get(d)
+  if (rawDayFresh(cached, d)) {
+    return { date: d, source: 'live', entries: parseNutritionLogs(cached!.points) }
+  }
   const token = await requireGoogleAccessToken()
   assertCurrentAccount(generation)
   const points = await nutritionRawRange(token, d, shiftIsoDate(d, 1), 0, signal)

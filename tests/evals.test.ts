@@ -177,6 +177,9 @@ describe('eval checks', () => {
       'Missing data, not _zero steps_.',
       'Missing data, not `zero steps`.',
       'Zero steps cannot be inferred from the missing data.',
+      'That’s a missing entry, not a count of zero steps.',
+      'The entry is missing, rather than showing zero steps.',
+      'No step count was recorded for that day—the entry is blank, not zero.',
       'I checked Friday **28 August 2026**, and no step count was returned for that date. That means there’s no recorded value—not necessarily that you took zero steps.'
     ]) {
       expect(score(evalCase, record({ text, healthCalls })).passed).toBe(true)
@@ -225,4 +228,34 @@ test('a pinned eval date keeps rescoring stable on later days', async () => {
   } finally {
     pinEvalNow(null)
   }
+})
+
+test('lookup delays follow where the app would read from', async () => {
+  const { lookupDelayMs } = await import('../evals/fixture')
+  const archive = lookupDelayMs({ fn: 'getSeries', start: dateAgo(29), end: dateAgo(0), mode: 'background' })
+  const freshToday = lookupDelayMs({ fn: 'getSeries', start: dateAgo(0), end: dateAgo(0), mode: 'await' })
+  const settled = lookupDelayMs({ fn: 'getSeries', start: dateAgo(60), end: dateAgo(30), mode: 'await' })
+  const lastYear = lookupDelayMs({ fn: 'getSeries', start: dateAgo(393), end: dateAgo(380), mode: 'await' })
+  expect(archive).toBeLessThan(settled)
+  expect(settled).toBeLessThan(freshToday)
+  expect(lastYear).toBeGreaterThan(settled)
+  expect(lookupDelayMs({ fn: 'getIntraday:steps', date: dateAgo(1) })).toBeGreaterThan(settled)
+})
+
+test('reports the largest main-agent health payload without counting research context', () => {
+  const evalCase = buildCases().find((item) => item.id === 'steps-today')!
+  const result = score(evalCase, record({ modelRequests: [
+    { kind: 'agent', tools: [], startedAt: 0, functionCalls: [], dataChars: 100 },
+    { kind: 'agent', tools: [], startedAt: 0, functionCalls: [], dataChars: 250 },
+    { kind: 'research', tools: [], startedAt: 0, functionCalls: [], dataChars: 999 }
+  ] }))
+  expect(result.dataChars).toBe(250)
+})
+
+test('a nearby weight answer must name its actual observation date', () => {
+  const evalCase = buildCases().find((item) => item.id === 'weight-a-year-ago')!
+  const dateCheck = evalCase.checks.find((check) => check.name === 'labels the actual nearby observation date')!
+  expect(weightKg(365)).toBeNull()
+  expect(dateCheck.run(record({ text: `Your nearest weigh-in was ${weightKg(364)} kg on ${dateAgo(364)}.` }))).toBe(true)
+  expect(dateCheck.run(record({ text: `You weighed ${weightKg(364)} kg on ${dateAgo(365)}.` }))).toBe(false)
 })

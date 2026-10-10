@@ -168,7 +168,7 @@ export const AGENT_TOOL_LABELS: Record<string, string> = {
   get_devices: 'Checking devices'
 }
 
-const METRIC_UNITS: Record<MetricKey, string> = {
+export const METRIC_UNITS: Record<MetricKey, string> = {
   steps: 'steps',
   distanceKm: 'km',
   floors: 'floors',
@@ -229,7 +229,7 @@ function parseMetrics(value: unknown, max: number): MetricKey[] {
   return metrics as MetricKey[]
 }
 
-function dailyPayload(metrics: MetricKey[], result: Awaited<ReturnType<typeof getSeries>>): Record<string, unknown> {
+export function dailyPayload(metrics: MetricKey[], result: Awaited<ReturnType<typeof getSeries>>): Record<string, unknown> {
   const observations = Object.fromEntries(
     metrics.map((metric) => [
       metric,
@@ -323,6 +323,10 @@ export async function runHealthAgentTool(
         source: result.source,
         requestedRange: { start, end },
         detail: args.detail,
+        ...(result.provisionalDates.length ? {
+          provisionalDates: result.provisionalDates,
+          warning: 'Sleep detail for provisionalDates is cached and provisional; it could not be confirmed as current.'
+        } : {}),
         days: result.days.map(({ sessions, ...summary }) => ({ ...summary, sessionCount: sessions.length })),
         nights: result.days.flatMap((day) => [...day.sessions].sort((a, b) =>
           Number(b.id === day.mainSessionId) - Number(a.id === day.mainSessionId)

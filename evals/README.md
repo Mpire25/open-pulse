@@ -14,12 +14,16 @@ Only these are swapped out:
   weight gain driven by an evening snack, fewer runs, short nights in the last
   fortnight with resting heart rate up and HRV down, five days when the tracker
   was not worn, and a partial today.
+- **Lookups take app-like time**: archive reads are near-instant, while fresh
+  data, history beyond the 180 synced days, hourly data and food logs wait as
+  they would on Google (`lookupDelayMs` in `fixture.ts`). `--instant` turns
+  this off.
 - **Sign-in** uses the eval's own ChatGPT session, stored in
   `~/.config/openpulse-evals/store.json` (owner-only permissions), not the
   app's Keychain-encrypted store.
 
 Each run uses your ChatGPT plan, like using the assistant in the app. A full
-run is 16 conversations.
+run is 20 conversations.
 
 ## Running
 

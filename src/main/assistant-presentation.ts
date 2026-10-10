@@ -44,7 +44,7 @@ export const PRESENTATION_TOOL: AgentToolSpec = {
   type: 'function',
   name: 'present_health_data',
   description:
-    'Display trusted OpenPulse cards and charts from datasets returned by query_daily_metrics, analyze_daily_metrics, query_sleep, query_nutrition_logs, or query_workouts. Analysis dataset IDs can be used directly; never repeat a health query merely to make a visual. Use an overview for a broad multi-domain summary, a metric card for one exact value, a comparison for two periods, a chart for a trend, a sleep card for one night when stage detail is relevant, a nutrition card for one day, meal, or logged item, or a workout card for one workout. Comparison aggregations are selected independently for each side: preserve explicit total/average/latest wording and use auto otherwise. Totals are rejected for rates, percentages, and state measurements. Use query_daily_metrics for a day nutrition card and query_nutrition_logs for a meal or item card. An overview is a standalone block: when requesting one, leave every other array empty. Otherwise normally show one block and never more than two unless the user explicitly asks for several. The app computes all values and navigation; never copy values into this call. All seven arrays are required and may be empty.',
+    'Display trusted OpenPulse cards and charts from datasets returned by query_daily_metrics, analyze_daily_metrics, query_sleep, query_nutrition_logs, or query_workouts. Analysis dataset IDs can be used directly; never repeat a health query merely to make a visual. Use an overview for a broad multi-domain summary, a metric card for one exact value, a comparison for two periods, a chart for a trend over the period the answer discusses, a sleep card for one night when stage detail is relevant, a nutrition card for one day, meal, or logged item, or a workout card for one workout. Comparison aggregations are selected independently for each side: preserve explicit total/average/latest wording and use auto otherwise. Totals are rejected for rates, percentages, and state measurements. Use query_daily_metrics for a day nutrition card and query_nutrition_logs for a meal or item card. An overview is a standalone block: when requesting one, leave every other array empty. Otherwise normally show one block and never more than two unless the user explicitly asks for several. The app computes all values and navigation; never copy values into this call. All seven arrays are required and may be empty.',
   strict: true,
   parameters: {
     type: 'object',
@@ -119,8 +119,14 @@ export const PRESENTATION_TOOL: AgentToolSpec = {
         maxItems: 2,
         items: {
           type: 'object',
-          properties: { datasetId: DATASET_ID, metric: METRIC, title: { type: 'string', minLength: 1, maxLength: 100 } },
-          required: ['datasetId', 'metric', 'title'],
+          properties: {
+            datasetId: DATASET_ID,
+            metric: METRIC,
+            title: { type: 'string', minLength: 1, maxLength: 100 },
+            startDate: { ...DATE_SCHEMA, description: 'First day of the period the answer discusses, not necessarily the whole dataset.' },
+            endDate: DATE_SCHEMA
+          },
+          required: ['datasetId', 'metric', 'title', 'startDate', 'endDate'],
           additionalProperties: false
         }
       },
@@ -283,9 +289,10 @@ function dailyDataset(datasetId: string, datasets: Map<string, AgentDataset>): D
     const end = requiredDate(requestedRange.end, 'dataset end')
     if (!source) throw new Error(`Dataset ${datasetId} has no valid source.`)
     const days: DailyDataset['days'] = {}
+    const provisional = provisionalSleepDates(data)
     for (const rawNight of (Array.isArray(data.days) ? data.days : data.nights)) {
       const night = record(rawNight)
-      if (!night || typeof night.date !== 'string') continue
+      if (!night || typeof night.date !== 'string' || provisional.has(night.date)) continue
       const date = requiredDate(night.date, 'sleep date')
       days[date] = {
         sleepMinutes:
@@ -492,10 +499,15 @@ function workoutDataset(datasetId: string, datasets: Map<string, AgentDataset>):
 
 const SLEEP_STAGES = new Set(['AWAKE', 'LIGHT', 'DEEP', 'REM'])
 
+/** Dates whose sleep detail the dataset marks as cached and unconfirmed; never shown as current. */
+function provisionalSleepDates(data: Record<string, unknown>): Set<string> {
+  return new Set(Array.isArray(data.provisionalDates) ? data.provisionalDates.filter((date) => typeof date === 'string') : [])
+}
+
 function sleepDataset(
   datasetId: string,
   datasets: Map<string, AgentDataset>
-): { source: DataSource; start: string; end: string; nights: AssistantSleepNight[] } {
+): { source: DataSource; start: string; end: string; nights: AssistantSleepNight[]; provisional: Set<string> } {
   const dataset = datasets.get(datasetId)
   const data = record(dataset?.data)
   const requestedRange = record(data?.requestedRange)
@@ -544,7 +556,7 @@ function sleepDataset(
     )
     return [{ ...(typeof night.id === 'string' ? { id: night.id } : {}), date, startTime, endTime, minutesAsleep, minutesInSleepPeriod, efficiency, stages, stageMinutes }]
   })
-  return { source, start, end, nights }
+  return { source, start, end, nights, provisional: provisionalSleepDates(data) }
 }
 
 const NUTRITION_DAILY_KEYS = {
@@ -679,6 +691,9 @@ export function resolvePresentation(
     const dataset = dailyDataset(datasetId, datasets)
     ensureWithin(dataset, start, end)
     const selectedDataset = { ...dataset, start, end }
+    // A blank tile says nothing; leave out metrics with no value in the period.
+    const items = metrics.map((metric) => overviewMetric(selectedDataset, metric)).filter((item) => item.value != null)
+    if (items.length < 2) throw new Error('An overview requires at least two metrics with recorded values.')
     return [
       {
         id: randomUUID(),
@@ -686,7 +701,7 @@ export function resolvePresentation(
         title,
         startDate: start,
         endDate: end,
-        items: metrics.map((metric) => overviewMetric(selectedDataset, metric)),
+        items,
         source: dataset.source
       }
     ]
@@ -699,6 +714,7 @@ export function resolvePresentation(
     const date = requiredDate(item?.date, 'date')
     const dataset = dailyDataset(datasetId, datasets)
     const point = metricValues(dataset, metric, date, date)[0]
+    if (point.value == null) throw new Error(`No ${metric} value is recorded on ${date}.`)
     parts.push({
       id: randomUUID(),
       type: 'metric-card',
@@ -775,19 +791,23 @@ export function resolvePresentation(
     const item = record(raw)
     const datasetId = requiredText(item?.datasetId, 'datasetId', 200)
     const metric = requiredMetric(item?.metric)
+    const start = requiredDate(item?.startDate, 'startDate')
+    const end = requiredDate(item?.endDate, 'endDate')
     const dataset = dailyDataset(datasetId, datasets)
-    const points = metricValues(dataset, metric, dataset.start, dataset.end)
+    const points = metricValues(dataset, metric, start, end)
+    const observations = points.filter((point) => point.value != null).length
+    if (!observations) throw new Error(`The requested ${metric} chart has no recorded values.`)
     parts.push({
       id: randomUUID(),
       type: 'trend-chart',
       title: requiredText(item?.title, 'title', 100),
       metric,
-      startDate: dataset.start,
-      endDate: dataset.end,
+      startDate: start,
+      endDate: end,
       points,
-      observations: points.filter((point) => point.value != null).length,
+      observations,
       source: dataset.source,
-      action: metricAction(metric, dataset.end, rangeDays(dataset.start, dataset.end))
+      action: metricAction(metric, end, rangeDays(start, end))
     })
   }
 
@@ -798,6 +818,9 @@ export function resolvePresentation(
     const selected = sleepDataset(datasetId, datasets)
     if (date < selected.start || date > selected.end) {
       throw new Error('The requested sleep card falls outside its dataset range.')
+    }
+    if (selected.provisional.has(date)) {
+      throw new Error(`Sleep detail for ${date} is cached and provisional; refresh it with query_sleep before showing a sleep card.`)
     }
     const sessionId = item?.sessionId == null ? undefined : requiredText(item.sessionId, 'sessionId', 500)
     const night = selected.nights.find((candidate) => candidate.date === date && (sessionId === undefined || candidate.id === sessionId))

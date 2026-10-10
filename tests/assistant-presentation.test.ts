@@ -178,7 +178,7 @@ describe('assistant visual presentation', () => {
             previousEndDate: '2026-07-02'
           }
         ],
-        charts: [{ datasetId: 'daily-1', metric: 'sleepMinutes', title: 'Sleep trend' }],
+        charts: [{ datasetId: 'daily-1', metric: 'sleepMinutes', title: 'Sleep trend', startDate: '2026-07-01', endDate: '2026-07-04' }],
         workouts: []
       },
       dailyDatasets()
@@ -289,6 +289,45 @@ describe('assistant visual presentation', () => {
     ).toThrow('outside its dataset range')
   })
 
+  test('charts the requested period rather than the whole dataset', () => {
+    const [chart] = resolvePresentation(
+      { charts: [{ datasetId: 'daily-1', metric: 'steps', title: 'Steps', startDate: '2026-07-03', endDate: '2026-07-04' }] },
+      dailyDatasets()
+    )
+    expect(chart).toMatchObject({
+      type: 'trend-chart',
+      startDate: '2026-07-03',
+      endDate: '2026-07-04',
+      points: [{ date: '2026-07-03', value: 6_000 }, { date: '2026-07-04', value: 7_000 }],
+      observations: 2,
+      action: { type: 'open-metric', date: '2026-07-04' }
+    })
+  })
+
+  test('never shows a blank chart, metric card or overview tile', () => {
+    const datasets = dailyDatasets()
+    expect(() =>
+      resolvePresentation({ charts: [{ datasetId: 'daily-1', metric: 'bmi', title: 'BMI', startDate: '2026-07-04', endDate: '2026-07-04' }] }, datasets)
+    ).toThrow('no recorded values')
+    expect(() =>
+      resolvePresentation({ metricCards: [{ datasetId: 'daily-1', metric: 'sleepMinutes', date: '2026-07-03' }] }, datasets)
+    ).toThrow('No sleepMinutes value')
+
+    const [overview] = resolvePresentation(
+      {
+        overviews: [{ datasetId: 'daily-1', title: 'Today', startDate: '2026-07-04', endDate: '2026-07-04', metrics: ['steps', 'activeZoneMinutes', 'sleepMinutes'] }]
+      },
+      datasets
+    )
+    expect(overview.type === 'overview' && overview.items.map((item) => item.metric)).toEqual(['steps', 'sleepMinutes'])
+    expect(() =>
+      resolvePresentation(
+        { overviews: [{ datasetId: 'daily-1', title: 'Today', startDate: '2026-07-04', endDate: '2026-07-04', metrics: ['steps', 'activeZoneMinutes', 'bmi'] }] },
+        datasets
+      )
+    ).toThrow('at least two metrics with recorded values')
+  })
+
   test('only opens workouts that were actually returned by the tool', () => {
     const datasets = new Map<string, AgentDataset>([
       [
@@ -341,6 +380,16 @@ describe('assistant visual presentation', () => {
         sleepDatasets()
       )
     ).toThrow('outside its dataset range')
+  })
+
+  test('never shows provisional sleep detail as a card or value', () => {
+    const datasets = sleepDatasets()
+    const data = datasets.get('sleep-1')!.data as Record<string, unknown>
+    data.provisionalDates = ['2026-07-11']
+    expect(() => resolvePresentation({ sleepCards: [{ datasetId: 'sleep-1', date: '2026-07-11' }] }, datasets))
+      .toThrow('cached and provisional')
+    expect(() => resolvePresentation({ metricCards: [{ datasetId: 'sleep-1', metric: 'sleepMinutes', date: '2026-07-11' }] }, datasets))
+      .toThrow('No sleepMinutes value')
   })
 
   test('resolves trusted nutrition cards for a day, meal, and returned item', () => {
@@ -416,7 +465,7 @@ describe('assistant visual presentation', () => {
         {
           metricCards: [],
           comparisons: [],
-          charts: [{ datasetId: 'analysis-1', metric: 'restingHeartRate', title: 'Resting heart rate trend' }],
+          charts: [{ datasetId: 'analysis-1', metric: 'restingHeartRate', title: 'Resting heart rate trend', startDate: '2026-07-01', endDate: '2026-07-04' }],
           workouts: []
         },
         datasets
