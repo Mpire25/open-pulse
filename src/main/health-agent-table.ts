@@ -69,7 +69,14 @@ export async function buildHealthTable(
   const datasets = new Map<string, AgentDataset>()
   datasets.set(SLEEP_DATASET_ID, {
     tool: 'query_sleep',
-    data: { source: lastNight.source, requestedRange: { start: today, end: today }, nights: lastNight.days.flatMap((day) => [...day.sessions].sort((a, b) => Number(b.id === day.mainSessionId) - Number(a.id === day.mainSessionId))) }
+    data: {
+      source: lastNight.source,
+      requestedRange: { start: today, end: today },
+      days: lastNight.days.map(({ sessions, ...summary }) => ({ ...summary, sessionCount: sessions.length })),
+      nights: lastNight.days.flatMap((day) => [...day.sessions].sort((a, b) =>
+        Number(b.id === day.mainSessionId) - Number(a.id === day.mainSessionId)
+      ))
+    }
   })
   datasets.set(WORKOUT_DATASET_ID, { tool: 'query_workouts', data: workouts })
   for (const day of food) {

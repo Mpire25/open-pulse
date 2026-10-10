@@ -39,6 +39,7 @@ mock.module('../../src/main/health-service', () => ({
   }
 }))
 const { buildHealthTable } = await import('../../src/main/health-agent-table')
+const { resolvePresentation } = await import('../../src/main/assistant-presentation')
 
 test('uses 180 archived days and fresh today, drops empty columns and preserves usable detail', async () => {
   const table = await buildHealthTable(dateAgo(0), new AbortController().signal)
@@ -84,5 +85,50 @@ test('unmeasured sleep stages remain unavailable while measured zeros stay zero'
     const table = await buildHealthTable(dateAgo(0), new AbortController().signal)
     expect(table.text).toContain('deep unavailable, REM unavailable, light unavailable, awake 0 min')
     expect(table.text).not.toContain('REM 0')
+  } finally { sleepOverride = null }
+})
+
+
+test('prefetched sleep totals include the main night and nap in every daily presentation', async () => {
+  const date = dateAgo(0)
+  const sleep = await fixture.getSleepRange(date, date)
+  const day = sleep.days[0]
+  const main = day.sessions.find((session) => session.id === day.mainSessionId)!
+  main.minutesAsleep = 300
+  const nap = { ...main, id: 'nap', isMainSleep: false, minutesAsleep: 120 }
+  // Put the nap first to also verify that session cards retain main-session selection.
+  day.sessions = [nap, main]
+  day.minutesAsleep = 420
+  sleepOverride = sleep
+  try {
+    const table = await buildHealthTable(date, new AbortController().signal)
+    const datasetId = 'health-table-sleep'
+    const data = table.datasets.get(datasetId)!.data as { days: Array<{ minutesAsleep: number; sessionCount: number }> }
+    expect(data.days[0].minutesAsleep).toBe(420)
+    expect(data.days[0].sessionCount).toBe(2)
+    const [card] = resolvePresentation({ metricCards: [{ datasetId, date, metric: 'sleepMinutes' }] }, table.datasets)
+    expect(card.type).toBe('metric-card')
+    if (card.type === 'metric-card') expect(card.value).toBe(420)
+    const [comparison] = resolvePresentation({ comparisons: [{
+      datasetId, metric: 'sleepMinutes', title: 'Sleep',
+      currentStartDate: date, currentEndDate: date, previousStartDate: date, previousEndDate: date,
+      currentLabel: 'Current', previousLabel: 'Previous'
+    }] }, table.datasets)
+    expect(comparison.type).toBe('comparison')
+    if (comparison.type === 'comparison') {
+      expect(comparison.current.value).toBe(420)
+      expect(comparison.previous.value).toBe(420)
+    }
+    const [overview] = resolvePresentation({ overviews: [{
+      datasetId, title: 'Sleep', startDate: date, endDate: date, metrics: ['sleepMinutes', 'sleepEfficiency']
+    }] }, table.datasets)
+    expect(overview.type).toBe('overview')
+    if (overview.type === 'overview') expect(overview.items.find((item) => item.metric === 'sleepMinutes')!.value).toBe(420)
+    const [session] = resolvePresentation({ sleepCards: [{ datasetId, date, sessionId: null }] }, table.datasets)
+    expect(session.type).toBe('sleep-card')
+    if (session.type === 'sleep-card') {
+      expect(session.night.id).toBe(main.id)
+      expect(session.night.minutesAsleep).toBe(300)
+    }
   } finally { sleepOverride = null }
 })
