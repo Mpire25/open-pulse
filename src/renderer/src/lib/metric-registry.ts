@@ -30,7 +30,7 @@ import {
   Wind
 } from '@phosphor-icons/react'
 import type { Goals, MetricKey } from '@shared/types'
-import { formatInt, formatMinutes } from './format'
+import { formatMetricValue } from '@shared/metric-format'
 
 export type MetricDomain = 'activity' | 'heart' | 'sleep' | 'body' | 'nutrition'
 
@@ -55,9 +55,6 @@ export interface MetricDef {
   hint?: string
 }
 
-const int = (v: number): string => formatInt(Math.round(v))
-const one = (v: number): string => v.toFixed(1)
-
 export const METRICS: Record<MetricKey, MetricDef> = {
   steps: {
     key: 'steps',
@@ -68,7 +65,7 @@ export const METRICS: Record<MetricKey, MetricDef> = {
     aggregate: 'sum',
     chart: 'bar',
     upIsGood: true,
-    format: int,
+    format: (v) => formatMetricValue('steps', v),
     goalKey: 'steps',
     hint: 'Total steps per day'
   },
@@ -81,7 +78,7 @@ export const METRICS: Record<MetricKey, MetricDef> = {
     aggregate: 'sum',
     chart: 'bar',
     upIsGood: true,
-    format: (v) => (v >= 100 ? int(v) : v.toFixed(2)),
+    format: (v) => formatMetricValue('distanceKm', v),
     hint: 'Distance covered on foot'
   },
   floors: {
@@ -93,7 +90,7 @@ export const METRICS: Record<MetricKey, MetricDef> = {
     aggregate: 'sum',
     chart: 'bar',
     upIsGood: true,
-    format: int,
+    format: (v) => formatMetricValue('floors', v),
     hint: 'Floors climbed'
   },
   caloriesOut: {
@@ -106,7 +103,7 @@ export const METRICS: Record<MetricKey, MetricDef> = {
     aggregate: 'sum',
     chart: 'bar',
     upIsGood: true,
-    format: int,
+    format: (v) => formatMetricValue('caloriesOut', v),
     goalKey: 'caloriesOut',
     hint: 'Total energy burned, including resting'
   },
@@ -119,7 +116,7 @@ export const METRICS: Record<MetricKey, MetricDef> = {
     aggregate: 'sum',
     chart: 'bar',
     upIsGood: true,
-    format: int,
+    format: (v) => formatMetricValue('activeMinutes', v),
     hint: 'Moderate + vigorous movement'
   },
   activeZoneMinutes: {
@@ -131,7 +128,7 @@ export const METRICS: Record<MetricKey, MetricDef> = {
     aggregate: 'sum',
     chart: 'bar',
     upIsGood: true,
-    format: int,
+    format: (v) => formatMetricValue('activeZoneMinutes', v),
     goalKey: 'activeZoneMinutes',
     hint: 'Minutes in fat-burn zone or above'
   },
@@ -145,7 +142,7 @@ export const METRICS: Record<MetricKey, MetricDef> = {
     aggregate: 'avg',
     chart: 'bar',
     upIsGood: false,
-    format: formatMinutes,
+    format: (v) => formatMetricValue('sedentaryMinutes', v),
     hint: 'Time without meaningful movement'
   },
   restingHeartRate: {
@@ -158,7 +155,7 @@ export const METRICS: Record<MetricKey, MetricDef> = {
     aggregate: 'avg',
     chart: 'line',
     upIsGood: false,
-    format: int,
+    format: (v) => formatMetricValue('restingHeartRate', v),
     hint: 'Lower usually means better recovery'
   },
   hrvMs: {
@@ -171,7 +168,7 @@ export const METRICS: Record<MetricKey, MetricDef> = {
     aggregate: 'avg',
     chart: 'line',
     upIsGood: true,
-    format: int,
+    format: (v) => formatMetricValue('hrvMs', v),
     hint: 'Compare with your own baseline'
   },
   spo2Pct: {
@@ -184,7 +181,7 @@ export const METRICS: Record<MetricKey, MetricDef> = {
     aggregate: 'avg',
     chart: 'line',
     upIsGood: true,
-    format: one,
+    format: (v) => formatMetricValue('spo2Pct', v),
     hint: 'Nightly average SpO2'
   },
   breathingRate: {
@@ -197,7 +194,7 @@ export const METRICS: Record<MetricKey, MetricDef> = {
     aggregate: 'avg',
     chart: 'line',
     upIsGood: false,
-    format: one,
+    format: (v) => formatMetricValue('breathingRate', v),
     hint: 'Breaths per minute during sleep'
   },
   skinTempDeltaC: {
@@ -210,7 +207,7 @@ export const METRICS: Record<MetricKey, MetricDef> = {
     aggregate: 'avg',
     chart: 'line',
     upIsGood: null,
-    format: (v) => `${v > 0 ? '+' : ''}${v.toFixed(1)}`,
+    format: (v) => formatMetricValue('skinTempDeltaC', v),
     deltaMode: 'abs',
     hint: 'Nightly deviation from your device baseline'
   },
@@ -224,7 +221,7 @@ export const METRICS: Record<MetricKey, MetricDef> = {
     aggregate: 'avg',
     chart: 'bar',
     upIsGood: true,
-    format: formatMinutes,
+    format: (v) => formatMetricValue('sleepMinutes', v),
     goalKey: 'sleepMinutes',
     hint: 'Time actually asleep, not just in bed'
   },
@@ -238,7 +235,7 @@ export const METRICS: Record<MetricKey, MetricDef> = {
     aggregate: 'avg',
     chart: 'line',
     upIsGood: true,
-    format: int,
+    format: (v) => formatMetricValue('sleepEfficiency', v),
     hint: 'Share of the sleep period spent asleep'
   },
   weightKg: {
@@ -250,7 +247,7 @@ export const METRICS: Record<MetricKey, MetricDef> = {
     aggregate: 'last',
     chart: 'line',
     upIsGood: null,
-    format: one,
+    format: (v) => formatMetricValue('weightKg', v),
     hint: 'Scale estimate — watch the trend, not single readings'
   },
   bodyFatPct: {
@@ -262,7 +259,7 @@ export const METRICS: Record<MetricKey, MetricDef> = {
     aggregate: 'last',
     chart: 'line',
     upIsGood: null,
-    format: one,
+    format: (v) => formatMetricValue('bodyFatPct', v),
     hint: 'Bioimpedance estimate'
   },
   bmi: {
@@ -274,7 +271,7 @@ export const METRICS: Record<MetricKey, MetricDef> = {
     aggregate: 'last',
     chart: 'line',
     upIsGood: null,
-    format: one,
+    format: (v) => formatMetricValue('bmi', v),
     hint: 'Calculated from weight and your latest recorded height'
   },
   waterMl: {
@@ -286,7 +283,7 @@ export const METRICS: Record<MetricKey, MetricDef> = {
     aggregate: 'sum',
     chart: 'bar',
     upIsGood: true,
-    format: int,
+    format: (v) => formatMetricValue('waterMl', v),
     hint: 'Logged intake — missing logs aren’t zero'
   },
   caloriesIn: {
@@ -299,7 +296,7 @@ export const METRICS: Record<MetricKey, MetricDef> = {
     aggregate: 'sum',
     chart: 'bar',
     upIsGood: null,
-    format: int,
+    format: (v) => formatMetricValue('caloriesIn', v),
     goalKey: 'caloriesIn',
     hint: 'Logged food energy'
   },
@@ -312,7 +309,7 @@ export const METRICS: Record<MetricKey, MetricDef> = {
     aggregate: 'sum',
     chart: 'bar',
     upIsGood: null,
-    format: int,
+    format: (v) => formatMetricValue('proteinG', v),
     goalKey: 'proteinG',
     hint: 'Logged protein'
   },
@@ -325,7 +322,7 @@ export const METRICS: Record<MetricKey, MetricDef> = {
     aggregate: 'sum',
     chart: 'bar',
     upIsGood: null,
-    format: int,
+    format: (v) => formatMetricValue('carbsG', v),
     goalKey: 'carbsG',
     hint: 'Logged carbohydrates'
   },
@@ -338,7 +335,7 @@ export const METRICS: Record<MetricKey, MetricDef> = {
     aggregate: 'sum',
     chart: 'bar',
     upIsGood: null,
-    format: int,
+    format: (v) => formatMetricValue('fatG', v),
     goalKey: 'fatG',
     hint: 'Logged fat'
   },
@@ -351,7 +348,7 @@ export const METRICS: Record<MetricKey, MetricDef> = {
     aggregate: 'sum',
     chart: 'bar',
     upIsGood: true,
-    format: int,
+    format: (v) => formatMetricValue('fiberG', v),
     hint: 'Logged fiber'
   },
   saturatedFatG: {
@@ -363,7 +360,7 @@ export const METRICS: Record<MetricKey, MetricDef> = {
     aggregate: 'sum',
     chart: 'bar',
     upIsGood: false,
-    format: int,
+    format: (v) => formatMetricValue('saturatedFatG', v),
     hint: 'Logged saturated fat'
   },
   sodiumG: {
@@ -375,7 +372,7 @@ export const METRICS: Record<MetricKey, MetricDef> = {
     aggregate: 'sum',
     chart: 'bar',
     upIsGood: false,
-    format: one,
+    format: (v) => formatMetricValue('sodiumG', v),
     hint: 'Logged sodium'
   },
   sugarG: {
@@ -387,7 +384,7 @@ export const METRICS: Record<MetricKey, MetricDef> = {
     aggregate: 'sum',
     chart: 'bar',
     upIsGood: false,
-    format: int,
+    format: (v) => formatMetricValue('sugarG', v),
     hint: 'Logged sugar'
   }
 }

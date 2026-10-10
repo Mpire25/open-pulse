@@ -1,5 +1,6 @@
 import type { AssistantVisualPart, MetricKey } from '../shared/types'
 import { METRIC_UNITS } from '../shared/health-metric-units'
+import { formatMetricValue, isDurationMetric, metricDecimals } from '../shared/metric-format'
 import {
   normalizePresentationAggregations,
   PRESENTATION_TOOL,
@@ -9,9 +10,9 @@ import {
 
 const FACT_PREFIX = '{{openpulse:fact:'
 
-export const RESPONSE_FORMAT_INSTRUCTIONS = `When a visual helps, begin the final answer with exactly one hidden comment, <!--openpulse:present JSON-->, before any prose, then write the concise answer. Its JSON follows the schema below. Do not call a presentation tool, use a code block, or add another comment. Complete needed health/research tool calls before the final answer; never finalize a promise to look something up later.
+export const RESPONSE_FORMAT_INSTRUCTIONS = `When a visual helps, begin the final answer with exactly one hidden comment, <!--openpulse:present JSON-->, before any prose, then write the concise answer. Its JSON follows the schema below; card types you do not use may be omitted. Do not call a presentation tool, use a code block, or add another comment. Complete needed health/research tool calls before the final answer; never finalize a promise to look something up later.
 The app calculates the cards and replaces literal fact placeholders in your prose from those same validated values. For a metric card use {{openpulse:fact:0.formattedValue}} (includes units) or {{openpulse:fact:0.value}} (native units). For a comparison use {{openpulse:fact:0.current.formattedValue}} and {{openpulse:fact:0.previous.formattedValue}}. Index 0 means the first resolved visual, index 1 the second; visual order is overview, metric cards, comparisons, charts, sleep cards, nutrition cards, workouts. Every placeholder requires its corresponding card in the comment. Never independently calculate a displayed comparison or call analyze_daily_metrics solely for arithmetic that the comparison card can compute from supplied data. Keep analysis tools for substantive analysis, correlation and data outside the supplied datasets.
-Comparison placeholders also support current.observations, previous.observations, direction, absoluteChange, percentChange, changeMagnitude and percentChangeMagnitude. Direction is higher, lower, unchanged, or not comparable. Raw absoluteChange and percentChange are signed; use the positive changeMagnitude or percentChangeMagnitude for "higher/lower by". Native numeric values need explicit units; formattedValue includes units (sleep is hours/minutes), so do not append another unit. Percent placeholders require a % sign. Never request a percentage when the baseline is zero or missing, or a change/direction judgement for unequal totals; just describe those totals. If records are missing, describe the gaps without a numeric placeholder for unavailable data. When no card helps, write an ordinary answer without placeholders or a comment.
+Comparison placeholders also support current.observations, previous.observations, direction, absoluteChange, percentChange, changeMagnitude and percentChangeMagnitude. Direction is higher, lower, unchanged, or not comparable. Raw absoluteChange and percentChange are signed; use the positive changeMagnitude or percentChangeMagnitude for "higher/lower by". Native numeric values need explicit units; formattedValue includes units (sleep and sedentary time read as hours and minutes), so do not append another unit. Percent placeholders require a % sign. Never request a percentage when the baseline is zero or missing, or a change/direction judgement for unequal totals; just describe those totals. If records are missing, describe the gaps without a numeric placeholder for unavailable data. When no card helps, write an ordinary answer without placeholders or a comment.
 Example: "Your daily average was {{openpulse:fact:0.current.formattedValue}} versus {{openpulse:fact:0.previous.formattedValue}} previously, {{openpulse:fact:0.direction}} by {{openpulse:fact:0.percentChangeMagnitude}}%."
 Presentation JSON schema: ${JSON.stringify(PRESENTATION_TOOL.parameters)}`
 
@@ -172,30 +173,38 @@ function validateSchema(value: unknown, schema: PresentationSchema, path = 'pres
   }
 }
 
-function numericFact(value: number | null | undefined): string {
+// Facts are rounded exactly as their cards display them, so the answer and
+// the card never disagree.
+function available(value: number | null | undefined): number {
   if (value == null || !Number.isFinite(value)) throw new ResponseProtocolError('A requested fact is unavailable.')
-  return String(Math.round(value * 10) / 10)
+  return value
+}
+
+function numericFact(value: number | null | undefined, decimals = 0): string {
+  return String(Number(available(value).toFixed(decimals)))
+}
+
+function metricFact(value: number | null | undefined, metric: MetricKey): string {
+  const number = available(value)
+  return numericFact(number, metricDecimals(metric, number))
 }
 
 function formattedFact(value: number | null, metric: MetricKey): string {
-  if (value == null || !Number.isFinite(value)) throw new ResponseProtocolError('A requested fact is unavailable.')
-  if (metric === 'sleepMinutes') {
-    const minutes = Math.round(value)
-    return `${Math.floor(minutes / 60)}h ${minutes % 60}m`
-  }
+  const text = formatMetricValue(metric, available(value))
+  if (isDurationMetric(metric)) return text
   const unit = METRIC_UNITS[metric]
-  return `${Number(numericFact(value)).toLocaleString('en-GB')}${unit === '%' ? '' : ' '}${unit}`
+  return `${text}${unit === '%' ? '' : ' '}${unit}`
 }
 
 function fact(part: AssistantVisualPart | undefined, path: string): string {
   if (part?.type === 'metric-card') {
-    if (path === 'value') return numericFact(part.value)
+    if (path === 'value') return metricFact(part.value, part.metric)
     if (path === 'formattedValue') return formattedFact(part.value, part.metric)
   }
   if (part?.type === 'comparison') {
     switch (path) {
-      case 'current.value': return numericFact(part.current.value)
-      case 'previous.value': return numericFact(part.previous.value)
+      case 'current.value': return metricFact(part.current.value, part.metric)
+      case 'previous.value': return metricFact(part.previous.value, part.metric)
       case 'current.formattedValue': return formattedFact(part.current.value, part.metric)
       case 'previous.formattedValue': return formattedFact(part.previous.value, part.metric)
       case 'current.observations': return numericFact(part.current.observations)
@@ -203,9 +212,9 @@ function fact(part: AssistantVisualPart | undefined, path: string): string {
       case 'direction':
         return !part.comparable || part.absoluteChange == null ? 'not comparable'
           : part.absoluteChange === 0 ? 'unchanged' : part.absoluteChange > 0 ? 'higher' : 'lower'
-      case 'absoluteChange': return numericFact(part.absoluteChange)
+      case 'absoluteChange': return metricFact(part.absoluteChange, part.metric)
       case 'percentChange': return numericFact(part.percentChange)
-      case 'changeMagnitude': return numericFact(part.absoluteChange == null ? null : Math.abs(part.absoluteChange))
+      case 'changeMagnitude': return metricFact(part.absoluteChange == null ? null : Math.abs(part.absoluteChange), part.metric)
       case 'percentChangeMagnitude': return numericFact(part.percentChange == null ? null : Math.abs(part.percentChange))
     }
   }
@@ -237,7 +246,12 @@ export function createCardResolver(datasets: Map<string, AgentDataset>, userText
 function resolveCards(json: string, datasets: Map<string, AgentDataset>, userText: string): AssistantVisualPart[] {
   let args: unknown
   try { args = JSON.parse(json) } catch { throw new ResponseProtocolError('Presentation JSON is malformed.') }
-  validateSchema(args, PRESENTATION_TOOL.parameters as unknown as PresentationSchema)
+  const schema = PRESENTATION_TOOL.parameters as unknown as PresentationSchema
+  // Written as free text, so a card type the model leaves out simply has no cards.
+  if (args && typeof args === 'object' && !Array.isArray(args)) {
+    args = { ...Object.fromEntries((schema.required ?? []).map((key) => [key, []])), ...args }
+  }
+  validateSchema(args, schema)
   const request = args as Record<string, unknown>
   const count = Object.values(request).reduce<number>((sum, items) => sum + (items as unknown[]).length, 0)
   if (!count || count > 2 || ((request.overviews as unknown[]).length && count !== 1)) {

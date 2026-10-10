@@ -458,10 +458,11 @@ export async function runChat(
       if (functionCalls.length === 0) {
         try {
           const answer = resolveAssistantResponse(resolvedTurnText, datasets, latestUserText, plainOnly, cards)
-          // Resolve markup before adding sources. Template substitutions can
-          // shift annotation offsets, so retain source links without inserting
-          // a citation marker at an unrelated character in that case.
-          const annotations = resolvedTurnText.includes('{{openpulse:') || completedMessages.length > 1
+          // Resolve markup before adding sources. Removing the card comment,
+          // template substitutions and joined messages all shift annotation
+          // offsets, so retain source links without inserting a citation
+          // marker at an unrelated character in those cases.
+          const annotations = answer.text !== resolvedTurnText.trimEnd() || completedMessages.length > 1
             ? completedAnnotations.map((item) => ({ ...item, start_index: undefined, end_index: undefined }))
             : completedAnnotations
           const answerText = addUrlCitations(answer.text, annotations)

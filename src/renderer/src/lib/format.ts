@@ -1,12 +1,4 @@
-export function formatInt(n: number): string {
-  return new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(n)
-}
-
-export function formatMinutes(totalMinutes: number): string {
-  const h = Math.floor(totalMinutes / 60)
-  const m = Math.round(totalMinutes % 60)
-  return h > 0 ? `${h}h ${m}m` : `${m}m`
-}
+export { formatInt, formatMinutes } from '@shared/metric-format'
 
 export function formatClock(iso: string): string {
   return new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })

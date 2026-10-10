@@ -89,6 +89,36 @@ describe('combined assistant answers and cards', () => {
     expect(resolve('No steps were recorded. ' + marker(request))).toEqual({ text: 'No steps were recorded.', parts: [], droppedCards: true })
   })
 
+  test('quotes values rounded exactly as their cards display them', () => {
+    const daily = new Map<string, AgentDataset>([['d', { tool: 'query_daily_metrics', data: {
+      source: 'live', requestedRange: { start: '2026-07-01', end: '2026-07-04' },
+      days: {
+        '2026-07-01': { steps: 8000, weightKg: 70.26, sleepMinutes: 479.6 },
+        '2026-07-02': { steps: 8000, weightKg: 70.24, sleepMinutes: 420 },
+        '2026-07-03': { steps: 8995, weightKg: 70.31, sleepMinutes: 420 },
+        '2026-07-04': { steps: 8994, weightKg: 70.33, sleepMinutes: 420 }
+      }
+    } }]])
+    const steps = { ...comparison, datasetId: 'd', currentStartDate: '2026-07-03', currentEndDate: '2026-07-04', currentAggregation: 'average',
+      previousStartDate: '2026-07-01', previousEndDate: '2026-07-02', previousAggregation: 'average' }
+    const answer = resolveAssistantResponse(marker({ ...empty, comparisons: [steps] }) +
+      '{{openpulse:fact:0.current.formattedValue}} ({{openpulse:fact:0.current.value}}), up {{openpulse:fact:0.percentChangeMagnitude}}% by {{openpulse:fact:0.changeMagnitude}}.', daily, 'Compare average steps')
+    // 8,994.5 average steps and a 12.43% rise: the card shows 8,995 and 12%.
+    expect(answer.text).toBe('8,995 steps (8995), up 12% by 995.')
+    const cards = { ...empty, metricCards: [
+      { datasetId: 'd', metric: 'weightKg', date: '2026-07-01' }, { datasetId: 'd', metric: 'sleepMinutes', date: '2026-07-01' }
+    ] }
+    expect(resolveAssistantResponse(marker(cards) + '{{openpulse:fact:0.formattedValue}}, {{openpulse:fact:0.value}}; {{openpulse:fact:1.formattedValue}}.', daily, 'Weight and sleep').text)
+      .toBe('70.3 kg, 70.3; 8h 0m.')
+  })
+
+  test('treats card types left out of the JSON as having no cards', () => {
+    const answer = resolve(marker({ metricCards: [{ datasetId: 'daily', metric: 'steps', date: '2026-07-02' }] }) + 'Today {{openpulse:fact:0.value}} steps.')
+    expect(answer).toMatchObject({ text: 'Today 200 steps.', parts: [{ type: 'metric-card', value: 200 }] })
+    expect(answer.droppedCards).toBeUndefined()
+    expect(resolve(marker({ metricCards: [], bogus: [] }) + 'Steps.')).toEqual({ text: 'Steps.', parts: [], droppedCards: true })
+  })
+
   test('uses validated comparison arithmetic, signed changes, positive magnitudes and units', () => {
     const request = { ...empty, comparisons: [{ ...comparison, metric: 'sleepMinutes' }] }
     const answer = resolve('{{openpulse:fact:0.current.formattedValue}} versus {{openpulse:fact:0.previous.formattedValue}}: {{openpulse:fact:0.direction}} by {{openpulse:fact:0.changeMagnitude}} minutes ({{openpulse:fact:0.absoluteChange}}). ' + marker(request))

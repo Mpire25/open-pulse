@@ -168,6 +168,22 @@ test('citations survive template substitution without corrupting the presentatio
   displayed(sender.events)
 })
 
+test('a leading card comment never misplaces citation markers', async () => {
+  const sender = new Sender()
+  const raw = marker(card) + 'Walking more helps. Today counts.'
+  const at = raw.indexOf('Walking')
+  globalThis.fetch = (async () => response(raw, [
+    { type: 'url_citation', start_index: at, end_index: at + 'Walking more helps.'.length, url: 'https://example.com/walking', title: 'Walking' }
+  ])) as typeof fetch
+  await runChat(sender as unknown as WebContents, 'cite-chat', 'cite-run', [{ role: 'user', text: 'Does walking help?' }])
+  const done = sender.events.find((event) => event.type === 'done')
+  expect(done).toMatchObject({ parts: [{ type: 'metric-card' }] })
+  const text = done?.type === 'done' ? done.text : ''
+  // Offsets counted against the raw reply would land inside the prose.
+  expect(text.startsWith('Walking more helps. Today counts.')).toBe(true)
+  expect(text).toContain('https://example.com/walking')
+})
+
 test('health tools remain available for history beyond the initial snapshot', async () => {
   const sender = new Sender()
   let requests = 0
