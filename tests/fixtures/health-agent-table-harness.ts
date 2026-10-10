@@ -69,6 +69,8 @@ test('uses 180 archived days and fresh today, drops empty columns and preserves 
   expect(daily.days[dateAgo(1)].steps).toBe(10)
   expect(table.text).toContain(`${dateAgo(0)},20,`)
   expect(table.text).toContain('not zero or proof that no record exists')
+  expect(table.text).not.toContain('STALE CACHED VALUES')
+  expect(table.needsRevalidation).toBe(false)
   expect(table.datasets.get('health-table-sleep')!.tool).toBe('query_sleep')
   expect(table.datasets.get(`health-table-food-${dateAgo(1)}`)!.tool).toBe('query_nutrition_logs')
 })
@@ -154,7 +156,8 @@ test('stale populated values are explicitly provisional rather than presented as
     const table = await buildHealthTable(dateAgo(0), new AbortController().signal)
     expect(table.text).toContain(`${dateAgo(1)}: steps,caloriesOut`)
     expect(table.text).toContain(`${dateAgo(30)}: steps`)
-    expect(table.text).toContain('query the relevant health tool before using these values as current or complete')
+    expect(table.text).toContain('only the following date/metric pairs need revalidation')
+    expect(table.needsRevalidation).toBe(true)
   } finally { staleMetrics = {} }
 })
 
@@ -171,6 +174,7 @@ for (const failure of ['today', 'sleep', 'both']) {
       expect(table.text).toContain(`${dateAgo(1)},10,`)
       expect(table.text.includes("Today's metric refresh unavailable")).toBe(failToday)
       expect(table.text.includes('Sleep detail refresh unavailable')).toBe(failSleep)
+      expect(table.needsRevalidation).toBe(true)
     } finally { failToday = false; failSleep = false }
   })
 }
