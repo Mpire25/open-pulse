@@ -44,6 +44,8 @@ export interface CaseRun {
   afterMidnight?: boolean
   /** The most health data any of the run's requests carried, in characters. */
   dataChars?: number
+  /** Extra model requests spent correcting an answer that failed validation. */
+  answerRepairs?: number
   /** Per-request detail; absent in results saved before it was recorded. */
   requests?: Array<Omit<ModelRequest, 'startedAt'>>
 }
@@ -95,6 +97,7 @@ export function score(evalCase: EvalCase, record: RunRecord): CaseRun {
     outputTokens: sum((request) => request.outputTokens),
     reasoningTokens: sum((request) => request.reasoningTokens),
     visuals: record.parts.map((part) => (part as { type?: string }).type ?? 'visual'),
+    answerRepairs: record.toolEvents.filter((name) => name === 'finish_answer').length,
     dataChars: Math.max(0, ...record.modelRequests.filter((request) => request.kind === 'agent').map((request) => request.dataChars ?? 0)),
     requests: record.modelRequests.map(({ startedAt: _startedAt, ...request }) => request)
   }
@@ -116,7 +119,7 @@ export function recordFromRun(run: CaseRun): RunRecord {
     error: run.error,
     healthCalls: run.healthCalls,
     modelRequests: requests,
-    toolEvents: run.toolCalls,
+    toolEvents: [...run.toolCalls, ...Array.from({ length: run.answerRepairs ?? 0 }, () => 'finish_answer')],
     totalMs: run.totalMs,
     firstTextMs: run.firstTextMs
   }
