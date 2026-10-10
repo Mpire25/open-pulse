@@ -5,11 +5,12 @@ response. This removes the extra model request previously needed after
 `present_health_data`. Health and isolated research tools still run normally;
 historical questions can query beyond the initial 180-day cached snapshot.
 
-`assistant-response.ts` owns the response format. A final response may end with
-one `<!--openpulse:present JSON-->` comment conforming to the presentation
-schema. The app validates its shape, resolves dataset IDs and requested records,
-and calculates the visual parts using the existing presentation resolver. It
-publishes the answer and parts only after the entire response validates.
+`assistant-response.ts` owns the response format. A final response may begin
+with one `<!--openpulse:present JSON-->` comment conforming to the presentation
+schema; one at the end is still accepted. The app validates its shape, resolves
+dataset IDs and requested records, and calculates the visual parts using the
+existing presentation resolver. The saved answer and parts are published only
+after the entire response validates.
 
 Prose can refer to metric-card and comparison values with fact placeholders,
 for example `{{openpulse:fact:0.current.formattedValue}}`. These are substituted
@@ -18,9 +19,13 @@ units; sleep durations use hours and minutes. Signed changes and positive change
 magnitudes are separate. Missing values and unavailable percentages cannot be
 substituted, including percentage changes from a zero baseline.
 
-Streaming emits the prefix before the first placeholder or comment, holding
-partial opening delimiters across chunks. Completion replaces the streamed
-text with the validated prose, then delivers the visual parts. Raw instructions
+Because the comment leads, its cards are validated as soon as it closes and the
+prose streams with placeholders already filled from them, without pausing at
+each value. Streaming stops at anything it cannot fill or validate, holding
+partial delimiters across chunks. The cards are shown when the answer
+completes, immediately after its last words, since nothing remains to be
+written. Completion replaces the streamed text with the validated prose and
+publishes the same card objects. Raw instructions
 and placeholders never enter the rendered or saved chat. Citation links are
 added after resolution; when substitutions change annotation offsets, the
 source list remains without inserting markers at incorrect character positions.

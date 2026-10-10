@@ -88,6 +88,17 @@ test('one request resolves a metric card and exposes only rendered prose to the 
   expect(displayed(result.sender.events)).toBe('Today 200 steps.')
 })
 
+test('leading cards fill the streamed prose and arrive with the completed answer', async () => {
+  const result = await run([marker(card) + 'Today {{openpulse:fact:0.formattedValue}} so far.'], 'How many steps today?')
+  expect(result.bodies).toHaveLength(1)
+  const deltas = result.sender.events.flatMap((event) => event.type === 'delta' ? [event.text] : [])
+  // Facts stream in place, without waiting for the end of the response.
+  expect(deltas.join('')).toBe('Today 200 steps so far.')
+  expect(result.done).toMatchObject({ text: 'Today 200 steps so far.', parts: [{ type: 'metric-card', value: 200 }] })
+  expect(displayed(result.sender.events)).toBe('Today 200 steps so far.')
+  expect(String(result.bodies[0].instructions)).toContain('begin the final answer with exactly one hidden comment')
+})
+
 test('validation retry replaces rejected prose without losing earlier progress', async () => {
   const result = await run(['Incorrect first attempt {{openpulse:fact:0.current.value}}.', good])
   expect(result.bodies).toHaveLength(2)

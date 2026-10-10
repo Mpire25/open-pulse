@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { AssistantResponseStream, resolveAssistantResponse, ResponseProtocolError } from '../src/main/assistant-response'
+import { AssistantAnswerStream, AssistantResponseStream, createCardResolver, resolveAssistantResponse, ResponseProtocolError } from '../src/main/assistant-response'
 import type { AgentDataset } from '../src/main/assistant-presentation'
 
 const empty = { overviews: [], metricCards: [], comparisons: [], charts: [], sleepCards: [], nutritionCards: [], workouts: [] }
@@ -37,6 +37,44 @@ describe('combined assistant answers and cards', () => {
     }
     const ordinary = new AssistantResponseStream()
     expect(['A <', ' B and {', 'text}.'].map((part) => ordinary.push(part)).join('')).toBe('A < B and {text}.')
+  })
+
+  test('streams prose after leading cards with facts filled, at every chunk boundary', () => {
+    const request = { ...empty, metricCards: [{ datasetId: 'daily', metric: 'steps', date: '2026-07-02' }] }
+    const raw = marker(request) + '\nToday: {{openpulse:fact:0.formattedValue}}, up from yesterday.'
+    for (let split = 0; split <= raw.length; split++) {
+      const cards = createCardResolver(datasets, 'How many steps?')
+      const stream = new AssistantAnswerStream(cards)
+      expect(stream.push(raw.slice(0, split)) + stream.push(raw.slice(split))).toBe('Today: 200 steps, up from yesterday.')
+      // The published answer reuses the cards whose facts were streamed.
+      const shown = cards(JSON.stringify(request))
+      expect(resolveAssistantResponse(raw, datasets, 'How many steps?', false, cards).parts[0]).toBe(shown[0])
+    }
+    const stream = new AssistantAnswerStream(createCardResolver(datasets, ''))
+    expect([...raw].map((char) => stream.push(char)).join('')).toBe('Today: 200 steps, up from yesterday.')
+  })
+
+  test('streams no further than it can validate', () => {
+    const invalid = marker({ ...empty, metricCards: [{ datasetId: 'invented', metric: 'steps', date: '2026-07-02' }] })
+    for (const [raw, shown] of [
+      [invalid + 'Steps {{openpulse:fact:0.value}} today.', 'Steps '],
+      [marker({ ...empty, metricCards: [{ datasetId: 'daily', metric: 'steps', date: '2026-07-02' }] }) + 'Steps {{openpulse:fact:1.value}}.', 'Steps '],
+      ['Trailing {{openpulse:fact:0.value}}. ' + invalid, 'Trailing '],
+      ['Plain answer. ' + invalid, 'Plain answer. '],
+      ['<!-- other -->Hidden', '']
+    ]) {
+      const stream = new AssistantAnswerStream(createCardResolver(datasets, ''))
+      expect([...raw].map((char) => stream.push(char)).join('')).toBe(shown)
+    }
+    const plain = new AssistantAnswerStream(null)
+    expect(plain.push(marker(empty) + 'Text {{openpulse:fact:0.value}}')).toBe('Text ')
+  })
+
+  test('accepts the comment before or after the prose, never between', () => {
+    const request = { ...empty, metricCards: [{ datasetId: 'daily', metric: 'steps', date: '2026-07-02' }] }
+    expect(resolve(marker(request) + ' Today {{openpulse:fact:0.value}} steps.').text).toBe('Today 200 steps.')
+    expect(resolve('Today {{openpulse:fact:0.value}} steps. ' + marker(request)).text).toBe('Today 200 steps.')
+    expect(resolve('Today. ' + marker(request) + ' More.')).toEqual({ text: 'Today.  More.', parts: [], droppedCards: true })
   })
 
   test('fills exact facts from the same metric card and permits zero', () => {
