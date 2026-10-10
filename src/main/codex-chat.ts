@@ -44,6 +44,8 @@ const MAX_RESEARCH_ATTEMPTS = 4
 const RESEARCH_SEARCH_TURNS = 1
 const FIRST_BYTE_TIMEOUT_MS = 90_000
 const STREAM_IDLE_TIMEOUT_MS = 120_000
+// The archive usually answers in milliseconds; only name the stage when a fetch makes it noticeable.
+const HEALTH_READ_LABEL_DELAY_MS = 400
 const TURN_SEPARATOR = '\n\n'
 const WEB_SEARCH_TOOL = { type: 'web_search', search_context_size: 'medium' } as const
 
@@ -312,13 +314,20 @@ export async function runChat(
     const input: InputItem[] = toInputItems(history)
     const datasets = new Map<string, AgentDataset>()
     let table: HealthTable | null = null
-    emit({ type: 'tool', chatId, runId, name: 'read_health_table', label: 'Reading your health data' })
+    let readingLabelShown = false
+    const readingLabel = setTimeout(() => {
+      readingLabelShown = true
+      emit({ type: 'tool', chatId, runId, name: 'read_health_table', label: 'Reading your health data' })
+    }, HEALTH_READ_LABEL_DELAY_MS)
     try {
       table = await buildHealthTable(today, signal)
     } catch {
       if (signal.aborted) throw cancellationError(signal)
       // Without the table the tools still answer, just more slowly.
+    } finally {
+      clearTimeout(readingLabel)
     }
+    if (readingLabelShown) emit({ type: 'tool', chatId, runId, name: 'thinking', label: 'Thinking' })
     if (table) {
       insertDataCoverage(input, table.text)
       for (const [id, dataset] of table.datasets) datasets.set(id, dataset)

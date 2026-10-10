@@ -71,9 +71,13 @@ mock.module('../../src/main/health-agent-tools', () => ({
 }))
 
 // Exercise the coverage fallback without loading the live health service.
+let healthTableDelayMs = 0
 mock.module('../../src/main/health-agent-table', () => ({
   HEALTH_TABLE_DATASET_ID: 'health-table',
-  buildHealthTable: async () => { throw new Error('Health snapshot unavailable') }
+  buildHealthTable: async () => {
+    await new Promise((resolve) => setTimeout(resolve, healthTableDelayMs))
+    throw new Error('Health snapshot unavailable')
+  }
 }))
 
 mock.module('../../src/main/metric-store', () => ({
@@ -243,6 +247,19 @@ describe('brokered Codex research orchestration', () => {
     // The existing chat transcript still receives all streamed text.
     expect(sender.events.find((event) => event.type === 'done')).toMatchObject({ text: 'Checking your metrics first.\n\nYour final analysis is ready.' })
 
+  })
+
+  test('names the health data stage only when reading it is slow, then returns to thinking', async () => {
+    globalThis.fetch = (async () => message('Done.')) as typeof fetch
+    const labels = async (delayMs: number): Promise<string[]> => {
+      healthTableDelayMs = delayMs
+      const sender = new FakeSender()
+      await runChat(sender as unknown as WebContents, `label-chat-${delayMs}`, `label-run-${delayMs}`, [{ role: 'user', text: 'Steps today?' }])
+      healthTableDelayMs = 0
+      return sender.events.flatMap((event) => (event.type === 'tool' ? [event.label] : []))
+    }
+    expect(await labels(0)).toEqual([])
+    expect(await labels(600)).toEqual(['Reading your health data', 'Thinking'])
   })
 
   test('streams a paragraph break between text from separate turns', async () => {
