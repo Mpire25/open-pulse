@@ -291,6 +291,11 @@ function mealsOn(daysAgo: number): Meal[] {
   return meals
 }
 
+/** The name of the first logged meal of a type on a day, if any. */
+export function mealName(daysAgo: number, mealType: Meal['mealType']): string | null {
+  return mealsOn(daysAgo).find((meal) => meal.mealType === mealType)?.foodName ?? null
+}
+
 export function nutritionEntries(daysAgo: number, now = evalNow()): NutritionLogEntry[] {
   return mealsOn(daysAgo).map((meal, index) => {
     const start = localInstant(daysAgo, meal.minute, now)
@@ -528,17 +533,56 @@ export interface HealthCall {
   end?: string
   date?: string
   metrics?: MetricKey[]
+  /** 'background' reads return the local archive at once; others may wait on Google. */
+  mode?: string
+}
+
+/**
+ * An approximation of how long each read takes in the app, so the evals do not
+ * flatter designs that make many lookups. Background reads come straight from
+ * the local archive. Awaited reads of the last few days usually need a fresh
+ * Google request, and each 90 days beyond the 180 the app keeps synced adds a
+ * slower backfill. Intraday, food logs and devices are always fetched live.
+ */
+export function lookupDelayMs(call: HealthCall, now = evalNow()): number {
+  if (call.fn === 'getDevices') return 300
+  if (call.fn.startsWith('getIntraday')) return 600
+  if (call.fn === 'getNutritionLogs') return 500
+  if (!call.start || !call.end) return 60
+  if (call.mode === 'background') return 30
+  const newest = daysAgoOf(call.end, now)
+  const oldest = daysAgoOf(call.start, now)
+  const recent = newest <= 3 ? 600 : 0
+  const backfill = Math.max(0, Math.ceil((oldest - 179) / 90)) * 300
+  return 60 + recent + backfill
 }
 
 export type HealthCallListener = (call: HealthCall) => void
 
-export function createHealthFixture(record: HealthCallListener, now = evalNow) {
+interface ReadOptions {
+  mode?: string
+}
+
+export function createHealthFixture(record: HealthCallListener, now = evalNow, options: { latency?: boolean } = {}) {
   const clampRange = (start: string, end: string): [string, string] => (start <= end ? [start, end] : [end, start])
+  const read = async (call: HealthCall): Promise<void> => {
+    record(call)
+    if (options.latency) await new Promise((resolve) => setTimeout(resolve, lookupDelayMs(call, now())))
+  }
 
   return {
-    async getSeries(metrics: MetricKey[], start: string, end: string): Promise<SeriesResult> {
+    async getArchivedHealthHistory(metrics: MetricKey[], start: string, end: string) {
+      // Match the pure archive snapshot: record what was supplied, without lookup latency.
+      const cached = createHealthFixture(record, now)
+      const [series, workouts] = await Promise.all([
+        cached.getSeries(metrics, start, end, false, undefined, { mode: 'background' }),
+        cached.getWorkoutsRange(start, end, false, undefined, { mode: 'background' })
+      ])
+      return { series, workouts }
+    },
+    async getSeries(metrics: MetricKey[], start: string, end: string, _force?: boolean, _signal?: AbortSignal, sync: ReadOptions = {}): Promise<SeriesResult> {
       const [s, e] = clampRange(start, end)
-      record({ fn: 'getSeries', metrics: [...metrics], start: s, end: e })
+      await read({ fn: 'getSeries', metrics: [...metrics], start: s, end: e, mode: sync.mode })
       const at = now()
       const days: SeriesResult['days'] = {}
       for (const date of datesBetween(s, e)) {
@@ -549,9 +593,9 @@ export function createHealthFixture(record: HealthCallListener, now = evalNow) {
       return { source: 'live', start: s, end: e, days }
     },
 
-    async getSleepRange(start: string, end: string): Promise<SleepRangeResult> {
+    async getSleepRange(start: string, end: string, _force?: boolean, _signal?: AbortSignal, sync: ReadOptions = {}): Promise<SleepRangeResult> {
       const [s, e] = clampRange(start, end)
-      record({ fn: 'getSleepRange', start: s, end: e })
+      await read({ fn: 'getSleepRange', start: s, end: e, mode: sync.mode })
       const at = now()
       const days = datesBetween(s, e)
         .map((date) => sleepDay(daysAgoOf(date, at), at))
@@ -559,9 +603,9 @@ export function createHealthFixture(record: HealthCallListener, now = evalNow) {
       return { source: 'live', days }
     },
 
-    async getWorkoutsRange(start: string, end: string): Promise<WorkoutsResult> {
+    async getWorkoutsRange(start: string, end: string, _force?: boolean, _signal?: AbortSignal, sync: ReadOptions = {}): Promise<WorkoutsResult> {
       const [s, e] = clampRange(start, end)
-      record({ fn: 'getWorkoutsRange', start: s, end: e })
+      await read({ fn: 'getWorkoutsRange', start: s, end: e, mode: sync.mode })
       const at = now()
       const workouts = datesBetween(s, e)
         .map((date) => workout(daysAgoOf(date, at), at))
@@ -570,7 +614,7 @@ export function createHealthFixture(record: HealthCallListener, now = evalNow) {
     },
 
     async getIntraday(date: string, _force?: boolean, _signal?: AbortSignal, scope: 'steps' | 'heart' | 'both' = 'both'): Promise<IntradaySnapshot> {
-      record({ fn: `getIntraday:${scope}`, date })
+      await read({ fn: `getIntraday:${scope}`, date })
       const at = now()
       const daysAgo = daysAgoOf(date, at)
       const heart = scope === 'steps' ? [] : heartRate(daysAgo, at)
@@ -584,14 +628,14 @@ export function createHealthFixture(record: HealthCallListener, now = evalNow) {
     },
 
     async getNutritionLogs(date: string): Promise<NutritionLogsResult> {
-      record({ fn: 'getNutritionLogs', date })
+      await read({ fn: 'getNutritionLogs', date })
       const at = now()
       return { date, source: 'live', entries: nutritionEntries(daysAgoOf(date, at), at) }
     },
 
     async getBodyMeasurements(start: string, end: string): Promise<BodyMeasurementsResult> {
       const [s, e] = clampRange(start, end)
-      record({ fn: 'getBodyMeasurements', start: s, end: e })
+      await read({ fn: 'getBodyMeasurements', start: s, end: e })
       const at = now()
       const measurements: BodyMeasurement[] = datesBetween(s, e).flatMap((date) => {
         const daysAgo = daysAgoOf(date, at)
@@ -604,7 +648,7 @@ export function createHealthFixture(record: HealthCallListener, now = evalNow) {
     },
 
     async getDevices(): Promise<PairedDevice[]> {
-      record({ fn: 'getDevices' })
+      await read({ fn: 'getDevices' })
       return [{
         name: 'Fitbit Air',
         model: 'Air',

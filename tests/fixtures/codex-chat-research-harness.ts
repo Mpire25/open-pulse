@@ -70,6 +70,16 @@ mock.module('../../src/main/health-agent-tools', () => ({
   }
 }))
 
+// Exercise the coverage fallback without loading the live health service.
+let healthTableDelayMs = 0
+mock.module('../../src/main/health-agent-table', () => ({
+  HEALTH_TABLE_DATASET_ID: 'health-table',
+  buildHealthTable: async () => {
+    await new Promise((resolve) => setTimeout(resolve, healthTableDelayMs))
+    throw new Error('Health snapshot unavailable')
+  }
+}))
+
 mock.module('../../src/main/metric-store', () => ({
   archivedMetricCoverage: () => ({
     weightKg: { days: 27, first: '2026-08-08', last: '2026-10-08' }
@@ -239,6 +249,19 @@ describe('brokered Codex research orchestration', () => {
 
   })
 
+  test('names the health data stage only when reading it is slow, then returns to thinking', async () => {
+    globalThis.fetch = (async () => message('Done.')) as typeof fetch
+    const labels = async (delayMs: number): Promise<string[]> => {
+      healthTableDelayMs = delayMs
+      const sender = new FakeSender()
+      await runChat(sender as unknown as WebContents, `label-chat-${delayMs}`, `label-run-${delayMs}`, [{ role: 'user', text: 'Steps today?' }])
+      healthTableDelayMs = 0
+      return sender.events.flatMap((event) => (event.type === 'tool' ? [event.label] : []))
+    }
+    expect(await labels(0)).toEqual([])
+    expect(await labels(600)).toEqual(['Reading your health data', 'Thinking'])
+  })
+
   test('streams a paragraph break between text from separate turns', async () => {
     const sender = new FakeSender()
     let calls = 0
@@ -310,7 +333,7 @@ describe('brokered Codex research orchestration', () => {
     await runChat(sender as unknown as WebContents, 'unfinished-chat', 'unfinished-run', [{ role: 'user', text: 'Analyse my steps and HRV together.' }])
     expect(requests).toBe(1)
     expect(sender.events.some((event) => event.type === 'done')).toBe(false)
-    expect(sender.events.some((event) => event.type === 'tool')).toBe(false)
+    expect(sender.events.some((event) => event.type === 'tool' && event.name !== 'read_health_table')).toBe(false)
     expect(sender.events.some((event) => event.type === 'error' || event.type === 'interrupted')).toBe(true)
   })
 
@@ -442,7 +465,7 @@ describe('brokered Codex research orchestration', () => {
     )
 
     expect(calls).toBe(2)
-    expect(sender.events.filter((event) => event.type === 'tool')).toHaveLength(1)
+    expect(sender.events.filter((event) => event.type === 'tool' && event.name !== 'read_health_table')).toHaveLength(1)
     expect(sender.events.find((event) => event.type === 'done')).toMatchObject({
       type: 'done',
       text: 'Your HRV yesterday was 41.2 ms.'

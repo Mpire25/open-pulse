@@ -168,7 +168,7 @@ export const AGENT_TOOL_LABELS: Record<string, string> = {
   get_devices: 'Checking devices'
 }
 
-const METRIC_UNITS: Record<MetricKey, string> = {
+export const METRIC_UNITS: Record<MetricKey, string> = {
   steps: 'steps',
   distanceKm: 'km',
   floors: 'floors',
@@ -229,7 +229,7 @@ function parseMetrics(value: unknown, max: number): MetricKey[] {
   return metrics as MetricKey[]
 }
 
-function dailyPayload(metrics: MetricKey[], result: Awaited<ReturnType<typeof getSeries>>): Record<string, unknown> {
+export function dailyPayload(metrics: MetricKey[], result: Awaited<ReturnType<typeof getSeries>>): Record<string, unknown> {
   const observations = Object.fromEntries(
     metrics.map((metric) => [
       metric,

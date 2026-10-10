@@ -1539,6 +1539,24 @@ async function ensureIntradayHeart(
 // ---------------------------------------------------------------------------
 // Public queries
 
+/** A request-local snapshot; never fetches missing days or schedules a backfill. */
+export function getArchivedHealthHistory(
+  metrics: MetricKey[], start: string, end: string
+): { series: SeriesResult; workouts: WorkoutsResult } {
+  const [s, e] = normalizeRange(start, end)
+  const days: DailySeries = {}
+  const workouts: Workout[] = []
+  for (const date of listDates(s, e)) {
+    const record = peekDay(date)
+    days[date] = Object.fromEntries(metrics.map((metric) => [metric, record?.values[metric] ?? null]))
+    workouts.push(...(record?.workouts ?? []))
+  }
+  return {
+    series: { source: 'live', start: s, end: e, days },
+    workouts: { source: 'live', workouts }
+  }
+}
+
 export async function getSeries(
   metrics: MetricKey[],
   start: string,

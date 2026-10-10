@@ -44,7 +44,7 @@ export const PRESENTATION_TOOL: AgentToolSpec = {
   type: 'function',
   name: 'present_health_data',
   description:
-    'Display trusted OpenPulse cards and charts from datasets returned by query_daily_metrics, analyze_daily_metrics, query_sleep, query_nutrition_logs, or query_workouts. Analysis dataset IDs can be used directly; never repeat a health query merely to make a visual. Use an overview for a broad multi-domain summary, a metric card for one exact value, a comparison for two periods, a chart for a trend, a sleep card for one night when stage detail is relevant, a nutrition card for one day, meal, or logged item, or a workout card for one workout. Comparison aggregations are selected independently for each side: preserve explicit total/average/latest wording and use auto otherwise. Totals are rejected for rates, percentages, and state measurements. Use query_daily_metrics for a day nutrition card and query_nutrition_logs for a meal or item card. An overview is a standalone block: when requesting one, leave every other array empty. Otherwise normally show one block and never more than two unless the user explicitly asks for several. The app computes all values and navigation; never copy values into this call. All seven arrays are required and may be empty.',
+    'Display trusted OpenPulse cards and charts from datasets returned by query_daily_metrics, analyze_daily_metrics, query_sleep, query_nutrition_logs, or query_workouts. Analysis dataset IDs can be used directly; never repeat a health query merely to make a visual. Use an overview for a broad multi-domain summary, a metric card for one exact value, a comparison for two periods, a chart for a trend over the period the answer discusses, a sleep card for one night when stage detail is relevant, a nutrition card for one day, meal, or logged item, or a workout card for one workout. Comparison aggregations are selected independently for each side: preserve explicit total/average/latest wording and use auto otherwise. Totals are rejected for rates, percentages, and state measurements. Use query_daily_metrics for a day nutrition card and query_nutrition_logs for a meal or item card. An overview is a standalone block: when requesting one, leave every other array empty. Otherwise normally show one block and never more than two unless the user explicitly asks for several. The app computes all values and navigation; never copy values into this call. All seven arrays are required and may be empty.',
   strict: true,
   parameters: {
     type: 'object',
@@ -119,8 +119,14 @@ export const PRESENTATION_TOOL: AgentToolSpec = {
         maxItems: 2,
         items: {
           type: 'object',
-          properties: { datasetId: DATASET_ID, metric: METRIC, title: { type: 'string', minLength: 1, maxLength: 100 } },
-          required: ['datasetId', 'metric', 'title'],
+          properties: {
+            datasetId: DATASET_ID,
+            metric: METRIC,
+            title: { type: 'string', minLength: 1, maxLength: 100 },
+            startDate: { ...DATE_SCHEMA, description: 'First day of the period the answer discusses, not necessarily the whole dataset.' },
+            endDate: DATE_SCHEMA
+          },
+          required: ['datasetId', 'metric', 'title', 'startDate', 'endDate'],
           additionalProperties: false
         }
       },
@@ -679,6 +685,9 @@ export function resolvePresentation(
     const dataset = dailyDataset(datasetId, datasets)
     ensureWithin(dataset, start, end)
     const selectedDataset = { ...dataset, start, end }
+    // A blank tile says nothing; leave out metrics with no value in the period.
+    const items = metrics.map((metric) => overviewMetric(selectedDataset, metric)).filter((item) => item.value != null)
+    if (items.length < 2) throw new Error('An overview requires at least two metrics with recorded values.')
     return [
       {
         id: randomUUID(),
@@ -686,7 +695,7 @@ export function resolvePresentation(
         title,
         startDate: start,
         endDate: end,
-        items: metrics.map((metric) => overviewMetric(selectedDataset, metric)),
+        items,
         source: dataset.source
       }
     ]
@@ -699,6 +708,7 @@ export function resolvePresentation(
     const date = requiredDate(item?.date, 'date')
     const dataset = dailyDataset(datasetId, datasets)
     const point = metricValues(dataset, metric, date, date)[0]
+    if (point.value == null) throw new Error(`No ${metric} value is recorded on ${date}.`)
     parts.push({
       id: randomUUID(),
       type: 'metric-card',
@@ -775,19 +785,23 @@ export function resolvePresentation(
     const item = record(raw)
     const datasetId = requiredText(item?.datasetId, 'datasetId', 200)
     const metric = requiredMetric(item?.metric)
+    const start = requiredDate(item?.startDate, 'startDate')
+    const end = requiredDate(item?.endDate, 'endDate')
     const dataset = dailyDataset(datasetId, datasets)
-    const points = metricValues(dataset, metric, dataset.start, dataset.end)
+    const points = metricValues(dataset, metric, start, end)
+    const observations = points.filter((point) => point.value != null).length
+    if (!observations) throw new Error(`The requested ${metric} chart has no recorded values.`)
     parts.push({
       id: randomUUID(),
       type: 'trend-chart',
       title: requiredText(item?.title, 'title', 100),
       metric,
-      startDate: dataset.start,
-      endDate: dataset.end,
+      startDate: start,
+      endDate: end,
       points,
-      observations: points.filter((point) => point.value != null).length,
+      observations,
       source: dataset.source,
-      action: metricAction(metric, dataset.end, rangeDays(dataset.start, dataset.end))
+      action: metricAction(metric, end, rangeDays(start, end))
     })
   }
 

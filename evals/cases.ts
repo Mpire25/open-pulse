@@ -7,6 +7,7 @@ import {
   BATTERY_PCT,
   dateAgo,
   evalNow,
+  mealName,
   night,
   runsBetween,
   TODAY_STEPS,
@@ -28,7 +29,7 @@ import {
   type Check
 } from './checks'
 
-export type Category = 'simple' | 'trend' | 'analysis' | 'missing-data' | 'research' | 'follow-up'
+export type Category = 'simple' | 'trend' | 'analysis' | 'missing-data' | 'detail' | 'research' | 'follow-up'
 
 export interface EvalCase {
   id: string
@@ -81,6 +82,16 @@ export function buildCases(): EvalCase[] {
   const steps30 = [average('steps', 29, 0)!, average('steps', 30, 1)!]
   const stepsPrior30 = [average('steps', 59, 30)!, average('steps', 60, 31)!]
   const recentRunsPerWeek = runsBetween(90, 1) / (90 / 7)
+  const restingHeartRateToday = average('restingHeartRate', 0, 0)!
+  const lastYearRhr = average('restingHeartRate', 393, 380)!
+  const dinnerThreeWeeksAgo = mealName(21, 'DINNER')!
+  const yearAgoDatePatterns = [364, 366].filter((days) => weightKg(days) != null).map((days) => {
+    const date = dateAgo(days)
+    const [year, month, day] = date.split('-').map(Number)
+    const label = new Date(year, month - 1, day).toLocaleDateString('en-GB', { month: 'long' })
+    const monthPattern = `${label.slice(0, 3)}(?:${label.slice(3)})?`
+    return new RegExp(`${date}|\\b${day}(?:st|nd|rd|th)?\\s+${monthPattern}\\b|\\b${monthPattern}\\s+${day}(?:st|nd|rd|th)?\\b`, 'i')
+  })
   const yearAgo = [weightKg(364), weightKg(366), nearestWeight(365)].filter((value): value is number => value != null)
 
   return [
@@ -163,6 +174,7 @@ export function buildCases(): EvalCase[] {
         read({ metric: 'weightKg' }, 56),
         read({ metric: 'caloriesIn' }, 56),
         both('links the gain to eating more', /\b(?:eat\w*|intake|consum\w*|calories in|food|snack\w*)\b/i, INCREASE),
+        both('also links it to running less', /\b(?:run\w*|activ\w*|steps|exercis\w*|workouts?)\b/i, DECLINE),
         mentionsNumber('sizes the gain', gainSince60, 0.8, { critical: false }),
         says('spots the evening snack', /\bsnack/i, { critical: false }),
         showsVisual('shows a chart', { critical: false })
@@ -259,7 +271,7 @@ export function buildCases(): EvalCase[] {
         },
         says(
           'says nothing was recorded',
-          /\bno (?:step )?(?:data|record\w*|steps? (?:were |was )?(?:recorded|logged|tracked))|not (?:worn|wearing|recorded|synced|tracked|logged)|missing|nothing (?:was )?(?:recorded|logged)|wasn't (?:worn|recording|tracking)|no activity (?:was )?recorded|(?:data|steps) (?:is|are) (?:missing|unavailable|blank|empty)|(?:has|shows) no\b/i
+          /\bno (?:step )?(?:data|count|record\w*|steps? (?:were |was )?(?:recorded|logged|tracked))|not (?:worn|wearing|recorded|synced|tracked|logged)|missing|nothing (?:was )?(?:recorded|logged)|wasn't (?:worn|recording|tracking)|no activity (?:was )?recorded|(?:data|steps) (?:is|are) (?:missing|unavailable|blank|empty)|(?:has|shows) no\b/i
         )
       ]
     },
@@ -270,12 +282,52 @@ export function buildCases(): EvalCase[] {
       checks: [
         completed(),
         neverSays('never claims the data is missing', CLAIMS_NO_DATA),
-        read({ kind: 'body' }, 368, 362, { share: 0.6 }),
+        // The answer is what matters: a table reaching back a year can answer without a lookup.
+        read({ kind: 'body' }, 368, 362, { share: 0.6, critical: false }),
+        {
+          name: 'labels the actual nearby observation date',
+          critical: true,
+          run: (record) => yearAgoDatePatterns.some((pattern) => pattern.test(record.text))
+        },
         {
           name: 'gives the weight from a year ago',
           critical: true,
           run: (record) => numbersIn(record.text).some((n) => yearAgo.some((value) => Math.abs(n - value) <= 0.3))
         }
+      ]
+    },
+
+    // -----------------------------------------------------------------------
+    // Detail a recent-history table cannot answer on its own
+    {
+      id: 'resting-hr-over-a-year-ago',
+      category: 'detail',
+      history: ask(`What was my average resting heart rate from ${spokenDate(393)} to ${spokenDate(380)} last year?`),
+      checks: [
+        completed(),
+        neverSays('never claims the data is missing', CLAIMS_NO_DATA),
+        read({ metric: 'restingHeartRate' }, 393, 380),
+        mentionsNumber('gives the average for those two weeks', lastYearRhr, 1)
+      ]
+    },
+    {
+      id: 'most-active-hour-yesterday',
+      category: 'detail',
+      history: ask('What time of day was I most active yesterday?'),
+      checks: [
+        completed(),
+        says('says early morning, around 7am', /\b(?:7|07)(?::\d{2})?\s*(?:am|a\.m\.)|\b07:\d{2}\b|\b7 o'clock\b|\bbetween 7\b/i),
+        read({ kind: 'intraday' }, 1, 1, { critical: false })
+      ]
+    },
+    {
+      id: 'dinner-three-weeks-ago',
+      category: 'detail',
+      history: ask(`What did I have for dinner on ${spokenDate(21)}?`),
+      checks: [
+        completed(),
+        read({ kind: 'nutrition' }, 21, 21),
+        says(`names the ${dinnerThreeWeeksAgo.toLowerCase()}`, new RegExp(dinnerThreeWeeksAgo.split(' ')[0], 'i'))
       ]
     },
 
@@ -313,6 +365,24 @@ export function buildCases(): EvalCase[] {
       ]
     },
     {
+      id: 'sleep-and-heart-conversation',
+      category: 'follow-up',
+      history: [
+        { role: 'user', text: 'How did I sleep last night?' },
+        { role: 'assistant', text: `You slept ${Math.floor(lastNight!.minutesAsleep / 60)}h ${lastNight!.minutesAsleep % 60}m last night.` },
+        { role: 'user', text: "And what's my resting heart rate today?" },
+        { role: 'assistant', text: `Your resting heart rate today is ${restingHeartRateToday} bpm.` },
+        { role: 'user', text: 'Do you think the two are connected over the last month?' }
+      ],
+      checks: [
+        completed(),
+        read({ kind: 'sleep' }, 27),
+        read({ metric: 'restingHeartRate' }, 27),
+        says('describes the relationship', /\b(?:link\w*|relationship|correlat\w*|associat\w*|connect\w*|tend\w* to|go(?:es)? together|coincid\w*)\b/i),
+        both('notes short sleep with higher heart rate', /\bsleep\w*/i, /\b(?:higher|rose|risen|rising|elevated|up)\b/i, { critical: false })
+      ]
+    },
+    {
       id: 'food-after-run',
       category: 'analysis',
       history: ask('What did I eat after my run yesterday?'),
@@ -327,4 +397,4 @@ export function buildCases(): EvalCase[] {
   ]
 }
 
-export const CATEGORIES: Category[] = ['simple', 'trend', 'analysis', 'missing-data', 'research', 'follow-up']
+export const CATEGORIES: Category[] = ['simple', 'trend', 'analysis', 'missing-data', 'detail', 'research', 'follow-up']
