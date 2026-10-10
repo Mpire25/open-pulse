@@ -140,6 +140,18 @@ describe('combined assistant answers and cards', () => {
     expect(resolve('Compared with zero steps. ' + marker(request)).parts[0]).toMatchObject({ percentChange: null })
   })
 
+  test('never turns a skin temperature offset into a percentage', () => {
+    const skin = new Map<string, AgentDataset>([['d', { tool: 'query_daily_metrics', data: {
+      source: 'live', requestedRange: { start: '2026-07-01', end: '2026-07-02' },
+      days: { '2026-07-01': { skinTempDeltaC: -0.5 }, '2026-07-02': { skinTempDeltaC: -0.2 } }
+    } }]])
+    const request = marker({ ...empty, comparisons: [{ ...comparison, datasetId: 'd', metric: 'skinTempDeltaC' }] })
+    const answer = resolveAssistantResponse(request + '{{openpulse:fact:0.direction}} by {{openpulse:fact:0.changeMagnitude}} °C.', skin, 'Compare my skin temp')
+    expect(answer.text).toBe('higher by 0.3 °C.')
+    expect(answer.parts[0]).toMatchObject({ percentChange: null })
+    expect(() => resolveAssistantResponse(request + '{{openpulse:fact:0.percentChangeMagnitude}}%.', skin, 'Compare my skin temp')).toThrow(ResponseProtocolError)
+  })
+
   test('drops invalid cards without a correction when the prose does not reference them', () => {
     for (const card of [
       { datasetId: 'invented', metric: 'steps', date: '2026-07-02' },
