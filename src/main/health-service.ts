@@ -1539,6 +1539,23 @@ async function ensureIntradayHeart(
 // ---------------------------------------------------------------------------
 // Public queries
 
+/** Populated cached values that need revalidation before being treated as current. */
+export function getHealthHistoryFreshness(metrics: MetricKey[], start: string, end: string): Record<string, MetricKey[]> {
+  const stale: Record<string, MetricKey[]> = {}
+  for (const date of listDates(...normalizeRange(start, end))) {
+    const values = peekDay(date)?.values
+    const missingFreshness = metrics.filter((metric) => {
+      if (values?.[metric] == null) return false
+      const group = SLEEP_METRICS.includes(metric) ? SLEEP_SUMMARY_GROUP : GROUP_BY_METRIC.get(metric)?.id
+      // Partial-fetch cooldown is not evidence that the stored value is complete.
+      const at = group ? fetchedAt(group, date) : null
+      return at == null || !isHealthCacheTimestampFresh(date, at)
+    })
+    if (missingFreshness.length) stale[date] = missingFreshness
+  }
+  return stale
+}
+
 /** A request-local snapshot; never fetches missing days or schedules a backfill. */
 export function getArchivedHealthHistory(
   metrics: MetricKey[], start: string, end: string

@@ -571,6 +571,7 @@ export function createHealthFixture(record: HealthCallListener, now = evalNow, o
   }
 
   return {
+    getHealthHistoryFreshness: () => ({} as Record<string, MetricKey[]>),
     async getArchivedHealthHistory(metrics: MetricKey[], start: string, end: string) {
       // Match the pure archive snapshot: record what was supplied, without lookup latency.
       const cached = createHealthFixture(record, now)

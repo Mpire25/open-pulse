@@ -19,6 +19,7 @@ mock.module('electron', () => ({
 
 const {
   getArchivedHealthHistory,
+  getHealthHistoryFreshness,
   getDevices,
   getIntraday,
   getSeries,
@@ -163,6 +164,18 @@ describe('health request budgets', () => {
     expect(warm.series.days[date].steps).toBe(42)
     await new Promise((resolve) => setTimeout(resolve, 10))
     expect(requests).toHaveLength(0)
+  })
+
+  test('archive freshness distinguishes stale metrics from fresh metrics and missing values', () => {
+    const now = new Date()
+    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+    const date = shiftIsoDate(today, -1)
+    mergeValues(date, { steps: 200, caloriesOut: 1000, sleepMinutes: 420 })
+    markFetched('steps', [date], Date.now() - 60 * 60_000)
+    markFetched('sleep-summary-v2', [date], Date.now())
+    expect(getHealthHistoryFreshness(['steps', 'caloriesOut', 'sleepMinutes', 'weightKg'], date, date)).toEqual({ [date]: ['steps', 'caloriesOut'] })
+    markFetched('steps', [date], Date.now())
+    expect(getHealthHistoryFreshness(['steps', 'sleepMinutes'], date, date)).toEqual({})
   })
 
   test('loads intraday heart rate through a timezone probe and one rollup request', async () => {

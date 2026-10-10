@@ -4,6 +4,7 @@ import type { MetricKey, SleepRangeResult } from '../../src/shared/types'
 
 const fixture = createHealthFixture(() => {})
 let sleepOverride: SleepRangeResult | null = null
+let staleMetrics: Record<string, MetricKey[]> = {}
 let failFood = false
 let cancel: AbortController | null = null
 const calls: Array<{ start: string; end: string; mode?: string }> = []
@@ -27,6 +28,7 @@ const readSeries = async (metrics: MetricKey[], start: string, end: string, mode
 }
 mock.module('../../src/main/health-service', () => ({
   ...fixture,
+  getHealthHistoryFreshness: () => staleMetrics,
   getSleepRange: (start: string, end: string) => sleepOverride ?? fixture.getSleepRange(start, end),
   getArchivedHealthHistory: async (metrics: MetricKey[], start: string, end: string) => ({
     series: await readSeries(metrics, start, end, 'background'),
@@ -131,4 +133,15 @@ test('prefetched sleep totals include the main night and nap in every daily pres
       expect(session.night.minutesAsleep).toBe(300)
     }
   } finally { sleepOverride = null }
+})
+
+
+test('stale populated values are explicitly provisional rather than presented as complete', async () => {
+  staleMetrics = { [dateAgo(1)]: ['steps', 'caloriesOut'], [dateAgo(30)]: ['steps'] }
+  try {
+    const table = await buildHealthTable(dateAgo(0), new AbortController().signal)
+    expect(table.text).toContain(`${dateAgo(1)}: steps,caloriesOut`)
+    expect(table.text).toContain(`${dateAgo(30)}: steps`)
+    expect(table.text).toContain('query the relevant health tool before using these values as current or complete')
+  } finally { staleMetrics = {} }
 })
