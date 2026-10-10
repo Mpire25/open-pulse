@@ -72,30 +72,40 @@ describe('combined assistant answers and cards', () => {
     expect(resolve('Compared with zero steps. ' + marker(request)).parts[0]).toMatchObject({ percentChange: null })
   })
 
-  test('rejects unknown datasets, out-of-range dates, extra numeric fields and invalid schema', () => {
+  test('drops invalid cards without a correction when the prose does not reference them', () => {
     for (const card of [
       { datasetId: 'invented', metric: 'steps', date: '2026-07-02' },
       { datasetId: 'daily', metric: 'steps', date: '2026-06-30' },
       { datasetId: 'daily', metric: 'steps', date: '2026-07-02', value: 999 },
       { datasetId: 'daily', metric: 'fake', date: '2026-07-02' }
-    ]) expect(() => resolve('Steps. ' + marker({ ...empty, metricCards: [card] }))).toThrow(ResponseProtocolError)
+    ]) {
+      expect(resolve('Steps. ' + marker({ ...empty, metricCards: [card] }))).toEqual({ text: 'Steps.', parts: [], droppedCards: true })
+      expect(() => resolve('{{openpulse:fact:0.value}} steps. ' + marker({ ...empty, metricCards: [card] }))).toThrow(ResponseProtocolError)
+    }
     for (const request of [[], null, {}, { ...empty, metricCards: 'bad' }, { ...empty, unknown: [] }, empty]) {
-      expect(() => resolve('Steps. ' + marker(request))).toThrow(ResponseProtocolError)
+      expect(resolve('Steps. ' + marker(request))).toEqual({ text: 'Steps.', parts: [], droppedCards: true })
     }
   })
 
-  test('rejects malformed, duplicated, fenced, trailing or unresolved protocol', () => {
+  test('keeps the prose of malformed, duplicated, fenced or trailing markup but rejects unresolved placeholders', () => {
     const valid = marker({ ...empty, comparisons: [comparison] })
+    for (const [raw, text] of [
+      ['Answer. <!--openpulse:present {', 'Answer.'], ['Answer. ' + valid + valid, 'Answer.'],
+      ['Answer. ' + valid + ' Extra text.', 'Answer.  Extra text.'], ['Answer. ```json\n' + valid + '\n```', 'Answer.']
+    ]) expect(resolve(raw)).toEqual({ text, parts: [], droppedCards: true })
     for (const raw of [
-      'Answer. <!--openpulse:present {', 'Answer. ' + valid + valid, 'Answer. ' + valid + ' Extra text.',
-      'Answer. ```json\n' + valid + '\n```', 'Value {{openpulse:fact:0.current.value}}.',
+      'Value {{openpulse:fact:0.current.value}}.',
       'Value {{openpulse:fact:2.current.value}}. ' + valid,
-      'Value {{openpulse:fact:0.constructor}}. ' + valid, 'Value {{openpulse:fact:0.current.value}. ' + valid, ''
+      'Value {{openpulse:fact:0.constructor}}. ' + valid, 'Value {{openpulse:fact:0.current.value}. ' + valid,
+      'Answer. ' + valid + valid + ' {{openpulse:fact:0.current.value}}', ''
     ]) expect(() => resolve(raw)).toThrow(ResponseProtocolError)
   })
 
   test('plain fallback accepts prose while forbidding cards and placeholders', () => {
     expect(resolveAssistantResponse('An ordinary answer.', datasets, '', true)).toEqual({ text: 'An ordinary answer.', parts: [] })
-    expect(() => resolveAssistantResponse('Answer. ' + marker({ ...empty, comparisons: [comparison] }), datasets, '', true)).toThrow(ResponseProtocolError)
+    expect(resolveAssistantResponse('Answer. ' + marker({ ...empty, comparisons: [comparison] }), datasets, '', true))
+      .toEqual({ text: 'Answer.', parts: [], droppedCards: true })
+    expect(() => resolveAssistantResponse('Value {{openpulse:fact:0.current.value}}. ' + marker({ ...empty, comparisons: [comparison] }), datasets, '', true))
+      .toThrow(ResponseProtocolError)
   })
 })

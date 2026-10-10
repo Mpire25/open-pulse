@@ -335,8 +335,9 @@ export async function runChat(
     let protocolRepairs = 0
     const visualParts: AssistantVisualPart[] = []
 
-    for (let turn = 0; turn < MAX_TOOL_TURNS; turn++) {
-      const finalResponseTurn = turn === MAX_TOOL_TURNS - 1
+    // Answer corrections do not use up the tool budget.
+    for (let turn = 0; turn < MAX_TOOL_TURNS + protocolRepairs; turn++) {
+      const finalResponseTurn = turn === MAX_TOOL_TURNS - 1 + protocolRepairs
       signal.throwIfAborted()
       if (!isCodexAuthGenerationCurrent(authGeneration)) throw new Error('ChatGPT disconnected.')
 
@@ -470,8 +471,9 @@ export async function runChat(
           // Roll back this attempt, including any already streamed prefix. Card
           // resolution is atomic, so no rejected parts have entered the run.
           emit({ type: 'replace', chatId, runId, text: finalText })
-          if (finalResponseTurn || plainOnly) throw new Error('I couldn’t finish this answer. Please try again.')
-          protocolRepairs++
+          if (plainOnly) throw new Error('I couldn’t finish this answer. Please try again.')
+          // A failed last turn has no budget left for a correction: ask for plain prose instead.
+          protocolRepairs = finalResponseTurn ? 2 : protocolRepairs + 1
           emit({ type: 'tool', chatId, runId, name: 'finish_answer', label: 'Finishing your answer' })
           input.push(...continuationItems, {
             type: 'message', role: 'developer',

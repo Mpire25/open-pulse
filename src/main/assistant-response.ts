@@ -132,12 +132,42 @@ function fact(part: AssistantVisualPart | undefined, path: string): string {
   throw new ResponseProtocolError('A fact placeholder does not match a supported card value.')
 }
 
-/** Resolves the entire response atomically: never publish a partial set of cards. */
+/** Prose with all presentation markup removed, or null if the prose itself depends on the cards. */
+function plainProse(raw: string): string | null {
+  const text = raw
+    .replace(/<!--[\s\S]*?-->/g, '')
+    .replace(/<!--[\s\S]*$/, '')
+    .replace(/```[\w-]*\s*```/g, '')
+    .trim()
+  if (!text || text.includes('{{') || text.includes('openpulse:')) return null
+  return text
+}
+
+/**
+ * Resolves the entire response atomically: never publish a partial set of
+ * cards. When only the cards are invalid and the prose does not reference
+ * them, the prose is kept without cards rather than asking for a correction.
+ */
 export function resolveAssistantResponse(
   raw: string,
   datasets: Map<string, AgentDataset>,
   userText: string,
   plainOnly = false
+): { text: string; parts: AssistantVisualPart[]; droppedCards?: boolean } {
+  try {
+    return resolveStrict(raw, datasets, userText, plainOnly)
+  } catch (error) {
+    const prose = error instanceof ResponseProtocolError ? plainProse(raw) : null
+    if (prose == null) throw error
+    return { text: prose, parts: [], droppedCards: true }
+  }
+}
+
+function resolveStrict(
+  raw: string,
+  datasets: Map<string, AgentDataset>,
+  userText: string,
+  plainOnly: boolean
 ): { text: string; parts: AssistantVisualPart[] } {
   let text = raw.trim()
   let parts: AssistantVisualPart[] = []

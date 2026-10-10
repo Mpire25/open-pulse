@@ -25,12 +25,16 @@ and placeholders never enter the rendered or saved chat. Citation links are
 added after resolution; when substitutions change annotation offsets, the
 source list remains without inserting markers at incorrect character positions.
 
-An invalid response clears the rejected attempt and requests one correction.
-If that also fails, the next request asks for a plain answer without visuals,
-placeholders or further tools. Recovery stays within the run's eight-request
-limit. Repeated invalid output ends with a retryable error. Cancellation and
-timeouts retain only text already safe to stream. History and title generation
-receive the rendered prose, and saved visual parts use their existing format.
+When only the visual instructions are invalid and the prose does not use any
+placeholders, the app shows the prose without visuals rather than spending
+another request on a correction. Otherwise an invalid response clears the
+rejected attempt and requests one correction. If that also fails, or the
+invalid response was on the last tool turn, the next request asks for a plain
+answer without visuals, placeholders or further tools. Corrections do not use
+up the run's eight tool turns. A plain answer that still fails ends with a
+retryable error. Cancellation and timeouts retain only text already safe to
+stream. History and title generation receive the rendered prose, and saved
+visual parts use their existing format.
 
 ## Verification
 
