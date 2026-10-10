@@ -20,6 +20,8 @@ mock.module('electron', () => ({
 const {
   getArchivedHealthHistory,
   getHealthHistoryFreshness,
+  getNutritionLogs,
+  clearHealthCache,
   getDevices,
   getIntraday,
   getSeries,
@@ -176,6 +178,34 @@ describe('health request budgets', () => {
     expect(getHealthHistoryFreshness(['steps', 'caloriesOut', 'sleepMinutes', 'weightKg'], date, date)).toEqual({ [date]: ['steps', 'caloriesOut'] })
     markFetched('steps', [date], Date.now())
     expect(getHealthHistoryFreshness(['steps', 'sleepMinutes'], date, date)).toEqual({})
+  })
+
+  test('seven warm food days skip network and token lookup, while refresh and account changes invalidate them', async () => {
+    const now = new Date()
+    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+    const dates = Array.from({ length: 7 }, (_, i) => shiftIsoDate(today, -i))
+    const auth = await import('../src/main/google-auth')
+    const tokenRead = spyOn(auth, 'getGoogleAccessToken')
+    try {
+      await Promise.all(dates.map((date) => getNutritionLogs(date)))
+      expect(requests).toHaveLength(7)
+      tokenRead.mockClear()
+      requests = []
+      const warm = await Promise.all(dates.map((date) => getNutritionLogs(date)))
+      expect(warm.map((day) => day.date)).toEqual(dates)
+      expect(warm.every((day) => day.entries.length === 0)).toBe(true)
+      expect(requests).toHaveLength(0)
+      expect(tokenRead).toHaveBeenCalledTimes(0)
+      const controller = new AbortController()
+      controller.abort()
+      await expect(getNutritionLogs(today, controller.signal)).rejects.toThrow()
+      clearHealthCache()
+      await getNutritionLogs(today)
+      expect(requests).toHaveLength(1)
+      resetHealthAccount()
+      await getNutritionLogs(today)
+      expect(requests).toHaveLength(2)
+    } finally { tokenRead.mockRestore() }
   })
 
   test('loads intraday heart rate through a timezone probe and one rollup request', async () => {

@@ -1827,6 +1827,11 @@ export async function getHeartDetail(
 export async function getNutritionLogs(date: string, signal?: AbortSignal): Promise<NutritionLogsResult> {
   const generation = healthAccountGeneration
   const [d] = normalizeRange(date, date)
+  signal?.throwIfAborted()
+  const cached = nutritionRawCache.get(d)
+  if (rawDayFresh(cached, d)) {
+    return { date: d, source: 'live', entries: parseNutritionLogs(cached!.points) }
+  }
   const token = await requireGoogleAccessToken()
   assertCurrentAccount(generation)
   const points = await nutritionRawRange(token, d, shiftIsoDate(d, 1), 0, signal)
