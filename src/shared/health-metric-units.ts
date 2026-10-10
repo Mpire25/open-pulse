@@ -1,0 +1,30 @@
+import type { MetricKey } from './types'
+
+export const METRIC_UNITS: Record<MetricKey, string> = {
+  steps: 'steps',
+  distanceKm: 'km',
+  floors: 'floors',
+  caloriesOut: 'kcal',
+  activeMinutes: 'min',
+  activeZoneMinutes: 'min',
+  sedentaryMinutes: 'min',
+  restingHeartRate: 'bpm',
+  hrvMs: 'ms',
+  spo2Pct: '%',
+  breathingRate: 'breaths/min',
+  skinTempDeltaC: '°C from baseline',
+  sleepMinutes: 'min',
+  sleepEfficiency: '%',
+  weightKg: 'kg',
+  bodyFatPct: '%',
+  bmi: 'kg/m²',
+  waterMl: 'ml',
+  caloriesIn: 'kcal',
+  proteinG: 'g',
+  carbsG: 'g',
+  fatG: 'g',
+  fiberG: 'g',
+  saturatedFatG: 'g',
+  sodiumG: 'g',
+  sugarG: 'g'
+}

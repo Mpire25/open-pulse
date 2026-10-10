@@ -771,7 +771,10 @@ export function resolvePresentation(
       ? null
       : current.value - previous.value
     const previousValue = previous.value
-    const percentChange = absoluteChange == null || previousValue == null || previousValue === 0 ? null : (absoluteChange / previousValue) * 100
+    // Skin temperature is a signed offset from a baseline, so a percentage of it means nothing.
+    const percentChange = absoluteChange == null || previousValue == null || previousValue === 0 || metric === 'skinTempDeltaC'
+      ? null
+      : (absoluteChange / previousValue) * 100
     parts.push({
       id: randomUUID(),
       type: 'comparison',

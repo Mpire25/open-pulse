@@ -406,7 +406,7 @@ describe('brokered Codex research orchestration', () => {
       calls++
       const body = requestBody(init)
       if (calls === 1) {
-        expect(toolNames(body)).toEqual(['query_daily_metrics', 'present_health_data', 'research_web'])
+        expect(toolNames(body)).toEqual(['query_daily_metrics', 'research_web'])
         expect(body.tool_choice).toBe('auto')
         expect(String(body.instructions)).toContain('Never say that data is missing')
         const input = body.input as Array<{ role?: string; content?: Array<{ text?: string }> }>

@@ -103,13 +103,10 @@ test('keeps the eval session private', async () => {
   expect(store.getSecret<{ tokens: { accessToken: string } }>('chatgpt-plan-session')?.tokens.accessToken).toBe('eval-access-token')
 })
 
-test('uses a prompt dataset for a card and returns validated facts before the answer', async () => {
-  const text = `You've done ${TODAY_STEPS.toLocaleString('en-GB')} steps so far today.`
-  respond = () => requests.length === 1 ? sse([{
-    type: 'response.output_item.done',
-    item: { type: 'function_call', name: 'present_health_data', call_id: 'visual-1',
-      arguments: JSON.stringify({ metricCards: [{ datasetId: 'health-table', metric: 'steps', date: dateAgo(0) }] }) }
-  }]) : sse([
+test('uses a prompt dataset for an answer and card in one request', async () => {
+  const spec = { overviews: [], metricCards: [{ datasetId: 'health-table', metric: 'steps', date: dateAgo(0) }], comparisons: [], charts: [], sleepCards: [], nutritionCards: [], workouts: [] }
+  const text = `You've done {{openpulse:fact:0.formattedValue}} so far today. <!--openpulse:present ${JSON.stringify(spec)}-->`
+  respond = () => sse([
     { type: 'response.output_text.delta', delta: text },
     { type: 'response.output_item.done', item: { type: 'message', content: [{ type: 'output_text', text, annotations: [] }] } }
   ])
@@ -118,7 +115,7 @@ test('uses a prompt dataset for a card and returns validated facts before the an
     const evalCase = buildCases().find((item) => item.id === 'steps-today')!
     const record = await runCase(assistant, evalCase, 0)
     expect(record.outcome).toBe('completed')
-    expect(requests).toHaveLength(2)
+    expect(requests).toHaveLength(1)
     const input = requests[0].body.input as Array<{ role?: string; content?: Array<{ text?: string }> }>
     const table = input.find((item) => item.role === 'developer')?.content?.[0]?.text ?? ''
     expect(table).toContain('<OPENPULSE_HEALTH_DATA>')
@@ -127,8 +124,9 @@ test('uses a prompt dataset for a card and returns validated facts before the an
     expect(record.healthCalls.some((call) => call.fn === 'getSeries' && call.mode === 'background' && call.start === dateAgo(179))).toBe(true)
     expect(record.modelRequests[0].dataChars).toBe(table.length)
     expect(record.parts).toHaveLength(1)
-    const output = (requests[1].body.input as Array<{ type: string; output?: string }>).find((item) => item.type === 'function_call_output')!
-    expect(JSON.parse(output.output!).validatedFacts).toBeDefined()
+    expect(record.parts[0]).toMatchObject({ type: 'metric-card', value: TODAY_STEPS })
+    expect(record.text).not.toContain('openpulse:')
+    expect(record.firstTextMs).toBeGreaterThanOrEqual(0)
     expect(score(evalCase, record).passed).toBe(true)
     expect(record.healthCalls.filter((call) => call.fn === 'getSeries')).toHaveLength(2)
   } finally { respond = null }
