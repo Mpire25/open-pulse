@@ -833,7 +833,7 @@ function PeriodDetail({
             label: 'Daily average',
             value: present.length ? def.format(present.reduce((s, v) => s + v, 0) / present.length) : '—'
           },
-          { label: 'Best day', value: present.length ? def.format(Math.max(...present)) : '—' }
+          { label: 'Highest day', value: present.length ? def.format(Math.max(...present)) : '—' }
         ]
       : [
           {
