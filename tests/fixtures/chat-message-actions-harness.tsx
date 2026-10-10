@@ -11,6 +11,10 @@ for (const name of ['window', 'document', 'navigator', 'HTMLElement', 'Element',
   Object.defineProperty(globalThis, name, { configurable: true, value: name === 'window' ? dom : (dom as unknown as Record<string, unknown>)[name] })
 }
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
+Object.assign(globalThis, {
+  requestAnimationFrame: dom.requestAnimationFrame.bind(dom),
+  cancelAnimationFrame: dom.cancelAnimationFrame.bind(dom)
+})
 const motionExports = { ...framerMotion }
 mock.module('framer-motion', () => ({ ...motionExports, motion: new Proxy({}, { get: (_, tag: string) => tag === 'create' ? (component: React.ComponentType) => component : React.forwardRef((props: Record<string, unknown>, ref) => {
   const { initial, animate, transition, exit, ...rest } = props
@@ -102,6 +106,34 @@ test('IPC send rejection becomes a retryable error', async () => {
   expect(chat.busy).toBe(false)
   expect(document.querySelector('[role="alert"]')?.textContent).toBe('Synthetic IPC failure')
   expect(button('Retry')).toBeDefined()
+})
+
+test('validated replacement removes a rejected prefix, persists cards, and survives reload', async () => {
+  const ids = await send()
+  await act(async () => receive({ ...ids, type: 'delta', text: 'Rejected first attempt' }))
+  await act(async () => receive({ ...ids, type: 'replace', text: '' }))
+  expect(chat.turns.at(-1)?.text).toBe('')
+  expect(chat.busy).toBe(true)
+  await act(async () => receive({ ...ids, type: 'delta', text: 'Today ' }))
+  await act(async () => receive({ ...ids, type: 'replace', text: 'Today 200 steps.' }))
+  expect(chat.turns.at(-1)?.text).toBe('Today 200 steps.')
+  expect(container.textContent).not.toContain('Rejected first attempt')
+  await act(async () => receive({ ...ids, runId: 'obsolete', type: 'replace', text: 'Stale answer' }))
+  expect(chat.turns.at(-1)?.text).toBe('Today 200 steps.')
+  const parts = [{
+    id: 'steps-card', type: 'metric-card' as const, metric: 'steps' as const,
+    date: '2026-07-02', value: 200, source: 'live' as const,
+    action: { type: 'open-metric' as const, view: 'activity' as const, metric: 'steps' as const, date: '2026-07-02', range: 'D' as const }
+  }]
+  await act(async () => receive({ ...ids, type: 'done', outcome: 'completed', text: 'Today 200 steps.', parts }))
+  expect(chat.busy).toBe(false)
+  expect(sessions.get(ids.chatId)?.messages.at(-1)).toMatchObject({ text: 'Today 200 steps.', parts })
+  await act(async () => { await chat.reload(); chat.select(ids.chatId) })
+  expect(chat.turns.at(-1)).toMatchObject({ text: 'Today 200 steps.', parts })
+  expect(container.textContent).toContain('200')
+  await act(async () => chat.send('Compare that with yesterday'))
+  expect(histories.at(-1)?.[1].text).toContain('Today 200 steps.')
+  expect(histories.at(-1)?.[1].text).not.toContain('openpulse:fact')
 })
 
 test('an older failure cannot retry after a newer request', async () => {

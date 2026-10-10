@@ -263,6 +263,8 @@ export function useChat(enabled = true): ChatController {
           switch (event.type) {
             case 'delta':
               return { ...turn, text: turn.text + event.text, toolLabel: undefined }
+            case 'replace':
+              return { ...turn, text: event.text, toolLabel: undefined }
             case 'tool':
               return { ...turn, toolLabel: event.label }
             case 'reasoning':
