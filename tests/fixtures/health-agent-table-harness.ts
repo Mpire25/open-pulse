@@ -1,8 +1,9 @@
 import { expect, mock, test } from 'bun:test'
 import { createHealthFixture, dateAgo } from '../../evals/fixture'
-import type { MetricKey } from '../../src/shared/types'
+import type { MetricKey, SleepRangeResult } from '../../src/shared/types'
 
 const fixture = createHealthFixture(() => {})
+let sleepOverride: SleepRangeResult | null = null
 let failFood = false
 let cancel: AbortController | null = null
 const calls: Array<{ start: string; end: string; mode?: string }> = []
@@ -26,6 +27,7 @@ const readSeries = async (metrics: MetricKey[], start: string, end: string, mode
 }
 mock.module('../../src/main/health-service', () => ({
   ...fixture,
+  getSleepRange: (start: string, end: string) => sleepOverride ?? fixture.getSleepRange(start, end),
   getArchivedHealthHistory: async (metrics: MetricKey[], start: string, end: string) => ({
     series: await readSeries(metrics, start, end, 'background'),
     workouts: await fixture.getWorkoutsRange(start, end)
@@ -70,4 +72,17 @@ test('cancellation during reads cannot publish a partial table', async () => {
   cancel = new AbortController()
   try { await expect(buildHealthTable(dateAgo(0), cancel.signal)).rejects.toThrow() }
   finally { cancel = null }
+})
+
+
+test('unmeasured sleep stages remain unavailable while measured zeros stay zero', async () => {
+  const sleep = await fixture.getSleepRange(dateAgo(0), dateAgo(0))
+  const main = sleep.days[0].sessions.find((session) => session.id === sleep.days[0].mainSessionId)!
+  main.stageMinutes = { AWAKE: 0 }
+  sleepOverride = sleep
+  try {
+    const table = await buildHealthTable(dateAgo(0), new AbortController().signal)
+    expect(table.text).toContain('deep unavailable, REM unavailable, light unavailable, awake 0 min')
+    expect(table.text).not.toContain('REM 0')
+  } finally { sleepOverride = null }
 })

@@ -113,7 +113,7 @@ export async function buildHealthTable(
   const sleepForModel = healthAgentModelData('query_sleep', { nights: main ? [main] : [] }).nights as Array<{ localStartTime?: string; localEndTime?: string }>
   const sleepLine = main
     ? `${night!.date}: ${sleepForModel[0].localStartTime}–${sleepForModel[0].localEndTime}, asleep ${main.minutesAsleep} min of ${main.minutesInSleepPeriod} in bed, ` +
-      `deep ${main.stageMinutes.DEEP ?? 0}, REM ${main.stageMinutes.REM ?? 0}, light ${main.stageMinutes.LIGHT ?? 0}, awake ${main.stageMinutes.AWAKE ?? 0} min`
+      `deep ${main.stageMinutes.DEEP ?? 'unavailable'}, REM ${main.stageMinutes.REM ?? 'unavailable'}, light ${main.stageMinutes.LIGHT ?? 'unavailable'}, awake ${main.stageMinutes.AWAKE ?? 'unavailable'} min`
     : 'No cached sleep detail for last night yet; query_sleep can check it.'
 
   const text = [
