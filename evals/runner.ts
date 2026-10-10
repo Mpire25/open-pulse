@@ -145,7 +145,9 @@ export async function runCase(assistant: AssistantUnderTest, evalCase: EvalCase,
   let firstTextMs: number | undefined
   sender.send = (channel: string, event: AiEvent) => {
     if (channel !== 'ai:event') return
-    if (event.type === 'delta' && firstTextMs === undefined) firstTextMs = Date.now() - startedAt
+    if ((event.type === 'delta' || event.type === 'replace') && event.text && firstTextMs === undefined) {
+      firstTextMs = Date.now() - startedAt
+    }
     sender.events.push(event)
   }
   let timedOut = false

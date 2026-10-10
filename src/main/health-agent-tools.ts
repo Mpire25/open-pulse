@@ -1,3 +1,5 @@
+import { METRIC_UNITS } from '../shared/health-metric-units'
+export { METRIC_UNITS } from '../shared/health-metric-units'
 import { METRIC_KEYS, type MetricKey } from '../shared/types'
 import {
   type SyncOptions,
@@ -166,35 +168,6 @@ export const AGENT_TOOL_LABELS: Record<string, string> = {
   query_nutrition_logs: 'Reading nutrition log',
   query_body_measurements: 'Reading body measurements',
   get_devices: 'Checking devices'
-}
-
-export const METRIC_UNITS: Record<MetricKey, string> = {
-  steps: 'steps',
-  distanceKm: 'km',
-  floors: 'floors',
-  caloriesOut: 'kcal',
-  activeMinutes: 'min',
-  activeZoneMinutes: 'min',
-  sedentaryMinutes: 'min',
-  restingHeartRate: 'bpm',
-  hrvMs: 'ms',
-  spo2Pct: '%',
-  breathingRate: 'breaths/min',
-  skinTempDeltaC: '°C from baseline',
-  sleepMinutes: 'min',
-  sleepEfficiency: '%',
-  weightKg: 'kg',
-  bodyFatPct: '%',
-  bmi: 'kg/m²',
-  waterMl: 'ml',
-  caloriesIn: 'kcal',
-  proteinG: 'g',
-  carbsG: 'g',
-  fatG: 'g',
-  fiberG: 'g',
-  saturatedFatG: 'g',
-  sodiumG: 'g',
-  sugarG: 'g'
 }
 
 function parseDate(value: unknown, field: string): string {
