@@ -1539,6 +1539,22 @@ async function ensureIntradayHeart(
 // ---------------------------------------------------------------------------
 // Public queries
 
+/** Guard request-local cached snapshots against a disconnect or account switch. */
+export function healthAccountSnapshotGuard(): () => void {
+  const generation = healthAccountGeneration
+  return () => assertCurrentAccount(generation)
+}
+
+/** Sleep detail already held locally; never obtains a token or schedules a fetch. */
+export function getArchivedSleepHistory(start: string, end: string): SleepRangeResult {
+  return {
+    source: 'live',
+    days: listDates(...normalizeRange(start, end))
+      .map((date) => cachedSleepDay(peekDay(date)))
+      .filter((day): day is SleepDay => day != null)
+  }
+}
+
 /** Populated cached values that need revalidation before being treated as current. */
 export function getHealthHistoryFreshness(metrics: MetricKey[], start: string, end: string): Record<string, MetricKey[]> {
   const stale: Record<string, MetricKey[]> = {}
@@ -1559,7 +1575,7 @@ export function getHealthHistoryFreshness(metrics: MetricKey[], start: string, e
 /** A request-local snapshot; never fetches missing days or schedules a backfill. */
 export function getArchivedHealthHistory(
   metrics: MetricKey[], start: string, end: string
-): { series: SeriesResult; workouts: WorkoutsResult } {
+): { series: SeriesResult; workouts: WorkoutsResult; staleMetrics: Record<string, MetricKey[]> } {
   const [s, e] = normalizeRange(start, end)
   const days: DailySeries = {}
   const workouts: Workout[] = []
@@ -1570,7 +1586,8 @@ export function getArchivedHealthHistory(
   }
   return {
     series: { source: 'live', start: s, end: e, days },
-    workouts: { source: 'live', workouts }
+    workouts: { source: 'live', workouts },
+    staleMetrics: getHealthHistoryFreshness(metrics, s, e)
   }
 }
 

@@ -571,6 +571,8 @@ export function createHealthFixture(record: HealthCallListener, now = evalNow, o
   }
 
   return {
+    healthAccountSnapshotGuard: () => () => {},
+    getArchivedSleepHistory: (start: string, end: string) => createHealthFixture(() => {}, now).getSleepRange(start, end),
     getHealthHistoryFreshness: () => ({} as Record<string, MetricKey[]>),
     async getArchivedHealthHistory(metrics: MetricKey[], start: string, end: string) {
       // Match the pure archive snapshot: record what was supplied, without lookup latency.
@@ -579,7 +581,7 @@ export function createHealthFixture(record: HealthCallListener, now = evalNow, o
         cached.getSeries(metrics, start, end, false, undefined, { mode: 'background' }),
         cached.getWorkoutsRange(start, end, false, undefined, { mode: 'background' })
       ])
-      return { series, workouts }
+      return { series, workouts, staleMetrics: {} as Record<string, MetricKey[]> }
     },
     async getSeries(metrics: MetricKey[], start: string, end: string, _force?: boolean, _signal?: AbortSignal, sync: ReadOptions = {}): Promise<SeriesResult> {
       const [s, e] = clampRange(start, end)

@@ -20,6 +20,7 @@ mock.module('electron', () => ({
 const {
   getArchivedHealthHistory,
   getHealthHistoryFreshness,
+  healthAccountSnapshotGuard,
   getNutritionLogs,
   clearHealthCache,
   getDevices,
@@ -206,6 +207,23 @@ describe('health request budgets', () => {
       await getNutritionLogs(today)
       expect(requests).toHaveLength(2)
     } finally { tokenRead.mockRestore() }
+  })
+
+  test('snapshot guards reject account changes and freshness stays attached to the captured values', () => {
+    const now = new Date()
+    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+    const date = shiftIsoDate(today, -1)
+    mergeValues(date, { steps: 200 })
+    const snapshot = getArchivedHealthHistory(['steps'], date, date)
+    mergeValues(date, { steps: 500 })
+    markFetched('steps', [date], Date.now())
+    expect(snapshot.series.days[date].steps).toBe(200)
+    expect(snapshot.staleMetrics[date]).toEqual(['steps'])
+    expect(getHealthHistoryFreshness(['steps'], date, date)).toEqual({})
+    const guard = healthAccountSnapshotGuard()
+    expect(guard).not.toThrow()
+    resetHealthAccount()
+    expect(guard).toThrow('account changed')
   })
 
   test('loads intraday heart rate through a timezone probe and one rollup request', async () => {

@@ -8,7 +8,7 @@ import type { AgentDataset } from './assistant-presentation'
 import { shiftIsoDate } from './health-api'
 import { healthAgentModelData } from './health-agent-analysis'
 import { dailyPayload, METRIC_UNITS } from './health-agent-tools'
-import { getArchivedHealthHistory, getHealthHistoryFreshness, getNutritionLogs, getSeries, getSleepRange } from './health-service'
+import { getArchivedHealthHistory, getArchivedSleepHistory, healthAccountSnapshotGuard, getHealthHistoryFreshness, getNutritionLogs, getSeries, getSleepRange } from './health-service'
 
 export const HEALTH_TABLE_DATASET_ID = 'health-table'
 export const HEALTH_TABLE_DAYS = 180
@@ -53,18 +53,32 @@ export async function buildHealthTable(
   signal: AbortSignal
 ): Promise<HealthTable> {
   signal.throwIfAborted()
+  const assertAccount = healthAccountSnapshotGuard()
+  const cachedSleep = getArchivedSleepHistory(today, today)
+  const optionalRead = async <T>(read: Promise<T>): Promise<T | null> => {
+    try { return await read } catch (error) {
+      signal.throwIfAborted()
+      assertAccount()
+      if (error instanceof Error && (error.name === 'AbortError' || error.name === 'HealthAccountChangedError')) throw error
+      return null
+    }
+  }
   const start = shiftIsoDate(today, -(HEALTH_TABLE_DAYS - 1))
   const candidates = KEY_METRICS
   const foodDates = Array.from({ length: FOOD_LOG_DAYS }, (_, index) => shiftIsoDate(today, -index)).reverse()
 
   // History comes straight from the archive; today is refreshed before answering.
-  const [archive, latest, lastNight, food] = await Promise.all([
+  const [archive, latest, refreshedSleep, food] = await Promise.all([
     getArchivedHealthHistory(candidates, start, today),
-    getSeries(candidates, today, today, false, signal, { mode: 'await', priority: 0 }),
-    getSleepRange(today, today, false, signal, { mode: 'await', priority: 0 }),
-    Promise.all(foodDates.map((date) => getNutritionLogs(date, signal).catch(() => null)))
+    optionalRead(getSeries(candidates, today, today, false, signal, { mode: 'await', priority: 0 })),
+    optionalRead(getSleepRange(today, today, false, signal, { mode: 'await', priority: 0 })),
+    Promise.all(foodDates.map((date) => optionalRead(getNutritionLogs(date, signal))))
   ])
   signal.throwIfAborted()
+  assertAccount()
+  const lastNight = refreshedSleep ?? await cachedSleep
+  signal.throwIfAborted()
+  assertAccount()
   const { series: history, workouts } = archive
   const datasets = new Map<string, AgentDataset>()
   datasets.set(SLEEP_DATASET_ID, {
@@ -82,12 +96,15 @@ export async function buildHealthTable(
   for (const day of food) {
     if (day) datasets.set(`health-table-food-${day.date}`, { tool: 'query_nutrition_logs', data: day })
   }
-  const series: SeriesResult = { ...history, days: { ...history.days, ...latest.days } }
+  const series: SeriesResult = { ...history, days: { ...history.days, ...latest?.days } }
   const dates = Object.keys(series.days).sort()
   // A metric the user never records costs nothing.
   const metrics = candidates.filter((metric) => dates.some((date) => series.days[date]?.[metric] != null))
 
-  const staleMetrics = getHealthHistoryFreshness(metrics, start, today)
+  // Preserve freshness from the same snapshot: a concurrent sync must not make old rows look fresh.
+  const staleMetrics = { ...archive.staleMetrics }
+  staleMetrics[today] = getHealthHistoryFreshness(metrics, today, today)[today] ?? []
+  if (!latest) staleMetrics[today] = metrics.filter((metric) => series.days[today]?.[metric] != null)
   const rows = dates.map((date) => [date, ...metrics.map((metric) => cell(series.days[date]?.[metric]))].join(','))
   const workoutLines = workouts.workouts.map((workout) =>
     [
@@ -130,7 +147,7 @@ export async function buildHealthTable(
     `To chart this data, use datasetId "${HEALTH_TABLE_DATASET_ID}".`,
     `Units: ${metrics.map((metric) => `${metric} ${METRIC_UNITS[metric]}`).join('; ')}`,
     'STALE CACHED VALUES (provisional; query the relevant health tool before using these values as current or complete, including in calculations and cards)',
-    ...Object.entries(staleMetrics).map(([date, stale]) => `${date}: ${stale.join(',')}`),
+    ...Object.entries(staleMetrics).filter(([, stale]) => stale.length).map(([date, stale]) => `${date}: ${stale.join(',')}`),
     'DAILY',
     ['date', ...metrics].join(','),
     ...rows,
@@ -139,6 +156,8 @@ export async function buildHealthTable(
     `FOOD LOG (${foodDates[0]} to ${today})`,
     ...food.flatMap((day, index) => day ? [`${day.date}: datasetId "health-table-food-${day.date}"${day.entries.length ? '' : ' (no entries returned)'}`] : [`${foodDates[index]}: food log unavailable; use query_nutrition_logs if needed.`]),
     ...foodLines,
+    ...(latest ? [] : ["Today's metric refresh unavailable; today's stored values are cached and provisional."]),
+    ...(refreshedSleep ? [] : ['Sleep detail refresh unavailable; any supplied sleep detail is cached and provisional.']),
     `LAST NIGHT, datasetId "${SLEEP_DATASET_ID}", wake date ${today}${main ? `, main sessionId=${JSON.stringify(main.id)}` : ''}`,
     sleepLine,
     '</OPENPULSE_HEALTH_DATA>'

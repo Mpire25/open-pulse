@@ -5,6 +5,9 @@ import type { MetricKey, SleepRangeResult } from '../../src/shared/types'
 const fixture = createHealthFixture(() => {})
 let sleepOverride: SleepRangeResult | null = null
 let staleMetrics: Record<string, MetricKey[]> = {}
+let failToday = false
+let failSleep = false
+let accountChanged = false
 let failFood = false
 let cancel: AbortController | null = null
 const calls: Array<{ start: string; end: string; mode?: string }> = []
@@ -28,13 +31,22 @@ const readSeries = async (metrics: MetricKey[], start: string, end: string, mode
 }
 mock.module('../../src/main/health-service', () => ({
   ...fixture,
+  healthAccountSnapshotGuard: () => () => { if (accountChanged) throw new Error('Account changed') },
+  getArchivedSleepHistory: (start: string, end: string) => sleepOverride ?? fixture.getSleepRange(start, end),
   getHealthHistoryFreshness: () => staleMetrics,
-  getSleepRange: (start: string, end: string) => sleepOverride ?? fixture.getSleepRange(start, end),
+  getSleepRange: async (start: string, end: string) => {
+    if (failSleep) throw new Error('Sleep refresh failed')
+    return sleepOverride ?? fixture.getSleepRange(start, end)
+  },
   getArchivedHealthHistory: async (metrics: MetricKey[], start: string, end: string) => ({
     series: await readSeries(metrics, start, end, 'background'),
-    workouts: await fixture.getWorkoutsRange(start, end)
+    workouts: await fixture.getWorkoutsRange(start, end),
+    staleMetrics: structuredClone(staleMetrics)
   }),
-  getSeries: (metrics: MetricKey[], start: string, end: string) => readSeries(metrics, start, end, 'await'),
+  getSeries: async (metrics: MetricKey[], start: string, end: string) => {
+    if (failToday) throw new Error('Today refresh failed')
+    return readSeries(metrics, start, end, 'await')
+  },
   getNutritionLogs: async (date: string) => {
     if (failFood && date === dateAgo(2)) throw new Error('Food lookup unavailable')
     return fixture.getNutritionLogs(date)
@@ -144,4 +156,27 @@ test('stale populated values are explicitly provisional rather than presented as
     expect(table.text).toContain(`${dateAgo(30)}: steps`)
     expect(table.text).toContain('query the relevant health tool before using these values as current or complete')
   } finally { staleMetrics = {} }
+})
+
+
+for (const failure of ['today', 'sleep', 'both']) {
+  test(`keeps archived history and successful sections when ${failure} refresh fails`, async () => {
+    failToday = failure !== 'sleep'
+    failSleep = failure !== 'today'
+    try {
+      const table = await buildHealthTable(dateAgo(0), new AbortController().signal)
+      expect(table.datasets.has('health-table')).toBe(true)
+      expect(table.datasets.has('health-table-sleep')).toBe(true)
+      expect(table.datasets.has(`health-table-food-${dateAgo(1)}`)).toBe(true)
+      expect(table.text).toContain(`${dateAgo(1)},10,`)
+      expect(table.text.includes("Today's metric refresh unavailable")).toBe(failToday)
+      expect(table.text.includes('Sleep detail refresh unavailable')).toBe(failSleep)
+    } finally { failToday = false; failSleep = false }
+  })
+}
+
+test('never publishes a prior-account snapshot after an account switch', async () => {
+  accountChanged = true
+  try { await expect(buildHealthTable(dateAgo(0), new AbortController().signal)).rejects.toThrow('Account changed') }
+  finally { accountChanged = false }
 })
