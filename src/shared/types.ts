@@ -133,6 +133,8 @@ export interface SleepDay {
 export interface SleepRangeResult {
   days: SleepDay[]
   source: DataSource
+  /** Requested dates whose sleep detail isn't confirmed current; their cached detail is provisional. */
+  provisionalDates: string[]
 }
 
 // ---------------------------------------------------------------------------

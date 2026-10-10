@@ -603,7 +603,7 @@ export function createHealthFixture(record: HealthCallListener, now = evalNow, o
       const days = datesBetween(s, e)
         .map((date) => sleepDay(daysAgoOf(date, at), at))
         .filter((day): day is SleepDay => day != null)
-      return { source: 'live', days }
+      return { source: 'live', days, provisionalDates: [] }
     },
 
     async getWorkoutsRange(start: string, end: string, _force?: boolean, _signal?: AbortSignal, sync: ReadOptions = {}): Promise<WorkoutsResult> {

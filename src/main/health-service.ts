@@ -1547,9 +1547,14 @@ export function healthAccountSnapshotGuard(): () => void {
 
 /** Sleep detail already held locally; never obtains a token or schedules a fetch. */
 export function getArchivedSleepHistory(start: string, end: string): SleepRangeResult {
+  const dates = listDates(...normalizeRange(start, end))
   return {
     source: 'live',
-    days: listDates(...normalizeRange(start, end))
+    provisionalDates: dates.filter((date) => {
+      const at = fetchedAt(SLEEP_DETAIL_GROUP, date)
+      return at == null || !isHealthCacheTimestampFresh(date, at)
+    }),
+    days: dates
       .map((date) => cachedSleepDay(peekDay(date)))
       .filter((day): day is SleepDay => day != null)
   }
@@ -1657,10 +1662,7 @@ export async function getSleepRange(
     console.error(`[health] sleep range failed for ${s}..${e}:`, err)
   }
   assertCurrentAccount(generation)
-  const days = listDates(s, e)
-    .map((d) => cachedSleepDay(peekDay(d)))
-    .filter((day): day is SleepDay => day != null)
-  return { source: 'live', days }
+  return getArchivedSleepHistory(s, e)
 }
 
 export async function getWorkoutsRange(

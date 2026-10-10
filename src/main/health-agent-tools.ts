@@ -323,6 +323,10 @@ export async function runHealthAgentTool(
         source: result.source,
         requestedRange: { start, end },
         detail: args.detail,
+        ...(result.provisionalDates.length ? {
+          provisionalDates: result.provisionalDates,
+          warning: 'Sleep detail for provisionalDates is cached and provisional; it could not be confirmed as current.'
+        } : {}),
         days: result.days.map(({ sessions, ...summary }) => ({ ...summary, sessionCount: sessions.length })),
         nights: result.days.flatMap((day) => [...day.sessions].sort((a, b) =>
           Number(b.id === day.mainSessionId) - Number(a.id === day.mainSessionId)

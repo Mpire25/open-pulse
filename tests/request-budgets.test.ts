@@ -43,7 +43,7 @@ const {
 const { disconnectCodex, getCodexTokens } = await import('../src/main/codex-auth')
 const { runHealthAgentTool } = await import('../src/main/health-agent-tools')
 const { shiftIsoDate } = await import('../src/main/health-api')
-const { fetchedAt, markFetched, mergeValues, peekDay } = await import('../src/main/metric-store')
+const { fetchedAt, markFetched, mergeValues, peekDay, setSleep } = await import('../src/main/metric-store')
 const { setSecret, deleteSecret, updateSettings } = await import('../src/main/store')
 
 const HOME_METRICS: MetricKey[] = [
@@ -224,6 +224,61 @@ describe('health request budgets', () => {
     expect(guard).not.toThrow()
     resetHealthAccount()
     expect(guard).toThrow('account changed')
+  })
+
+  test('a swallowed sleep refresh failure marks old detail provisional beside a fresh daily summary', async () => {
+    const now = new Date()
+    const date = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+    const metrics: MetricKey[] = ['steps', 'caloriesOut', 'activeZoneMinutes', 'restingHeartRate', 'hrvMs', 'sleepMinutes', 'sleepEfficiency', 'weightKg', 'caloriesIn']
+    // Warm the real daily and food caches; only sleep detail should need a request.
+    await getSeries(metrics, date, date, false, undefined, { mode: 'await' })
+    await Promise.all(Array.from({ length: 7 }, (_, i) => getNutritionLogs(shiftIsoDate(date, -i))))
+    const { createHealthFixture } = await import('../evals/fixture')
+    const cached = await createHealthFixture(() => {}).getSleepRange(date, date)
+    const day = cached.days[0]
+    const session = day.sessions.find((night) => night.id === day.mainSessionId)!
+    session.minutesAsleep = 300
+    day.sessions = [session]
+    day.minutesAsleep = 300
+    setSleep(date, day)
+    mergeValues(date, { sleepMinutes: 420, sleepEfficiency: 90 })
+    markFetched('sleep-summary-v2', [date], Date.now())
+    markFetched('sleep-detail-v6', [date], 0)
+    requests = []
+    globalThis.fetch = (async (input) => {
+      requests.push(String(input))
+      return new Response('Sleep service unavailable', { status: 503 })
+    }) as typeof fetch
+    const log = spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      const { buildHealthTable } = await import('../src/main/health-agent-table')
+      const table = await buildHealthTable(date, new AbortController().signal)
+      expect(requests).toHaveLength(1)
+      expect(requests[0]).toContain('/sleep/')
+      expect(table.text).toContain('asleep 300 min')
+      expect(table.text).toContain('Sleep detail is stale or unavailable')
+      expect(table.needsRevalidation).toBe(true)
+      const daily = table.datasets.get('health-table')!.data as { days: Record<string, { sleepMinutes: number }> }
+      expect(daily.days[date].sleepMinutes).toBe(420)
+      const queried = JSON.parse(await runHealthAgentTool('query_sleep', { startDate: date, endDate: date, detail: 'detailed' }, new AbortController().signal))
+      expect(queried.provisionalDates).toEqual([date])
+      expect(queried.warning).toContain('cached and provisional')
+      // The stale 300-minute night can't be drawn beside the fresh 420-minute total.
+      const { resolvePresentation } = await import('../src/main/assistant-presentation')
+      expect(() => resolvePresentation({ sleepCards: [{ datasetId: 'health-table-sleep', date }] }, table.datasets))
+        .toThrow('cached and provisional')
+      // Once detail is fresh, the warning and revalidation instruction disappear without another read.
+      session.minutesAsleep = 420
+      day.minutesAsleep = 420
+      setSleep(date, day)
+      markFetched('sleep-detail-v6', [date], Date.now())
+      const callsBefore = requests.length
+      const fresh = await buildHealthTable(date, new AbortController().signal)
+      expect(requests).toHaveLength(callsBefore)
+      expect(fresh.text).not.toContain('Sleep detail is stale or unavailable')
+      expect(fresh.needsRevalidation).toBe(false)
+      expect(fresh.datasets.get('health-table-sleep')!.data).not.toHaveProperty('provisionalDates')
+    } finally { log.mockRestore() }
   })
 
   test('loads intraday heart rate through a timezone probe and one rollup request', async () => {

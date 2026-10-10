@@ -289,9 +289,10 @@ function dailyDataset(datasetId: string, datasets: Map<string, AgentDataset>): D
     const end = requiredDate(requestedRange.end, 'dataset end')
     if (!source) throw new Error(`Dataset ${datasetId} has no valid source.`)
     const days: DailyDataset['days'] = {}
+    const provisional = provisionalSleepDates(data)
     for (const rawNight of (Array.isArray(data.days) ? data.days : data.nights)) {
       const night = record(rawNight)
-      if (!night || typeof night.date !== 'string') continue
+      if (!night || typeof night.date !== 'string' || provisional.has(night.date)) continue
       const date = requiredDate(night.date, 'sleep date')
       days[date] = {
         sleepMinutes:
@@ -498,10 +499,15 @@ function workoutDataset(datasetId: string, datasets: Map<string, AgentDataset>):
 
 const SLEEP_STAGES = new Set(['AWAKE', 'LIGHT', 'DEEP', 'REM'])
 
+/** Dates whose sleep detail the dataset marks as cached and unconfirmed; never shown as current. */
+function provisionalSleepDates(data: Record<string, unknown>): Set<string> {
+  return new Set(Array.isArray(data.provisionalDates) ? data.provisionalDates.filter((date) => typeof date === 'string') : [])
+}
+
 function sleepDataset(
   datasetId: string,
   datasets: Map<string, AgentDataset>
-): { source: DataSource; start: string; end: string; nights: AssistantSleepNight[] } {
+): { source: DataSource; start: string; end: string; nights: AssistantSleepNight[]; provisional: Set<string> } {
   const dataset = datasets.get(datasetId)
   const data = record(dataset?.data)
   const requestedRange = record(data?.requestedRange)
@@ -550,7 +556,7 @@ function sleepDataset(
     )
     return [{ ...(typeof night.id === 'string' ? { id: night.id } : {}), date, startTime, endTime, minutesAsleep, minutesInSleepPeriod, efficiency, stages, stageMinutes }]
   })
-  return { source, start, end, nights }
+  return { source, start, end, nights, provisional: provisionalSleepDates(data) }
 }
 
 const NUTRITION_DAILY_KEYS = {
@@ -812,6 +818,9 @@ export function resolvePresentation(
     const selected = sleepDataset(datasetId, datasets)
     if (date < selected.start || date > selected.end) {
       throw new Error('The requested sleep card falls outside its dataset range.')
+    }
+    if (selected.provisional.has(date)) {
+      throw new Error(`Sleep detail for ${date} is cached and provisional; refresh it with query_sleep before showing a sleep card.`)
     }
     const sessionId = item?.sessionId == null ? undefined : requiredText(item.sessionId, 'sessionId', 500)
     const night = selected.nights.find((candidate) => candidate.date === date && (sessionId === undefined || candidate.id === sessionId))

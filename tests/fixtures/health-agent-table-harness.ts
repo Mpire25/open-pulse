@@ -173,7 +173,7 @@ for (const failure of ['today', 'sleep', 'both']) {
       expect(table.datasets.has(`health-table-food-${dateAgo(1)}`)).toBe(true)
       expect(table.text).toContain(`${dateAgo(1)},10,`)
       expect(table.text.includes("Today's metric refresh unavailable")).toBe(failToday)
-      expect(table.text.includes('Sleep detail refresh unavailable')).toBe(failSleep)
+      expect(table.text.includes('Sleep detail is stale or unavailable')).toBe(failSleep)
       expect(table.needsRevalidation).toBe(true)
     } finally { failToday = false; failSleep = false }
   })
@@ -183,4 +183,15 @@ test('never publishes a prior-account snapshot after an account switch', async (
   accountChanged = true
   try { await expect(buildHealthTable(dateAgo(0), new AbortController().signal)).rejects.toThrow('Account changed') }
   finally { accountChanged = false }
+})
+
+
+test('a resolved cached sleep result still needs revalidation when detail coverage is stale', async () => {
+  sleepOverride = { ...await fixture.getSleepRange(dateAgo(0), dateAgo(0)), provisionalDates: [dateAgo(0)] }
+  try {
+    const table = await buildHealthTable(dateAgo(0), new AbortController().signal)
+    expect(table.text).toContain('Sleep detail is stale or unavailable')
+    expect(table.needsRevalidation).toBe(true)
+    expect(table.datasets.get('health-table-sleep')!.data).toMatchObject({ provisionalDates: [dateAgo(0)] })
+  } finally { sleepOverride = null }
 })

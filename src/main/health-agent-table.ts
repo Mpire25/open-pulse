@@ -78,6 +78,9 @@ export async function buildHealthTable(
   signal.throwIfAborted()
   assertAccount()
   const lastNight = refreshedSleep ?? await cachedSleep
+  // Without a completed refresh, last night's cached detail can't be confirmed current.
+  const provisionalSleepDates = refreshedSleep ? refreshedSleep.provisionalDates : [today]
+  const sleepDetailCurrent = provisionalSleepDates.length === 0
   signal.throwIfAborted()
   assertAccount()
   const { series: history, workouts } = archive
@@ -87,6 +90,7 @@ export async function buildHealthTable(
     data: {
       source: lastNight.source,
       requestedRange: { start: today, end: today },
+      ...(sleepDetailCurrent ? {} : { provisionalDates: provisionalSleepDates }),
       days: lastNight.days.map(({ sessions, ...summary }) => ({ ...summary, sessionCount: sessions.length })),
       nights: lastNight.days.flatMap((day) => [...day.sessions].sort((a, b) =>
         Number(b.id === day.mainSessionId) - Number(a.id === day.mainSessionId)
@@ -160,7 +164,7 @@ export async function buildHealthTable(
     ...food.flatMap((day, index) => day ? [`${day.date}: datasetId "health-table-food-${day.date}"${day.entries.length ? '' : ' (no entries returned)'}`] : [`${foodDates[index]}: food log unavailable; use query_nutrition_logs if needed.`]),
     ...foodLines,
     ...(latest ? [] : ["Today's metric refresh unavailable; today's stored values are cached and provisional."]),
-    ...(refreshedSleep ? [] : ['Sleep detail refresh unavailable; any supplied sleep detail is cached and provisional.']),
+    ...(sleepDetailCurrent ? [] : ['Sleep detail is stale or unavailable; any supplied sleep detail is cached and provisional.']),
     `LAST NIGHT, datasetId "${SLEEP_DATASET_ID}", wake date ${today}${main ? `, main sessionId=${JSON.stringify(main.id)}` : ''}`,
     sleepLine,
     '</OPENPULSE_HEALTH_DATA>'
@@ -170,7 +174,7 @@ export async function buildHealthTable(
   return {
     text,
     start,
-    needsRevalidation: Object.values(staleMetrics).some((stale) => stale.length > 0) || !latest || !refreshedSleep,
+    needsRevalidation: Object.values(staleMetrics).some((stale) => stale.length > 0) || !latest || !sleepDetailCurrent,
     datasets
   }
 }

@@ -382,6 +382,16 @@ describe('assistant visual presentation', () => {
     ).toThrow('outside its dataset range')
   })
 
+  test('never shows provisional sleep detail as a card or value', () => {
+    const datasets = sleepDatasets()
+    const data = datasets.get('sleep-1')!.data as Record<string, unknown>
+    data.provisionalDates = ['2026-07-11']
+    expect(() => resolvePresentation({ sleepCards: [{ datasetId: 'sleep-1', date: '2026-07-11' }] }, datasets))
+      .toThrow('cached and provisional')
+    expect(() => resolvePresentation({ metricCards: [{ datasetId: 'sleep-1', metric: 'sleepMinutes', date: '2026-07-11' }] }, datasets))
+      .toThrow('No sleepMinutes value')
+  })
+
   test('resolves trusted nutrition cards for a day, meal, and returned item', () => {
     const datasets = nutritionDatasets()
     const parts = resolvePresentation(
