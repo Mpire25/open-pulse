@@ -97,12 +97,41 @@ test('validation retry replaces rejected prose without losing earlier progress',
 })
 
 test('two rejected attempts fall back to a plain answer within three requests', async () => {
-  const result = await run(['Bad {{openpulse:fact:0.value}}.', 'Still bad <!--openpulse:present {', 'Today you recorded 200 steps.'])
+  const result = await run(['Bad {{openpulse:fact:0.value}}.', 'Still bad {{openpulse:fact:1.value}}.', 'Today you recorded 200 steps.'])
   expect(result.bodies).toHaveLength(3)
   expect(result.bodies[2].tool_choice).toBe('none')
   expect(String(result.bodies[2].instructions)).not.toContain('Presentation JSON schema')
   expect(result.done).toMatchObject({ text: 'Today you recorded 200 steps.', parts: [] })
   expect(displayed(result.sender.events)).toBe('Today you recorded 200 steps.')
+})
+
+test('an invalid card is dropped without a correction when the prose stands alone', async () => {
+  const result = await run(['Today you recorded 200 steps. ' + marker({ ...empty, metricCards: [{ datasetId: 'invented', metric: 'steps', date: dateAgo(0) }] })])
+  expect(result.bodies).toHaveLength(1)
+  expect(result.sender.events.some((event) => event.type === 'tool' && event.name === 'finish_answer')).toBe(false)
+  expect(result.done).toMatchObject({ text: 'Today you recorded 200 steps.', parts: [] })
+  expect(displayed(result.sender.events)).toBe('Today you recorded 200 steps.')
+})
+
+test('an invalid answer on the last tool turn falls back to plain prose instead of an error', async () => {
+  const sender = new Sender()
+  const bodies: Record<string, unknown>[] = []
+  globalThis.fetch = (async (_input, init) => {
+    const body = JSON.parse(String(init?.body)) as Record<string, unknown>
+    bodies.push(body)
+    if (body.tool_choice === 'auto') return eventsResponse([{ type: 'response.output_item.done', item: {
+      type: 'function_call', name: 'query_daily_metrics', call_id: `turn-${bodies.length}`,
+      arguments: JSON.stringify({ metrics: ['steps'], startDate: dateAgo(200 + bodies.length), endDate: dateAgo(200 + bodies.length) })
+    } }])
+    return response(String(body.instructions).includes('Presentation JSON schema') ? 'Bad {{openpulse:fact:0.value}}.' : 'Today you recorded 200 steps.')
+  }) as typeof fetch
+  await runChat(sender as unknown as WebContents, 'last-chat', 'last-run', [{ role: 'user', text: 'Investigate my steps' }])
+  expect(bodies).toHaveLength(9)
+  expect(bodies.slice(0, 7).every((body) => body.tool_choice === 'auto')).toBe(true)
+  expect(bodies[8]).toMatchObject({ tool_choice: 'none' })
+  expect(String(bodies[8].instructions)).not.toContain('Presentation JSON schema')
+  expect(sender.events.find((event) => event.type === 'done')).toMatchObject({ text: 'Today you recorded 200 steps.', parts: [] })
+  displayed(sender.events)
 })
 
 test('repeated invalid output stops within three requests without fabricated cards', async () => {
