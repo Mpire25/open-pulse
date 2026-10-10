@@ -77,6 +77,7 @@ interface Summary {
   modelRequests: number
   tokens: number
   dataChars: number
+  answerRepairs: number
 }
 
 function summarise(cases: CaseResult[]): Summary {
@@ -88,7 +89,8 @@ function summarise(cases: CaseResult[]): Summary {
     medianFirstTextMs: median(runs.flatMap((run) => (run.firstTextMs == null ? [] : [run.firstTextMs]))),
     modelRequests: runs.reduce((sum, run) => sum + run.modelRequests, 0) / (runs.length || 1),
     tokens: runs.reduce((sum, run) => sum + run.inputTokens + run.outputTokens, 0) / (runs.length || 1),
-    dataChars: runs.reduce((sum, run) => sum + (run.dataChars ?? 0), 0) / (runs.length || 1)
+    dataChars: runs.reduce((sum, run) => sum + (run.dataChars ?? 0), 0) / (runs.length || 1),
+    answerRepairs: runs.reduce((sum, run) => sum + (run.answerRepairs ?? 0), 0)
   }
 }
 
@@ -128,7 +130,7 @@ function printResults(results: ResultsFile, verbose: boolean): void {
     `${'overall'.padEnd(14)} pass ${percent(total.passRate).padStart(4)}  score ${percent(total.score).padStart(4)}  ` +
       `median ${seconds(total.medianMs).padStart(6)}  first text ${seconds(total.medianFirstTextMs).padStart(6)}  ` +
       `${total.modelRequests.toFixed(1)} req/run  ${Math.round(total.tokens).toLocaleString('en-GB')} tokens/run  ` +
-      `${(total.dataChars / 1000).toFixed(1)}k chars of health data/msg`
+      `${(total.dataChars / 1000).toFixed(1)}k chars of health data/msg  ${total.answerRepairs} answer corrections`
   )
 }
 
@@ -155,7 +157,8 @@ function compare(paths: string[]): void {
       `${'median first text'.padEnd(18)} ${seconds(a.medianFirstTextMs)} → ${seconds(b.medianFirstTextMs)}\n` +
       `${'requests per run'.padEnd(18)} ${a.modelRequests.toFixed(1)} → ${b.modelRequests.toFixed(1)}\n` +
       `${'tokens per run'.padEnd(18)} ${Math.round(a.tokens).toLocaleString('en-GB')} → ${Math.round(b.tokens).toLocaleString('en-GB')}\n` +
-      `${'health data/msg'.padEnd(18)} ${(a.dataChars / 1000).toFixed(1)}k → ${(b.dataChars / 1000).toFixed(1)}k chars`
+      `${'health data/msg'.padEnd(18)} ${(a.dataChars / 1000).toFixed(1)}k → ${(b.dataChars / 1000).toFixed(1)}k chars\n` +
+      `${'answer corrections'.padEnd(18)} ${a.answerRepairs} → ${b.answerRepairs}`
   )
 }
 

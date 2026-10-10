@@ -687,6 +687,7 @@ export interface ChatHistorySnapshot {
 
 export type AiEvent =
   | { type: 'delta'; chatId: string; runId: string; text: string }
+  | { type: 'replace'; chatId: string; runId: string; text: string }
   | { type: 'reasoning'; chatId: string; runId: string }
   | { type: 'tool'; chatId: string; runId: string; name: string; label: string }
   | { type: 'done'; chatId: string; runId: string; text: string; parts: AssistantVisualPart[]; outcome: 'completed' | 'tool-limit' }
