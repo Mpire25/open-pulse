@@ -42,6 +42,15 @@ function response(text: string, annotations: unknown[] = []): Response {
     { type: 'response.output_item.done', item: { type: 'message', content: [{ type: 'output_text', text, annotations }] } },
   ])
 }
+function messageEvents(text: string, index: number, channel?: string, annotations: unknown[] = []): unknown[] {
+  const identity = channel ? { output_index: index, item_id: `message-${index}` } : {}
+  const item = { type: 'message', ...(channel ? { id: `message-${index}`, channel } : {}) }
+  return [
+    ...(channel ? [{ type: 'response.output_item.added', ...identity, item }] : []),
+    ...[...text].map((delta) => ({ type: 'response.output_text.delta', ...identity, delta })),
+    { type: 'response.output_item.done', ...identity, item: { ...item, content: [{ type: 'output_text', text, annotations }] } }
+  ]
+}
 function eventsResponse(events: unknown[]): Response {
   return new Response([...events, { type: 'response.completed', response: { status: 'completed' } }]
     .map((event) => `data: ${JSON.stringify(event)}\n\n`).join('') + 'data: [DONE]\n\n', {
@@ -97,6 +106,61 @@ test('leading cards fill the streamed prose and arrive with the completed answer
   expect(result.done).toMatchObject({ text: 'Today 200 steps so far.', parts: [{ type: 'metric-card', value: 200 }] })
   expect(displayed(result.sender.events)).toBe('Today 200 steps so far.')
   expect(String(result.bodies[0].instructions)).toContain('begin the final answer with exactly one hidden comment')
+})
+
+for (const usesFacts of [true, false]) {
+  for (const hasMessageIdentity of [true, false]) {
+    test(`commentary preserves leading cards ${usesFacts ? 'with' : 'without'} facts ${hasMessageIdentity ? 'with' : 'without'} message metadata`, async () => {
+      const sender = new Sender()
+      const previews: unknown[] = []
+      let requests = 0
+      const final = marker(card) + (usesFacts ? 'Today {{openpulse:fact:0.formattedValue}}.' : 'Today 200 steps.')
+      globalThis.fetch = (async () => {
+        requests++
+        return eventsResponse([
+          ...messageEvents('I found your step record.', 0, hasMessageIdentity ? 'commentary' : undefined),
+          ...messageEvents(final, 1, hasMessageIdentity ? 'final' : undefined)
+        ])
+      }) as typeof fetch
+      await runChat(sender as unknown as WebContents, 'commentary-chat', 'commentary-run', [{ role: 'user', text: 'How many steps today?' }], (_event, answer) => {
+        if (answer) previews.push(answer)
+      })
+      expect(requests).toBe(1)
+      expect(sender.events.some((event) => event.type === 'tool' && event.name === 'finish_answer')).toBe(false)
+      const text = 'I found your step record.\n\nToday 200 steps.'
+      expect(sender.events.filter((event) => event.type === 'delta').map((event) => event.text).join('')).toBe(text)
+      expect(sender.events.find((event) => event.type === 'done')).toMatchObject({ text, parts: [{ type: 'metric-card', value: 200 }] })
+      expect(previews).toEqual([{ query: 'How many steps today?', text: 'Today 200 steps.' }])
+      expect(displayed(sender.events)).toBe(text)
+    })
+  }
+}
+
+test('commentary and final citations keep their own text offsets', async () => {
+  const sender = new Sender()
+  const commentary = 'Walking helps.'
+  const final = 'Today 200 steps.'
+  globalThis.fetch = (async () => eventsResponse([
+    ...messageEvents(commentary, 0, 'commentary', [{ type: 'url_citation', start_index: 0, end_index: commentary.length, url: 'https://example.com/walking', title: 'Walking' }]),
+    ...messageEvents(final, 1, 'final', [{ type: 'url_citation', start_index: 0, end_index: final.length, url: 'https://example.com/steps', title: 'Steps' }])
+  ])) as typeof fetch
+  await runChat(sender as unknown as WebContents, 'separate-cite-chat', 'separate-cite-run', [{ role: 'user', text: 'How many steps?' }])
+  const text = displayed(sender.events)
+  expect(text).toContain('Walking helps. [1](https://example.com/walking)')
+  expect(text).toContain('Today 200 steps. [1](https://example.com/steps)')
+})
+
+test('commentary does not permit a presentation comment between prose in the final message', async () => {
+  const sender = new Sender()
+  let requests = 0
+  globalThis.fetch = (async () => ++requests === 1 ? eventsResponse([
+    ...messageEvents('I found your record.', 0, 'commentary'),
+    ...messageEvents('Today. ' + marker(card) + ' {{openpulse:fact:0.formattedValue}}.', 1, 'final')
+  ]) : response(marker(card) + 'Today {{openpulse:fact:0.formattedValue}}.')) as typeof fetch
+  await runChat(sender as unknown as WebContents, 'middle-chat', 'middle-run', [{ role: 'user', text: 'How many steps?' }])
+  expect(requests).toBe(2)
+  expect(sender.events.find((event) => event.type === 'done')).toMatchObject({ text: 'Today 200 steps.', parts: [{ type: 'metric-card', value: 200 }] })
+  expect(displayed(sender.events)).toBe('Today 200 steps.')
 })
 
 test('validation retry replaces rejected prose without losing earlier progress', async () => {
@@ -225,6 +289,30 @@ test('a long investigation can repair its final answer after several health turn
 })
 
 for (const interruption of ['stop', 'timeout'] as const) {
+  test(`${interruption} after commentary keeps streamed final facts without partial markup`, async () => {
+    const sender = new Sender()
+    const encoder = new TextEncoder()
+    const events = [
+      ...messageEvents('I found your record.', 0, 'commentary'),
+      { type: 'response.output_item.added', output_index: 1, item: { type: 'message', id: 'final-message', channel: 'final' } },
+      { type: 'response.output_text.delta', output_index: 1, item_id: 'final-message', delta: marker(card) + 'Today {{openpulse:fact:0.formattedValue}}. Next {{openpulse:fact:0.value' }
+    ]
+    globalThis.fetch = (async () => new Response(new ReadableStream({
+      start(controller) {
+        controller.enqueue(encoder.encode(events.map((event) => 'data: ' + JSON.stringify(event) + '\n\n').join('')))
+      },
+      pull(controller) {
+        if (interruption === 'stop') {
+          cancelChat(sender as unknown as WebContents, 'commentary-stop-chat', 'commentary-stop-run')
+          controller.error(new Error('Aborted stream'))
+        } else controller.error(new StreamTimeoutError('idle', 'Synthetic timeout.'))
+      }
+    }), { headers: { 'content-type': 'text/event-stream' } })) as typeof fetch
+    await runChat(sender as unknown as WebContents, 'commentary-stop-chat', 'commentary-stop-run', [{ role: 'user', text: 'How many steps?' }])
+    expect(sender.events.at(-1)).toMatchObject({ type: 'interrupted' })
+    expect(displayed(sender.events)).toBe('I found your record.\n\nToday 200 steps. Next ')
+  })
+
   test(`${interruption} during a split placeholder preserves only a safe prefix`, async () => {
     const sender = new Sender()
     const encoder = new TextEncoder()

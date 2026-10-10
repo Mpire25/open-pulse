@@ -109,8 +109,31 @@ interface OutputTextItem {
 }
 
 interface ResponseOutputItem extends FunctionCallItem {
+  id?: string
+  channel?: string
   content?: OutputTextItem[]
   action?: unknown
+}
+
+interface AssistantOutputMessage {
+  text: string
+  annotations: UrlCitationAnnotation[]
+  channel?: string
+}
+
+function citeResolvedMessage(text: string, message: AssistantOutputMessage): string {
+  // Removing markup or substituting facts shifts offsets within this message.
+  const annotations = text !== message.text.trimEnd()
+    ? message.annotations.map((item) => ({ ...item, start_index: undefined, end_index: undefined }))
+    : message.annotations
+  return addUrlCitations(text, annotations)
+}
+
+function safeNarration(message: AssistantOutputMessage): string {
+  const stream = new AssistantResponseStream()
+  stream.push(message.text)
+  const text = stream.visibleText.trim()
+  return text ? citeResolvedMessage(text, message) : ''
 }
 
 function citedMessageText(item: ResponseOutputItem, includeCitations = true): string | null {
@@ -350,10 +373,18 @@ export async function runChat(
       const plainOnly = protocolRepairs >= 2
       // Cards lead the answer, so its facts are known before the prose streams.
       const cards = createCardResolver(datasets, latestUserText)
-      const responseStream = new AssistantAnswerStream(plainOnly ? null : cards)
+      let responseStream: AssistantAnswerStream | AssistantResponseStream = new AssistantAnswerStream(plainOnly ? null : cards)
       let turnVisible = false
-      const completedMessages: string[] = []
-      const completedAnnotations: UrlCitationAnnotation[] = []
+      let messageVisible = false
+      let messageKey: string | number | undefined
+      const startMessage = (key?: string | number, channel?: string): void => {
+        messageKey = key
+        messageVisible = false
+        responseStream = channel === 'commentary'
+          ? new AssistantResponseStream()
+          : new AssistantAnswerStream(plainOnly ? null : cards)
+      }
+      const completedMessages: AssistantOutputMessage[] = []
       const tools = localToolNamespace([
         ...AGENT_TOOLS,
         ...(researchCalls < MAX_RESEARCH_CALLS && researchAttempts < MAX_RESEARCH_ATTEMPTS
@@ -399,18 +430,26 @@ export async function runChat(
 
         for await (const event of responseEvents<{
           type?: string; delta?: string; item?: ResponseOutputItem
+          item_id?: string; output_index?: number
           response?: { error?: { message?: string }; usage?: unknown }
         }>(resp, () => {
           requestTrace.firstByte()
           streamTimeout.activity()
         })) {
           switch (event.type) {
+            case 'response.output_item.added':
+              if (event.item?.type === 'message') startMessage(event.output_index ?? event.item.id, event.item.channel)
+              break
             case 'response.output_text.delta':
               if (event.delta) {
+                const key = event.output_index ?? event.item_id
+                if (key != null && messageKey != null && key !== messageKey) startMessage(key)
+                else if (key != null) messageKey = key
                 turnText += event.delta
                 const visibleDelta = responseStream.push(event.delta)
                 if (visibleDelta) {
-                  if (!turnVisible && finalText) emit({ type: 'delta', chatId, runId, text: TURN_SEPARATOR })
+                  if (!messageVisible && (turnVisible || finalText)) emit({ type: 'delta', chatId, runId, text: TURN_SEPARATOR })
+                  messageVisible = true
                   turnVisible = true
                   emit({ type: 'delta', chatId, runId, text: visibleDelta })
                 }
@@ -428,10 +467,16 @@ export async function runChat(
               } else if (event.item?.type === 'message') {
                 continuationItems.push(event.item)
                 const messageText = citedMessageText(event.item, false)
-                if (messageText != null) completedMessages.push(messageText)
-                for (const part of event.item.content ?? []) {
-                  if (part.type === 'output_text' && Array.isArray(part.annotations)) completedAnnotations.push(...part.annotations)
+                if (messageText != null) {
+                  completedMessages.push({
+                    text: messageText,
+                    channel: event.item.channel,
+                    annotations: (event.item.content ?? []).flatMap((part) =>
+                      part.type === 'output_text' && Array.isArray(part.annotations) ? part.annotations : [])
+                  })
                 }
+                // Some streams omit IDs/added events; done still ends the message.
+                startMessage()
               }
               break
             case 'response.completed':
@@ -445,7 +490,7 @@ export async function runChat(
         streamTimeout.dispose()
       }
 
-      const resolvedTurnText = completedMessages.length ? completedMessages.join('\n') : turnText
+      const resolvedTurnText = completedMessages.length ? completedMessages.map((message) => message.text).join('\n') : turnText
       requestTrace.finish({
         usage: traceUsage(usage),
         functionCalls: functionCalls.map((call) => call.name ?? ''),
@@ -457,16 +502,16 @@ export async function runChat(
 
       if (functionCalls.length === 0) {
         try {
-          const answer = resolveAssistantResponse(resolvedTurnText, datasets, latestUserText, plainOnly, cards)
-          // Resolve markup before adding sources. Removing the card comment,
-          // template substitutions and joined messages all shift annotation
-          // offsets, so retain source links without inserting a citation
-          // marker at an unrelated character in those cases.
-          const annotations = answer.text !== resolvedTurnText.trimEnd() || completedMessages.length > 1
-            ? completedAnnotations.map((item) => ({ ...item, start_index: undefined, end_index: undefined }))
-            : completedAnnotations
-          const answerText = addUrlCitations(answer.text, annotations)
-          finalText = joinTurnText(finalText, answerText)
+          const finalIndex = completedMessages.findLastIndex((message) => message.channel === 'final')
+          const answerIndex = finalIndex >= 0 ? finalIndex : completedMessages.length - 1
+          const answerMessage = completedMessages[answerIndex] ?? { text: turnText, annotations: [] }
+          // A leading presentation comment belongs to the final message, even
+          // when this same response has already emitted commentary.
+          const answer = resolveAssistantResponse(answerMessage.text, datasets, latestUserText, plainOnly, cards)
+          const answerText = citeResolvedMessage(answer.text, answerMessage)
+          const commentary = completedMessages.slice(0, Math.max(0, answerIndex))
+            .map(safeNarration).reduce(joinTurnText, '')
+          finalText = joinTurnText(finalText, joinTurnText(commentary, answerText))
           visualParts.push(...answer.parts)
           emit({ type: 'replace', chatId, runId, text: finalText })
           trace.finish('completed')
@@ -493,9 +538,10 @@ export async function runChat(
 
       // Tool narration may stream, but presentation markup belongs only to a
       // final answer, once every requested dataset has returned.
-      const narration = new AssistantResponseStream()
-      narration.push(resolvedTurnText)
-      finalText = joinTurnText(finalText, narration.visibleText.trim())
+      const narration = completedMessages.length
+        ? completedMessages.map(safeNarration).reduce(joinTurnText, '')
+        : safeNarration({ text: turnText, annotations: [] })
+      finalText = joinTurnText(finalText, narration)
       emit({ type: 'replace', chatId, runId, text: finalText })
       input.push(...continuationItems)
       const executeFunctionCall = async (call: FunctionCallItem): Promise<InputItem> => {

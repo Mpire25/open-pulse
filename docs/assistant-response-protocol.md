@@ -10,7 +10,9 @@ with one `<!--openpulse:present JSON-->` comment conforming to the presentation
 schema; one at the end is still accepted. The app validates its shape, resolves
 dataset IDs and requested records, and calculates the visual parts using the
 existing presentation resolver. The saved answer and parts are published only
-after the entire response validates.
+after the final answer message validates. Commentary messages from the same
+model response stay separate: they cannot move a leading presentation comment
+into the middle of the answer or affect its card validation.
 
 Prose can refer to metric-card and comparison values with fact placeholders,
 for example `{{openpulse:fact:0.current.formattedValue}}`. These are substituted
@@ -24,11 +26,13 @@ prose streams with placeholders already filled from them, without pausing at
 each value. Streaming stops at anything it cannot fill or validate, holding
 partial delimiters across chunks. The cards are shown when the answer
 completes, immediately after its last words, since nothing remains to be
-written. Completion replaces the streamed text with the validated prose and
-publishes the same card objects. Raw instructions
+written. Each message gets its own stream parser, with paragraph breaks between
+commentary and the answer. Completion replaces the streamed text with the
+validated prose and publishes the same card objects. Raw instructions
 and placeholders never enter the rendered or saved chat. Citation links are
 added after resolution; when substitutions change annotation offsets, the
 source list remains without inserting markers at incorrect character positions.
+Citation offsets are resolved within each message before the messages are joined.
 
 When only the visual instructions are invalid and the prose does not use any
 placeholders, the app shows the prose without visuals rather than spending
