@@ -8,6 +8,7 @@ import {
 import {
   localToolNamespace,
   reasoningOptions,
+  serviceTierOptions,
   responseEvents,
   responseError
 } from '../src/main/chatgpt-responses'
@@ -95,6 +96,21 @@ test('ID tokens require a valid signature, issuer, audience, expiry and nonce', 
   await expect(
     verifyIdentity(expired, 'issued', 'expected', key)
   ).rejects.toThrow()
+})
+
+test('speed preferences explicitly request Standard by default and retain valid advertised tiers', () => {
+  for (const serviceTier of [undefined, 'auto', '', 'bad tier', 'x'.repeat(65)]) {
+    expect(serviceTierOptions({ model: 'future', serviceTier })).toEqual({ service_tier: 'default' })
+  }
+  for (const serviceTier of ['default', 'priority', 'fast', 'future-speed']) {
+    expect(serviceTierOptions({ model: 'future', serviceTier })).toEqual({ service_tier: serviceTier })
+  }
+})
+
+test('service tier rejection tells the user how to return to Standard', () => {
+  const error = responseError({ error: { code: 'subscription_sharing_unsupported_capability', param: 'service_tier' } }, 400)
+  expect(error.message).toContain('Choose Standard speed')
+  expect(responseError({ error: { param: 'service_tier' } }, 401).message).toContain('Reconnect')
 })
 
 test('missing and legacy effort selections omit the override and local tools are namespaced', () => {

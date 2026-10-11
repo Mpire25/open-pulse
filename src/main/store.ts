@@ -8,6 +8,7 @@ import {
   DEFAULT_ASSISTANT,
   DEFAULT_GOALS,
   REASONING_EFFORT_PATTERN,
+  SERVICE_TIER_PATTERN,
   type AppSettings,
   type AssistantSettings,
   type ChatRetention,
@@ -59,11 +60,15 @@ function normalizeGoals(raw?: Partial<Goals>): Goals {
 function normalizeAssistant(raw?: Partial<AssistantSettings>): AssistantSettings {
   const model = String(raw?.model ?? '').trim()
   const effort = raw?.reasoningEffort
+  const tier = raw?.serviceTier
   return {
     model: ASSISTANT_MODEL_PATTERN.test(model) ? model : DEFAULT_ASSISTANT.model,
     reasoningEffort:
       typeof effort === 'string' && effort !== 'auto' && REASONING_EFFORT_PATTERN.test(effort)
-        ? effort : DEFAULT_ASSISTANT.reasoningEffort
+        ? effort : DEFAULT_ASSISTANT.reasoningEffort,
+    serviceTier:
+      typeof tier === 'string' && tier !== 'auto' && SERVICE_TIER_PATTERN.test(tier)
+        ? tier : undefined
   }
 }
 

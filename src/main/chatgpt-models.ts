@@ -1,8 +1,9 @@
 import type {
   AssistantModel,
+  AssistantServiceTier,
   ModelCatalog
 } from '../shared/types'
-import { ASSISTANT_MODEL_PATTERN, REASONING_EFFORT_PATTERN } from '../shared/types'
+import { ASSISTANT_MODEL_PATTERN, REASONING_EFFORT_PATTERN, SERVICE_TIER_PATTERN, serviceTierKey } from '../shared/types'
 import {
   getCodexAuthGeneration,
   getCodexStatus,
@@ -53,6 +54,30 @@ export async function getChatTitleModels(
   return selectChatTitleModels(models ?? [], assistantModel)
 }
 
+function parseServiceTiers(tiers: unknown, additionalTiers: unknown): AssistantServiceTier[] {
+  const result: AssistantServiceTier[] = []
+  const seen = new Set<string>()
+  for (const raw of [
+    ...(Array.isArray(tiers) ? tiers : []),
+    ...(Array.isArray(additionalTiers) ? additionalTiers : [])
+  ]) {
+    const tier = typeof raw === 'string' ? { id: raw } : raw as { id?: unknown; name?: unknown; description?: unknown } | null
+    if (!tier || typeof tier.id !== 'string' || !SERVICE_TIER_PATTERN.test(tier.id) || tier.id === 'auto' || tier.id === 'default') continue
+    const key = serviceTierKey(tier.id)
+    if (seen.has(key)) continue
+    seen.add(key)
+    result.push({
+      id: tier.id,
+      label: typeof tier.name === 'string' && tier.name.trim()
+        ? tier.name.trim()
+        : key.replace(/[-_]+/g, ' ').replace(/\b[a-z]/g, (letter) => letter.toUpperCase()),
+      ...(typeof tier.description === 'string' && tier.description.trim()
+        ? { description: tier.description.trim() } : {})
+    })
+  }
+  return result
+}
+
 export function parseModels(value: unknown): AssistantModel[] {
   if (
     !value ||
@@ -69,6 +94,8 @@ export function parseModels(value: unknown): AssistantModel[] {
       visibility?: unknown
       supported_reasoning_levels?: unknown
       default_reasoning_level?: unknown
+      service_tiers?: unknown
+      additional_speed_tiers?: unknown
     }
     if (
       model.visibility !== 'list' ||
@@ -96,6 +123,7 @@ export function parseModels(value: unknown): AssistantModel[] {
     })
     const defaultEffort = typeof model.default_reasoning_level === 'string' && efforts.includes(model.default_reasoning_level)
       ? model.default_reasoning_level : undefined
+    const serviceTiers = parseServiceTiers(model.service_tiers, model.additional_speed_tiers)
     return [
       {
         id: model.slug,
@@ -108,7 +136,8 @@ export function parseModels(value: unknown): AssistantModel[] {
           : {}),
         ...(defaultEffort ? { defaultEffort } : {}),
         ...(levels.some((level) => typeof level === 'string' ? level === 'none' : level?.effort === 'none')
-          ? { supportsNoReasoning: true as const } : {})
+          ? { supportsNoReasoning: true as const } : {}),
+        ...(serviceTiers.length ? { serviceTiers } : {})
       }
     ]
   })
@@ -125,7 +154,7 @@ export async function getChatGPTModels(force = false): Promise<ModelCatalog> {
     }
   const key = `chatgpt-models:${status.activeRegistration}`
   const cached = getLocalValue<ModelCatalog>(key)
-  if (!force && cached?.effortsVersion === 3 && cached.fetchedAt && Date.now() - cached.fetchedAt < MAX_AGE)
+  if (!force && cached?.effortsVersion === 3 && cached.serviceTiersVersion === 1 && cached.fetchedAt && Date.now() - cached.fetchedAt < MAX_AGE)
     return cached
   let tokens
   try {
@@ -168,7 +197,8 @@ export async function getChatGPTModels(force = false): Promise<ModelCatalog> {
         fetchedAt: Date.now(),
         stale: false,
         registrationId: tokens.clientId,
-        effortsVersion: 3
+        effortsVersion: 3,
+        serviceTiersVersion: 1
       }
     } catch (error) {
       catalog = {
