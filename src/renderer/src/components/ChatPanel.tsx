@@ -288,7 +288,7 @@ export function ChatPanel({
         onTouchMove={markUserScroll}
         onKeyDown={markUserScroll}
         onPointerDown={handleConversationPointerDown}
-        className="flex-1 overflow-y-auto pb-4"
+        className="chat-conversation flex-1 overflow-y-auto pb-4"
       >
         {empty ? (
           <div className={cn('h-full', compact ? 'px-4' : 'mx-auto w-full max-w-[820px] px-6')}>
