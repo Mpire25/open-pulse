@@ -213,7 +213,7 @@ function SessionRow({ session, selected, streaming, onSelect, onPin, onKeep, onD
         type="button"
         onClick={onSelect}
         aria-label={session.title}
-        className="flex min-w-0 flex-1 items-center gap-2 rounded-[10px] py-2.5 pl-3 pr-1 text-left outline-none focus-visible:ring-1 focus-visible:ring-accent/50"
+        className="flex min-w-0 flex-1 items-center gap-2 rounded-[10px] py-2.5 pl-3 pr-1 text-left outline-none focus-visible:ring-1 focus-visible:ring-focus-faint"
       >
         {streaming && <span className="size-1.5 shrink-0 animate-pulse rounded-full bg-accent-icon" />}
         <SessionTitle title={session.title} />

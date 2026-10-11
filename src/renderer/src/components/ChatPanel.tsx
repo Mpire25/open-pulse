@@ -467,7 +467,7 @@ const Bubble = memo(function Bubble({
               onClick={() => setEditedText(turn.text)}
               aria-label="Edit message"
               title="Edit message"
-              className="grid size-7 place-items-center rounded-lg text-ink-faint transition-colors hover:bg-surface-tint/[0.06] hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+              className="grid size-7 place-items-center rounded-lg text-ink-faint transition-colors hover:bg-surface-tint/[0.06] hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-faint"
             >
               <PencilSimple size={14} />
             </button>
@@ -508,7 +508,7 @@ function CopyMessageButton({ text }: { text: string }): React.JSX.Element {
       onClick={() => void copy()}
       className={cn(
         'grid size-7 place-items-center rounded-lg transition-colors',
-        'hover:bg-surface-tint/[0.06] hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50',
+        'hover:bg-surface-tint/[0.06] hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-faint',
         copied ? 'text-accent-icon' : 'text-ink-faint'
       )}
       aria-label={copied ? 'Message copied' : 'Copy message'}

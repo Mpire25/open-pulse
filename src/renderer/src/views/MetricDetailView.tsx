@@ -998,7 +998,7 @@ function HistoryList({
             {withValues.map((row) => {
               const rowClassName = cn(
                 'flex w-full items-center justify-between px-5 py-2.5 text-left',
-                onSelectDate && 'transition-colors hover:bg-surface-tint/[0.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/50',
+                onSelectDate && 'transition-colors hover:bg-surface-tint/[0.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-focus-faint',
                 row.date === selected && 'bg-surface-tint/[0.03]'
               )
               const content = (

@@ -8,7 +8,7 @@ export function Switch({
   return (
     <SwitchPrimitive.Root
       className={cn(
-        'relative h-6 w-10 shrink-0 rounded-full border border-transparent bg-surface-tint/12 transition-colors duration-200 outline-none focus-visible:ring-2 focus-visible:ring-accent/60 data-[state=checked]:bg-success-fill',
+        'relative h-6 w-10 shrink-0 rounded-full border border-transparent bg-switch-off transition-colors duration-200 outline-none focus-visible:ring-2 focus-visible:ring-focus data-[state=checked]:bg-success-fill',
         className
       )}
       {...props}

@@ -653,7 +653,7 @@ function GoalsCard({
   ): React.JSX.Element => (
     <label className="flex flex-col gap-1.5">
       <span className="text-[11px] font-medium text-ink-faint">
-        {label} <span className="text-ink-faint/70">({unit})</span>
+        {label} <span className="text-ink-unit">({unit})</span>
       </span>
       <Input
         type="number"

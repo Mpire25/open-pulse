@@ -71,7 +71,7 @@ function ActivityGoalRing({
       onClick={pending ? undefined : () => onOpen(metricKey, 'D')}
       disabled={pending}
       aria-busy={pending}
-      className="group -m-2 flex min-w-0 flex-col items-center gap-2.5 rounded-2xl p-4 outline-none transition-[background-color,box-shadow,transform] duration-200 hover:bg-surface-tint/[0.05] hover:shadow-[inset_0_0_0_1px_var(--color-hairline)] focus-visible:bg-surface-tint/[0.05] focus-visible:ring-2 focus-visible:ring-accent/60 active:scale-[0.98]"
+      className="group -m-2 flex min-w-0 flex-col items-center gap-2.5 rounded-2xl p-4 outline-none transition-[background-color,box-shadow,transform] duration-200 hover:bg-surface-tint/[0.05] hover:shadow-[inset_0_0_0_1px_var(--color-hairline)] focus-visible:bg-surface-tint/[0.05] focus-visible:ring-2 focus-visible:ring-focus active:scale-[0.98]"
       aria-label={`Open ${def.label} details`}
     >
       {pending ? (

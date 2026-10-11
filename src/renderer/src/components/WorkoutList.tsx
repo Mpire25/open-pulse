@@ -18,7 +18,7 @@ export function WorkoutList({ workouts, onOpen }: WorkoutListProps): React.JSX.E
             key={w.id}
             type="button"
             onClick={() => onOpen(w)}
-            className="flex w-full min-w-0 items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-surface-tint/[0.05] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 active:bg-surface-tint/[0.07]"
+            className="flex w-full min-w-0 items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-surface-tint/[0.05] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-faint active:bg-surface-tint/[0.07]"
           >
             <div className="flex min-w-0 flex-1 items-center gap-3">
               <div

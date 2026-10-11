@@ -146,7 +146,7 @@ export function NutritionView({ date, goals, onOpenMetric, onSelectDate }: Nutri
                   onClick={intakePending ? undefined : () => onOpenMetric('caloriesIn', 'D')}
                   disabled={intakePending}
                   aria-busy={intakePending}
-                  className="group -m-2 flex flex-col items-center gap-2 rounded-2xl p-3 outline-none transition-[background-color,box-shadow,transform] duration-200 hover:bg-surface-tint/[0.05] hover:shadow-[inset_0_0_0_1px_var(--color-hairline)] focus-visible:bg-surface-tint/[0.05] focus-visible:ring-2 focus-visible:ring-accent/60 active:scale-[0.98]"
+                  className="group -m-2 flex flex-col items-center gap-2 rounded-2xl p-3 outline-none transition-[background-color,box-shadow,transform] duration-200 hover:bg-surface-tint/[0.05] hover:shadow-[inset_0_0_0_1px_var(--color-hairline)] focus-visible:bg-surface-tint/[0.05] focus-visible:ring-2 focus-visible:ring-focus active:scale-[0.98]"
                   aria-label="Open calories eaten details"
                 >
                   {intakePending ? (
@@ -443,7 +443,7 @@ function MealSummary({
       aria-expanded={isOpen}
       aria-controls={contentId}
       onClick={onToggle}
-      className="w-full cursor-pointer px-5 py-4 text-left transition-colors hover:bg-surface-tint/[0.025] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/50 active:bg-surface-tint/[0.04]"
+      className="w-full cursor-pointer px-5 py-4 text-left transition-colors hover:bg-surface-tint/[0.025] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-focus-faint active:bg-surface-tint/[0.04]"
     >
       <div className="flex items-baseline justify-between gap-4">
         <div className="flex items-baseline gap-2">
@@ -583,7 +583,7 @@ function MacroBreakdown({
             key={p.key}
             type="button"
             onClick={() => onOpenMetric(p.key, 'D')}
-            className="group -m-1 min-w-0 rounded-xl p-3 text-left outline-none transition-[background-color,box-shadow,transform] duration-200 hover:bg-surface-tint/[0.05] hover:shadow-[inset_0_0_0_1px_var(--color-hairline)] focus-visible:bg-surface-tint/[0.05] focus-visible:ring-2 focus-visible:ring-accent/60 active:scale-[0.98]"
+            className="group -m-1 min-w-0 rounded-xl p-3 text-left outline-none transition-[background-color,box-shadow,transform] duration-200 hover:bg-surface-tint/[0.05] hover:shadow-[inset_0_0_0_1px_var(--color-hairline)] focus-visible:bg-surface-tint/[0.05] focus-visible:ring-2 focus-visible:ring-focus active:scale-[0.98]"
           >
             <div className="flex items-center gap-1.5">
               <span className="h-2 w-2 rounded-full" style={{ background: chartColor(p.color) }} />
@@ -612,7 +612,7 @@ function MacroBreakdown({
               key={nutrient.key}
               type="button"
               onClick={() => onOpenMetric(nutrient.key, 'D')}
-              className="group min-w-0 rounded-xl px-2 py-1 text-left outline-none transition-colors hover:bg-surface-tint/[0.04] focus-visible:ring-2 focus-visible:ring-accent/60 active:scale-[0.98]"
+              className="group min-w-0 rounded-xl px-2 py-1 text-left outline-none transition-colors hover:bg-surface-tint/[0.04] focus-visible:ring-2 focus-visible:ring-focus active:scale-[0.98]"
             >
               <div className="flex items-center gap-1.5 text-[10.5px] font-medium text-ink-faint">
                 <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: chartColor(nutrient.color) }} />

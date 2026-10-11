@@ -15,7 +15,7 @@ export function SleepSessionSelector({ day, selectedId, onSelect }: {
         const main = id === day.mainSessionId
         return (
           <button key={id} type="button" aria-pressed={id === selectedId} onClick={() => onSelect(id)}
-            className={`rounded-xl border px-3 py-2 text-left text-[12px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 ${id === selectedId ? 'border-accent/50 bg-sleep-soft text-ink' : 'border-hairline text-ink-dim hover:bg-surface-tint/[0.04]'}`}>
+            className={`rounded-xl border px-3 py-2 text-left text-[12px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-faint ${id === selectedId ? 'border-accent/50 bg-sleep-soft text-ink' : 'border-hairline text-ink-dim hover:bg-surface-tint/[0.04]'}`}>
             <span className="font-medium">{main ? 'Main sleep' : 'Additional sleep'}</span>
             <span className="ml-2 font-mono">{formatMinutes(session.minutesAsleep)}</span>
             <span className="mt-0.5 block text-[11px] text-ink-dim">{formatClock(session.startTime)}–{formatClock(session.endTime)}</span>

@@ -53,7 +53,7 @@ export function AppearanceCard(): React.JSX.Element {
         {OPTIONS.map(({ mode: value, label, Icon }) => <label
           key={value}
           className={cn(
-            'relative flex cursor-pointer items-center gap-2 rounded-[10px] px-3.5 py-1.5 text-[12px] font-semibold transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-accent/60',
+            'relative flex cursor-pointer items-center gap-2 rounded-[10px] px-3.5 py-1.5 text-[12px] font-semibold transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-focus',
             value === mode ? 'bg-surface-tint/[0.08] text-ink shadow-[inset_0_0_0_1px_var(--color-hairline)]' : 'text-ink-dim hover:bg-surface-tint/[0.04] hover:text-ink',
             saving && 'cursor-wait opacity-60'
           )}

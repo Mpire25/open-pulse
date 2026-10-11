@@ -42,7 +42,7 @@ export function DateNav({ date, today, onChange }: DateNavProps): React.JSX.Elem
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -2 }}
               transition={{ duration: 0.15, ease: [0.16, 1, 0.3, 1] }}
-              className="no-drag flex h-[22px] w-[88px] items-center justify-center whitespace-nowrap rounded-[6px] px-2 text-[10.5px] font-semibold text-accent outline-none transition-colors hover:bg-accent-soft hover:text-accent-highlight focus-visible:ring-2 focus-visible:ring-accent/60 active:scale-[0.97]"
+              className="no-drag flex h-[22px] w-[88px] items-center justify-center whitespace-nowrap rounded-[6px] px-2 text-[10.5px] font-semibold text-accent outline-none transition-colors hover:bg-accent-soft hover:text-accent-highlight focus-visible:ring-2 focus-visible:ring-focus active:scale-[0.97]"
             >
               Back to Today
             </motion.button>
@@ -221,7 +221,7 @@ function Calendar({
                 day === selected
                   ? 'bg-accent font-semibold text-white'
                   : day > maxDate
-                    ? 'text-ink-faint/50'
+                    ? 'text-ink-outside'
                     : 'text-ink-dim hover:bg-surface-tint/[0.07] hover:text-ink'
               )}
             >

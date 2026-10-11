@@ -70,6 +70,13 @@
   --color-success-icon: var(--color-success);
   --color-danger-icon: var(--color-danger);
 
+  /* Translucent in dark; light mode swaps in solid shades that hold contrast. */
+  --color-focus: color-mix(in oklab, var(--color-accent) 60%, transparent);
+  --color-focus-faint: color-mix(in oklab, var(--color-accent) 50%, transparent);
+  --color-ink-outside: color-mix(in oklab, var(--color-ink-faint) 50%, transparent);
+  --color-ink-unit: color-mix(in oklab, var(--color-ink-faint) 70%, transparent);
+  --color-switch-off: color-mix(in oklab, var(--color-surface-tint) 12%, transparent);
+
   /* Neutral effects use a theme-aware tint; white foregrounds on brand tiles stay white. */
   --color-surface-tint: #ffffff;
   --color-field: rgb(0 0 0 / 0.25);
@@ -191,6 +198,12 @@
   --color-stage-light: #ada0e3;
   --color-stage-rem: #3ba4c9;
   --color-stage-awake: var(--color-activity-mark);
+
+  --color-focus: var(--color-accent-icon);
+  --color-focus-faint: var(--color-accent-icon);
+  --color-ink-outside: #8b92a6;
+  --color-ink-unit: var(--color-ink-faint);
+  --color-switch-off: rgb(24 32 48 / 0.26);
 
   --shadow-panel: 0 20px 50px -30px rgb(54 65 99 / 0.2);
   --shadow-popover: 0 24px 60px -20px rgb(54 65 99 / 0.25);

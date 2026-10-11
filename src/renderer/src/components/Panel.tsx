@@ -32,7 +32,7 @@ export const InteractivePanel = forwardRef<HTMLDivElement, InteractivePanelProps
       role="button"
       tabIndex={0}
       className={cn(
-        'group/drill cursor-pointer transition-[background-color,border-color,box-shadow,transform] hover:border-hairline-strong hover:bg-panel-2/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 active:translate-y-px',
+        'group/drill cursor-pointer transition-[background-color,border-color,box-shadow,transform] hover:border-hairline-strong hover:bg-panel-2/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-faint active:translate-y-px',
         className
       )}
       onClick={onOpen}
@@ -70,7 +70,7 @@ export const DrillPanel = forwardRef<HTMLDivElement, DrillPanelProps>(
         type="button"
         aria-label={label}
         onClick={onOpen}
-        className="absolute inset-0 rounded-[22px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+        className="absolute inset-0 rounded-[22px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-faint"
       />
       <div className={cn('pointer-events-none relative z-10', contentClassName)}>{children}</div>
     </Panel>
