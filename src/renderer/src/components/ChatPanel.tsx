@@ -119,6 +119,8 @@ export function ChatPanel({
     const container = scrollRef.current
     if (!container) return
     container.style.setProperty('--chat-top-fade', `${Math.min(24, Math.max(0, container.scrollTop))}px`)
+    const remainingScroll = container.scrollHeight - container.clientHeight - container.scrollTop
+    container.style.setProperty('--chat-bottom-fade', `${Math.min(24, Math.max(0, remainingScroll))}px`)
   }, [])
 
   useEffect(() => {
@@ -182,6 +184,15 @@ export function ChatPanel({
   useLayoutEffect(() => {
     updateConversationFade()
   }, [activeChatId, busy, codexConnected, loading, turns, updateConversationFade])
+
+  useEffect(() => {
+    const container = scrollRef.current
+    if (!container) return
+    const observer = new window.ResizeObserver(updateConversationFade)
+    observer.observe(container)
+    if (container.firstElementChild) observer.observe(container.firstElementChild)
+    return () => observer.disconnect()
+  }, [activeChatId, codexConnected, loading, updateConversationFade])
 
   // Only scrolls that follow real user input can change following; the app's own
   // scrolls, scroll anchoring and clamping move scrollTop without user intent.

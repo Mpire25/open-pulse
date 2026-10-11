@@ -687,10 +687,16 @@ body {
   }
 }
 
-/* Fade messages into the surface above without covering them or intercepting
-   input. The fade grows with scrollTop, keeping the first message clear at rest. */
+/* Fade messages into the surrounding surface without covering them or
+   intercepting input. Each edge clears as that end of the conversation is reached. */
 .chat-conversation {
-  mask-image: linear-gradient(to bottom, transparent, black var(--chat-top-fade, 0px));
+  mask-image: linear-gradient(
+    to bottom,
+    transparent,
+    black var(--chat-top-fade, 0px),
+    black calc(100% - var(--chat-bottom-fade, 0px)),
+    transparent
+  );
 }
 
 /* One shared fade edge replaces the old chat name with the new name from
