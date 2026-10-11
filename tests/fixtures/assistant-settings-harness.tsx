@@ -347,3 +347,16 @@ test('a stale catalog cannot erase a saved speed preference', async () => {
   expect(saves).toBe(0)
   expect(Boolean(document.querySelector('[aria-labelledby="assistant-speed-label"]'))).toBe(false)
 })
+
+test('switching models with a stale catalog keeps a saved speed preference', async () => {
+  backendStatus = connected
+  modelResult = { models: [
+    { id: 'future-model', label: 'Future Model', efforts: ['low'] },
+    { id: 'other-model', label: 'Other Model', efforts: ['low'] }
+  ], stale: true }
+  let saved: AppSettings = { ...settings, assistant: { model: 'future-model', reasoningEffort: 'low', serviceTier: 'priority' } }
+  window.pulse.settings.update = async (patch) => { saved = { ...saved, ...patch }; return saved }
+  await act(async () => root.render(<Harness initialSettings={saved} />))
+  await act(async () => button('Other Model')!.click())
+  expect(saved.assistant).toEqual({ model: 'other-model', reasoningEffort: 'low', serviceTier: 'priority' })
+})

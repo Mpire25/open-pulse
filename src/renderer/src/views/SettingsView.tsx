@@ -482,7 +482,8 @@ function AssistantCard({
       reasoningEffort: assistant.reasoningEffort && supported.includes(assistant.reasoningEffort)
         ? assistant.reasoningEffort
         : defaultEffortForModel(model),
-      serviceTier: tierForModel(model, assistant.serviceTier)
+      // As on load, only a fresh catalog can show that a model lacks the saved tier.
+      serviceTier: tierForModel(model, assistant.serviceTier) ?? (catalog.stale ? assistant.serviceTier : undefined)
     })
   }
 
