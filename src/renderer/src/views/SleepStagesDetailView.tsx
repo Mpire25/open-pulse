@@ -1,3 +1,4 @@
+import { iconColor } from '@/lib/icon-color'
 import { selectedSleepSession, sleepSessionId } from '@shared/sleep'
 import { SleepSessionSelector } from '@/components/SleepSessionSelector'
 import { motion } from 'framer-motion'
@@ -47,14 +48,14 @@ export function SleepStagesDetailView({ date, sessionId, onSelectSession, onBack
         <button
           type="button"
           onClick={onBack}
-          className="-ml-1.5 mb-2 flex items-center gap-1.5 rounded-lg px-1.5 py-1 text-[12.5px] font-medium text-ink-dim transition-colors hover:bg-white/[0.05] hover:text-ink"
+          className="-ml-1.5 mb-2 flex items-center gap-1.5 rounded-lg px-1.5 py-1 text-[12.5px] font-medium text-ink-dim transition-colors hover:bg-surface-tint/[0.05] hover:text-ink"
         >
           <ArrowLeft size={13} weight="bold" />
           Back
         </button>
         <div className="flex items-center gap-3">
           <div className="grid h-11 w-11 place-items-center rounded-2xl bg-sleep-soft">
-            <Moon size={22} weight="fill" style={{ color: 'var(--color-sleep)' }} />
+            <Moon size={22} weight="fill" style={{ color: iconColor('var(--color-sleep)') }} />
           </div>
           <div>
             <h1 className="display text-[27px] font-bold leading-tight text-ink">Sleep stages</h1>
@@ -73,7 +74,7 @@ export function SleepStagesDetailView({ date, sessionId, onSelectSession, onBack
               <SectionHeader
                 title="Sleep timeline"
                 hint="Hover any stage block to see its time and duration"
-                icon={<Moon size={18} weight="fill" style={{ color: 'var(--color-sleep)' }} />}
+                icon={<Moon size={18} weight="fill" style={{ color: iconColor('var(--color-sleep)') }} />}
               />
               <div className="mt-7">
                 <SleepStages key={night ? sleepSessionId(night) : "empty"} night={night} />
@@ -228,7 +229,7 @@ function SleepStagesDetailSkeleton(): React.JSX.Element {
         <SectionHeader
           title="Sleep timeline"
           hint="Hover any stage block to see its time and duration"
-          icon={<Moon size={18} weight="fill" style={{ color: 'var(--color-sleep)' }} />}
+          icon={<Moon size={18} weight="fill" style={{ color: iconColor('var(--color-sleep)') }} />}
         />
         <div className="mt-7">
           <SleepStages night={null} loading />

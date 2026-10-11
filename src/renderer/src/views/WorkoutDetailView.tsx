@@ -1,3 +1,5 @@
+import { iconColor } from '@/lib/icon-color'
+import { chartColor } from '@/lib/chart-color'
 import { useState } from 'react'
 import { motion } from 'framer-motion'
 import {
@@ -98,7 +100,7 @@ export function WorkoutDetailView({ workout, date, onBack }: WorkoutDetailViewPr
         <button
           type="button"
           onClick={onBack}
-          className="-ml-1.5 mb-2 flex items-center gap-1.5 rounded-lg px-1.5 py-1 text-[12.5px] font-medium text-ink-dim transition-colors hover:bg-white/[0.05] hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+          className="-ml-1.5 mb-2 flex items-center gap-1.5 rounded-lg px-1.5 py-1 text-[12.5px] font-medium text-ink-dim transition-colors hover:bg-surface-tint/[0.05] hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-faint"
         >
           <ArrowLeft size={13} weight="bold" />
           Back to workouts
@@ -119,7 +121,7 @@ export function WorkoutDetailView({ workout, date, onBack }: WorkoutDetailViewPr
             </div>
           </div>
           {(workout.deviceName || workout.recordingSource) && (
-            <div className="rounded-full border border-hairline bg-white/[0.025] px-3 py-1.5 text-[11px] text-ink-dim">
+            <div className="rounded-full border border-hairline bg-surface-tint/[0.025] px-3 py-1.5 text-[11px] text-ink-dim">
               {workout.deviceName ?? titleCase(workout.recordingSource ?? '')}
             </div>
           )}
@@ -139,7 +141,7 @@ export function WorkoutDetailView({ workout, date, onBack }: WorkoutDetailViewPr
           <SectionHeader
             title="Heart rate"
             hint={heartPoints.length ? `${heartPoints.length} readings during this workout` : 'Recorded workout window'}
-            icon={<Heartbeat size={18} weight="fill" className="text-heart" />}
+            icon={<Heartbeat size={18} weight="fill" className="text-heart-icon" />}
             action={
               heartValues.length > 0 || heartRateChartZones.length > 0 ? (
                 <div className="flex items-center gap-3">
@@ -163,14 +165,14 @@ export function WorkoutDetailView({ workout, date, onBack }: WorkoutDetailViewPr
                         transition={{ type: 'spring', stiffness: 350, damping: 24 }}
                         className={`inline-flex h-8 items-center gap-1.5 rounded-[9px] border px-2.5 text-[10.5px] font-semibold transition-[background-color,border-color,color,box-shadow] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-heart/40 ${
                           showHeartRateZones
-                            ? 'border-heart/30 bg-heart-soft text-ink shadow-[inset_0_1px_0_rgb(255_255_255/0.06)]'
-                            : 'border-hairline bg-white/[0.02] text-ink-dim hover:border-hairline-strong hover:bg-white/[0.045] hover:text-ink'
+                            ? 'border-heart/30 bg-heart-soft text-ink shadow-[inset_0_1px_0_color-mix(in_srgb,var(--color-surface-tint)_6%,transparent)]'
+                            : 'border-hairline bg-surface-tint/[0.02] text-ink-dim hover:border-hairline-strong hover:bg-surface-tint/[0.045] hover:text-ink'
                         }`}
                       >
                         <StackSimple
                           size={14}
                           weight={showHeartRateZones ? 'fill' : 'regular'}
-                          className={showHeartRateZones ? 'text-heart' : 'text-ink-faint'}
+                          className={showHeartRateZones ? 'text-heart-icon' : 'text-ink-faint'}
                         />
                         Zones
                       </motion.button>
@@ -232,7 +234,7 @@ export function WorkoutDetailView({ workout, date, onBack }: WorkoutDetailViewPr
                 <SectionHeader
                   title="Route"
                   hint={routePoints.length ? `${routePoints.length} GPS trackpoints` : 'Recorded GPS trace'}
-                  icon={<MapPin size={18} weight="fill" style={{ color: tone.color }} />}
+                  icon={<MapPin size={18} weight="fill" style={{ color: iconColor(tone.color) }} />}
                 />
                 <div className="mt-4">
                   {track.isPending ? (
@@ -257,18 +259,18 @@ export function WorkoutDetailView({ workout, date, onBack }: WorkoutDetailViewPr
             <SectionHeader
               title="Session timing"
               hint="Elapsed time, active time, and recorded events"
-              icon={<Clock size={18} weight="fill" style={{ color: tone.color }} />}
+              icon={<Clock size={18} weight="fill" style={{ color: iconColor(tone.color) }} />}
             />
             <div className="mt-7 grid grid-cols-[auto_1fr_auto] items-center gap-4">
               <TimePoint label="Started" value={startLabel} />
               <div className="relative h-px bg-hairline-strong">
                 <span
                   className="absolute left-0 top-1/2 h-2 w-2 -translate-y-1/2 rounded-full"
-                  style={{ background: tone.color }}
+                  style={{ background: chartColor(tone.color) }}
                 />
                 <span
                   className="absolute right-0 top-1/2 h-2 w-2 -translate-y-1/2 rounded-full"
-                  style={{ background: tone.color }}
+                  style={{ background: chartColor(tone.color) }}
                 />
               </div>
               <TimePoint label="Finished" value={endLabel} align="right" />
@@ -285,7 +287,7 @@ export function WorkoutDetailView({ workout, date, onBack }: WorkoutDetailViewPr
                 {workout.events?.map((event, index) => (
                   <span
                     key={`${event.time}-${event.type}-${index}`}
-                    className="rounded-full border border-hairline bg-white/[0.025] px-2.5 py-1 text-[10.5px] text-ink-dim"
+                    className="rounded-full border border-hairline bg-surface-tint/[0.025] px-2.5 py-1 text-[10.5px] text-ink-dim"
                   >
                     {titleCase(event.type)} · {event.minute != null ? formatMinuteOfDay(event.minute) : formatClock(event.time)}
                   </span>
@@ -300,7 +302,7 @@ export function WorkoutDetailView({ workout, date, onBack }: WorkoutDetailViewPr
             <SectionHeader
               title="Performance"
               hint="Native exercise metrics where available"
-              icon={<Gauge size={18} weight="fill" style={{ color: tone.color }} />}
+              icon={<Gauge size={18} weight="fill" style={{ color: iconColor(tone.color) }} />}
             />
             {performance.length > 0 ? (
               <div className="mt-5 grid grid-cols-2 gap-x-5 gap-y-4">
@@ -326,7 +328,7 @@ export function WorkoutDetailView({ workout, date, onBack }: WorkoutDetailViewPr
             <SectionHeader
               title="Advanced metrics"
               hint="Sport-specific measurements supplied by the tracker"
-              icon={<Mountains size={18} weight="fill" style={{ color: tone.color }} />}
+              icon={<Mountains size={18} weight="fill" style={{ color: iconColor(tone.color) }} />}
             />
             <div className="workout-advanced-grid mt-4 grid grid-cols-2 gap-2">
               {specialized.map((item) => (
@@ -348,9 +350,9 @@ export function WorkoutDetailView({ workout, date, onBack }: WorkoutDetailViewPr
 
 function DetailStat({ item, color }: { item: DetailItem; color: string }): React.JSX.Element {
   return (
-    <div className="min-w-0 rounded-[16px] bg-white/[0.025] px-4 py-4">
+    <div className="min-w-0 rounded-[16px] bg-surface-tint/[0.025] px-4 py-4">
       <div className="flex items-center gap-2 text-[11px] text-ink-faint">
-        <span style={{ color }}>{item.icon}</span>
+        <span style={{ color: iconColor(color) }}>{item.icon}</span>
         <span className="truncate">{item.label}</span>
       </div>
       <div className="mt-2 truncate font-mono text-[15px] font-medium text-ink">{item.value}</div>
@@ -383,18 +385,18 @@ function HeartRateZones({ zones }: { zones: ReturnType<typeof zoneItems> }): Rea
       <SectionHeader
         title="Heart-rate zones"
         hint={`${formatMinutes(total)} with a classified zone`}
-        icon={<Lightning size={18} weight="fill" className="text-heart" />}
+        icon={<Lightning size={18} weight="fill" className="text-heart-icon" />}
       />
-      <div className="mt-5 flex h-3 overflow-hidden rounded-full bg-white/[0.035]">
+      <div className="mt-5 flex h-3 overflow-hidden rounded-full bg-surface-tint/[0.035]">
         {zones.map((zone) => (
-          <span key={zone.label} style={{ width: `${(zone.minutes / total) * 100}%`, background: zone.color }} />
+          <span key={zone.label} style={{ width: `${(zone.minutes / total) * 100}%`, background: chartColor(zone.color) }} />
         ))}
       </div>
       <div className="workout-zone-grid mt-4 grid grid-cols-2 gap-x-5 gap-y-4">
         {zones.map((zone) => (
           <div key={zone.label} className="flex items-center justify-between gap-3 border-t border-hairline pt-3">
             <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-[11.5px] text-ink-dim">
-              <span className="h-2 w-2 rounded-full" style={{ background: zone.color }} />
+              <span className="h-2 w-2 rounded-full" style={{ background: chartColor(zone.color) }} />
               <span>{zone.label}</span>
               {zone.range && <span className="whitespace-nowrap font-mono text-[10.5px] text-ink-faint">{zone.range}</span>}
             </span>
@@ -448,9 +450,9 @@ function RoutePlot({
           <line x1="0" x2={width} y1={height * ratio} y2={height * ratio} />
         </g>
       ))}
-      <path d={path} fill="none" stroke={color} strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
-      <circle cx={start.x} cy={start.y} r="6" fill={color} stroke="var(--color-panel)" strokeWidth="3" />
-      <circle cx={finish.x} cy={finish.y} r="6" fill="var(--color-heart)" stroke="var(--color-panel)" strokeWidth="3" />
+      <path d={path} fill="none" stroke={chartColor(color)} strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx={start.x} cy={start.y} r="6" fill={chartColor(color)} stroke="var(--color-panel)" strokeWidth="3" />
+      <circle cx={finish.x} cy={finish.y} r="6" fill={chartColor('var(--color-heart)')} stroke="var(--color-panel)" strokeWidth="3" />
     </svg>
   )
 }

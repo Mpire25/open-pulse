@@ -1,6 +1,8 @@
 import { chooseDashboardWidget } from './dashboard-menu'
 import { isMenuBarDestination, type MenuBarDestination } from '../shared/menu-bar'
 import { app, ipcMain } from 'electron'
+import { applyAppearancePreference, getAppearanceState, setAppearanceMode } from './appearance'
+import type { AppearanceState } from '../shared/appearance'
 import type { IpcMainInvokeEvent, WebContents } from 'electron'
 import type {
   ActivityIntradayMetric,
@@ -200,6 +202,10 @@ function sendToTrustedRenderers(channel: string, ...args: unknown[]): void {
   }
 }
 
+export function broadcastAppearance(state: AppearanceState): void {
+  sendToTrustedRenderers('appearance:changed', state)
+}
+
 export function registerIpc(commands: { open: (destination: MenuBarDestination) => void; close: () => void; resizePanel: (height: number, senderId: number) => void; quit: () => void; settingsChanged: (settings: AppSettings) => void; notifications: ResponseNotificationController }): void {
   responseNotifications = commands.notifications
   app.once('before-quit', () => chatTitles.clear('app-quitting'))
@@ -224,8 +230,11 @@ export function registerIpc(commands: { open: (destination: MenuBarDestination) 
     return layouts
   })
   handle('settings:get', () => getSettings())
+  handle('appearance:get', () => getAppearanceState())
+  handle('appearance:set', (_e, mode: unknown) => setAppearanceMode(mode))
   handle('settings:update', (_e, patch: Partial<AppSettings>) => {
     const settings = updateSettings(patch)
+    applyAppearancePreference()
     if (!settings.responseNotificationsEnabled) responseNotifications?.clear()
     if (!settings.responseNotificationPreviews) responseNotifications?.clearPreviews()
     commands.settingsChanged(settings)

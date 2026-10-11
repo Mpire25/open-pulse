@@ -13,7 +13,7 @@ export function ErrorState({ message, onRetry }: ErrorStateProps): React.JSX.Ele
         </p>
         <button
           onClick={onRetry}
-          className="mt-4 rounded-full bg-panel-2 px-4 py-2 text-[13px] text-ink transition-colors hover:bg-white/10"
+          className="mt-4 rounded-full bg-panel-2 px-4 py-2 text-[13px] text-ink transition-colors hover:bg-surface-tint/10"
         >
           Try again
         </button>

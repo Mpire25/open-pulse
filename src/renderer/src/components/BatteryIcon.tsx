@@ -1,3 +1,5 @@
+import { iconColor } from '@/lib/icon-color'
+
 interface BatteryIconProps {
   pct: number
   size?: number
@@ -19,7 +21,7 @@ export function batteryColor(pct: number): string {
 /** A battery glyph whose fill represents the actual charge, rather than a broad icon tier. */
 export function BatteryIcon({ pct, size = 18, className }: BatteryIconProps): React.JSX.Element {
   const level = clampBatteryPct(pct)
-  const color = batteryColor(level)
+  const color = iconColor(batteryColor(level))
 
   return (
     <svg

@@ -1,3 +1,4 @@
+import { iconColor } from '@/lib/icon-color'
 import { Barbell, Moon } from '@phosphor-icons/react'
 import { DASHBOARD_TREND_PERIODS, type DashboardTrendDays, type DashboardWidget } from '@shared/dashboard'
 import type { Goals, MetricKey, Workout } from '@shared/types'
@@ -199,7 +200,7 @@ export function DashboardSummary({
           disabled={reading.pending}
         >
           <span>
-            <Icon size={14} color={def.color} />
+            <Icon size={14} color={iconColor(def.color)} />
             {def.shortLabel ?? def.label}
           </span>
           <strong>
@@ -217,11 +218,11 @@ export function DashboardSummary({
         <button
           type="button"
           onClick={open}
-          className="home-hero-stat -mx-2 flex min-h-[70px] items-start gap-2.5 rounded-xl px-2 py-1.5 text-left transition-colors hover:bg-white/[0.04]"
+          className="home-hero-stat -mx-2 flex min-h-[70px] items-start gap-2.5 rounded-xl px-2 py-1.5 text-left transition-colors hover:bg-surface-tint/[0.04]"
           aria-label={`Open ${def.shortLabel ?? def.label} details`}
         >
           <span className="mt-0.5">
-            <Icon size={15} weight="fill" color={def.color} />
+            <Icon size={15} weight="fill" color={iconColor(def.color)} />
           </span>
           <span className="grid min-w-0 grid-rows-[17px_22px_19px]">
             <span className="truncate text-[11px] font-medium leading-[17px] text-ink-faint">{def.shortLabel ?? def.label}</span>
@@ -365,7 +366,7 @@ function TrendWidget({
       wide={wide}
       title={title}
       hint={`${period.hint}${weekly ? ' · weekly daily averages' : ''}`}
-      icon={<Icon size={18} weight="fill" color={def.color} />}
+      icon={<Icon size={18} weight="fill" color={iconColor(def.color)} />}
       onOpen={() => onOpen(metric, period.range, date)}
     >
       {series.isError ? (
@@ -428,7 +429,7 @@ function IntradayWidget({
       wide={wide}
       title={metric === 'steps' ? 'Daily movement' : def.label}
       hint={metric === 'steps' ? 'Steps per hour' : 'Throughout the day'}
-      icon={<Icon size={18} weight="fill" color={def.color} />}
+      icon={<Icon size={18} weight="fill" color={iconColor(def.color)} />}
       onOpen={() => onOpen(metric, 'D', date)}
     >
       {query.isError ? (
@@ -464,7 +465,7 @@ function HeartRateWidget({ date, enabled = true, compact, wide, onOpen }: ChartP
       wide={wide}
       title="Heart rate"
       hint="Across the day"
-      icon={<Icon size={18} weight="fill" color={def.color} />}
+      icon={<Icon size={18} weight="fill" color={iconColor(def.color)} />}
       onOpen={() => onOpen('restingHeartRate', 'D', date)}
     >
       {intraday.isError ? (
@@ -513,7 +514,7 @@ function SleepWidget({ date, enabled = true, compact, onSleep }: ChartProps): Re
               {STAGES.map((stage) => (
                 <div key={stage}>
                   <span>
-                    <i style={{ background: sleep.isPending ? 'rgb(255 255 255 / 0.055)' : STAGE_COLOR[stage] }} />
+                    <i style={{ background: sleep.isPending ? 'color-mix(in srgb, var(--color-surface-tint) 5.5%, transparent)' : STAGE_COLOR[stage] }} />
                     {STAGE_LABEL[stage]}
                   </span>
                   <strong>{sleep.isPending ? <SkeletonText className="h-2.5 w-10" /> : formatMinutes(night?.stageMinutes[stage] ?? 0)}</strong>
@@ -537,7 +538,7 @@ function SleepWidget({ date, enabled = true, compact, onSleep }: ChartProps): Re
     <ChartFrame
       title="Sleep"
       hint={hint}
-      icon={<Moon size={18} weight="fill" color="var(--color-sleep)" />}
+      icon={<Moon size={18} weight="fill" color={iconColor('var(--color-sleep)')} />}
       onOpen={onSleep}
     >
       {sleep.isError ? (
@@ -568,7 +569,7 @@ function WorkoutsWidget({ date, onWorkouts, onWorkout }: ChartProps): React.JSX.
         <DrillHeader
           title="Workouts"
           hint={workouts.isPending ? <SkeletonText className="w-20" /> : `${workouts.data?.length ?? 0} session${workouts.data?.length === 1 ? '' : 's'}`}
-          icon={<Barbell size={18} weight="fill" color="var(--color-recovery)" />}
+          icon={<Barbell size={18} weight="fill" color={iconColor('var(--color-recovery)')} />}
         />
       </div>
       {workouts.isError ? (

@@ -58,6 +58,163 @@
   --color-accent-soft: rgb(125 123 240 / 0.16);
 
   --color-danger: #e0544e;
+
+  /* Icons have their own shades; default aliases retain the original dark look. */
+  --color-activity-icon: var(--color-activity);
+  --color-heart-icon: var(--color-heart);
+  --color-recovery-icon: var(--color-recovery);
+  --color-sleep-icon: var(--color-sleep);
+  --color-hydration-icon: var(--color-hydration);
+  --color-body-metric-icon: var(--color-body-metric);
+  --color-accent-icon: var(--color-accent);
+  --color-success-icon: var(--color-success);
+  --color-danger-icon: var(--color-danger);
+
+  /* Translucent in dark; light mode swaps in solid shades that hold contrast. */
+  --color-focus: color-mix(in oklab, var(--color-accent) 60%, transparent);
+  --color-focus-faint: color-mix(in oklab, var(--color-accent) 50%, transparent);
+  --color-ink-outside: color-mix(in oklab, var(--color-ink-faint) 50%, transparent);
+  --color-ink-unit: color-mix(in oklab, var(--color-ink-faint) 70%, transparent);
+  --color-switch-off: color-mix(in oklab, var(--color-surface-tint) 12%, transparent);
+
+  /* Neutral effects use a theme-aware tint; white foregrounds on brand tiles stay white. */
+  --color-surface-tint: #ffffff;
+  --color-field: rgb(0 0 0 / 0.25);
+  --color-scrim: rgb(0 0 0 / 0.55);
+  --color-panel-hover: #26262e;
+  --color-accent-hover: #2b95ff;
+  --color-accent-highlight: #a5a3ff;
+  --color-success: #4fd979;
+  --color-success-fill: #30d158;
+  --shadow-panel: 0 20px 50px -30px rgb(0 0 0 / 0.8);
+  --shadow-popover: 0 24px 60px -20px rgb(0 0 0 / 0.9);
+  --shadow-tooltip: 0 10px 30px -12px rgb(0 0 0 / 0.9);
+  --shadow-dialog: 0 40px 100px -40px rgb(0 0 0 / 0.9);
+  --shadow-composer: 0 12px 40px -24px rgb(0 0 0 / 0.9);
+  --shadow-assistant: 0 20px 50px -30px rgb(0 0 0 / 0.8), inset 0 1px 0 rgb(255 255 255 / 0.05);
+  --shadow-workout: 0 18px 24px rgb(0 0 0 / 0.22);
+  --shadow-assistant-logo: 0 10px 30px -10px rgb(125 123 240 / 0.7), inset 0 1px 0 rgb(255 255 255 / 0.3);
+}
+
+:root {
+  color-scheme: dark;
+}
+
+:root[data-appearance='light'] {
+  color-scheme: light;
+  --color-canvas: #f3f4f8;
+  --color-panel: #ffffff;
+  --color-panel-2: #eceef5;
+  --color-hairline: rgb(24 30 48 / 0.09);
+  --color-hairline-strong: rgb(24 30 48 / 0.18);
+  --color-ink: #202430;
+  --color-ink-dim: #454c5e;
+  --color-ink-faint: #646b7d;
+  --color-surface-tint: #182030;
+  --color-field: rgb(255 255 255 / 0.8);
+  --color-scrim: rgb(24 30 48 / 0.3);
+  --color-panel-hover: #e2e5ef;
+  --color-accent: #67529b;
+  --color-accent-soft: rgb(150 131 254 / 0.16);
+  --color-accent-hover: #564187;
+  --color-accent-highlight: #564187;
+  --color-danger: #a5453a;
+  --color-danger-mark: var(--color-danger-icon);
+  --color-success: #2c6e51;
+  --color-success-fill: var(--color-success-icon);
+
+  /* Each hue has two shades on pale surfaces: a deep one for text, and one
+     bright shade shared by icons, plots, bars, and rings. The bright shade
+     holds 3:1 on white cards; values always sit beside it as text. */
+
+  /* Amber can't reach text contrast on white without turning brown, so
+     activity values read in ink; the icon and a true gold carry the hue. */
+  --color-activity: var(--color-ink);
+  --color-activity-icon: #c98b00;
+  --color-activity-mark: #e6a41f;
+  --color-activity-soft: rgb(230 164 31 / 0.18);
+  --color-heart: #a5453a;
+  --color-heart-icon: #f06c5a;
+  --color-heart-mark: var(--color-heart-icon);
+  --color-heart-soft: rgb(240 108 90 / 0.16);
+  --color-recovery: #2c6e51;
+  --color-recovery-icon: #24a87a;
+  --color-recovery-mark: var(--color-recovery-icon);
+  --color-recovery-soft: rgb(36 168 122 / 0.16);
+  --color-sleep: #67529b;
+  --color-sleep-icon: #9683fe;
+  --color-sleep-mark: var(--color-sleep-icon);
+  --color-sleep-soft: rgb(150 131 254 / 0.16);
+  --color-hydration: #346a8b;
+  --color-hydration-icon: #299ed7;
+  --color-hydration-mark: var(--color-hydration-icon);
+  --color-hydration-soft: rgb(41 158 215 / 0.16);
+  --color-body-metric: #86527a;
+  --color-body-metric-icon: #dc6bc9;
+  --color-body-metric-mark: var(--color-body-metric-icon);
+  --color-body-metric-soft: rgb(220 107 201 / 0.16);
+  --color-accent-icon: var(--color-sleep-icon);
+  --color-success-icon: #25a96d;
+  --color-danger-icon: #ef6c61;
+
+  --color-workout-walking: var(--color-recovery);
+  --color-workout-walking-icon: var(--color-recovery-icon);
+  --color-workout-running: #97532d;
+  --color-workout-running-icon: #e4773a;
+  --color-workout-strength: var(--color-activity);
+  --color-workout-strength-icon: var(--color-activity-icon);
+  --color-workout-cycling: var(--color-hydration);
+  --color-workout-cycling-icon: var(--color-hydration-icon);
+  --color-workout-swimming: var(--color-sleep);
+  --color-workout-swimming-icon: var(--color-sleep-icon);
+  --color-workout-mobility: #2f7265;
+  --color-workout-mobility-icon: #22a695;
+  --color-workout-cardio: var(--color-heart);
+  --color-workout-cardio-icon: var(--color-heart-icon);
+  --color-workout-tennis: #607128;
+  --color-workout-tennis-icon: #889e25;
+  --color-workout-badminton: #2c6e7a;
+  --color-workout-badminton-icon: #15a3b5;
+  --color-workout-football: var(--color-body-metric);
+  --color-workout-football-icon: var(--color-body-metric-icon);
+  --color-workout-treadmill: #984763;
+  --color-workout-treadmill-icon: #e56d98;
+  --color-workout-other: #626b7b;
+  --color-workout-other-icon: #8696ad;
+
+  --color-workout-walking-mark: var(--color-workout-walking-icon);
+  --color-workout-running-mark: var(--color-workout-running-icon);
+  --color-workout-strength-mark: var(--color-workout-strength-icon);
+  --color-workout-cycling-mark: var(--color-workout-cycling-icon);
+  --color-workout-swimming-mark: var(--color-workout-swimming-icon);
+  --color-workout-mobility-mark: var(--color-workout-mobility-icon);
+  --color-workout-cardio-mark: var(--color-workout-cardio-icon);
+  --color-workout-tennis-mark: var(--color-workout-tennis-icon);
+  --color-workout-badminton-mark: var(--color-workout-badminton-icon);
+  --color-workout-football-mark: var(--color-workout-football-icon);
+  --color-workout-treadmill-mark: var(--color-workout-treadmill-icon);
+  --color-workout-other-mark: var(--color-workout-other-icon);
+
+  /* Stacked stages step clearly in lightness as well as hue. */
+  --color-stage-deep: #5c56ba;
+  --color-stage-light: #a597da;
+  --color-stage-rem: #158baf;
+  --color-stage-awake: var(--color-activity-mark);
+
+  --color-focus: var(--color-accent-icon);
+  --color-focus-faint: var(--color-accent-icon);
+  --color-ink-outside: #8b92a6;
+  --color-ink-unit: var(--color-ink-faint);
+  --color-switch-off: rgb(24 32 48 / 0.26);
+
+  --shadow-panel: 0 20px 50px -30px rgb(54 65 99 / 0.2);
+  --shadow-popover: 0 24px 60px -20px rgb(54 65 99 / 0.25);
+  --shadow-tooltip: 0 10px 30px -12px rgb(54 65 99 / 0.25);
+  --shadow-dialog: 0 40px 100px -40px rgb(54 65 99 / 0.25);
+  --shadow-composer: 0 12px 40px -24px rgb(54 65 99 / 0.2);
+  --shadow-assistant: 0 20px 50px -30px rgb(54 65 99 / 0.2), inset 0 1px 0 rgb(255 255 255 / 0.6);
+  --shadow-workout: 0 18px 24px rgb(54 65 99 / 0.12);
+  --shadow-assistant-logo: 0 10px 30px -10px rgb(103 82 155 / 0.24), inset 0 1px 0 rgb(255 255 255 / 0.3);
 }
 
 html,
@@ -84,7 +241,7 @@ body {
 }
 
 ::selection {
-  background: rgb(125 123 240 / 0.35);
+  background: color-mix(in srgb, var(--color-accent) 35%, transparent);
 }
 
 /* macOS window chrome */
@@ -567,13 +724,13 @@ body {
   height: 9px;
 }
 *::-webkit-scrollbar-thumb {
-  background: rgb(255 255 255 / 0.14);
+  background: color-mix(in srgb, var(--color-surface-tint) 14%, transparent);
   border-radius: 9999px;
   border: 2px solid transparent;
   background-clip: content-box;
 }
 *::-webkit-scrollbar-thumb:hover {
-  background: rgb(255 255 255 / 0.28);
+  background: color-mix(in srgb, var(--color-surface-tint) 28%, transparent);
   background-clip: content-box;
 }
 *::-webkit-scrollbar-corner {
@@ -586,7 +743,7 @@ body {
 
 .dashboard-edit-controls { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px 16px; }
 .dashboard-home-ring { display: flex; flex-direction: column; align-items: center; gap: 8px; border-radius: 16px; margin: -20px; padding: 20px; cursor: pointer; transition: background-color 200ms, box-shadow 200ms, transform 200ms; }
-.dashboard-home-ring:hover { background: rgb(255 255 255 / .05); box-shadow: inset 0 0 0 1px rgb(255 255 255 / .07); }
+.dashboard-home-ring:hover { background: color-mix(in srgb, var(--color-surface-tint) 5%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-surface-tint) 7%, transparent); }
 .dashboard-home-ring:active { transform: scale(.985); }
 .dashboard-home-ring:focus-visible, .dashboard-retry:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 3px; }
 .dashboard-ring-slot { display: flex; flex-direction: column; align-items: center; min-width: 0; }
@@ -655,7 +812,7 @@ body {
 .dashboard-slot-change:hover,
 .dashboard-slot-change[aria-busy="true"] { color: var(--color-ink); }
 .dashboard-slot-change:hover::before,
-.dashboard-slot-change[aria-busy="true"]::before { background: #26262e; }
+.dashboard-slot-change[aria-busy="true"]::before { background: var(--color-panel-hover); }
 .dashboard-slot-change:disabled { opacity: .4; cursor: default; }
 .dashboard-slot--home.dashboard-slot--chart > .dashboard-slot-change,
 .dashboard-slot--home.dashboard-slot--wide > .dashboard-slot-change { top: -10px; right: -10px; }

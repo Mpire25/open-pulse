@@ -1,3 +1,4 @@
+import { iconColor } from '@/lib/icon-color'
 import { motion } from 'framer-motion'
 import { Scales } from '@phosphor-icons/react'
 import { DrillHeader, InteractivePanel, Panel, SectionHeader } from '@/components/Panel'
@@ -64,7 +65,7 @@ export function BodyView({ date, onOpenMetric }: BodyViewProps): React.JSX.Eleme
                 <DrillHeader
                   title={def.label}
                   hint={def.hint}
-                  icon={<Icon size={18} weight="fill" style={{ color: def.color }} />}
+                  icon={<Icon size={18} weight="fill" style={{ color: iconColor(def.color) }} />}
                   action={
                     pending ? (
                       <SkeletonText className="h-5 w-20" />
@@ -118,7 +119,7 @@ export function BodyView({ date, onOpenMetric }: BodyViewProps): React.JSX.Eleme
               <SectionHeader
                 title="Recent measurements"
                 hint="Individual scale readings with calculated BMI"
-                icon={<Scales size={18} weight="fill" style={{ color: 'var(--color-body-metric)' }} />}
+                icon={<Scales size={18} weight="fill" style={{ color: iconColor('var(--color-body-metric)') }} />}
               />
             </div>
             <div className="divide-y divide-hairline">
@@ -181,7 +182,7 @@ function BodyMeasurementsStatus({ hint, message }: { hint: string; message: stri
         <SectionHeader
           title="Recent measurements"
           hint={hint}
-          icon={<Scales size={18} weight="fill" style={{ color: 'var(--color-body-metric)' }} />}
+          icon={<Scales size={18} weight="fill" style={{ color: iconColor('var(--color-body-metric)') }} />}
         />
       </div>
       <div className="relative">
@@ -222,7 +223,7 @@ function BodyMeasurementsSkeleton(): React.JSX.Element {
         <SectionHeader
           title="Recent measurements"
           hint="Individual scale readings with calculated BMI"
-          icon={<Scales size={18} weight="fill" style={{ color: 'var(--color-body-metric)' }} />}
+          icon={<Scales size={18} weight="fill" style={{ color: iconColor('var(--color-body-metric)') }} />}
         />
       </div>
       <BodyMeasurementSkeletonRows />

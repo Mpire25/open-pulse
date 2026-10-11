@@ -20,7 +20,7 @@ export const CARD_HEIGHT = {
   measurementList: 'min-h-[268px]'
 } as const
 
-const pulse = 'animate-pulse bg-white/[0.055]'
+const pulse = 'animate-pulse bg-surface-tint/[0.055]'
 
 const PERIOD_LINE_Y = [72, 62, 67, 42, 50, 31, 46, 25, 36]
 
@@ -69,7 +69,7 @@ export function SkeletonRing({
           cy={size / 2}
           r={radius}
           fill="none"
-          stroke="rgb(255 255 255 / 0.055)"
+          stroke="color-mix(in srgb, var(--color-surface-tint) 5.5%, transparent)"
           strokeWidth={stroke}
         />
       </svg>
@@ -162,7 +162,7 @@ export function SkeletonChart({
             <path
               d={linePath}
               fill="none"
-              stroke="rgb(255 255 255 / 0.09)"
+              stroke="color-mix(in srgb, var(--color-surface-tint) 9%, transparent)"
               strokeWidth="3"
               strokeLinecap="round"
               strokeLinejoin="round"

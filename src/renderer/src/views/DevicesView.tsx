@@ -1,3 +1,5 @@
+import { iconColor } from '@/lib/icon-color'
+import { chartColor } from '@/lib/chart-color'
 import { useState } from 'react'
 import { motion } from 'framer-motion'
 import {
@@ -114,7 +116,7 @@ export function DevicesView({ connected, today }: DevicesViewProps): React.JSX.E
                 const Icon = row.icon
                 return (
                   <div key={row.label} className="flex items-center gap-3 border-b border-hairline py-3 last:border-0">
-                    <div className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-white/[0.04]">
+                    <div className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-surface-tint/[0.04]">
                       <Icon size={16} weight="fill" className="text-ink-dim" />
                     </div>
                     <div className="min-w-0 flex-1">
@@ -130,7 +132,7 @@ export function DevicesView({ connected, today }: DevicesViewProps): React.JSX.E
                       )}
                     </div>
                     {!pending && available.length > 0 && (
-                      <CheckCircle size={17} weight="fill" style={{ color: 'var(--color-recovery)' }} />
+                      <CheckCircle size={17} weight="fill" style={{ color: iconColor('var(--color-recovery)') }} />
                     )}
                   </div>
                 )
@@ -150,7 +152,7 @@ function DeviceHero({ device, connected }: { device: PairedDevice; connected: bo
       <div
         className="relative grid place-items-center px-6 pb-2 pt-8"
         style={{
-          background: 'radial-gradient(ellipse 65% 80% at 50% 45%, rgb(125 123 240 / 0.08), transparent 70%)'
+          background: 'radial-gradient(ellipse 65% 80% at 50% 45%, color-mix(in srgb, var(--color-accent) 8%, transparent), transparent 70%)'
         }}
       >
         <img
@@ -172,7 +174,7 @@ function DeviceHero({ device, connected }: { device: PairedDevice; connected: bo
             >
               <span
                 className="h-1.5 w-1.5 rounded-full"
-                style={{ background: connected ? 'var(--color-recovery)' : 'var(--color-ink-faint)' }}
+                style={{ background: connected ? 'var(--color-recovery-icon)' : 'var(--color-ink-faint)' }}
               />
               {connected ? 'Connected' : 'Sample device'}
             </span>
@@ -217,10 +219,10 @@ function BatteryMeter({ pct, state }: { pct: number; state?: string | null }): R
         </span>
         <span className="text-[13px] font-semibold text-ink">{Math.round(level)}%</span>
       </div>
-      <div className="h-2 overflow-hidden rounded-full" style={{ background: `color-mix(in oklab, ${color} 18%, transparent)` }}>
+      <div className="h-2 overflow-hidden rounded-full" style={{ background: `color-mix(in oklab, ${chartColor(color)} 18%, transparent)` }}>
         <div
           className="h-full rounded-full transition-[width] duration-700 ease-out motion-reduce:transition-none"
-          style={{ width: `${level}%`, background: color }}
+          style={{ width: `${level}%`, background: chartColor(color) }}
         />
       </div>
     </div>
@@ -245,7 +247,7 @@ function Capabilities({ features }: { features: string[] }): React.JSX.Element {
           {features.map((f) => (
             <span
               key={f}
-              className="rounded-full border border-hairline bg-white/[0.03] px-2.5 py-1 text-[10.5px] font-medium tracking-wide text-ink-dim"
+              className="rounded-full border border-hairline bg-surface-tint/[0.03] px-2.5 py-1 text-[10.5px] font-medium tracking-wide text-ink-dim"
             >
               {titleCase(f)}
             </span>

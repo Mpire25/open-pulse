@@ -1,5 +1,6 @@
 import { normalizeDashboardLayouts, validateDashboardLayout, type DashboardLayouts, type DashboardSurface } from '../shared/dashboard'
 import { app, safeStorage } from 'electron'
+import { normalizeAppearance, type AppearanceMode } from '../shared/appearance'
 import { join } from 'node:path'
 import { existsSync, readFileSync, writeFileSync, renameSync } from 'node:fs'
 import {
@@ -24,6 +25,7 @@ interface StoreFile {
 }
 
 const DEFAULTS: AppSettings = {
+  appearance: 'dark',
   menuBarEnabled: true,
   responseNotificationsEnabled: false,
   responseNotificationSound: false,
@@ -75,6 +77,7 @@ function normalizeAssistant(raw?: Partial<AssistantSettings>): AssistantSettings
 function normalizeSettings(raw?: Partial<AppSettings>): AppSettings {
   const chatRetention = raw?.chatRetention as ChatRetention | undefined
   return {
+    appearance: normalizeAppearance(raw?.appearance),
     menuBarEnabled: typeof raw?.menuBarEnabled === 'boolean' ? raw.menuBarEnabled : DEFAULTS.menuBarEnabled,
     responseNotificationsEnabled: raw?.responseNotificationsEnabled === true,
     responseNotificationSound: raw?.responseNotificationSound === true,
@@ -118,6 +121,19 @@ function persist(store: StoreFile = load()): void {
   const temporary = `${filePath()}.tmp`
   writeFileSync(temporary, JSON.stringify(store, null, 2), { encoding: 'utf8', mode: 0o600 })
   renameSync(temporary, filePath())
+}
+
+/** Read the desktop preference at startup without opening credential storage. */
+export function getAppearancePreference(): AppearanceMode {
+  return load().settings.appearance
+}
+
+/** Appearance never reads credentials; publish only after the atomic save succeeds. */
+export function updateAppearancePreference(appearance: AppearanceMode): void {
+  const store = load()
+  const settings = { ...store.settings, appearance }
+  persist({ ...store, settings })
+  store.settings = settings
 }
 
 /** Read the desktop preference at startup without opening credential storage. */

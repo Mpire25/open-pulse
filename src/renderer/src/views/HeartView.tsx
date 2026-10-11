@@ -1,3 +1,4 @@
+import { iconColor } from '@/lib/icon-color'
 import { motion } from 'framer-motion'
 import { Heartbeat } from '@phosphor-icons/react'
 import { DrillHeader, InteractivePanel } from '@/components/Panel'
@@ -49,7 +50,7 @@ export function HeartView({ date, onOpenMetric }: HeartViewProps): React.JSX.Ele
           <DrillHeader
             title="Heart rate"
             hint="Across the day"
-            icon={<Heartbeat size={18} weight="fill" style={{ color: 'var(--color-heart)' }} />}
+            icon={<Heartbeat size={18} weight="fill" style={{ color: iconColor('var(--color-heart)') }} />}
             action={
               intraday.isPending ? (
                 <SkeletonText className="h-5 w-20" />
@@ -121,7 +122,7 @@ function VitalCard({
         <DrillHeader
           title={def.label}
           hint={def.hint}
-          icon={<Icon size={18} weight="fill" style={{ color: def.color }} />}
+          icon={<Icon size={18} weight="fill" style={{ color: iconColor(def.color) }} />}
           action={
             <div className="flex w-[140px] shrink-0 justify-end">
               {pending ? (

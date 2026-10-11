@@ -1,3 +1,5 @@
+import { iconColor } from '@/lib/icon-color'
+import { chartColor } from '@/lib/chart-color'
 import { motion } from 'framer-motion'
 import { Barbell, Footprints } from '@phosphor-icons/react'
 import { DrillHeader, DrillPanel, InteractivePanel, Panel } from '@/components/Panel'
@@ -69,7 +71,7 @@ function ActivityGoalRing({
       onClick={pending ? undefined : () => onOpen(metricKey, 'D')}
       disabled={pending}
       aria-busy={pending}
-      className="group -m-2 flex min-w-0 flex-col items-center gap-2.5 rounded-2xl p-4 outline-none transition-[background-color,box-shadow,transform] duration-200 hover:bg-white/[0.05] hover:shadow-[inset_0_0_0_1px_rgb(255_255_255/0.07)] focus-visible:bg-white/[0.05] focus-visible:ring-2 focus-visible:ring-accent/60 active:scale-[0.98]"
+      className="group -m-2 flex min-w-0 flex-col items-center gap-2.5 rounded-2xl p-4 outline-none transition-[background-color,box-shadow,transform] duration-200 hover:bg-surface-tint/[0.05] hover:shadow-[inset_0_0_0_1px_var(--color-hairline)] focus-visible:bg-surface-tint/[0.05] focus-visible:ring-2 focus-visible:ring-focus active:scale-[0.98]"
       aria-label={`Open ${def.label} details`}
     >
       {pending ? (
@@ -124,7 +126,7 @@ export function ActivityView({ date, goals, onOpenMetric, onOpenWorkout, onOpenW
           <DrillHeader
             title={def.label}
             hint="Last 7 days"
-            icon={<span className="h-2 w-2 rounded-full" style={{ background: def.color }} />}
+            icon={<span className="h-2 w-2 rounded-full" style={{ background: chartColor(def.color) }} />}
           />
           <div className="mt-auto">
             {series.isMetricPending(key) ? (
@@ -221,7 +223,7 @@ export function ActivityView({ date, goals, onOpenMetric, onOpenWorkout, onOpenW
             <DrillHeader
               title="Hourly steps"
               hint="When did you move?"
-              icon={<Footprints size={18} weight="fill" style={{ color: 'var(--color-activity)' }} />}
+              icon={<Footprints size={18} weight="fill" style={{ color: iconColor('var(--color-activity)') }} />}
             />
             {intraday.isPending ? (
               <SkeletonChart height={180} columns={24} tickEvery={6} tickWidth={40} />
@@ -272,7 +274,7 @@ export function ActivityView({ date, goals, onOpenMetric, onOpenWorkout, onOpenW
                     'No sessions logged'
                   )
                 }
-                icon={<Barbell size={18} weight="fill" style={{ color: 'var(--color-recovery)' }} />}
+                icon={<Barbell size={18} weight="fill" style={{ color: iconColor('var(--color-recovery)') }} />}
               />
             </div>
             {workouts.isPending ? (

@@ -1,4 +1,5 @@
 import type { Workout } from '@shared/types'
+import { chartColor } from './chart-color'
 import { listDates } from './metrics'
 
 export interface WorkoutDaySummary {
@@ -72,7 +73,7 @@ const WORKOUT_CATEGORY_LABELS: Record<WorkoutColorKey, string> = {
 export function workoutTone(workout: Workout | string): WorkoutTone {
   const key = workoutColorKey(workoutText(workout))
   const color = WORKOUT_COLORS[key]
-  return { key, color, soft: `color-mix(in oklab, ${color} 15%, transparent)` }
+  return { key, color, soft: `color-mix(in oklab, ${chartColor(color)} 15%, transparent)` }
 }
 
 export function workoutCategoryLabel(workout: Workout | string): string {

@@ -1,6 +1,7 @@
 import type { DashboardLayout, DashboardLayouts, DashboardSurface, DashboardWidget } from '../shared/dashboard'
 import type { MenuBarDestination } from '../shared/menu-bar'
 import { contextBridge, ipcRenderer } from 'electron'
+import type { AppearanceMode, AppearanceState } from '../shared/appearance'
 import { healthWireArgs, unwrapHealthResult } from '../shared/health-ipc'
 import type {
   ActivityIntradayMetric,
@@ -75,6 +76,15 @@ ipcRenderer.on('app:panel-visibility', (_event, visible: boolean) => {
 })
 
 const api = {
+  appearance: {
+    get: (): Promise<AppearanceState> => ipcRenderer.invoke('appearance:get'),
+    set: (mode: AppearanceMode): Promise<AppearanceState> => ipcRenderer.invoke('appearance:set', mode),
+    onChanged: (callback: (state: AppearanceState) => void): (() => void) => {
+      const listener = (_event: unknown, state: AppearanceState): void => callback(state)
+      ipcRenderer.on('appearance:changed', listener)
+      return () => ipcRenderer.removeListener('appearance:changed', listener)
+    }
+  },
   app: {
     platform: process.platform,
     onOpenChat: (callback: (chatId: string) => void): (() => void) => {

@@ -26,17 +26,18 @@ export function DeltaChip({
 }: DeltaChipProps): React.JSX.Element | null {
   if (delta == null || Math.abs(delta) < minMagnitude) return null
   const good = upIsGood == null ? null : delta > 0 ? upIsGood : !upIsGood
+  const iconClass = good == null ? undefined : good ? 'text-recovery-icon' : 'text-heart-icon'
   return (
     <span
       className={cn(
         'inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10.5px] font-semibold leading-none',
-        good == null && 'bg-white/[0.06] text-ink-dim',
+        good == null && 'bg-surface-tint/[0.06] text-ink-dim',
         good === true && 'bg-recovery-soft text-recovery',
         good === false && 'bg-heart-soft text-heart',
         className
       )}
     >
-      {delta > 0 ? <TrendUp size={11} weight="bold" /> : <TrendDown size={11} weight="bold" />}
+      {delta > 0 ? <TrendUp size={11} weight="bold" className={iconClass} /> : <TrendDown size={11} weight="bold" className={iconClass} />}
       {format(Math.abs(delta))}
     </span>
   )

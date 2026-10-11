@@ -108,7 +108,7 @@ export function AssistantView({
       <div className="mx-auto flex w-full max-w-[1060px] items-center justify-between px-8 pb-2 pt-1.5">
         <div className="flex items-center gap-2.5">
           <div className="grid h-6 w-6 place-items-center rounded-lg bg-accent-soft">
-            <Sparkle size={14} weight="fill" className="text-accent" />
+            <Sparkle size={14} weight="fill" className="text-accent-icon" />
           </div>
           <span className="display text-[15px] font-bold">Assistant</span>
         </div>
@@ -122,7 +122,7 @@ export function AssistantView({
             disabled={chat.loading}
             aria-label="New chat"
             title="New chat"
-            className="grid h-7 w-7 place-items-center rounded-lg text-ink-dim transition-colors hover:bg-white/[0.06] hover:text-ink disabled:opacity-40"
+            className="grid h-7 w-7 place-items-center rounded-lg text-ink-dim transition-colors hover:bg-surface-tint/[0.06] hover:text-ink disabled:opacity-40"
           >
             <Plus size={15} />
           </button>
@@ -137,8 +137,8 @@ export function AssistantView({
             aria-haspopup="true"
             title="History"
             className={cn(
-              'grid h-7 w-7 place-items-center rounded-lg text-ink-dim transition-colors hover:bg-white/[0.06] hover:text-ink',
-              historyOpen && 'bg-white/[0.07] text-ink'
+              'grid h-7 w-7 place-items-center rounded-lg text-ink-dim transition-colors hover:bg-surface-tint/[0.06] hover:text-ink',
+              historyOpen && 'bg-surface-tint/[0.07] text-ink'
             )}
           >
             <ClockCounterClockwise size={15} />
@@ -178,7 +178,7 @@ export function AssistantView({
             onBlurCapture={(event) => {
               if (!event.currentTarget.contains(event.relatedTarget)) scheduleClose()
             }}
-            className="absolute bottom-3 right-3 top-1.5 z-30 flex w-[300px] flex-col overflow-hidden rounded-[22px] border border-hairline bg-panel/75 shadow-[0_20px_50px_-30px_rgb(0_0_0/0.8),inset_0_1px_0_rgb(255_255_255/0.05)] backdrop-blur-2xl"
+            className="absolute bottom-3 right-3 top-1.5 z-30 flex w-[300px] flex-col overflow-hidden rounded-[22px] border border-hairline bg-panel/75 shadow-(--shadow-assistant) backdrop-blur-2xl"
           >
             <div className="flex h-10 shrink-0 items-center justify-between border-b border-hairline pl-4 pr-2">
               <span className="display text-[13px] font-semibold text-ink">Chats</span>
@@ -191,7 +191,7 @@ export function AssistantView({
                 disabled={chat.loading}
                 aria-label="New chat"
                 title="New chat"
-                className="grid h-7 w-7 place-items-center rounded-lg text-ink-dim transition-colors hover:bg-white/[0.06] hover:text-ink disabled:opacity-40"
+                className="grid h-7 w-7 place-items-center rounded-lg text-ink-dim transition-colors hover:bg-surface-tint/[0.06] hover:text-ink disabled:opacity-40"
               >
                 <Plus size={15} />
               </button>

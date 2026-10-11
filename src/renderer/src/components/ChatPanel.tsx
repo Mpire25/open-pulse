@@ -47,25 +47,25 @@ const SUGGESTIONS: Array<{ text: string; icon: Icon; iconClass: string; tintClas
   {
     text: 'How did I sleep this week compared to last night?',
     icon: Moon,
-    iconClass: 'text-sleep',
+    iconClass: 'text-sleep-icon',
     tintClass: 'bg-sleep-soft'
   },
   {
     text: 'Is my resting heart rate trending up or down?',
     icon: Heartbeat,
-    iconClass: 'text-heart',
+    iconClass: 'text-heart-icon',
     tintClass: 'bg-heart-soft'
   },
   {
     text: 'How active have I been the last two weeks?',
     icon: PersonSimpleRun,
-    iconClass: 'text-activity',
+    iconClass: 'text-activity-icon',
     tintClass: 'bg-activity-soft'
   },
   {
     text: 'Any anomalies in my HRV I should watch?',
     icon: Pulse,
-    iconClass: 'text-recovery',
+    iconClass: 'text-recovery-icon',
     tintClass: 'bg-recovery-soft'
   }
 ]
@@ -319,7 +319,7 @@ export function ChatPanel({
       </div>
 
       <div className={cn('pb-4 pt-1', compact ? 'px-3' : 'mx-auto w-full max-w-[820px] px-6')}>
-        <div className="flex items-end gap-2 rounded-[18px] border border-hairline bg-panel/80 p-2 pl-4 shadow-[0_12px_40px_-24px_rgb(0_0_0/0.9)] backdrop-blur-xl transition-colors focus-within:border-hairline-strong">
+        <div className="flex items-end gap-2 rounded-[18px] border border-hairline bg-panel/80 p-2 pl-4 shadow-(--shadow-composer) backdrop-blur-xl transition-colors focus-within:border-hairline-strong">
           <textarea
             ref={inputRef}
             value={draft}
@@ -467,7 +467,7 @@ const Bubble = memo(function Bubble({
               onClick={() => setEditedText(turn.text)}
               aria-label="Edit message"
               title="Edit message"
-              className="grid size-7 place-items-center rounded-lg text-ink-faint transition-colors hover:bg-white/[0.06] hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+              className="grid size-7 place-items-center rounded-lg text-ink-faint transition-colors hover:bg-surface-tint/[0.06] hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-faint"
             >
               <PencilSimple size={14} />
             </button>
@@ -508,8 +508,8 @@ function CopyMessageButton({ text }: { text: string }): React.JSX.Element {
       onClick={() => void copy()}
       className={cn(
         'grid size-7 place-items-center rounded-lg transition-colors',
-        'hover:bg-white/[0.06] hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50',
-        copied ? 'text-accent' : 'text-ink-faint'
+        'hover:bg-surface-tint/[0.06] hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-faint',
+        copied ? 'text-accent-icon' : 'text-ink-faint'
       )}
       aria-label={copied ? 'Message copied' : 'Copy message'}
       title={copied ? 'Copied' : 'Copy message'}
@@ -523,8 +523,8 @@ function ToolThinking({ label }: { label: string }): React.JSX.Element {
   return (
     <div className="flex items-center gap-2.5 text-[13px]">
       <span className="relative flex size-2 shrink-0">
-        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-accent opacity-50" />
-        <span className="relative inline-flex size-2 rounded-full bg-accent/90" />
+        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-accent-icon opacity-50" />
+        <span className="relative inline-flex size-2 rounded-full bg-accent-icon/90" />
       </span>
       <AnimatePresence mode="wait" initial={false}>
         <motion.span
@@ -549,7 +549,7 @@ function EmptyState({ compact, onPick }: { compact?: boolean; onPick: (s: string
         initial={{ opacity: 0, scale: 0.9 }}
         animate={{ opacity: 1, scale: 1 }}
         transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
-        className="grid h-12 w-12 place-items-center rounded-2xl bg-gradient-to-br from-accent to-[#a5a3ff] shadow-[0_10px_30px_-10px_rgb(125_123_240/0.7),inset_0_1px_0_rgb(255_255_255/0.3)]"
+        className="grid h-12 w-12 place-items-center rounded-2xl bg-gradient-to-br from-accent to-accent-highlight shadow-(--shadow-assistant-logo)"
       >
         <Sparkle size={24} weight="fill" className="text-white" />
       </motion.div>
@@ -568,7 +568,7 @@ function EmptyState({ compact, onPick }: { compact?: boolean; onPick: (s: string
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.1 + i * 0.06, duration: 0.4 }}
               onClick={() => onPick(suggestion.text)}
-              className="group flex items-start gap-3 rounded-2xl border border-hairline bg-white/[0.03] px-3.5 py-3 text-left text-[12.5px] leading-snug text-ink-dim transition-all duration-200 hover:-translate-y-px hover:border-hairline-strong hover:bg-white/[0.06] hover:text-ink"
+              className="group flex items-start gap-3 rounded-2xl border border-hairline bg-surface-tint/[0.03] px-3.5 py-3 text-left text-[12.5px] leading-snug text-ink-dim transition-all duration-200 hover:-translate-y-px hover:border-hairline-strong hover:bg-surface-tint/[0.06] hover:text-ink"
             >
               <span
                 className={cn(
@@ -592,7 +592,7 @@ function SignInPrompt({ onOpenSettings, compact }: { onOpenSettings: () => void;
     <div className={cn('grid h-full place-items-center', compact ? 'px-5' : 'px-8')}>
       <div className="max-w-sm text-center">
         <div className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-accent-soft">
-          <Sparkle size={24} weight="fill" className="text-accent" />
+          <Sparkle size={24} weight="fill" className="text-accent-icon" />
         </div>
         <h2 className="display mt-5 text-[17px] font-bold text-ink">Connect ChatGPT</h2>
         <p className="mt-2 text-[13px] leading-relaxed text-ink-dim">

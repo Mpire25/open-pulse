@@ -6,8 +6,10 @@ import { readFileSync } from 'node:fs'
 import menuBarIcon from '../../build/menu-barTemplate.png?asset'
 import menuBarIconRetina from '../../build/menu-barTemplate@2x.png?asset'
 import { getMenuBarEnabled } from './store'
+import { getAppearanceState, initializeAppearance } from './appearance'
+import { APPEARANCE_CANVAS } from '../shared/appearance'
 import { installWindowActivation } from './window-activation'
-import { getCachedChatTitle, registerIpc, registerTrustedRenderer } from './ipc'
+import { broadcastAppearance, getCachedChatTitle, registerIpc, registerTrustedRenderer } from './ipc'
 import { createResponseNotifications } from './response-notifications'
 import { configureAssistantTrace } from './assistant-trace'
 import { startHealthBackgroundSync } from './health-sync-scheduler'
@@ -84,7 +86,7 @@ function createWindow(target: RendererTarget, panel = false): BrowserWindow {
     backgroundColor: '#00000000',
     vibrancy: 'sidebar',
     visualEffectState: 'active',
-    ...(panel ? { type: 'panel', width: 452, height: 650, minWidth: 0, minHeight: 0, frame: false, resizable: false, maximizable: false, minimizable: false, fullscreenable: false, skipTaskbar: true, alwaysOnTop: true, vibrancy: undefined, backgroundColor: '#0e0f12' } : {}),
+    ...(panel ? { type: 'panel', width: 452, height: 650, minWidth: 0, minHeight: 0, frame: false, resizable: false, maximizable: false, minimizable: false, fullscreenable: false, skipTaskbar: true, alwaysOnTop: true, vibrancy: undefined, backgroundColor: APPEARANCE_CANVAS[getAppearanceState().resolved] } : {}),
     webPreferences: {
       preload: join(import.meta.dirname, '../preload/index.mjs'),
       // electron-vite emits this preload as ESM. Electron's sandboxed preload
@@ -297,6 +299,11 @@ installWindowActivation(app, () => mainWindow ?? createWindow(rendererTarget()))
 
 app.whenReady().then(() => {
   const target = rendererTarget()
+  const stopAppearance = initializeAppearance((state) => {
+    if (menuPanel && !menuPanel.isDestroyed()) menuPanel.setBackgroundColor(APPEARANCE_CANVAS[state.resolved])
+    broadcastAppearance(state)
+  })
+  app.once('before-quit', stopAppearance)
   configureAssistantTrace(join(app.getPath('userData'), 'assistant-trace.jsonl'))
   applyContentSecurityPolicy(target)
   registerIpc({

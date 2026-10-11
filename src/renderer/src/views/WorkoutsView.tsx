@@ -1,3 +1,4 @@
+import { chartColor } from '@/lib/chart-color'
 import { useMemo } from 'react'
 import { motion } from 'framer-motion'
 import {
@@ -90,14 +91,14 @@ export function WorkoutsView({
         <button
           type="button"
           onClick={onBack}
-          className="-ml-1.5 mb-2 flex items-center gap-1.5 rounded-lg px-1.5 py-1 text-[12.5px] font-medium text-ink-dim transition-colors hover:bg-white/[0.05] hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+          className="-ml-1.5 mb-2 flex items-center gap-1.5 rounded-lg px-1.5 py-1 text-[12.5px] font-medium text-ink-dim transition-colors hover:bg-surface-tint/[0.05] hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-faint"
         >
           <ArrowLeft size={13} weight="bold" />
           Back
         </button>
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div className="flex min-w-0 items-center gap-3">
-            <div className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-recovery-soft text-recovery">
+            <div className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-recovery-soft text-recovery-icon">
               <Barbell size={22} weight="fill" />
             </div>
             <div className="min-w-0">
@@ -137,7 +138,7 @@ export function WorkoutsView({
                   <SectionHeader
                     title="Training rhythm"
                     hint="Active minutes by workout type"
-                    icon={<CalendarCheck size={18} weight="fill" className="text-recovery" />}
+                    icon={<CalendarCheck size={18} weight="fill" className="text-recovery-icon" />}
                   />
                   <div className="mt-auto">
                     <StackedColumnChart
@@ -174,7 +175,7 @@ export function WorkoutsView({
                 <SectionHeader
                   title={range === 'D' ? 'Sessions' : 'Workout history'}
                   hint={sessions.length ? `${sessions.length} in this range` : 'No sessions in this range'}
-                  icon={<Barbell size={18} weight="fill" className="text-recovery" />}
+                  icon={<Barbell size={18} weight="fill" className="text-recovery-icon" />}
                 />
               </div>
               {groups.length > 0 ? (
@@ -274,7 +275,7 @@ function SummaryStat({
 }): React.JSX.Element {
   return (
     <div className="flex min-w-0 flex-col justify-center px-5 py-4">
-      <div className="flex items-center gap-2 text-recovery">
+      <div className="flex items-center gap-2 text-recovery-icon">
         {icon}
         <span className="text-[11px] font-medium text-ink-faint">{label}</span>
       </div>
@@ -295,17 +296,17 @@ function TrainingSplit({
       <SectionHeader
         title="Training split"
         hint="Share of active time"
-        icon={<ChartDonut size={18} weight="fill" className="text-recovery" />}
+        icon={<ChartDonut size={18} weight="fill" className="text-recovery-icon" />}
       />
       {types.length > 0 ? (
         fullWidth ? (
           <>
-            <div className="mt-6 flex h-2.5 overflow-hidden rounded-full bg-white/[0.04]">
+            <div className="mt-6 flex h-2.5 overflow-hidden rounded-full bg-surface-tint/[0.04]">
               {types.map((type) => (
                 <span
                   key={type.label}
                   className="h-full first:rounded-l-full last:rounded-r-full"
-                  style={{ width: `${type.share}%`, background: workoutTone(type.label).color }}
+                  style={{ width: `${type.share}%`, background: chartColor(workoutTone(type.label).color) }}
                 />
               ))}
             </div>
@@ -342,11 +343,11 @@ function TrainingSplitPie({ types }: { types: DisplayedWorkoutType[] }): React.J
       viewBox="0 0 120 120"
       role="img"
       aria-label={label}
-      className="h-36 w-36 shrink-0 drop-shadow-[0_18px_24px_rgb(0_0_0/0.22)]"
+      className="h-36 w-36 shrink-0 drop-shadow-(--shadow-workout)"
     >
-      <circle cx="60" cy="60" r="51" fill="rgb(255 255 255 / 0.035)" />
+      <circle cx="60" cy="60" r="51" fill="color-mix(in srgb, var(--color-surface-tint) 3.5%, transparent)" />
       {slices.map(({ type, start: sliceStart, end }) => {
-        const color = workoutTone(type.label).color
+        const color = chartColor(workoutTone(type.label).color)
         return type.share >= 99.999 ? (
           <circle
             key={type.label}
@@ -389,7 +390,7 @@ function TrainingSplitLegend({
         <div key={type.label} className="flex min-w-0 items-center gap-3">
           <span
             className="h-2 w-2 shrink-0 rounded-full"
-            style={{ background: workoutTone(type.label).color }}
+            style={{ background: chartColor(workoutTone(type.label).color) }}
           />
           <span className="min-w-0 flex-1 truncate text-[12.5px] font-medium text-ink-dim">{type.label}</span>
           <span className="shrink-0 font-mono text-[11.5px] text-ink">{formatMinutes(type.durationMin)}</span>
@@ -421,7 +422,7 @@ function WorkoutRangeTabs({
   onChange: (range: MetricRange) => void
 }): React.JSX.Element {
   return (
-    <div className="flex rounded-xl border border-hairline bg-white/[0.03] p-0.5">
+    <div className="flex rounded-xl border border-hairline bg-surface-tint/[0.03] p-0.5">
       {RANGES.map((candidate) => (
         <button
           key={candidate.id}
@@ -435,7 +436,7 @@ function WorkoutRangeTabs({
           {range === candidate.id && (
             <motion.span
               layoutId="workout-range-active"
-              className="absolute inset-0 rounded-[10px] border border-hairline bg-white/[0.08]"
+              className="absolute inset-0 rounded-[10px] border border-hairline bg-surface-tint/[0.08]"
               transition={{ type: 'spring', stiffness: 400, damping: 34 }}
             />
           )}
@@ -465,7 +466,7 @@ function WorkoutsSkeleton({ range }: { range: MetricRange }): React.JSX.Element 
             <SectionHeader
               title="Training rhythm"
               hint="Active minutes by workout type"
-              icon={<CalendarCheck size={18} weight="fill" className="text-recovery" />}
+              icon={<CalendarCheck size={18} weight="fill" className="text-recovery-icon" />}
             />
             <SkeletonChart height={190} columns={columns} />
           </Panel>
@@ -479,7 +480,7 @@ function WorkoutsSkeleton({ range }: { range: MetricRange }): React.JSX.Element 
           <SectionHeader
             title="Training split"
             hint="Share of active time"
-            icon={<ChartDonut size={18} weight="fill" className="text-recovery" />}
+            icon={<ChartDonut size={18} weight="fill" className="text-recovery-icon" />}
           />
           {range === 'D' ? (
             <>
@@ -507,7 +508,7 @@ function WorkoutsSkeleton({ range }: { range: MetricRange }): React.JSX.Element 
           <SectionHeader
             title={range === 'D' ? 'Sessions' : 'Workout history'}
             hint={<SkeletonText className="w-28" />}
-            icon={<Barbell size={18} weight="fill" className="text-recovery" />}
+            icon={<Barbell size={18} weight="fill" className="text-recovery-icon" />}
           />
         </div>
         <div className="px-3 py-3">

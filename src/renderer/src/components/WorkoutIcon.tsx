@@ -1,3 +1,4 @@
+import { iconColor } from '@/lib/icon-color'
 import {
   Barbell,
   Bicycle,
@@ -40,5 +41,5 @@ interface WorkoutIconProps extends Omit<IconProps, 'color'> {
 export function WorkoutIcon({ color, weight = 'fill', workout, ...props }: WorkoutIconProps): React.JSX.Element {
   const tone = workoutTone(workout)
   const Icon = WORKOUT_ICONS[tone.key]
-  return <Icon {...props} color={color ?? tone.color} weight={weight} />
+  return <Icon {...props} color={iconColor(color ?? tone.color)} weight={weight} />
 }

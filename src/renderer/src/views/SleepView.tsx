@@ -1,3 +1,4 @@
+import { iconColor } from '@/lib/icon-color'
 import { selectedSleepSession, sleepSessionId } from '@shared/sleep'
 import { SleepSessionSelector } from '@/components/SleepSessionSelector'
 import { motion } from 'framer-motion'
@@ -64,7 +65,7 @@ export function SleepView({ date, goals, sessionId, onSelectSession, onOpenMetri
             type="button"
             onClick={sleepDays.isPending ? undefined : () => onOpenMetric('sleepMinutes', 'D')}
             disabled={sleepDays.isPending}
-            className="group/drill relative flex min-w-0 flex-col items-center justify-center gap-3 rounded-[18px] p-4 transition-colors hover:bg-white/[0.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+            className="group/drill relative flex min-w-0 flex-col items-center justify-center gap-3 rounded-[18px] p-4 transition-colors hover:bg-surface-tint/[0.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-faint"
             aria-label="Open sleep duration details"
           >
             {!sleepDays.isPending && (
@@ -108,7 +109,7 @@ export function SleepView({ date, goals, sessionId, onSelectSession, onOpenMetri
               type="button"
               onClick={sleepDays.isPending ? undefined : () => onOpenStages(night ? sleepSessionId(night) : undefined)}
               disabled={sleepDays.isPending}
-              className="group/drill flex min-w-0 flex-col justify-center rounded-[18px] p-4 text-left transition-colors hover:bg-white/[0.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+              className="group/drill flex min-w-0 flex-col justify-center rounded-[18px] p-4 text-left transition-colors hover:bg-surface-tint/[0.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-faint"
               aria-label="Open sleep stages details"
             >
               <DrillHeader
@@ -122,7 +123,7 @@ export function SleepView({ date, goals, sessionId, onSelectSession, onOpenMetri
                     'No stages recorded'
                   )
                 }
-                icon={<Moon size={18} weight="fill" style={{ color: 'var(--color-sleep)' }} />}
+                icon={<Moon size={18} weight="fill" style={{ color: iconColor('var(--color-sleep)') }} />}
               />
               <div className="mt-4">
                 <SleepStages key={night ? sleepSessionId(night) : "empty"} night={night} compact loading={sleepDays.isPending} />
@@ -143,7 +144,7 @@ export function SleepView({ date, goals, sessionId, onSelectSession, onOpenMetri
               <DrillHeader
                 title="Duration"
                 hint="Daily totals · Last 7 days"
-                icon={<Moon size={18} weight="fill" style={{ color: 'var(--color-sleep)' }} />}
+                icon={<Moon size={18} weight="fill" style={{ color: iconColor('var(--color-sleep)') }} />}
               />
               <div className="mt-auto">
                 {sleepDays.isPending ? (
@@ -177,7 +178,7 @@ export function SleepView({ date, goals, sessionId, onSelectSession, onOpenMetri
               <DrillHeader
                 title="Efficiency"
                 hint="Time asleep across recorded sleep periods"
-                icon={<Timer size={18} weight="fill" style={{ color: 'var(--color-sleep)' }} />}
+                icon={<Timer size={18} weight="fill" style={{ color: iconColor('var(--color-sleep)') }} />}
               />
               <div className="mt-auto">
                 {sleepDays.isPending ? (

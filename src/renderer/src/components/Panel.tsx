@@ -10,7 +10,7 @@ export const Panel = forwardRef<HTMLDivElement, HTMLAttributes<HTMLDivElement>>(
     <div
       ref={ref}
       className={cn(
-        'rounded-[22px] border border-hairline bg-panel shadow-[0_20px_50px_-30px_rgb(0_0_0/0.8)]',
+        'rounded-[22px] border border-hairline bg-panel shadow-(--shadow-panel)',
         className
       )}
       {...props}
@@ -32,7 +32,7 @@ export const InteractivePanel = forwardRef<HTMLDivElement, InteractivePanelProps
       role="button"
       tabIndex={0}
       className={cn(
-        'group/drill cursor-pointer transition-[background-color,border-color,box-shadow,transform] hover:border-hairline-strong hover:bg-panel-2/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 active:translate-y-px',
+        'group/drill cursor-pointer transition-[background-color,border-color,box-shadow,transform] hover:border-hairline-strong hover:bg-panel-2/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-faint active:translate-y-px',
         className
       )}
       onClick={onOpen}
@@ -70,7 +70,7 @@ export const DrillPanel = forwardRef<HTMLDivElement, DrillPanelProps>(
         type="button"
         aria-label={label}
         onClick={onOpen}
-        className="absolute inset-0 rounded-[22px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+        className="absolute inset-0 rounded-[22px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-faint"
       />
       <div className={cn('pointer-events-none relative z-10', contentClassName)}>{children}</div>
     </Panel>
@@ -131,7 +131,7 @@ export function DrillHeader({ title, hint, icon, action, onOpen }: DrillHeaderPr
     <button
       type="button"
       onClick={onOpen}
-      className="group/drill -mx-2 -my-1 flex w-[calc(100%+1rem)] items-center justify-between gap-3 rounded-xl px-2 py-1 text-left transition-colors hover:bg-white/[0.04]"
+      className="group/drill -mx-2 -my-1 flex w-[calc(100%+1rem)] items-center justify-between gap-3 rounded-xl px-2 py-1 text-left transition-colors hover:bg-surface-tint/[0.04]"
     >
       {content}
     </button>

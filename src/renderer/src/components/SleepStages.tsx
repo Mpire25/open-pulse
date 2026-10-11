@@ -110,7 +110,7 @@ export function SleepStages({ night, compact = false, loading = false }: SleepSt
           {ROW_ORDER.map((_, r) => (
             <div
               key={r}
-              className="absolute inset-x-0 rounded-full bg-white/[0.03]"
+              className="absolute inset-x-0 rounded-full bg-surface-tint/[0.03]"
               style={{ top: r * (rowHeight + rowGap), height: rowHeight }}
             />
           ))}
