@@ -689,8 +689,7 @@ body {
 
 /* Fade messages into the surrounding surface without covering them or
    intercepting input. Scroll-driven animations grow each edge over the first
-   12px of scroll away from that end, so both ends stay clear at rest. The size
-   matches CHAT_TURN_TOP_INSET, keeping a newly sent message below the fade. */
+   24px of scroll away from that end, so both ends stay clear at rest. */
 @property --chat-top-fade {
   syntax: '<length>';
   inherits: false;
@@ -716,8 +715,8 @@ body {
     chat-bottom-fade linear both;
   animation-timeline: scroll(self), scroll(self);
   animation-range:
-    0px 12px,
-    calc(100% - 12px) 100%;
+    0px 24px,
+    calc(100% - 24px) 100%;
 }
 
 @keyframes chat-top-fade {
@@ -725,13 +724,13 @@ body {
     --chat-top-fade: 0px;
   }
   to {
-    --chat-top-fade: 12px;
+    --chat-top-fade: 24px;
   }
 }
 
 @keyframes chat-bottom-fade {
   from {
-    --chat-bottom-fade: 12px;
+    --chat-bottom-fade: 24px;
   }
   to {
     --chat-bottom-fade: 0px;
