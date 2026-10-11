@@ -108,64 +108,64 @@
   --color-scrim: rgb(24 30 48 / 0.3);
   --color-panel-hover: #e2e5ef;
   --color-accent: #67529b;
-  --color-accent-soft: rgb(133 116 193 / 0.12);
+  --color-accent-soft: rgb(147 129 223 / 0.12);
   --color-accent-hover: #564187;
   --color-accent-highlight: #564187;
   --color-danger: #a5453a;
-  --color-danger-mark: #cc6357;
+  --color-danger-mark: #df7061;
   --color-success: #2c6e51;
-  --color-success-fill: #46866c;
+  --color-success-fill: #36a17f;
 
   /* Clear metric hues for pale surfaces. Foregrounds stay deeper than
      rings, plots, and bars so small labels remain easy to read. */
   --color-activity: #865e23;
-  --color-activity-mark: #b1792b;
-  --color-activity-soft: rgb(177 121 43 / 0.12);
+  --color-activity-mark: #c48a30;
+  --color-activity-soft: rgb(196 138 48 / 0.12);
   --color-heart: #a5453a;
-  --color-heart-mark: #cc6357;
-  --color-heart-soft: rgb(204 99 87 / 0.12);
+  --color-heart-mark: #df7061;
+  --color-heart-soft: rgb(223 112 97 / 0.12);
   --color-recovery: #2c6e51;
-  --color-recovery-mark: #46866c;
-  --color-recovery-soft: rgb(70 134 108 / 0.12);
+  --color-recovery-mark: #36a17f;
+  --color-recovery-soft: rgb(54 161 127 / 0.12);
   --color-sleep: #67529b;
-  --color-sleep-mark: #8574c1;
-  --color-sleep-soft: rgb(133 116 193 / 0.12);
+  --color-sleep-mark: #9381df;
+  --color-sleep-soft: rgb(147 129 223 / 0.12);
   --color-hydration: #346a8b;
-  --color-hydration-mark: #4788ad;
-  --color-hydration-soft: rgb(71 136 173 / 0.12);
+  --color-hydration-mark: #429ecc;
+  --color-hydration-soft: rgb(66 158 204 / 0.12);
   --color-body-metric: #86527a;
-  --color-body-metric-mark: #aa699e;
-  --color-body-metric-soft: rgb(170 105 158 / 0.12);
+  --color-body-metric-mark: #c26eb4;
+  --color-body-metric-soft: rgb(194 110 180 / 0.12);
 
   /* Saturated icon shades stay visibly colored at 13–18px on white and tinted
      surfaces. Text keeps the deeper foregrounds above; charts keep their fills. */
-  --color-activity-icon: #bc7a16;
-  --color-heart-icon: #d55a48;
-  --color-recovery-icon: #13966b;
-  --color-sleep-icon: #7965d4;
-  --color-hydration-icon: #208cbd;
-  --color-body-metric-icon: #b34ca3;
+  --color-activity-icon: #c08010;
+  --color-heart-icon: #df5d4b;
+  --color-recovery-icon: #0b9e70;
+  --color-sleep-icon: #806be6;
+  --color-hydration-icon: #1794cc;
+  --color-body-metric-icon: #c353b1;
   --color-accent-icon: var(--color-sleep-icon);
-  --color-success-icon: #17945b;
-  --color-danger-icon: #ce534a;
+  --color-success-icon: #12a064;
+  --color-danger-icon: #dd5b52;
 
   --color-workout-walking-icon: var(--color-recovery-icon);
-  --color-workout-running-icon: #cf6b32;
+  --color-workout-running-icon: #e07436;
   --color-workout-strength-icon: var(--color-activity-icon);
   --color-workout-cycling-icon: var(--color-hydration-icon);
   --color-workout-swimming-icon: var(--color-sleep-icon);
-  --color-workout-mobility-icon: #249d8b;
+  --color-workout-mobility-icon: #23a795;
   --color-workout-cardio-icon: var(--color-heart-icon);
-  --color-workout-tennis-icon: #849b25;
-  --color-workout-badminton-icon: #1b9aaa;
+  --color-workout-tennis-icon: #8ca32b;
+  --color-workout-badminton-icon: #16a4b6;
   --color-workout-football-icon: var(--color-body-metric-icon);
-  --color-workout-treadmill-icon: #ce5b88;
-  --color-workout-other-icon: #738298;
+  --color-workout-treadmill-icon: #db648f;
+  --color-workout-other-icon: #7e8ea4;
 
   --color-workout-walking: var(--color-recovery);
   --color-workout-walking-mark: var(--color-recovery-mark);
   --color-workout-running: #97532d;
-  --color-workout-running-mark: #c57745;
+  --color-workout-running-mark: #d98548;
   --color-workout-strength: var(--color-activity);
   --color-workout-strength-mark: var(--color-activity-mark);
   --color-workout-cycling: var(--color-hydration);
@@ -173,23 +173,23 @@
   --color-workout-swimming: var(--color-sleep);
   --color-workout-swimming-mark: var(--color-sleep-mark);
   --color-workout-mobility: #2f7265;
-  --color-workout-mobility-mark: #3f9587;
+  --color-workout-mobility-mark: #39a895;
   --color-workout-cardio: var(--color-heart);
   --color-workout-cardio-mark: var(--color-heart-mark);
   --color-workout-tennis: #607128;
-  --color-workout-tennis-mark: #83933e;
+  --color-workout-tennis-mark: #92a536;
   --color-workout-badminton: #2c6e7a;
-  --color-workout-badminton-mark: #3e919f;
+  --color-workout-badminton-mark: #2da1b4;
   --color-workout-football: var(--color-body-metric);
   --color-workout-football-mark: var(--color-body-metric-mark);
   --color-workout-treadmill: #984763;
-  --color-workout-treadmill-mark: #c26187;
+  --color-workout-treadmill-mark: #d76d96;
   --color-workout-other: #626b7b;
-  --color-workout-other-mark: #808b9e;
+  --color-workout-other-mark: #8b98ad;
 
-  --color-stage-deep: #6e5caf;
-  --color-stage-light: #9c90ce;
-  --color-stage-rem: #4693b0;
+  --color-stage-deep: #806ad0;
+  --color-stage-light: #ada0e3;
+  --color-stage-rem: #3ba4c9;
   --color-stage-awake: var(--color-activity-mark);
 
   --shadow-panel: 0 20px 50px -30px rgb(54 65 99 / 0.2);
