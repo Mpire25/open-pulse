@@ -4,6 +4,7 @@
 // aggregation, so every metric behaves identically.
 
 import { iconColor } from '@/lib/icon-color'
+import { chartColor } from '@/lib/chart-color'
 import { useEffect, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
 import { ArrowLeft } from '@phosphor-icons/react'
@@ -241,7 +242,7 @@ export function MetricDetailView({
           <div className="flex items-center gap-3">
             <div
               className="grid h-11 w-11 place-items-center rounded-2xl"
-              style={{ background: `color-mix(in oklab, ${def.color} 14%, transparent)` }}
+              style={{ background: `color-mix(in oklab, ${chartColor(def.color)} 14%, transparent)` }}
             >
               <Icon size={22} weight="fill" style={{ color: iconColor(def.color) }} />
             </div>

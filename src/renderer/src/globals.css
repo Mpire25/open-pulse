@@ -115,88 +115,89 @@
   --color-scrim: rgb(24 30 48 / 0.3);
   --color-panel-hover: #e2e5ef;
   --color-accent: #67529b;
-  --color-accent-soft: rgb(147 129 223 / 0.12);
+  --color-accent-soft: rgb(150 131 254 / 0.16);
   --color-accent-hover: #564187;
   --color-accent-highlight: #564187;
   --color-danger: #a5453a;
-  --color-danger-mark: #df7061;
+  --color-danger-mark: var(--color-danger-icon);
   --color-success: #2c6e51;
-  --color-success-fill: #36a17f;
+  --color-success-fill: var(--color-success-icon);
 
-  /* Clear metric hues for pale surfaces. Foregrounds stay deeper than
-     rings, plots, and bars so small labels remain easy to read. */
-  --color-activity: #865e23;
-  --color-activity-mark: #c48a30;
-  --color-activity-soft: rgb(196 138 48 / 0.12);
+  /* Each hue has two shades on pale surfaces: a deep one for text, and one
+     bright shade shared by icons, plots, bars, and rings. The bright shade
+     holds 3:1 on white cards; values always sit beside it as text. */
+  /* Amber can't reach text contrast on white without turning brown, so
+     activity values read in ink; the icon and a true gold carry the hue. */
+  --color-activity: var(--color-ink);
+  --color-activity-icon: #c98b00;
+  --color-activity-mark: #e6a41f;
+  --color-activity-soft: rgb(230 164 31 / 0.18);
   --color-heart: #a5453a;
-  --color-heart-mark: #df7061;
-  --color-heart-soft: rgb(223 112 97 / 0.12);
+  --color-heart-icon: #f06c5a;
+  --color-heart-mark: var(--color-heart-icon);
+  --color-heart-soft: rgb(240 108 90 / 0.16);
   --color-recovery: #2c6e51;
-  --color-recovery-mark: #36a17f;
-  --color-recovery-soft: rgb(54 161 127 / 0.12);
+  --color-recovery-icon: #24a87a;
+  --color-recovery-mark: var(--color-recovery-icon);
+  --color-recovery-soft: rgb(36 168 122 / 0.16);
   --color-sleep: #67529b;
-  --color-sleep-mark: #9381df;
-  --color-sleep-soft: rgb(147 129 223 / 0.12);
+  --color-sleep-icon: #9683fe;
+  --color-sleep-mark: var(--color-sleep-icon);
+  --color-sleep-soft: rgb(150 131 254 / 0.16);
   --color-hydration: #346a8b;
-  --color-hydration-mark: #429ecc;
-  --color-hydration-soft: rgb(66 158 204 / 0.12);
+  --color-hydration-icon: #299ed7;
+  --color-hydration-mark: var(--color-hydration-icon);
+  --color-hydration-soft: rgb(41 158 215 / 0.16);
   --color-body-metric: #86527a;
-  --color-body-metric-mark: #c26eb4;
-  --color-body-metric-soft: rgb(194 110 180 / 0.12);
-
-  /* Saturated icon shades stay visibly colored at 13–18px on white and tinted
-     surfaces. Text keeps the deeper foregrounds above; charts keep their fills. */
-  --color-activity-icon: #c08010;
-  --color-heart-icon: #df5d4b;
-  --color-recovery-icon: #0b9e70;
-  --color-sleep-icon: #806be6;
-  --color-hydration-icon: #1794cc;
-  --color-body-metric-icon: #c353b1;
+  --color-body-metric-icon: #dc6bc9;
+  --color-body-metric-mark: var(--color-body-metric-icon);
+  --color-body-metric-soft: rgb(220 107 201 / 0.16);
   --color-accent-icon: var(--color-sleep-icon);
-  --color-success-icon: #12a064;
-  --color-danger-icon: #dd5b52;
-
-  --color-workout-walking-icon: var(--color-recovery-icon);
-  --color-workout-running-icon: #e07436;
-  --color-workout-strength-icon: var(--color-activity-icon);
-  --color-workout-cycling-icon: var(--color-hydration-icon);
-  --color-workout-swimming-icon: var(--color-sleep-icon);
-  --color-workout-mobility-icon: #23a795;
-  --color-workout-cardio-icon: var(--color-heart-icon);
-  --color-workout-tennis-icon: #8ca32b;
-  --color-workout-badminton-icon: #16a4b6;
-  --color-workout-football-icon: var(--color-body-metric-icon);
-  --color-workout-treadmill-icon: #db648f;
-  --color-workout-other-icon: #7e8ea4;
+  --color-success-icon: #25a96d;
+  --color-danger-icon: #ef6c61;
 
   --color-workout-walking: var(--color-recovery);
-  --color-workout-walking-mark: var(--color-recovery-mark);
+  --color-workout-walking-icon: var(--color-recovery-icon);
   --color-workout-running: #97532d;
-  --color-workout-running-mark: #d98548;
+  --color-workout-running-icon: #e4773a;
   --color-workout-strength: var(--color-activity);
-  --color-workout-strength-mark: var(--color-activity-mark);
+  --color-workout-strength-icon: var(--color-activity-icon);
   --color-workout-cycling: var(--color-hydration);
-  --color-workout-cycling-mark: var(--color-hydration-mark);
+  --color-workout-cycling-icon: var(--color-hydration-icon);
   --color-workout-swimming: var(--color-sleep);
-  --color-workout-swimming-mark: var(--color-sleep-mark);
+  --color-workout-swimming-icon: var(--color-sleep-icon);
   --color-workout-mobility: #2f7265;
-  --color-workout-mobility-mark: #39a895;
+  --color-workout-mobility-icon: #22a695;
   --color-workout-cardio: var(--color-heart);
-  --color-workout-cardio-mark: var(--color-heart-mark);
+  --color-workout-cardio-icon: var(--color-heart-icon);
   --color-workout-tennis: #607128;
-  --color-workout-tennis-mark: #92a536;
+  --color-workout-tennis-icon: #889e25;
   --color-workout-badminton: #2c6e7a;
-  --color-workout-badminton-mark: #2da1b4;
+  --color-workout-badminton-icon: #15a3b5;
   --color-workout-football: var(--color-body-metric);
-  --color-workout-football-mark: var(--color-body-metric-mark);
+  --color-workout-football-icon: var(--color-body-metric-icon);
   --color-workout-treadmill: #984763;
-  --color-workout-treadmill-mark: #d76d96;
+  --color-workout-treadmill-icon: #e56d98;
   --color-workout-other: #626b7b;
-  --color-workout-other-mark: #8b98ad;
+  --color-workout-other-icon: #8696ad;
 
-  --color-stage-deep: #806ad0;
-  --color-stage-light: #ada0e3;
-  --color-stage-rem: #3ba4c9;
+  --color-workout-walking-mark: var(--color-workout-walking-icon);
+  --color-workout-running-mark: var(--color-workout-running-icon);
+  --color-workout-strength-mark: var(--color-workout-strength-icon);
+  --color-workout-cycling-mark: var(--color-workout-cycling-icon);
+  --color-workout-swimming-mark: var(--color-workout-swimming-icon);
+  --color-workout-mobility-mark: var(--color-workout-mobility-icon);
+  --color-workout-cardio-mark: var(--color-workout-cardio-icon);
+  --color-workout-tennis-mark: var(--color-workout-tennis-icon);
+  --color-workout-badminton-mark: var(--color-workout-badminton-icon);
+  --color-workout-football-mark: var(--color-workout-football-icon);
+  --color-workout-treadmill-mark: var(--color-workout-treadmill-icon);
+  --color-workout-other-mark: var(--color-workout-other-icon);
+
+  /* Stacked stages step clearly in lightness as well as hue. */
+  --color-stage-deep: #5c56ba;
+  --color-stage-light: #a597da;
+  --color-stage-rem: #158baf;
   --color-stage-awake: var(--color-activity-mark);
 
   --color-focus: var(--color-accent-icon);
