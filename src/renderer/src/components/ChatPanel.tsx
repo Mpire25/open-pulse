@@ -115,13 +115,6 @@ export function ChatPanel({
   const handleAssistantAction = useCallback((action: AssistantAction): void => {
     actionRef.current(action)
   }, [])
-  const updateConversationFade = useCallback((): void => {
-    const container = scrollRef.current
-    if (!container) return
-    container.style.setProperty('--chat-top-fade', `${Math.min(24, Math.max(0, container.scrollTop))}px`)
-    const remainingScroll = container.scrollHeight - container.clientHeight - container.scrollTop
-    container.style.setProperty('--chat-bottom-fade', `${Math.min(24, Math.max(0, remainingScroll))}px`)
-  }, [])
 
   useEffect(() => {
     actionRef.current = onAssistantAction
@@ -181,19 +174,6 @@ export function ChatPanel({
     }
   }, [activeChatId, busy, turns])
 
-  useLayoutEffect(() => {
-    updateConversationFade()
-  }, [activeChatId, busy, codexConnected, loading, turns, updateConversationFade])
-
-  useEffect(() => {
-    const container = scrollRef.current
-    if (!container) return
-    const observer = new window.ResizeObserver(updateConversationFade)
-    observer.observe(container)
-    if (container.firstElementChild) observer.observe(container.firstElementChild)
-    return () => observer.disconnect()
-  }, [activeChatId, codexConnected, loading, updateConversationFade])
-
   // Only scrolls that follow real user input can change following; the app's own
   // scrolls, scroll anchoring and clamping move scrollTop without user intent.
   const markUserScroll = useCallback((): void => {
@@ -219,7 +199,6 @@ export function ChatPanel({
   const handleConversationScroll = useCallback((): void => {
     const container = scrollRef.current
     if (!container) return
-    updateConversationFade()
     const previousTop = lastScrollTopRef.current
     lastScrollTopRef.current = container.scrollTop
     if (!pointerScrollRef.current && performance.now() >= userScrollUntilRef.current) return
@@ -236,7 +215,7 @@ export function ChatPanel({
       visibleBottom: container.scrollTop + container.clientHeight,
       responseBottom: assistantBottom
     })
-  }, [updateConversationFade])
+  }, [])
 
   useEffect(() => {
     if (!codexConnected || !autoFocus) return

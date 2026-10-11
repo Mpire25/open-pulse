@@ -688,15 +688,53 @@ body {
 }
 
 /* Fade messages into the surrounding surface without covering them or
-   intercepting input. Each edge clears as that end of the conversation is reached. */
+   intercepting input. Scroll-driven animations grow each edge over the first
+   24px of scroll away from that end, so both ends stay clear at rest. */
+@property --chat-top-fade {
+  syntax: '<length>';
+  inherits: false;
+  initial-value: 0px;
+}
+
+@property --chat-bottom-fade {
+  syntax: '<length>';
+  inherits: false;
+  initial-value: 0px;
+}
+
 .chat-conversation {
   mask-image: linear-gradient(
     to bottom,
     transparent,
-    black var(--chat-top-fade, 0px),
-    black calc(100% - var(--chat-bottom-fade, 0px)),
+    black var(--chat-top-fade),
+    black calc(100% - var(--chat-bottom-fade)),
     transparent
   );
+  animation:
+    chat-top-fade linear both,
+    chat-bottom-fade linear both;
+  animation-timeline: scroll(self), scroll(self);
+  animation-range:
+    0px 24px,
+    calc(100% - 24px) 100%;
+}
+
+@keyframes chat-top-fade {
+  from {
+    --chat-top-fade: 0px;
+  }
+  to {
+    --chat-top-fade: 24px;
+  }
+}
+
+@keyframes chat-bottom-fade {
+  from {
+    --chat-bottom-fade: 24px;
+  }
+  to {
+    --chat-bottom-fade: 0px;
+  }
 }
 
 /* One shared fade edge replaces the old chat name with the new name from
