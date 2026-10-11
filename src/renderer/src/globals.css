@@ -687,6 +687,12 @@ body {
   }
 }
 
+/* Fade messages into the surface above without covering them or intercepting
+   input. The fade grows with scrollTop, keeping the first message clear at rest. */
+.chat-conversation {
+  mask-image: linear-gradient(to bottom, transparent, black var(--chat-top-fade, 0px));
+}
+
 /* One shared fade edge replaces the old chat name with the new name from
    left to right. The row's outer mask still handles overflow at its edge. */
 @property --chat-title-edge {

@@ -115,6 +115,11 @@ export function ChatPanel({
   const handleAssistantAction = useCallback((action: AssistantAction): void => {
     actionRef.current(action)
   }, [])
+  const updateConversationFade = useCallback((): void => {
+    const container = scrollRef.current
+    if (!container) return
+    container.style.setProperty('--chat-top-fade', `${Math.min(24, Math.max(0, container.scrollTop))}px`)
+  }, [])
 
   useEffect(() => {
     actionRef.current = onAssistantAction
@@ -174,6 +179,10 @@ export function ChatPanel({
     }
   }, [activeChatId, busy, turns])
 
+  useLayoutEffect(() => {
+    updateConversationFade()
+  }, [activeChatId, busy, codexConnected, loading, turns, updateConversationFade])
+
   // Only scrolls that follow real user input can change following; the app's own
   // scrolls, scroll anchoring and clamping move scrollTop without user intent.
   const markUserScroll = useCallback((): void => {
@@ -199,6 +208,7 @@ export function ChatPanel({
   const handleConversationScroll = useCallback((): void => {
     const container = scrollRef.current
     if (!container) return
+    updateConversationFade()
     const previousTop = lastScrollTopRef.current
     lastScrollTopRef.current = container.scrollTop
     if (!pointerScrollRef.current && performance.now() >= userScrollUntilRef.current) return
@@ -215,7 +225,7 @@ export function ChatPanel({
       visibleBottom: container.scrollTop + container.clientHeight,
       responseBottom: assistantBottom
     })
-  }, [])
+  }, [updateConversationFade])
 
   useEffect(() => {
     if (!codexConnected || !autoFocus) return
@@ -288,7 +298,7 @@ export function ChatPanel({
         onTouchMove={markUserScroll}
         onKeyDown={markUserScroll}
         onPointerDown={handleConversationPointerDown}
-        className="flex-1 overflow-y-auto pb-4"
+        className="chat-conversation flex-1 overflow-y-auto pb-4"
       >
         {empty ? (
           <div className={cn('h-full', compact ? 'px-4' : 'mx-auto w-full max-w-[820px] px-6')}>
