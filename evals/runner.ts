@@ -62,6 +62,8 @@ export interface ResultsFile {
   commit: string
   model: string
   reasoningEffort: string
+  /** Absent in older results and when Standard speed was requested. */
+  serviceTier?: string
   startedAt: string
   repeat: number
   cases: CaseResult[]

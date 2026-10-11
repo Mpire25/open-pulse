@@ -17,6 +17,7 @@ import {
   ASSISTANT_MODEL_PATTERN,
   DEFAULT_ASSISTANT,
   REASONING_EFFORT_PATTERN,
+  SERVICE_TIER_PATTERN,
   type AssistantSettings
 } from '../src/shared/types'
 import type { ModelRequest } from './checks'
@@ -84,12 +85,14 @@ export function appAssistantSettings(): AssistantSettings {
   }
   const model = String(saved.model ?? '').trim()
   const effort = saved.reasoningEffort
+  const tier = saved.serviceTier
   return {
     model: ASSISTANT_MODEL_PATTERN.test(model) ? model : DEFAULT_ASSISTANT.model,
     reasoningEffort:
       typeof effort === 'string' && effort !== 'auto' && REASONING_EFFORT_PATTERN.test(effort)
         ? effort
-        : DEFAULT_ASSISTANT.reasoningEffort
+        : DEFAULT_ASSISTANT.reasoningEffort,
+    serviceTier: typeof tier === 'string' && tier !== 'auto' && SERVICE_TIER_PATTERN.test(tier) ? tier : undefined
   }
 }
 

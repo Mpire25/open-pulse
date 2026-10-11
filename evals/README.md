@@ -38,9 +38,10 @@ bun run eval --rescore evals/results/a.json   # re-check saved answers after cha
 bun run eval --sign-out                # revoke and delete the eval session
 ```
 
-The model and reasoning effort default to the ones set in the app; override
-them with `--model` and `--effort`. Results are saved in `evals/results/`
-(git-ignored) and contain only synthetic data.
+The model, reasoning effort and speed default to the ones set in the app;
+override them with `--model`, `--effort` and `--service-tier` (for example
+`priority` for Fast, or `default` for Standard). Results are saved in
+`evals/results/` (git-ignored) and contain only synthetic data.
 
 The test data and checks use the date the run started. The assistant reads the
 real clock, so a conversation that starts after midnight is flagged in the
