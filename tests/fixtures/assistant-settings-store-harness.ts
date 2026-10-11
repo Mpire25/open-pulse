@@ -40,3 +40,17 @@ test('legacy Automatic settings load with no synthetic effort', async () => {
   const restarted = await import('../../src/main/store.ts?legacy-effort')
   expect(restarted.getSettings().assistant.reasoningEffort).toBeUndefined()
 })
+
+test('service tiers persist across restarts and malformed values fall back to Standard', async () => {
+  for (const serviceTier of ['default', 'priority', 'fast', 'future-speed']) {
+    const assistant = { model: 'future-model', reasoningEffort: 'low', serviceTier }
+    expect(updateSettings({ assistant }).assistant).toEqual(assistant)
+    expect(JSON.parse(readFileSync(path, 'utf8')).settings.assistant).toEqual(assistant)
+    const restarted = await import(`../../src/main/store.ts?speed=${serviceTier}`)
+    expect(restarted.getSettings().assistant).toEqual(assistant)
+  }
+  for (const serviceTier of ['auto', '', 'bad tier', 'x'.repeat(65), 42, null, { id: 'fast' }]) {
+    expect(updateSettings({ assistant: { model: 'future-model', serviceTier } as AssistantSettings }).assistant.serviceTier).toBeUndefined()
+    expect(JSON.parse(readFileSync(path, 'utf8')).settings.assistant).not.toHaveProperty('serviceTier')
+  }
+})

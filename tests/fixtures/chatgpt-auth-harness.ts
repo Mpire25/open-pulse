@@ -349,6 +349,29 @@ test('model catalog preserves ordering, filters hidden/duplicate/invalid models 
     { id: 'other', label: 'other' }
   ])
 })
+test('catalog retains advertised speed tiers, deduplicates aliases, and ignores malformed choices', () => {
+  expect(parseModels({ models: [
+    { slug: 'fast-model', visibility: 'list', service_tiers: [
+      { id: 'priority', name: 'Fast', description: '2x speed, increased usage' },
+      { id: 'fast', name: 'Duplicate alias' },
+      { id: 'future-speed', name: 'Future speed' },
+      { id: 'auto' }, { id: 'default' }, { id: 'bad tier' }, { id: 42 }, null
+    ], additional_speed_tiers: ['fast', 'future-speed', 'another-speed', 'bad tier', 42] },
+    { slug: 'alias-model', visibility: 'list', additional_speed_tiers: ['fast'] },
+    { slug: 'standard-model', visibility: 'list', service_tiers: [{ id: 'default' }] },
+    { slug: 'plain-model', visibility: 'list', service_tiers: 'invalid' }
+  ] })).toEqual([
+    { id: 'fast-model', label: 'fast-model', serviceTiers: [
+      { id: 'priority', label: 'Fast', description: '2x speed, increased usage' },
+      { id: 'future-speed', label: 'Future speed' },
+      { id: 'another-speed', label: 'Another Speed' }
+    ] },
+    { id: 'alias-model', label: 'alias-model', serviceTiers: [{ id: 'fast', label: 'Fast' }] },
+    { id: 'standard-model', label: 'standard-model' },
+    { id: 'plain-model', label: 'plain-model' }
+  ])
+})
+
 test('catalog refresh caches per registration and falls back without erasing successful data', async () => {
   seed()
   let requests = 0
@@ -372,7 +395,7 @@ test('catalog refresh caches per registration and falls back without erasing suc
   expect((await getChatGPTModels()).models).toEqual([])
 })
 
-test.each([undefined, 1, 2])('older catalog version %s refreshes to recover new levels and defaults', async (effortsVersion) => {
+test.each([undefined, 1, 2, 3])('older catalog version %s refreshes to recover levels, defaults, and speed tiers', async (effortsVersion) => {
   seed()
   local.set('chatgpt-models:issued-a', {
     models: [{ id: 'future-model', label: 'Future', efforts: ['auto', 'max'] }],
@@ -381,10 +404,10 @@ test.each([undefined, 1, 2])('older catalog version %s refreshes to recover new 
   let requests = 0
   globalThis.fetch = (async () => {
     requests++
-    return Response.json({ models: [{ slug: 'future-model', visibility: 'list', supported_reasoning_levels: ['max', 'ultra'], default_reasoning_level: 'ultra' }] })
+    return Response.json({ models: [{ slug: 'future-model', visibility: 'list', supported_reasoning_levels: ['max', 'ultra'], default_reasoning_level: 'ultra', service_tiers: [{ id: 'priority', name: 'Fast' }] }] })
   }) as typeof fetch
   expect(await getChatGPTModels()).toMatchObject({
-    effortsVersion: 3, models: [{ id: 'future-model', efforts: ['max', 'ultra'], defaultEffort: 'ultra' }]
+    effortsVersion: 3, serviceTiersVersion: 1, models: [{ id: 'future-model', efforts: ['max', 'ultra'], defaultEffort: 'ultra', serviceTiers: [{ id: 'priority', label: 'Fast' }] }]
   })
   await getChatGPTModels()
   expect(requests).toBe(1)

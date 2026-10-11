@@ -2,13 +2,14 @@
 import { afterEach, describe, expect, mock, test } from 'bun:test'
 import { EventEmitter } from 'node:events'
 import type { WebContents } from 'electron'
-import type { AiEvent, ChatMessage } from '../../src/shared/types'
+import type { AiEvent, AssistantSettings, ChatMessage } from '../../src/shared/types'
 import { StreamTimeoutError } from '../../src/main/stream-timeout'
 
 const HEALTH_DATA_SENTINEL = 'UNRELATED_RAW_HEALTH_DATA'
 const HISTORY_SENTINEL = 'UNRELATED_CONVERSATION_HISTORY'
 let activeHealthTools = 0
 let maxConcurrentHealthTools = 0
+let assistantSettings: AssistantSettings = { model: 'test-model', reasoningEffort: 'low' }
 
 mock.module('../../src/main/codex-auth', () => ({
   getCodexAuthGeneration: () => 1,
@@ -27,7 +28,7 @@ mock.module('../../src/main/store', () => ({
     googleClientSecret: '',
     googleClientSecretConfigured: false,
     goals: {},
-    assistant: { model: 'test-model', reasoningEffort: 'low' }
+    assistant: assistantSettings
   })
 }))
 
@@ -199,9 +200,40 @@ afterEach(() => {
   globalThis.fetch = originalFetch
   activeHealthTools = 0
   maxConcurrentHealthTools = 0
+  assistantSettings = { model: 'test-model', reasoningEffort: 'low' }
 })
 
 describe('brokered Codex research orchestration', () => {
+  test.each([undefined, 'default', 'fast', 'future-speed'])('foreground requests honor speed %s independently of reasoning', async (serviceTier) => {
+    assistantSettings = { ...assistantSettings, serviceTier }
+    const sender = new FakeSender()
+    let calls = 0
+    globalThis.fetch = (async (_input, init) => {
+      calls++
+      const body = requestBody(init)
+      expect(body).toMatchObject({ reasoning: { effort: 'low' } })
+      if (serviceTier && serviceTier !== 'default') expect(body.service_tier).toBe(serviceTier)
+      else expect(body).not.toHaveProperty('service_tier')
+      return message('Your answer is ready.')
+    }) as typeof fetch
+    await runChat(sender as unknown as WebContents, 'speed-chat', 'speed-run', [{ role: 'user', text: 'Hello.' }])
+    expect(calls).toBe(1)
+    expect(sender.events.find((event) => event.type === 'done')).toMatchObject({ outcome: 'completed' })
+  })
+
+  test('a rejected speed fails once without a silent tier retry', async () => {
+    assistantSettings = { ...assistantSettings, serviceTier: 'priority' }
+    const sender = new FakeSender()
+    let calls = 0
+    globalThis.fetch = (async () => {
+      calls++
+      return Response.json({ error: { code: 'subscription_sharing_unsupported_capability', param: 'service_tier' } }, { status: 400 })
+    }) as typeof fetch
+    await runChat(sender as unknown as WebContents, 'speed-error-chat', 'speed-error-run', [{ role: 'user', text: 'Hello.' }])
+    expect(calls).toBe(1)
+    expect(sender.events.find((event) => event.type === 'error')).toMatchObject({ message: expect.stringContaining('Choose Standard speed') })
+  })
+
   test('authenticated naming hook shares run credentials without delaying the answer', async () => {
     const sender = new FakeSender()
     let callbacks = 0
@@ -508,11 +540,13 @@ describe('brokered Codex research orchestration', () => {
   })
 
   test('searches after a health lookup without forwarding history or raw datasets', async () => {
+    assistantSettings = { ...assistantSettings, serviceTier: 'priority' }
     const sender = new FakeSender()
     const calls: Array<{ body: Record<string, unknown>; sessionId: string | null }> = []
     const researchText = 'Community reports mention short sleep at similar HRV values.'
     globalThis.fetch = (async (_input, init) => {
       const body = requestBody(init)
+      expect(body.service_tier).toBe('priority')
       const sessionId = new Headers(init?.headers).get('session_id')
       calls.push({ body, sessionId })
       switch (calls.length) {

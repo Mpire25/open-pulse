@@ -416,10 +416,18 @@ export type ReasoningEffort = string
 
 /** Validate the shape of an effort ID without restricting OpenAI's tier names. */
 export const REASONING_EFFORT_PATTERN = /^[a-z][a-z0-9_-]{0,63}$/
+export const SERVICE_TIER_PATTERN = /^[a-z][a-z0-9_-]{0,63}$/
+
+/** Fast and Priority are API aliases for the same processing tier. */
+export function serviceTierKey(tier: string): string {
+  return tier === 'priority' ? 'fast' : tier
+}
 
 export interface AssistantSettings {
   model: string
   reasoningEffort?: ReasoningEffort
+  /** Unset selections request Standard processing. */
+  serviceTier?: string
 }
 
 export const DEFAULT_ASSISTANT: AssistantSettings = {
@@ -434,6 +442,13 @@ export interface AssistantModel {
   defaultEffort?: ReasoningEffort
   /** Also supports older cached catalogs that kept none outside the effort list. */
   supportsNoReasoning?: true
+  /** Advertised alternatives to Standard processing; API aliases are deduplicated. */
+  serviceTiers?: AssistantServiceTier[]
+}
+export interface AssistantServiceTier {
+  id: string
+  label: string
+  description?: string
 }
 export interface ModelCatalog {
   models: AssistantModel[]
@@ -443,6 +458,8 @@ export interface ModelCatalog {
   registrationId?: string
   /** Refresh older catalogs that filtered tiers, added Automatic, or omitted defaults. */
   effortsVersion?: 3
+  /** Refresh catalogs saved before service-tier metadata was retained. */
+  serviceTiersVersion?: 1
 }
 
 /** Rejects pasted prose before it becomes a guaranteed 400 at send time. */

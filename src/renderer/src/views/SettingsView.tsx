@@ -13,6 +13,7 @@ import { GoogleSetup } from '@/components/GoogleSetup'
 import { cn } from '@/lib/utils'
 import {
   ASSISTANT_MODEL_PATTERN,
+  serviceTierKey,
   type AppSettings,
   type AssistantSettings,
   type ModelCatalog,
@@ -362,6 +363,7 @@ function Pill({
     <button
       onClick={onClick}
       disabled={disabled}
+      aria-pressed={active}
       className={cn(
         'relative rounded-[10px] px-3.5 py-1.5 text-[12px] font-semibold transition-colors',
         active ? 'text-ink' : 'text-ink-dim hover:text-ink',
@@ -404,6 +406,11 @@ function AssistantCard({
     const effort = presets.find((m) => m.id === model)?.defaultEffort
     return effort && effortsForModel(model).includes(effort) ? effort : undefined
   }
+  const tiersForModel = (model: string) => presets.find((m) => m.id === model)?.serviceTiers ?? []
+  const tierForModel = (model: string, tier?: string): string | undefined => {
+    if (!tier || tier === 'default') return tier
+    return tiersForModel(model).find((option) => serviceTierKey(option.id) === serviceTierKey(tier))?.id
+  }
   const refreshModels = async (force = false): Promise<void> => {
     const sequence = ++catalogSequence.current
     setLoading(true)
@@ -429,6 +436,8 @@ function AssistantCard({
   const customDirty = trimmedCustomModel !== assistant.model
   const customValid = ASSISTANT_MODEL_PATTERN.test(trimmedCustomModel)
   const efforts = effortsForModel(assistant.model)
+  const serviceTiers = tiersForModel(assistant.model)
+  const selectedTier = serviceTiers.find((tier) => serviceTierKey(tier.id) === serviceTierKey(assistant.serviceTier ?? 'default'))
 
   const persist = async (nextAssistant: AssistantSettings): Promise<void> => {
     const sequence = ++saveSequence.current
@@ -453,9 +462,16 @@ function AssistantCard({
   // Migrate legacy/default selections on catalog load. A failed save is only
   // retried after another catalog load, never in a state-update loop.
   useEffect(() => {
-    if (assistant.reasoningEffort && assistant.reasoningEffort !== 'auto') return
-    const effort = defaultEffortForModel(assistant.model)
-    if (effort) void persist({ ...assistant, reasoningEffort: effort })
+    const effort = !assistant.reasoningEffort || assistant.reasoningEffort === 'auto'
+      ? defaultEffortForModel(assistant.model) : undefined
+    // Only a fresh catalog can confirm that a saved tier has disappeared.
+    const resetTier = !catalog.stale && assistant.serviceTier && assistant.serviceTier !== 'default'
+      && !tierForModel(assistant.model, assistant.serviceTier)
+    if (effort || resetTier) void persist({
+      ...assistant,
+      ...(effort ? { reasoningEffort: effort } : {}),
+      ...(resetTier ? { serviceTier: undefined } : {})
+    })
   }, [catalog])
 
   // Unknown capability ladders use the server default.
@@ -465,7 +481,9 @@ function AssistantCard({
       model,
       reasoningEffort: assistant.reasoningEffort && supported.includes(assistant.reasoningEffort)
         ? assistant.reasoningEffort
-        : defaultEffortForModel(model)
+        : defaultEffortForModel(model),
+      // As on load, only a fresh catalog can show that a model lacks the saved tier.
+      serviceTier: tierForModel(model, assistant.serviceTier) ?? (catalog.stale ? assistant.serviceTier : undefined)
     })
   }
 
@@ -562,26 +580,49 @@ function AssistantCard({
         )}
       </div>
 
-      <div className="flex flex-col gap-2">
-        {!loading && assistant.reasoningEffort && assistant.reasoningEffort !== 'auto' && !efforts.includes(assistant.reasoningEffort) && <p className="text-[12px] text-ink-faint">Saved effort: {effortLabel(assistant.reasoningEffort)}. Choose a level supported by this model.</p>}
-        <span className="text-[11px] font-medium text-ink-faint">Reasoning effort</span>
-        {efforts.length > 0 && <div className="flex w-fit flex-wrap rounded-xl border border-hairline bg-white/[0.03] p-0.5">
-          {efforts.map((effort) => (
-            <Pill
-              key={effort}
-              active={assistant.reasoningEffort === effort}
-              layoutId="assistant-effort-active"
-              onClick={() => selectEffort(effort)}
-            >
-              {effortLabel(effort)}
-            </Pill>
-          ))}
-        </div>}
-        <p className="text-[11px] text-ink-faint">
-          {efforts.length > 0
-            ? 'Higher effort digs deeper on complex questions and takes longer to answer.'
-            : 'OpenAI has not provided reasoning levels for this model.'}
-        </p>
+      <div className="flex flex-wrap items-start gap-x-8 gap-y-5">
+        <div className="flex min-w-0 flex-1 basis-80 flex-col gap-2">
+          {!loading && assistant.reasoningEffort && assistant.reasoningEffort !== 'auto' && !efforts.includes(assistant.reasoningEffort) && <p className="text-[12px] text-ink-faint">Saved effort: {effortLabel(assistant.reasoningEffort)}. Choose a level supported by this model.</p>}
+          <span className="text-[11px] font-medium text-ink-faint">Reasoning effort</span>
+          {efforts.length > 0 && <div className="flex w-fit flex-wrap rounded-xl border border-hairline bg-white/[0.03] p-0.5">
+            {efforts.map((effort) => (
+              <Pill
+                key={effort}
+                active={assistant.reasoningEffort === effort}
+                layoutId="assistant-effort-active"
+                onClick={() => selectEffort(effort)}
+              >
+                {effortLabel(effort)}
+              </Pill>
+            ))}
+          </div>}
+          <p className="text-[11px] text-ink-faint">
+            {efforts.length > 0
+              ? 'Higher effort digs deeper on complex questions and takes longer to answer.'
+              : 'OpenAI has not provided reasoning levels for this model.'}
+          </p>
+        </div>
+        {serviceTiers.length > 0 && (
+          <div role="group" aria-labelledby="assistant-speed-label" className="flex w-48 max-w-full flex-col gap-2">
+            <span id="assistant-speed-label" className="text-[11px] font-medium text-ink-faint">Speed</span>
+            <div className="flex w-fit flex-wrap rounded-xl border border-hairline bg-white/[0.03] p-0.5">
+              {[{ id: 'default', label: 'Standard' }, ...serviceTiers].map((tier) => (
+                <Pill
+                  key={tier.id}
+                  active={serviceTierKey(assistant.serviceTier ?? 'default') === serviceTierKey(tier.id)}
+                  layoutId="assistant-speed-active"
+                  onClick={() => void persist({ ...assistant, serviceTier: tier.id })}
+                >
+                  {tier.label}
+                </Pill>
+              ))}
+            </div>
+            <p className="text-[11px] text-ink-faint">
+              {selectedTier?.description ?? 'Faster processing may use more of your ChatGPT allowance.'}
+              {selectedTier && ' Requests may still run at Standard speed.'}
+            </p>
+          </div>
+        )}
       </div>
     </Card>
   )

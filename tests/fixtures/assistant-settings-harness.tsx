@@ -277,3 +277,86 @@ test('valid saved effort selections survive catalog loading and model changes', 
   await act(async () => button('Other Model')!.click())
   expect(saved.assistant).toEqual({ model: 'other-model', reasoningEffort: 'low' })
 })
+
+test('Speed shows per-model options, saves independently, carries aliases, and hides without alternatives', async () => {
+  backendStatus = connected
+  modelResult = { models: [
+    { id: 'future-model', label: 'Future Model', efforts: ['low', 'medium'], serviceTiers: [{ id: 'priority', label: 'Fast', description: '2x speed, increased usage' }] },
+    { id: 'alias-model', label: 'Alias Model', efforts: ['low'], serviceTiers: [{ id: 'fast', label: 'Fast' }, { id: 'future-speed', label: 'Future Speed' }] },
+    { id: 'other-model', label: 'Other Model', efforts: ['low'] }
+  ], stale: false }
+  let saved: AppSettings = { ...settings, assistant: { model: 'future-model', reasoningEffort: 'low' } }
+  let saves = 0
+  window.pulse.settings.update = async (patch) => { saves++; saved = { ...saved, ...patch }; return saved }
+  await act(async () => root.render(<Harness initialSettings={saved} />))
+  expect(saves).toBe(0)
+  expect(button('Standard')?.getAttribute('aria-pressed')).toBe('true')
+  expect(Boolean(document.querySelector('[aria-labelledby="assistant-speed-label"]'))).toBe(true)
+  expect(Boolean(button('Future Speed'))).toBe(false)
+  await act(async () => button('Fast')!.click())
+  expect(saved.assistant).toEqual({ model: 'future-model', reasoningEffort: 'low', serviceTier: 'priority' })
+  expect(button('Fast')?.getAttribute('aria-pressed')).toBe('true')
+  expect(document.body.textContent).toContain('2x speed, increased usage')
+  await act(async () => button('Medium')!.click())
+  expect(saved.assistant.serviceTier).toBe('priority')
+  await act(async () => button('Alias Model')!.click())
+  expect(saved.assistant.serviceTier).toBe('fast')
+  expect(button('Fast')?.getAttribute('aria-pressed')).toBe('true')
+  await act(async () => button('Future Speed')!.click())
+  expect(saved.assistant.serviceTier).toBe('future-speed')
+  await act(async () => button('Standard')!.click())
+  expect(saved.assistant.serviceTier).toBe('default')
+  await act(async () => button('Fast')!.click())
+  await act(async () => button('Other Model')!.click())
+  expect(saved.assistant.serviceTier).toBeUndefined()
+  expect(Boolean(document.querySelector('[aria-labelledby="assistant-speed-label"]'))).toBe(false)
+  expect(Boolean(button('Fast'))).toBe(false)
+  await act(async () => button('Future Model')!.click())
+  expect(button('Standard')?.getAttribute('aria-pressed')).toBe('true')
+})
+
+test('fresh catalog refresh resets removed speed choices and keeps reasoning unchanged', async () => {
+  backendStatus = connected
+  modelResult = { models: [{ id: 'future-model', label: 'Future Model', efforts: ['low'], serviceTiers: [{ id: 'priority', label: 'Fast' }] }], stale: false }
+  let saved: AppSettings = { ...settings, assistant: { model: 'future-model', reasoningEffort: 'low', serviceTier: 'priority' } }
+  window.pulse.settings.update = async (patch) => { saved = { ...saved, ...patch }; return saved }
+  await act(async () => root.render(<Harness initialSettings={saved} />))
+  expect(button('Fast')?.getAttribute('aria-pressed')).toBe('true')
+  modelResult = { models: [{ id: 'future-model', label: 'Future Model', efforts: ['low'] }], stale: false }
+  await act(async () => button('Refresh models')!.click())
+  expect(saved.assistant).toEqual({ model: 'future-model', reasoningEffort: 'low', serviceTier: undefined })
+  expect(Boolean(document.querySelector('[aria-labelledby="assistant-speed-label"]'))).toBe(false)
+})
+
+test('failed speed saves restore the current selection and report the error', async () => {
+  backendStatus = connected
+  modelResult = { models: [{ id: 'future-model', label: 'Future Model', efforts: ['low'], serviceTiers: [{ id: 'priority', label: 'Fast' }] }], stale: false }
+  window.pulse.settings.update = async () => { throw new Error('Synthetic speed save failure') }
+  await act(async () => root.render(<Harness initialSettings={{ ...settings, assistant: { model: 'future-model', reasoningEffort: 'low' } }} />))
+  await act(async () => button('Fast')!.click())
+  expect(button('Standard')?.getAttribute('aria-pressed')).toBe('true')
+  expect(document.body.textContent).toContain('Synthetic speed save failure')
+})
+
+test('a stale catalog cannot erase a saved speed preference', async () => {
+  backendStatus = connected
+  modelResult = { models: [{ id: 'future-model', label: 'Future Model', efforts: ['low'] }], stale: true }
+  let saves = 0
+  window.pulse.settings.update = async () => { saves++; return settings }
+  await act(async () => root.render(<Harness initialSettings={{ ...settings, assistant: { model: 'future-model', reasoningEffort: 'low', serviceTier: 'priority' } }} />))
+  expect(saves).toBe(0)
+  expect(Boolean(document.querySelector('[aria-labelledby="assistant-speed-label"]'))).toBe(false)
+})
+
+test('switching models with a stale catalog keeps a saved speed preference', async () => {
+  backendStatus = connected
+  modelResult = { models: [
+    { id: 'future-model', label: 'Future Model', efforts: ['low'] },
+    { id: 'other-model', label: 'Other Model', efforts: ['low'] }
+  ], stale: true }
+  let saved: AppSettings = { ...settings, assistant: { model: 'future-model', reasoningEffort: 'low', serviceTier: 'priority' } }
+  window.pulse.settings.update = async (patch) => { saved = { ...saved, ...patch }; return saved }
+  await act(async () => root.render(<Harness initialSettings={saved} />))
+  await act(async () => button('Other Model')!.click())
+  expect(saved.assistant).toEqual({ model: 'other-model', reasoningEffort: 'low', serviceTier: 'priority' })
+})

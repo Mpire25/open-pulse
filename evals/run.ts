@@ -5,7 +5,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSyn
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { parseArgs } from 'node:util'
-import { ASSISTANT_MODEL_PATTERN, REASONING_EFFORT_PATTERN, type AssistantSettings } from '../src/shared/types'
+import { ASSISTANT_MODEL_PATTERN, REASONING_EFFORT_PATTERN, SERVICE_TIER_PATTERN, type AssistantSettings } from '../src/shared/types'
 import { buildCases, CATEGORIES, type EvalCase } from './cases'
 import { isoDay, pinEvalNow } from './fixture'
 import { appAssistantSettings, hasSessionFile, loadAssistant, sessionDir } from './runtime'
@@ -23,6 +23,7 @@ const { values: options } = parseArgs({
     ref: { type: 'string' },
     model: { type: 'string' },
     effort: { type: 'string' },
+    'service-tier': { type: 'string' },
     label: { type: 'string' },
     'sign-in': { type: 'boolean', default: false },
     'sign-out': { type: 'boolean', default: false },
@@ -44,6 +45,7 @@ const HELP = `Usage: bun run eval [options]
   --ref <git-ref>      Evaluate another version, e.g. a commit or branch
   --model <slug>       Model (default: the model set in the app)
   --effort <level>     Reasoning effort (default: the effort set in the app)
+  --service-tier <id>  Speed, e.g. priority or default (default: the speed set in the app)
   --label <name>       Name for the results file
   --compare <a> <b>    Compare two results files (pass --compare twice)
   --rescore <file>     Score a saved results file again with the current checks
@@ -94,8 +96,12 @@ function summarise(cases: CaseResult[]): Summary {
   }
 }
 
+function modelSettings(results: ResultsFile): string {
+  return `${results.model} (${results.reasoningEffort}${results.serviceTier ? `, ${results.serviceTier}` : ''})`
+}
+
 function printResults(results: ResultsFile, verbose: boolean): void {
-  console.log(`\n${results.label} — ${results.model} (${results.reasoningEffort}), ${results.commit.slice(0, 7)}\n`)
+  console.log(`\n${results.label} — ${modelSettings(results)}, ${results.commit.slice(0, 7)}\n`)
   for (const result of results.cases) {
     const passes = result.runs.filter((run) => run.passed).length
     const mark = passes === result.runs.length ? '✓' : passes === 0 ? '✗' : '~'
@@ -136,8 +142,8 @@ function printResults(results: ResultsFile, verbose: boolean): void {
 
 function compare(paths: string[]): void {
   const [before, after] = paths.map((path) => JSON.parse(readFileSync(path, 'utf8')) as ResultsFile)
-  console.log(`\nbefore: ${before.label} (${before.commit.slice(0, 7)}, ${before.model} ${before.reasoningEffort})`)
-  console.log(`after:  ${after.label} (${after.commit.slice(0, 7)}, ${after.model} ${after.reasoningEffort})\n`)
+  console.log(`\nbefore: ${before.label} (${before.commit.slice(0, 7)}, ${modelSettings(before)})`)
+  console.log(`after:  ${after.label} (${after.commit.slice(0, 7)}, ${modelSettings(after)})\n`)
   const ids = [...new Set([...before.cases, ...after.cases].map((result) => result.id))]
   for (const id of ids) {
     const a = before.cases.find((result) => result.id === id)
@@ -237,10 +243,13 @@ async function main(): Promise<void> {
   if (options.effort && (options.effort === 'auto' || !REASONING_EFFORT_PATTERN.test(options.effort))) {
     throw new Error(`Invalid --effort "${options.effort}".`)
   }
+  const tier = options['service-tier']
+  if (tier && (tier === 'auto' || !SERVICE_TIER_PATTERN.test(tier))) throw new Error(`Invalid --service-tier "${tier}".`)
   const saved = appAssistantSettings()
   const assistantSettings: AssistantSettings = {
     model: options.model ?? saved.model,
-    reasoningEffort: (options.effort ?? saved.reasoningEffort) as AssistantSettings['reasoningEffort']
+    reasoningEffort: (options.effort ?? saved.reasoningEffort) as AssistantSettings['reasoningEffort'],
+    serviceTier: tier ?? saved.serviceTier
   }
 
   const ref = options.ref ?? 'HEAD'
@@ -281,13 +290,14 @@ async function main(): Promise<void> {
       commit,
       model: assistantSettings.model,
       reasoningEffort: assistantSettings.reasoningEffort ?? 'auto',
+      ...(assistantSettings.serviceTier ? { serviceTier: assistantSettings.serviceTier } : {}),
       startedAt: startedAt.toISOString(),
       repeat,
       cases: cases.map((evalCase) => ({ id: evalCase.id, category: evalCase.category, runs: [] }))
     }
 
     const jobs = cases.flatMap((evalCase) => Array.from({ length: repeat }, (_, attempt) => ({ evalCase, attempt })))
-    console.log(`Running ${jobs.length} conversations against ${results.label} (${commit.slice(0, 7)}) with ${results.model} (${results.reasoningEffort})…`)
+    console.log(`Running ${jobs.length} conversations against ${results.label} (${commit.slice(0, 7)}) with ${modelSettings(results)}…`)
     let finished = 0
     await pool(jobs, Number(options.concurrency) || 4, async ({ evalCase, attempt }) => {
       // The assistant takes "today" from the real clock; the fixture and checks stay on the start date.

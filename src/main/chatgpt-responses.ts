@@ -1,4 +1,5 @@
 import type { AssistantSettings } from '../shared/types'
+import { SERVICE_TIER_PATTERN } from '../shared/types'
 export const RESPONSES_URL = 'https://api.openai.com/v1/responses'
 export function reasoningOptions(
   assistant: AssistantSettings
@@ -6,6 +7,11 @@ export function reasoningOptions(
   return !assistant.reasoningEffort || assistant.reasoningEffort === 'auto'
     ? {}
     : { reasoning: { effort: assistant.reasoningEffort } }
+}
+// Standard sends no tier, exactly as requests did before speeds existed.
+export function serviceTierOptions(assistant: AssistantSettings): { service_tier?: string } {
+  const tier = assistant.serviceTier
+  return tier && tier !== 'auto' && tier !== 'default' && SERVICE_TIER_PATTERN.test(tier) ? { service_tier: tier } : {}
 }
 export function localToolNamespace(tools: unknown[]): unknown[] {
   return tools.length
@@ -59,7 +65,9 @@ export function responseError(
       'ChatGPT authorization is not valid for this request. Reconnect in Settings.'
   }
   const message =
-    code && messages[code]
+    body?.error?.param === 'service_tier' && (status === 400 || code === 'subscription_sharing_unsupported_capability')
+      ? 'ChatGPT rejected the selected speed. Choose Standard speed or another model.'
+      : code && messages[code]
       ? messages[code]
       : status === 401
         ? 'ChatGPT did not accept this session or its plan permission. Reconnect in Settings.'
