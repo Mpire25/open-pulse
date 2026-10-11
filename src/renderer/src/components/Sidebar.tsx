@@ -79,7 +79,7 @@ export function Sidebar({ view, onSelect, connected }: SidebarProps): React.JSX.
           {!connected && (
             <div className="mb-2 mx-1 rounded-xl border border-hairline bg-surface-tint/[0.03] px-3 py-2.5">
               <div className="flex items-center gap-1.5">
-                <span className="h-1.5 w-1.5 rounded-full bg-activity" />
+                <span className="h-1.5 w-1.5 rounded-full bg-activity-icon" />
                 <p className="text-[11px] font-medium text-ink-dim">Not connected</p>
               </div>
               <p className="mt-1 text-[11px] leading-snug text-ink-faint">

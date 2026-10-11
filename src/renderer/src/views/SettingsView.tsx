@@ -282,7 +282,7 @@ function ChatRetentionCard({
       <SectionHeader
         title="Chat retention"
         hint="Applies globally to chats that you haven't kept"
-        icon={<ChatCircleDots size={18} weight="fill" className="text-accent" />}
+        icon={<ChatCircleDots size={18} weight="fill" className="text-accent-icon" />}
       />
       <div className="flex w-fit flex-wrap rounded-xl border border-hairline bg-surface-tint/[0.03] p-0.5">
         {RETENTION_OPTIONS.map((option) => (
@@ -303,7 +303,7 @@ function ChatRetentionCard({
       </p>
       {failure && (
         <div className="flex items-start gap-2 rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-[12px] text-danger">
-          <Warning size={15} weight="fill" className="mt-0.5 shrink-0" />
+          <Warning size={15} weight="fill" className="mt-0.5 shrink-0 text-danger-icon" />
           {failure}
         </div>
       )}
@@ -504,7 +504,7 @@ function AssistantCard({
         <SectionHeader
           title="Assistant model"
           hint="Choose the model used for your insights"
-          icon={<Brain size={18} weight="fill" className="text-sleep" />}
+          icon={<Brain size={18} weight="fill" className="text-sleep-icon" />}
         />
         <p className="text-[12px] leading-relaxed text-ink-faint" role={codex.connected ? 'status' : undefined}>
           {codex.connected
@@ -520,7 +520,7 @@ function AssistantCard({
       <SectionHeader
         title="Assistant model"
         hint="Models available through your connected ChatGPT plan"
-        icon={<Brain size={18} weight="fill" className="text-sleep" />}
+        icon={<Brain size={18} weight="fill" className="text-sleep-icon" />}
       />
 
       {saveError && <p role="alert" className="text-[12px] text-danger">{saveError}</p>}
@@ -669,7 +669,7 @@ function GoalsCard({
       <SectionHeader
         title="Daily goals"
         hint="Used for the rings and the goal lines on charts"
-        icon={<Target size={18} weight="fill" className="text-recovery" />}
+        icon={<Target size={18} weight="fill" className="text-recovery-icon" />}
       />
       <div className="display-sm-four-grid gap-4">
         {field('steps', 'Steps', 'count')}
@@ -699,7 +699,7 @@ function StatusPill({ connected, text }: { connected: boolean; text: string }): 
         connected ? 'bg-success-fill/15 text-success' : 'bg-surface-tint/8 text-ink-dim'
       }`}
     >
-      <span className={`h-1.5 w-1.5 rounded-full ${connected ? 'bg-success-fill' : 'bg-ink-faint'}`} />
+      <span className={`h-1.5 w-1.5 rounded-full ${connected ? 'bg-success-icon' : 'bg-ink-faint'}`} />
       {text}
     </span>
   )
@@ -733,7 +733,7 @@ function GoogleCard({
       {google.connected ? (
         <div className="flex flex-col gap-4">
           <div className="flex items-center gap-2 text-[13px] text-ink-dim">
-            <CheckCircle size={16} weight="fill" className="text-success" />
+            <CheckCircle size={16} weight="fill" className="text-success-icon" />
             Signed in{google.email ? ` as ${google.email}` : ''}
           </div>
           <div>
@@ -805,7 +805,7 @@ function CodexCard({
       <SectionHeader
         title="AI Assistant"
         hint={codex.connected ? "Your ChatGPT plan powers insights" : "Sign in with ChatGPT to power insights"}
-        icon={<Sparkle size={18} weight="fill" className="text-accent" />}
+        icon={<Sparkle size={18} weight="fill" className="text-accent-icon" />}
         action={
           <StatusPill
             connected={codex.connected}
@@ -818,7 +818,7 @@ function CodexCard({
       {codex.signedIn ? (
         <div className="flex flex-col gap-4">
           <div className="flex items-center gap-2 text-[13px] text-ink-dim">
-            <CheckCircle size={16} weight="fill" className="text-success" />
+            <CheckCircle size={16} weight="fill" className="text-success-icon" />
             Signed in{codex.email ? ` as ${codex.email}` : ''}
           </div>
           <div className="flex flex-wrap items-center gap-3">
@@ -835,7 +835,7 @@ function CodexCard({
           </p>
           {error && (
             <div className="flex items-start gap-2 rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-[12px] text-danger">
-              <Warning size={15} weight="fill" className="mt-0.5 shrink-0" />
+              <Warning size={15} weight="fill" className="mt-0.5 shrink-0 text-danger-icon" />
               {error}
             </div>
           )}

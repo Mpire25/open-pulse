@@ -47,25 +47,25 @@ const SUGGESTIONS: Array<{ text: string; icon: Icon; iconClass: string; tintClas
   {
     text: 'How did I sleep this week compared to last night?',
     icon: Moon,
-    iconClass: 'text-sleep',
+    iconClass: 'text-sleep-icon',
     tintClass: 'bg-sleep-soft'
   },
   {
     text: 'Is my resting heart rate trending up or down?',
     icon: Heartbeat,
-    iconClass: 'text-heart',
+    iconClass: 'text-heart-icon',
     tintClass: 'bg-heart-soft'
   },
   {
     text: 'How active have I been the last two weeks?',
     icon: PersonSimpleRun,
-    iconClass: 'text-activity',
+    iconClass: 'text-activity-icon',
     tintClass: 'bg-activity-soft'
   },
   {
     text: 'Any anomalies in my HRV I should watch?',
     icon: Pulse,
-    iconClass: 'text-recovery',
+    iconClass: 'text-recovery-icon',
     tintClass: 'bg-recovery-soft'
   }
 ]
@@ -509,7 +509,7 @@ function CopyMessageButton({ text }: { text: string }): React.JSX.Element {
       className={cn(
         'grid size-7 place-items-center rounded-lg transition-colors',
         'hover:bg-surface-tint/[0.06] hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50',
-        copied ? 'text-accent' : 'text-ink-faint'
+        copied ? 'text-accent-icon' : 'text-ink-faint'
       )}
       aria-label={copied ? 'Message copied' : 'Copy message'}
       title={copied ? 'Copied' : 'Copy message'}
@@ -523,8 +523,8 @@ function ToolThinking({ label }: { label: string }): React.JSX.Element {
   return (
     <div className="flex items-center gap-2.5 text-[13px]">
       <span className="relative flex size-2 shrink-0">
-        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-accent opacity-50" />
-        <span className="relative inline-flex size-2 rounded-full bg-accent/90" />
+        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-accent-icon opacity-50" />
+        <span className="relative inline-flex size-2 rounded-full bg-accent-icon/90" />
       </span>
       <AnimatePresence mode="wait" initial={false}>
         <motion.span
@@ -592,7 +592,7 @@ function SignInPrompt({ onOpenSettings, compact }: { onOpenSettings: () => void;
     <div className={cn('grid h-full place-items-center', compact ? 'px-5' : 'px-8')}>
       <div className="max-w-sm text-center">
         <div className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-accent-soft">
-          <Sparkle size={24} weight="fill" className="text-accent" />
+          <Sparkle size={24} weight="fill" className="text-accent-icon" />
         </div>
         <h2 className="display mt-5 text-[17px] font-bold text-ink">Connect ChatGPT</h2>
         <p className="mt-2 text-[13px] leading-relaxed text-ink-dim">

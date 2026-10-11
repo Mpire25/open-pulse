@@ -98,7 +98,7 @@ export function WorkoutsView({
         </button>
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div className="flex min-w-0 items-center gap-3">
-            <div className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-recovery-soft text-recovery">
+            <div className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-recovery-soft text-recovery-icon">
               <Barbell size={22} weight="fill" />
             </div>
             <div className="min-w-0">
@@ -138,7 +138,7 @@ export function WorkoutsView({
                   <SectionHeader
                     title="Training rhythm"
                     hint="Active minutes by workout type"
-                    icon={<CalendarCheck size={18} weight="fill" className="text-recovery" />}
+                    icon={<CalendarCheck size={18} weight="fill" className="text-recovery-icon" />}
                   />
                   <div className="mt-auto">
                     <StackedColumnChart
@@ -175,7 +175,7 @@ export function WorkoutsView({
                 <SectionHeader
                   title={range === 'D' ? 'Sessions' : 'Workout history'}
                   hint={sessions.length ? `${sessions.length} in this range` : 'No sessions in this range'}
-                  icon={<Barbell size={18} weight="fill" className="text-recovery" />}
+                  icon={<Barbell size={18} weight="fill" className="text-recovery-icon" />}
                 />
               </div>
               {groups.length > 0 ? (
@@ -275,7 +275,7 @@ function SummaryStat({
 }): React.JSX.Element {
   return (
     <div className="flex min-w-0 flex-col justify-center px-5 py-4">
-      <div className="flex items-center gap-2 text-recovery">
+      <div className="flex items-center gap-2 text-recovery-icon">
         {icon}
         <span className="text-[11px] font-medium text-ink-faint">{label}</span>
       </div>
@@ -296,7 +296,7 @@ function TrainingSplit({
       <SectionHeader
         title="Training split"
         hint="Share of active time"
-        icon={<ChartDonut size={18} weight="fill" className="text-recovery" />}
+        icon={<ChartDonut size={18} weight="fill" className="text-recovery-icon" />}
       />
       {types.length > 0 ? (
         fullWidth ? (
@@ -466,7 +466,7 @@ function WorkoutsSkeleton({ range }: { range: MetricRange }): React.JSX.Element 
             <SectionHeader
               title="Training rhythm"
               hint="Active minutes by workout type"
-              icon={<CalendarCheck size={18} weight="fill" className="text-recovery" />}
+              icon={<CalendarCheck size={18} weight="fill" className="text-recovery-icon" />}
             />
             <SkeletonChart height={190} columns={columns} />
           </Panel>
@@ -480,7 +480,7 @@ function WorkoutsSkeleton({ range }: { range: MetricRange }): React.JSX.Element 
           <SectionHeader
             title="Training split"
             hint="Share of active time"
-            icon={<ChartDonut size={18} weight="fill" className="text-recovery" />}
+            icon={<ChartDonut size={18} weight="fill" className="text-recovery-icon" />}
           />
           {range === 'D' ? (
             <>
@@ -508,7 +508,7 @@ function WorkoutsSkeleton({ range }: { range: MetricRange }): React.JSX.Element 
           <SectionHeader
             title={range === 'D' ? 'Sessions' : 'Workout history'}
             hint={<SkeletonText className="w-28" />}
-            icon={<Barbell size={18} weight="fill" className="text-recovery" />}
+            icon={<Barbell size={18} weight="fill" className="text-recovery-icon" />}
           />
         </div>
         <div className="px-3 py-3">

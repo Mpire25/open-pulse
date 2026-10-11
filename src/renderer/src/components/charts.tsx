@@ -2,6 +2,7 @@
 // gridlines, a hover layer on every plot (full-band hit targets, one tooltip
 // with the value leading), previous render held while data refetches.
 
+import { iconColor } from '@/lib/icon-color'
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { animate, motion, useMotionValue, useReducedMotion, useTransform } from 'framer-motion'
 import { formatMinuteOfDay } from '@/lib/format'
@@ -1180,7 +1181,7 @@ export function Spark({ values, color, width = 72, height = 24 }: { values: Arra
           cx={x(lastIdx)}
           cy={y(lastVal)}
           r={2.5}
-          fill={chartColor(color)}
+          fill={iconColor(color)}
           initial={reduceMotion ? false : { opacity: 0, scale: 0 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{

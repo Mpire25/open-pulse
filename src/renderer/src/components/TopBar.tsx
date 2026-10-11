@@ -58,7 +58,7 @@ export function TopBar({
             chatOpen ? 'bg-accent-soft text-accent' : 'text-ink-dim hover:bg-surface-tint/[0.06] hover:text-ink'
           )}
         >
-          <Sparkle size={14} weight="fill" />
+          <Sparkle size={14} weight="fill" className={chatOpen ? 'text-accent-icon' : undefined} />
           Ask
         </button>
       )}
@@ -82,7 +82,7 @@ function RefreshButton({ onRefreshDate }: { onRefreshDate: () => void }): React.
       title={busy ? 'Syncing…' : 'Refresh data'}
       className={cn(
         'no-drag grid h-7 w-7 place-items-center rounded-lg transition-colors',
-        busy ? 'text-accent' : 'text-ink-dim hover:bg-surface-tint/[0.06] hover:text-ink'
+        busy ? 'text-accent-icon' : 'text-ink-dim hover:bg-surface-tint/[0.06] hover:text-ink'
       )}
     >
       <ArrowClockwise size={15} weight="bold" className={cn(busy && 'animate-spin')} />

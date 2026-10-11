@@ -1,3 +1,4 @@
+import { iconColor } from '@/lib/icon-color'
 import { chartColor } from '@/lib/chart-color'
 import { useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
@@ -93,7 +94,7 @@ export function NutritionView({ date, goals, onOpenMetric, onSelectDate }: Nutri
           <DrillHeader
             title={def.label}
             hint="Last 7 days"
-            icon={<def.icon size={18} weight="fill" style={{ color: def.color }} />}
+            icon={<def.icon size={18} weight="fill" style={{ color: iconColor(def.color) }} />}
             action={
               pending ? (
                 <SkeletonText className="h-5 w-20" />
@@ -317,7 +318,7 @@ function NutritionLogsPanel({ entries }: { entries: NutritionLogEntry[] }): Reac
         <SectionHeader
           title="Logged meals"
           hint={`${entries.length} ${entries.length === 1 ? 'entry' : 'entries'} organized by meal`}
-          icon={<ForkKnife size={18} weight="fill" style={{ color: 'var(--color-recovery)' }} />}
+          icon={<ForkKnife size={18} weight="fill" style={{ color: iconColor('var(--color-recovery)') }} />}
         />
       </div>
       <div className="divide-y divide-hairline">
@@ -336,7 +337,7 @@ function NutritionLogsStatus({ hint, message }: { hint: string; message: string 
         <SectionHeader
           title="Logged meals"
           hint={hint}
-          icon={<ForkKnife size={18} weight="fill" style={{ color: 'var(--color-recovery)' }} />}
+          icon={<ForkKnife size={18} weight="fill" style={{ color: iconColor('var(--color-recovery)') }} />}
         />
       </div>
       <div className="grid min-h-[168px] place-items-center px-5 text-center text-[13px] text-ink-faint">
@@ -480,7 +481,7 @@ function NutritionLogsSkeleton(): React.JSX.Element {
         <SectionHeader
           title="Logged meals"
           hint={<SkeletonText className="w-36" />}
-          icon={<ForkKnife size={18} weight="fill" style={{ color: 'var(--color-recovery)' }} />}
+          icon={<ForkKnife size={18} weight="fill" style={{ color: iconColor('var(--color-recovery)') }} />}
         />
       </div>
       {Array.from({ length: 2 }, (_, groupIndex) => (

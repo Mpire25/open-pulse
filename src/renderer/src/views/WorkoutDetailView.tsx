@@ -1,3 +1,4 @@
+import { iconColor } from '@/lib/icon-color'
 import { chartColor } from '@/lib/chart-color'
 import { useState } from 'react'
 import { motion } from 'framer-motion'
@@ -140,7 +141,7 @@ export function WorkoutDetailView({ workout, date, onBack }: WorkoutDetailViewPr
           <SectionHeader
             title="Heart rate"
             hint={heartPoints.length ? `${heartPoints.length} readings during this workout` : 'Recorded workout window'}
-            icon={<Heartbeat size={18} weight="fill" className="text-heart" />}
+            icon={<Heartbeat size={18} weight="fill" className="text-heart-icon" />}
             action={
               heartValues.length > 0 || heartRateChartZones.length > 0 ? (
                 <div className="flex items-center gap-3">
@@ -171,7 +172,7 @@ export function WorkoutDetailView({ workout, date, onBack }: WorkoutDetailViewPr
                         <StackSimple
                           size={14}
                           weight={showHeartRateZones ? 'fill' : 'regular'}
-                          className={showHeartRateZones ? 'text-heart' : 'text-ink-faint'}
+                          className={showHeartRateZones ? 'text-heart-icon' : 'text-ink-faint'}
                         />
                         Zones
                       </motion.button>
@@ -233,7 +234,7 @@ export function WorkoutDetailView({ workout, date, onBack }: WorkoutDetailViewPr
                 <SectionHeader
                   title="Route"
                   hint={routePoints.length ? `${routePoints.length} GPS trackpoints` : 'Recorded GPS trace'}
-                  icon={<MapPin size={18} weight="fill" style={{ color: tone.color }} />}
+                  icon={<MapPin size={18} weight="fill" style={{ color: iconColor(tone.color) }} />}
                 />
                 <div className="mt-4">
                   {track.isPending ? (
@@ -258,7 +259,7 @@ export function WorkoutDetailView({ workout, date, onBack }: WorkoutDetailViewPr
             <SectionHeader
               title="Session timing"
               hint="Elapsed time, active time, and recorded events"
-              icon={<Clock size={18} weight="fill" style={{ color: tone.color }} />}
+              icon={<Clock size={18} weight="fill" style={{ color: iconColor(tone.color) }} />}
             />
             <div className="mt-7 grid grid-cols-[auto_1fr_auto] items-center gap-4">
               <TimePoint label="Started" value={startLabel} />
@@ -301,7 +302,7 @@ export function WorkoutDetailView({ workout, date, onBack }: WorkoutDetailViewPr
             <SectionHeader
               title="Performance"
               hint="Native exercise metrics where available"
-              icon={<Gauge size={18} weight="fill" style={{ color: tone.color }} />}
+              icon={<Gauge size={18} weight="fill" style={{ color: iconColor(tone.color) }} />}
             />
             {performance.length > 0 ? (
               <div className="mt-5 grid grid-cols-2 gap-x-5 gap-y-4">
@@ -327,7 +328,7 @@ export function WorkoutDetailView({ workout, date, onBack }: WorkoutDetailViewPr
             <SectionHeader
               title="Advanced metrics"
               hint="Sport-specific measurements supplied by the tracker"
-              icon={<Mountains size={18} weight="fill" style={{ color: tone.color }} />}
+              icon={<Mountains size={18} weight="fill" style={{ color: iconColor(tone.color) }} />}
             />
             <div className="workout-advanced-grid mt-4 grid grid-cols-2 gap-2">
               {specialized.map((item) => (
@@ -351,7 +352,7 @@ function DetailStat({ item, color }: { item: DetailItem; color: string }): React
   return (
     <div className="min-w-0 rounded-[16px] bg-surface-tint/[0.025] px-4 py-4">
       <div className="flex items-center gap-2 text-[11px] text-ink-faint">
-        <span style={{ color }}>{item.icon}</span>
+        <span style={{ color: iconColor(color) }}>{item.icon}</span>
         <span className="truncate">{item.label}</span>
       </div>
       <div className="mt-2 truncate font-mono text-[15px] font-medium text-ink">{item.value}</div>
@@ -384,7 +385,7 @@ function HeartRateZones({ zones }: { zones: ReturnType<typeof zoneItems> }): Rea
       <SectionHeader
         title="Heart-rate zones"
         hint={`${formatMinutes(total)} with a classified zone`}
-        icon={<Lightning size={18} weight="fill" className="text-heart" />}
+        icon={<Lightning size={18} weight="fill" className="text-heart-icon" />}
       />
       <div className="mt-5 flex h-3 overflow-hidden rounded-full bg-surface-tint/[0.035]">
         {zones.map((zone) => (

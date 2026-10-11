@@ -3,6 +3,7 @@
 // One data-driven page — the registry decides naming, color, chart type, and
 // aggregation, so every metric behaves identically.
 
+import { iconColor } from '@/lib/icon-color'
 import { useEffect, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
 import { ArrowLeft } from '@phosphor-icons/react'
@@ -242,7 +243,7 @@ export function MetricDetailView({
               className="grid h-11 w-11 place-items-center rounded-2xl"
               style={{ background: `color-mix(in oklab, ${def.color} 14%, transparent)` }}
             >
-              <Icon size={22} weight="fill" style={{ color: def.color }} />
+              <Icon size={22} weight="fill" style={{ color: iconColor(def.color) }} />
             </div>
             <div>
               <h1 className="display text-[27px] font-bold leading-tight text-ink">{def.label}</h1>

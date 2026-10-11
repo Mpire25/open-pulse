@@ -1,3 +1,4 @@
+import { iconColor } from '@/lib/icon-color'
 import type { Icon } from '@phosphor-icons/react'
 import { CaretRight } from '@phosphor-icons/react'
 import { Spark } from '@/components/charts'
@@ -49,7 +50,7 @@ export function MetricStat({
             </>
           ) : (
             <>
-              {IconCmp && <IconCmp size={13} weight="fill" style={{ color: accent }} />}
+              {IconCmp && <IconCmp size={13} weight="fill" style={{ color: iconColor(accent) }} />}
               <span className="truncate text-[11px] font-medium tracking-wide text-ink-faint">{label}</span>
             </>
           )}

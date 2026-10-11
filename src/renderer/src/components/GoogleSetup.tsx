@@ -148,7 +148,7 @@ export function GoogleSetup({
                   className="no-drag mt-1 inline-flex items-center gap-1 text-[12px] font-medium text-accent transition-opacity hover:opacity-80"
                 >
                   {step.link.label}
-                  <ArrowSquareOut size={12} weight="bold" />
+                  <ArrowSquareOut size={12} weight="bold" className="text-accent-icon" />
                 </a>
               )}
             </div>
@@ -189,7 +189,7 @@ export function GoogleSetup({
             animate={{ opacity: 1, y: 0 }}
             className="flex items-start gap-2 rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-[12px] text-danger"
           >
-            <Warning size={15} weight="fill" className="mt-0.5 shrink-0" />
+            <Warning size={15} weight="fill" className="mt-0.5 shrink-0 text-danger-icon" />
             {error}
           </motion.div>
         )}

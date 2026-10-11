@@ -215,7 +215,7 @@ function SessionRow({ session, selected, streaming, onSelect, onPin, onKeep, onD
         aria-label={session.title}
         className="flex min-w-0 flex-1 items-center gap-2 rounded-[10px] py-2.5 pl-3 pr-1 text-left outline-none focus-visible:ring-1 focus-visible:ring-accent/50"
       >
-        {streaming && <span className="size-1.5 shrink-0 animate-pulse rounded-full bg-accent" />}
+        {streaming && <span className="size-1.5 shrink-0 animate-pulse rounded-full bg-accent-icon" />}
         <SessionTitle title={session.title} />
       </button>
       {/* Only the visible trailing content takes up space, so the fade stays
@@ -236,7 +236,7 @@ function SessionRow({ session, selected, streaming, onSelect, onPin, onKeep, onD
           onClick={onKeep}
           className={cn(
             'grid size-7 shrink-0 place-items-center rounded-lg transition-colors hover:bg-surface-tint/[0.08] hover:text-ink',
-            session.kept ? 'text-accent' : 'text-ink-faint'
+            session.kept ? 'text-accent-icon' : 'text-ink-faint'
           )}
         >
           <ShieldCheck size={13} weight={session.kept ? 'fill' : 'regular'} />
@@ -255,7 +255,7 @@ function SessionRow({ session, selected, streaming, onSelect, onPin, onKeep, onD
           title="Delete chat"
           aria-label={`Delete ${session.title}`}
           onClick={(event) => onDelete(event.currentTarget, event.detail === 0)}
-          className="grid size-7 shrink-0 place-items-center rounded-lg text-ink-faint transition-colors hover:bg-danger/10 hover:text-danger"
+          className="grid size-7 shrink-0 place-items-center rounded-lg text-ink-faint transition-colors hover:bg-danger/10 hover:text-danger-icon"
         >
           <Trash size={13} />
         </button>

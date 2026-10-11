@@ -1,3 +1,4 @@
+import { iconColor } from '@/lib/icon-color'
 import { chartColor } from '@/lib/chart-color'
 import { motion } from 'framer-motion'
 import { Barbell, Footprints } from '@phosphor-icons/react'
@@ -222,7 +223,7 @@ export function ActivityView({ date, goals, onOpenMetric, onOpenWorkout, onOpenW
             <DrillHeader
               title="Hourly steps"
               hint="When did you move?"
-              icon={<Footprints size={18} weight="fill" style={{ color: 'var(--color-activity)' }} />}
+              icon={<Footprints size={18} weight="fill" style={{ color: iconColor('var(--color-activity)') }} />}
             />
             {intraday.isPending ? (
               <SkeletonChart height={180} columns={24} tickEvery={6} tickWidth={40} />
@@ -273,7 +274,7 @@ export function ActivityView({ date, goals, onOpenMetric, onOpenWorkout, onOpenW
                     'No sessions logged'
                   )
                 }
-                icon={<Barbell size={18} weight="fill" style={{ color: 'var(--color-recovery)' }} />}
+                icon={<Barbell size={18} weight="fill" style={{ color: iconColor('var(--color-recovery)') }} />}
               />
             </div>
             {workouts.isPending ? (

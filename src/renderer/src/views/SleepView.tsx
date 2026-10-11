@@ -1,3 +1,4 @@
+import { iconColor } from '@/lib/icon-color'
 import { selectedSleepSession, sleepSessionId } from '@shared/sleep'
 import { SleepSessionSelector } from '@/components/SleepSessionSelector'
 import { motion } from 'framer-motion'
@@ -122,7 +123,7 @@ export function SleepView({ date, goals, sessionId, onSelectSession, onOpenMetri
                     'No stages recorded'
                   )
                 }
-                icon={<Moon size={18} weight="fill" style={{ color: 'var(--color-sleep)' }} />}
+                icon={<Moon size={18} weight="fill" style={{ color: iconColor('var(--color-sleep)') }} />}
               />
               <div className="mt-4">
                 <SleepStages key={night ? sleepSessionId(night) : "empty"} night={night} compact loading={sleepDays.isPending} />
@@ -143,7 +144,7 @@ export function SleepView({ date, goals, sessionId, onSelectSession, onOpenMetri
               <DrillHeader
                 title="Duration"
                 hint="Daily totals · Last 7 days"
-                icon={<Moon size={18} weight="fill" style={{ color: 'var(--color-sleep)' }} />}
+                icon={<Moon size={18} weight="fill" style={{ color: iconColor('var(--color-sleep)') }} />}
               />
               <div className="mt-auto">
                 {sleepDays.isPending ? (
@@ -177,7 +178,7 @@ export function SleepView({ date, goals, sessionId, onSelectSession, onOpenMetri
               <DrillHeader
                 title="Efficiency"
                 hint="Time asleep across recorded sleep periods"
-                icon={<Timer size={18} weight="fill" style={{ color: 'var(--color-sleep)' }} />}
+                icon={<Timer size={18} weight="fill" style={{ color: iconColor('var(--color-sleep)') }} />}
               />
               <div className="mt-auto">
                 {sleepDays.isPending ? (

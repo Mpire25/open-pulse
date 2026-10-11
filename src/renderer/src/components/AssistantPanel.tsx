@@ -63,7 +63,7 @@ export function AssistantPanel({
         <div className="flex items-center justify-between border-b border-hairline px-4 py-3">
           <div className="flex items-center gap-2">
             <div className="grid h-6 w-6 place-items-center rounded-lg bg-accent-soft">
-              <Sparkle size={13} weight="fill" className="text-accent" />
+              <Sparkle size={13} weight="fill" className="text-accent-icon" />
             </div>
             <span className="text-[13.5px] font-semibold">{historyOpen ? 'Chats' : 'Assistant'}</span>
           </div>

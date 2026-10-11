@@ -26,6 +26,7 @@ export function DeltaChip({
 }: DeltaChipProps): React.JSX.Element | null {
   if (delta == null || Math.abs(delta) < minMagnitude) return null
   const good = upIsGood == null ? null : delta > 0 ? upIsGood : !upIsGood
+  const iconClass = good == null ? undefined : good ? 'text-recovery-icon' : 'text-heart-icon'
   return (
     <span
       className={cn(
@@ -36,7 +37,7 @@ export function DeltaChip({
         className
       )}
     >
-      {delta > 0 ? <TrendUp size={11} weight="bold" /> : <TrendDown size={11} weight="bold" />}
+      {delta > 0 ? <TrendUp size={11} weight="bold" className={iconClass} /> : <TrendDown size={11} weight="bold" className={iconClass} />}
       {format(Math.abs(delta))}
     </span>
   )

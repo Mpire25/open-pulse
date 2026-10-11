@@ -59,6 +59,17 @@
 
   --color-danger: #e0544e;
 
+  /* Icons have their own shades; default aliases retain the original dark look. */
+  --color-activity-icon: var(--color-activity);
+  --color-heart-icon: var(--color-heart);
+  --color-recovery-icon: var(--color-recovery);
+  --color-sleep-icon: var(--color-sleep);
+  --color-hydration-icon: var(--color-hydration);
+  --color-body-metric-icon: var(--color-body-metric);
+  --color-accent-icon: var(--color-accent);
+  --color-success-icon: var(--color-success);
+  --color-danger-icon: var(--color-danger);
+
   /* Neutral effects use a theme-aware tint; white foregrounds on brand tiles stay white. */
   --color-surface-tint: #ffffff;
   --color-field: rgb(0 0 0 / 0.25);
@@ -106,7 +117,7 @@
   --color-success-fill: #46866c;
 
   /* Clear metric hues for pale surfaces. Foregrounds stay deeper than
-     rings, plots, and bars so small labels and icons remain easy to read. */
+     rings, plots, and bars so small labels remain easy to read. */
   --color-activity: #865e23;
   --color-activity-mark: #b1792b;
   --color-activity-soft: rgb(177 121 43 / 0.12);
@@ -125,6 +136,31 @@
   --color-body-metric: #86527a;
   --color-body-metric-mark: #aa699e;
   --color-body-metric-soft: rgb(170 105 158 / 0.12);
+
+  /* Saturated icon shades stay visibly colored at 13–18px on white and tinted
+     surfaces. Text keeps the deeper foregrounds above; charts keep their fills. */
+  --color-activity-icon: #bc7a16;
+  --color-heart-icon: #d55a48;
+  --color-recovery-icon: #13966b;
+  --color-sleep-icon: #7965d4;
+  --color-hydration-icon: #208cbd;
+  --color-body-metric-icon: #b34ca3;
+  --color-accent-icon: var(--color-sleep-icon);
+  --color-success-icon: #17945b;
+  --color-danger-icon: #ce534a;
+
+  --color-workout-walking-icon: var(--color-recovery-icon);
+  --color-workout-running-icon: #cf6b32;
+  --color-workout-strength-icon: var(--color-activity-icon);
+  --color-workout-cycling-icon: var(--color-hydration-icon);
+  --color-workout-swimming-icon: var(--color-sleep-icon);
+  --color-workout-mobility-icon: #249d8b;
+  --color-workout-cardio-icon: var(--color-heart-icon);
+  --color-workout-tennis-icon: #849b25;
+  --color-workout-badminton-icon: #1b9aaa;
+  --color-workout-football-icon: var(--color-body-metric-icon);
+  --color-workout-treadmill-icon: #ce5b88;
+  --color-workout-other-icon: #738298;
 
   --color-workout-walking: var(--color-recovery);
   --color-workout-walking-mark: var(--color-recovery-mark);

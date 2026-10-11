@@ -108,7 +108,7 @@ export function AssistantView({
       <div className="mx-auto flex w-full max-w-[1060px] items-center justify-between px-8 pb-2 pt-1.5">
         <div className="flex items-center gap-2.5">
           <div className="grid h-6 w-6 place-items-center rounded-lg bg-accent-soft">
-            <Sparkle size={14} weight="fill" className="text-accent" />
+            <Sparkle size={14} weight="fill" className="text-accent-icon" />
           </div>
           <span className="display text-[15px] font-bold">Assistant</span>
         </div>

@@ -149,7 +149,7 @@ function Presets({ date, today, onPick }: { date: string; today: string; onPick:
           )}
         >
           {p.label}
-          {date === p.value && <span className="text-accent">✓</span>}
+          {date === p.value && <span className="text-accent-icon">✓</span>}
         </button>
       ))}
     </div>

@@ -1,3 +1,4 @@
+import { iconColor } from '@/lib/icon-color'
 import { chartColor } from '@/lib/chart-color'
 import { useState } from 'react'
 import { motion } from 'framer-motion'
@@ -131,7 +132,7 @@ export function DevicesView({ connected, today }: DevicesViewProps): React.JSX.E
                       )}
                     </div>
                     {!pending && available.length > 0 && (
-                      <CheckCircle size={17} weight="fill" style={{ color: 'var(--color-recovery)' }} />
+                      <CheckCircle size={17} weight="fill" style={{ color: iconColor('var(--color-recovery)') }} />
                     )}
                   </div>
                 )
@@ -173,7 +174,7 @@ function DeviceHero({ device, connected }: { device: PairedDevice; connected: bo
             >
               <span
                 className="h-1.5 w-1.5 rounded-full"
-                style={{ background: connected ? 'var(--color-recovery)' : 'var(--color-ink-faint)' }}
+                style={{ background: connected ? 'var(--color-recovery-icon)' : 'var(--color-ink-faint)' }}
               />
               {connected ? 'Connected' : 'Sample device'}
             </span>

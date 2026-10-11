@@ -1,3 +1,4 @@
+import { iconColor } from '@/lib/icon-color'
 import { chartColor } from '@/lib/chart-color'
 import { memo, useEffect, useState } from 'react'
 import { ForkKnife, Minus, Moon, Pulse, TrendDown, TrendUp } from '@phosphor-icons/react'
@@ -102,7 +103,7 @@ function AssistantResponsePartsBase({
             <MotionPanel key={part.id} {...entrance} className={cn('overflow-hidden', layoutClass)}>
               <div className="border-b border-hairline px-5 pb-3 pt-4">
                 <SectionHeader
-                  icon={<Pulse size={18} weight="fill" className="text-accent" />}
+                  icon={<Pulse size={18} weight="fill" className="text-accent-icon" />}
                   title={part.title}
                   hint={`${shortDate(part.startDate)}–${shortDate(part.endDate)} · ${part.items.length} signals`}
                 />
@@ -165,7 +166,7 @@ function AssistantResponsePartsBase({
             <MotionPanel key={part.id} {...entrance} className={cn('overflow-hidden', layoutClass)}>
               <div className="border-b border-hairline px-5 pb-3 pt-4">
                 <DrillHeader
-                  icon={<Icon size={18} weight="fill" style={{ color: def.color }} />}
+                  icon={<Icon size={18} weight="fill" style={{ color: iconColor(def.color) }} />}
                   title={`${def.shortLabel ?? def.label} comparison`}
                   hint={def.label}
                   onOpen={() => onAction(part.action)}
@@ -221,7 +222,7 @@ function AssistantResponsePartsBase({
           return (
             <MotionPanel key={part.id} {...entrance} className={cn('flex flex-col gap-3 p-5', layoutClass)}>
               <DrillHeader
-                icon={<Icon size={18} weight="fill" style={{ color: def.color }} />}
+                icon={<Icon size={18} weight="fill" style={{ color: iconColor(def.color) }} />}
                 title={`${def.shortLabel ?? def.label} trend`}
                 hint={`${shortDate(part.startDate)}–${shortDate(part.endDate)} · ${part.observations} readings`}
                 onOpen={() => onAction(part.action)}
@@ -277,7 +278,7 @@ function AssistantResponsePartsBase({
             <MotionPanel key={part.id} {...entrance} className={cn('overflow-hidden', layoutClass)}>
               <div className="border-b border-hairline px-5 pb-3 pt-4">
                 <DrillHeader
-                  icon={<Moon size={18} weight="fill" className="text-sleep" />}
+                  icon={<Moon size={18} weight="fill" className="text-sleep-icon" />}
                   title="Sleep stages"
                   hint={`${shortDate(night.date)} · ${formatClock(night.startTime)}–${formatClock(night.endTime)} · ${formatMinutes(night.minutesAsleep)} asleep${night.efficiency == null ? '' : ` · ${formatInt(night.efficiency)}% efficiency`}`}
                   onOpen={() => onAction(part.action)}
@@ -345,7 +346,7 @@ function NutritionCard({
     <MotionPanel {...entrance} className={cn('overflow-hidden', layoutClass)}>
       <div className="border-b border-hairline px-5 pb-3 pt-4">
         <DrillHeader
-          icon={<ForkKnife size={18} weight="fill" style={{ color: 'var(--color-recovery)' }} />}
+          icon={<ForkKnife size={18} weight="fill" style={{ color: iconColor('var(--color-recovery)') }} />}
           title={part.title}
           hint={details}
           onOpen={onOpen}
@@ -478,8 +479,8 @@ function DirectionLabel({
         className={cn(
           'size-1.5 rounded-full',
           tone === 'neutral' && 'bg-ink-faint',
-          tone === 'good' && 'bg-recovery',
-          tone === 'bad' && 'bg-heart'
+          tone === 'good' && 'bg-recovery-icon',
+          tone === 'bad' && 'bg-heart-icon'
         )}
       />
       {direction}
@@ -512,7 +513,11 @@ function ComparisonChange({
         tone === 'bad' && 'bg-heart-soft text-heart'
       )}
     >
-      <Icon size={11} weight="bold" />
+      <Icon
+        size={11}
+        weight="bold"
+        className={cn(tone === 'good' && 'text-recovery-icon', tone === 'bad' && 'text-heart-icon')}
+      />
       {direction === 'same' ? 'No change' : `${format(Math.abs(delta))} ${direction}`}
     </span>
   )
