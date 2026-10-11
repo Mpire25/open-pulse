@@ -108,7 +108,7 @@
   --color-hairline: rgb(24 30 48 / 0.09);
   --color-hairline-strong: rgb(24 30 48 / 0.18);
   --color-ink: #202430;
-  --color-ink-dim: #575e70;
+  --color-ink-dim: #454c5e;
   --color-ink-faint: #646b7d;
   --color-surface-tint: #182030;
   --color-field: rgb(255 255 255 / 0.8);
@@ -126,6 +126,7 @@
   /* Each hue has two shades on pale surfaces: a deep one for text, and one
      bright shade shared by icons, plots, bars, and rings. The bright shade
      holds 3:1 on white cards; values always sit beside it as text. */
+
   /* Amber can't reach text contrast on white without turning brown, so
      activity values read in ink; the icon and a true gold carry the hue. */
   --color-activity: var(--color-ink);
