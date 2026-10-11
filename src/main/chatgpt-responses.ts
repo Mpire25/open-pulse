@@ -8,9 +8,10 @@ export function reasoningOptions(
     ? {}
     : { reasoning: { effort: assistant.reasoningEffort } }
 }
-export function serviceTierOptions(assistant: AssistantSettings): { service_tier: string } {
+// Standard sends no tier, exactly as requests did before speeds existed.
+export function serviceTierOptions(assistant: AssistantSettings): { service_tier?: string } {
   const tier = assistant.serviceTier
-  return { service_tier: tier && tier !== 'auto' && SERVICE_TIER_PATTERN.test(tier) ? tier : 'default' }
+  return tier && tier !== 'auto' && tier !== 'default' && SERVICE_TIER_PATTERN.test(tier) ? { service_tier: tier } : {}
 }
 export function localToolNamespace(tools: unknown[]): unknown[] {
   return tools.length

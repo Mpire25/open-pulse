@@ -98,11 +98,11 @@ test('ID tokens require a valid signature, issuer, audience, expiry and nonce', 
   ).rejects.toThrow()
 })
 
-test('speed preferences explicitly request Standard by default and retain valid advertised tiers', () => {
-  for (const serviceTier of [undefined, 'auto', '', 'bad tier', 'x'.repeat(65)]) {
-    expect(serviceTierOptions({ model: 'future', serviceTier })).toEqual({ service_tier: 'default' })
+test('Standard speed sends no tier and other valid advertised tiers are retained', () => {
+  for (const serviceTier of [undefined, 'default', 'auto', '', 'bad tier', 'x'.repeat(65)]) {
+    expect(serviceTierOptions({ model: 'future', serviceTier })).toEqual({})
   }
-  for (const serviceTier of ['default', 'priority', 'fast', 'future-speed']) {
+  for (const serviceTier of ['priority', 'fast', 'future-speed']) {
     expect(serviceTierOptions({ model: 'future', serviceTier })).toEqual({ service_tier: serviceTier })
   }
 })

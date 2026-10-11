@@ -210,7 +210,10 @@ describe('brokered Codex research orchestration', () => {
     let calls = 0
     globalThis.fetch = (async (_input, init) => {
       calls++
-      expect(requestBody(init)).toMatchObject({ service_tier: serviceTier ?? 'default', reasoning: { effort: 'low' } })
+      const body = requestBody(init)
+      expect(body).toMatchObject({ reasoning: { effort: 'low' } })
+      if (serviceTier && serviceTier !== 'default') expect(body.service_tier).toBe(serviceTier)
+      else expect(body).not.toHaveProperty('service_tier')
       return message('Your answer is ready.')
     }) as typeof fetch
     await runChat(sender as unknown as WebContents, 'speed-chat', 'speed-run', [{ role: 'user', text: 'Hello.' }])
