@@ -1,3 +1,4 @@
+import { chartColor } from '@/lib/chart-color'
 import { useState } from 'react'
 import { motion } from 'framer-motion'
 import {
@@ -264,11 +265,11 @@ export function WorkoutDetailView({ workout, date, onBack }: WorkoutDetailViewPr
               <div className="relative h-px bg-hairline-strong">
                 <span
                   className="absolute left-0 top-1/2 h-2 w-2 -translate-y-1/2 rounded-full"
-                  style={{ background: tone.color }}
+                  style={{ background: chartColor(tone.color) }}
                 />
                 <span
                   className="absolute right-0 top-1/2 h-2 w-2 -translate-y-1/2 rounded-full"
-                  style={{ background: tone.color }}
+                  style={{ background: chartColor(tone.color) }}
                 />
               </div>
               <TimePoint label="Finished" value={endLabel} align="right" />
@@ -387,14 +388,14 @@ function HeartRateZones({ zones }: { zones: ReturnType<typeof zoneItems> }): Rea
       />
       <div className="mt-5 flex h-3 overflow-hidden rounded-full bg-surface-tint/[0.035]">
         {zones.map((zone) => (
-          <span key={zone.label} style={{ width: `${(zone.minutes / total) * 100}%`, background: zone.color }} />
+          <span key={zone.label} style={{ width: `${(zone.minutes / total) * 100}%`, background: chartColor(zone.color) }} />
         ))}
       </div>
       <div className="workout-zone-grid mt-4 grid grid-cols-2 gap-x-5 gap-y-4">
         {zones.map((zone) => (
           <div key={zone.label} className="flex items-center justify-between gap-3 border-t border-hairline pt-3">
             <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-[11.5px] text-ink-dim">
-              <span className="h-2 w-2 rounded-full" style={{ background: zone.color }} />
+              <span className="h-2 w-2 rounded-full" style={{ background: chartColor(zone.color) }} />
               <span>{zone.label}</span>
               {zone.range && <span className="whitespace-nowrap font-mono text-[10.5px] text-ink-faint">{zone.range}</span>}
             </span>
@@ -448,9 +449,9 @@ function RoutePlot({
           <line x1="0" x2={width} y1={height * ratio} y2={height * ratio} />
         </g>
       ))}
-      <path d={path} fill="none" stroke={color} strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
-      <circle cx={start.x} cy={start.y} r="6" fill={color} stroke="var(--color-panel)" strokeWidth="3" />
-      <circle cx={finish.x} cy={finish.y} r="6" fill="var(--color-heart)" stroke="var(--color-panel)" strokeWidth="3" />
+      <path d={path} fill="none" stroke={chartColor(color)} strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx={start.x} cy={start.y} r="6" fill={chartColor(color)} stroke="var(--color-panel)" strokeWidth="3" />
+      <circle cx={finish.x} cy={finish.y} r="6" fill={chartColor('var(--color-heart)')} stroke="var(--color-panel)" strokeWidth="3" />
     </svg>
   )
 }

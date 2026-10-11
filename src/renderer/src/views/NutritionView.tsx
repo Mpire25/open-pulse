@@ -1,3 +1,4 @@
+import { chartColor } from '@/lib/chart-color'
 import { useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { CaretDown, ForkKnife } from '@phosphor-icons/react'
@@ -284,7 +285,7 @@ function NutritionDayRow({
             <span
               key={part.key}
               className="rounded-full"
-              style={{ width: `${(part.kcal / macroCalories) * 100}%`, background: part.color }}
+              style={{ width: `${(part.kcal / macroCalories) * 100}%`, background: chartColor(part.color) }}
             />
           ) : null)}
         </div>
@@ -571,7 +572,7 @@ function MacroBreakdown({
         {parts.map(
           (p) =>
             p.kcal > 0 && (
-              <div key={p.key} style={{ width: `${(p.kcal / totalKcal) * 100}%`, background: p.color }} />
+              <div key={p.key} style={{ width: `${(p.kcal / totalKcal) * 100}%`, background: chartColor(p.color) }} />
             )
         )}
       </div>
@@ -584,7 +585,7 @@ function MacroBreakdown({
             className="group -m-1 min-w-0 rounded-xl p-3 text-left outline-none transition-[background-color,box-shadow,transform] duration-200 hover:bg-surface-tint/[0.05] hover:shadow-[inset_0_0_0_1px_var(--color-hairline)] focus-visible:bg-surface-tint/[0.05] focus-visible:ring-2 focus-visible:ring-accent/60 active:scale-[0.98]"
           >
             <div className="flex items-center gap-1.5">
-              <span className="h-2 w-2 rounded-full" style={{ background: p.color }} />
+              <span className="h-2 w-2 rounded-full" style={{ background: chartColor(p.color) }} />
               <span className="text-[11px] font-medium text-ink-faint">{p.label}</span>
             </div>
             <div className="mt-1 flex items-center gap-3">
@@ -613,7 +614,7 @@ function MacroBreakdown({
               className="group min-w-0 rounded-xl px-2 py-1 text-left outline-none transition-colors hover:bg-surface-tint/[0.04] focus-visible:ring-2 focus-visible:ring-accent/60 active:scale-[0.98]"
             >
               <div className="flex items-center gap-1.5 text-[10.5px] font-medium text-ink-faint">
-                <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: nutrient.color }} />
+                <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: chartColor(nutrient.color) }} />
                 <span className="truncate transition-colors group-hover:text-ink-dim">{nutrient.label}</span>
               </div>
               {nutrient.pending ? (

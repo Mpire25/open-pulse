@@ -1,3 +1,4 @@
+import { chartColor } from '@/lib/chart-color'
 import { useMemo } from 'react'
 import { motion } from 'framer-motion'
 import {
@@ -305,7 +306,7 @@ function TrainingSplit({
                 <span
                   key={type.label}
                   className="h-full first:rounded-l-full last:rounded-r-full"
-                  style={{ width: `${type.share}%`, background: workoutTone(type.label).color }}
+                  style={{ width: `${type.share}%`, background: chartColor(workoutTone(type.label).color) }}
                 />
               ))}
             </div>
@@ -346,7 +347,7 @@ function TrainingSplitPie({ types }: { types: DisplayedWorkoutType[] }): React.J
     >
       <circle cx="60" cy="60" r="51" fill="color-mix(in srgb, var(--color-surface-tint) 3.5%, transparent)" />
       {slices.map(({ type, start: sliceStart, end }) => {
-        const color = workoutTone(type.label).color
+        const color = chartColor(workoutTone(type.label).color)
         return type.share >= 99.999 ? (
           <circle
             key={type.label}
@@ -389,7 +390,7 @@ function TrainingSplitLegend({
         <div key={type.label} className="flex min-w-0 items-center gap-3">
           <span
             className="h-2 w-2 shrink-0 rounded-full"
-            style={{ background: workoutTone(type.label).color }}
+            style={{ background: chartColor(workoutTone(type.label).color) }}
           />
           <span className="min-w-0 flex-1 truncate text-[12.5px] font-medium text-ink-dim">{type.label}</span>
           <span className="shrink-0 font-mono text-[11.5px] text-ink">{formatMinutes(type.durationMin)}</span>

@@ -1,3 +1,4 @@
+import { chartColor } from '@/lib/chart-color'
 import { useState } from 'react'
 import { motion } from 'framer-motion'
 import {
@@ -217,10 +218,10 @@ function BatteryMeter({ pct, state }: { pct: number; state?: string | null }): R
         </span>
         <span className="text-[13px] font-semibold text-ink">{Math.round(level)}%</span>
       </div>
-      <div className="h-2 overflow-hidden rounded-full" style={{ background: `color-mix(in oklab, ${color} 18%, transparent)` }}>
+      <div className="h-2 overflow-hidden rounded-full" style={{ background: `color-mix(in oklab, ${chartColor(color)} 18%, transparent)` }}>
         <div
           className="h-full rounded-full transition-[width] duration-700 ease-out motion-reduce:transition-none"
-          style={{ width: `${level}%`, background: color }}
+          style={{ width: `${level}%`, background: chartColor(color) }}
         />
       </div>
     </div>

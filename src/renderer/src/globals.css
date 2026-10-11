@@ -75,6 +75,7 @@
   --shadow-composer: 0 12px 40px -24px rgb(0 0 0 / 0.9);
   --shadow-assistant: 0 20px 50px -30px rgb(0 0 0 / 0.8), inset 0 1px 0 rgb(255 255 255 / 0.05);
   --shadow-workout: 0 18px 24px rgb(0 0 0 / 0.22);
+  --shadow-assistant-logo: 0 10px 30px -10px rgb(125 123 240 / 0.7), inset 0 1px 0 rgb(255 255 255 / 0.3);
 }
 
 :root {
@@ -95,43 +96,65 @@
   --color-field: rgb(255 255 255 / 0.8);
   --color-scrim: rgb(24 30 48 / 0.3);
   --color-panel-hover: #e2e5ef;
-  --color-accent: #5b56cf;
-  --color-accent-soft: rgb(91 86 207 / 0.1);
-  --color-accent-hover: #4943b5;
-  --color-accent-highlight: #4943b5;
-  --color-danger: #b93832;
-  --color-success: #127b3d;
-  --color-success-fill: #148443;
+  --color-accent: #685f97;
+  --color-accent-soft: rgb(146 138 187 / 0.12);
+  --color-accent-hover: #594f85;
+  --color-accent-highlight: #594f85;
+  --color-danger: #a34f47;
+  --color-danger-mark: #c2786f;
+  --color-success: #386e53;
+  --color-success-fill: #6d987f;
 
-  /* Keep each metric's hue identity, with darker marks/text on pale surfaces. */
-  --color-activity: #91600e;
-  --color-activity-soft: rgb(145 96 14 / 0.1);
-  --color-heart: #b83e31;
-  --color-heart-soft: rgb(184 62 49 / 0.1);
-  --color-recovery: #087855;
-  --color-recovery-soft: rgb(8 120 85 / 0.1);
-  --color-sleep: #5b56cf;
-  --color-sleep-soft: rgb(91 86 207 / 0.1);
-  --color-hydration: #176c99;
-  --color-hydration-soft: rgb(23 108 153 / 0.1);
-  --color-body-metric: #963c8b;
-  --color-body-metric-soft: rgb(150 60 139 / 0.1);
-  --color-workout-walking: #087855;
-  --color-workout-running: #a94c21;
-  --color-workout-strength: #91600e;
-  --color-workout-cycling: #176c99;
-  --color-workout-swimming: #5b56cf;
-  --color-workout-mobility: #217a71;
-  --color-workout-cardio: #b83e31;
-  --color-workout-tennis: #617720;
-  --color-workout-badminton: #13798a;
-  --color-workout-football: #963c8b;
-  --color-workout-treadmill: #ad3a5c;
+  /* Quiet, warm metric shades for pale surfaces. Foregrounds stay deeper than
+     rings, plots, and bars so small labels and icons remain easy to read. */
+  --color-activity: #856031;
+  --color-activity-mark: #b98b4f;
+  --color-activity-soft: rgb(185 139 79 / 0.12);
+  --color-heart: #a34f47;
+  --color-heart-mark: #c2786f;
+  --color-heart-soft: rgb(194 120 111 / 0.12);
+  --color-recovery: #386e53;
+  --color-recovery-mark: #6d987f;
+  --color-recovery-soft: rgb(109 152 127 / 0.12);
+  --color-sleep: #685f97;
+  --color-sleep-mark: #928abb;
+  --color-sleep-soft: rgb(146 138 187 / 0.12);
+  --color-hydration: #416b80;
+  --color-hydration-mark: #6e91a3;
+  --color-hydration-soft: rgb(110 145 163 / 0.12);
+  --color-body-metric: #805978;
+  --color-body-metric-mark: #a17f9c;
+  --color-body-metric-soft: rgb(161 127 156 / 0.12);
+
+  --color-workout-walking: var(--color-recovery);
+  --color-workout-walking-mark: var(--color-recovery-mark);
+  --color-workout-running: #955e3d;
+  --color-workout-running-mark: #b98362;
+  --color-workout-strength: var(--color-activity);
+  --color-workout-strength-mark: var(--color-activity-mark);
+  --color-workout-cycling: var(--color-hydration);
+  --color-workout-cycling-mark: var(--color-hydration-mark);
+  --color-workout-swimming: var(--color-sleep);
+  --color-workout-swimming-mark: var(--color-sleep-mark);
+  --color-workout-mobility: #3e7069;
+  --color-workout-mobility-mark: #729a93;
+  --color-workout-cardio: var(--color-heart);
+  --color-workout-cardio-mark: var(--color-heart-mark);
+  --color-workout-tennis: #636f3f;
+  --color-workout-tennis-mark: #939f71;
+  --color-workout-badminton: #3b6e79;
+  --color-workout-badminton-mark: #6f98a2;
+  --color-workout-football: var(--color-body-metric);
+  --color-workout-football-mark: var(--color-body-metric-mark);
+  --color-workout-treadmill: #965670;
+  --color-workout-treadmill-mark: #b98098;
   --color-workout-other: #626b7b;
-  --color-stage-deep: #4944b5;
-  --color-stage-light: #7779d8;
-  --color-stage-rem: #187c9a;
-  --color-stage-awake: #91600e;
+  --color-workout-other-mark: #929aa8;
+
+  --color-stage-deep: #827bb7;
+  --color-stage-light: #b5b1d6;
+  --color-stage-rem: #79a5b4;
+  --color-stage-awake: var(--color-activity-mark);
 
   --shadow-panel: 0 20px 50px -30px rgb(54 65 99 / 0.2);
   --shadow-popover: 0 24px 60px -20px rgb(54 65 99 / 0.25);
@@ -140,6 +163,7 @@
   --shadow-composer: 0 12px 40px -24px rgb(54 65 99 / 0.2);
   --shadow-assistant: 0 20px 50px -30px rgb(54 65 99 / 0.2), inset 0 1px 0 rgb(255 255 255 / 0.6);
   --shadow-workout: 0 18px 24px rgb(54 65 99 / 0.12);
+  --shadow-assistant-logo: 0 10px 30px -10px rgb(107 98 155 / 0.24), inset 0 1px 0 rgb(255 255 255 / 0.3);
 }
 
 html,

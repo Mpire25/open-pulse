@@ -1,3 +1,4 @@
+import { chartColor } from '@/lib/chart-color'
 import { motion } from 'framer-motion'
 import { Barbell, Footprints } from '@phosphor-icons/react'
 import { DrillHeader, DrillPanel, InteractivePanel, Panel } from '@/components/Panel'
@@ -124,7 +125,7 @@ export function ActivityView({ date, goals, onOpenMetric, onOpenWorkout, onOpenW
           <DrillHeader
             title={def.label}
             hint="Last 7 days"
-            icon={<span className="h-2 w-2 rounded-full" style={{ background: def.color }} />}
+            icon={<span className="h-2 w-2 rounded-full" style={{ background: chartColor(def.color) }} />}
           />
           <div className="mt-auto">
             {series.isMetricPending(key) ? (

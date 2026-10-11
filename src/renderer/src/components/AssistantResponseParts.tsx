@@ -1,3 +1,4 @@
+import { chartColor } from '@/lib/chart-color'
 import { memo, useEffect, useState } from 'react'
 import { ForkKnife, Minus, Moon, Pulse, TrendDown, TrendUp } from '@phosphor-icons/react'
 import { motion } from 'framer-motion'
@@ -371,7 +372,7 @@ function NutritionCard({
           {secondary.map((nutrient) => (
             <div key={nutrient.key} className="min-w-0">
               <div className="flex items-center gap-1.5 text-[10px] text-ink-faint">
-                <span className="size-1.5 rounded-full" style={{ background: nutrient.color }} />
+                <span className="size-1.5 rounded-full" style={{ background: chartColor(nutrient.color) }} />
                 <span className="truncate">{nutrient.label}</span>
               </div>
               <div className="mt-1 font-mono text-[12px] font-medium text-ink-dim">

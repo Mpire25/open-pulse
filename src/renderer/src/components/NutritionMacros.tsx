@@ -1,3 +1,4 @@
+import { chartColor } from '@/lib/chart-color'
 import { formatInt } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import type { AssistantNutritionValues } from '@shared/types'
@@ -36,7 +37,7 @@ export function NutritionMacroBar({
       {total > 0 && parts.map((part) => part.kcal > 0 ? (
         <span
           key={part.key}
-          style={{ width: `${(part.kcal / total) * 100}%`, background: part.color }}
+          style={{ width: `${(part.kcal / total) * 100}%`, background: chartColor(part.color) }}
         />
       ) : null)}
     </div>
@@ -55,7 +56,7 @@ export function NutritionMacroTotal({
   if (value == null) return null
   return (
     <span className="flex items-center gap-1.5 text-[10.5px] text-ink-faint">
-      <span className="h-1.5 w-1.5 rounded-full" style={{ background: color }} />
+      <span className="h-1.5 w-1.5 rounded-full" style={{ background: chartColor(color) }} />
       {label} <span className="font-mono text-ink-dim">{formatInt(value)}g</span>
     </span>
   )

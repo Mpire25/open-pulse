@@ -549,7 +549,7 @@ function EmptyState({ compact, onPick }: { compact?: boolean; onPick: (s: string
         initial={{ opacity: 0, scale: 0.9 }}
         animate={{ opacity: 1, scale: 1 }}
         transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
-        className="grid h-12 w-12 place-items-center rounded-2xl bg-gradient-to-br from-accent to-accent-highlight shadow-[0_10px_30px_-10px_rgb(125_123_240/0.7),inset_0_1px_0_rgb(255_255_255/0.3)]"
+        className="grid h-12 w-12 place-items-center rounded-2xl bg-gradient-to-br from-accent to-accent-highlight shadow-(--shadow-assistant-logo)"
       >
         <Sparkle size={24} weight="fill" className="text-white" />
       </motion.div>

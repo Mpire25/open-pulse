@@ -9,6 +9,7 @@ import { sampleHeartRateForChart } from '@/lib/heart-rate'
 import { lineAxis } from '@/lib/chart-scale'
 import { CHART_PLOT, chartColumnWidth } from '@/lib/layout-contracts'
 import { cn } from '@/lib/utils'
+import { chartColor } from '@/lib/chart-color'
 
 // ---------------------------------------------------------------------------
 // Container measurement
@@ -60,7 +61,7 @@ function Tip({ tip, width }: { tip: TipState; width: number }): React.JSX.Elemen
       <div className="text-[10.5px] font-medium text-ink-faint">{tip.title}</div>
       {tip.rows.map((row, i) => (
         <div key={i} className="mt-1 flex items-center gap-1.5">
-          {row.color && <span className="h-0.5 w-3 rounded-full" style={{ background: row.color }} />}
+          {row.color && <span className="h-0.5 w-3 rounded-full" style={{ background: chartColor(row.color) }} />}
           <span className="text-[13px] font-semibold text-ink">{row.value}</span>
           {row.label && <span className="text-[10.5px] text-ink-dim">{row.label}</span>}
         </div>
@@ -228,7 +229,7 @@ export function ColumnChart({
               <path
                 key={d.key}
                 d={roundedColumn(cx - barW / 2, y(0) - h, barW, h)}
-                fill={color}
+                fill={chartColor(color)}
                 opacity={hovered === i ? 1 : recede ? 0.38 : 0.85}
                 clipPath={`url(#${clipPrefix}-${i})`}
               />
@@ -469,7 +470,7 @@ export function StackedColumnChart({
                       y={y(cumulative)}
                       width={barW}
                       height={Math.max(1, y(bottom) - y(cumulative))}
-                      fill={segment.color}
+                      fill={chartColor(segment.color)}
                     />
                   )
                 })}
@@ -716,7 +717,7 @@ export function TrendLine({
             <motion.path
               key={`area-${animationKey}`}
               d={`${path} L ${x(lastIndex)} ${pad.top + plotH} L ${x(data.indexOf(present[0] as LinePoint))} ${pad.top + plotH} Z`}
-              fill={color}
+              fill={chartColor(color)}
               initial={reduceMotion ? false : { opacity: 0 }}
               animate={{ opacity: 0.08 }}
               transition={{ duration: reduceMotion ? 0 : 0.55, delay: reduceMotion ? 0 : 0.18 }}
@@ -727,7 +728,7 @@ export function TrendLine({
               key={`line-${animationKey}`}
               d={path}
               fill="none"
-              stroke={color}
+              stroke={chartColor(color)}
               strokeWidth={2}
               strokeLinecap="round"
               strokeLinejoin="round"
@@ -755,7 +756,7 @@ export function TrendLine({
               cx={x(lastIndex)}
               cy={y(last.value!)}
               r={4}
-              fill={color}
+              fill={chartColor(color)}
               stroke="var(--color-panel)"
               strokeWidth={2}
               initial={reduceMotion ? false : { opacity: 0, scale: 0 }}
@@ -773,7 +774,7 @@ export function TrendLine({
               cx={x(cursor)}
               cy={y(data[cursor].value!)}
               r={4}
-              fill={color}
+              fill={chartColor(color)}
               stroke="var(--color-panel)"
               strokeWidth={2}
             />
@@ -1030,7 +1031,7 @@ export function IntradayLine({ points, color, height = 170, domain, zones }: Int
                 x2={plotW}
                 y1={y(zone.minBpm!)}
                 y2={y(zone.minBpm!)}
-                stroke={zone.color}
+                stroke={chartColor(zone.color)}
                 strokeWidth={1}
                 strokeDasharray="4 4"
                 opacity={0.65}
@@ -1087,7 +1088,7 @@ export function IntradayLine({ points, color, height = 170, domain, zones }: Int
                     key={`${segment.color}-${index}`}
                     d={segment.path}
                     fill="none"
-                    stroke={segment.color}
+                    stroke={chartColor(segment.color)}
                     strokeWidth={2}
                     strokeLinecap="round"
                     strokeLinejoin="round"
@@ -1097,7 +1098,7 @@ export function IntradayLine({ points, color, height = 170, domain, zones }: Int
                   <path
                     d={path}
                     fill="none"
-                    stroke={color}
+                    stroke={chartColor(color)}
                     strokeWidth={2}
                     strokeLinecap="round"
                     strokeLinejoin="round"
@@ -1179,7 +1180,7 @@ export function Spark({ values, color, width = 72, height = 24 }: { values: Arra
           cx={x(lastIdx)}
           cy={y(lastVal)}
           r={2.5}
-          fill={color}
+          fill={chartColor(color)}
           initial={reduceMotion ? false : { opacity: 0, scale: 0 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{
@@ -1255,14 +1256,14 @@ export function ProgressRing({
   return (
     <div className={cn('relative shrink-0', className)} style={{ width: size, height: size }}>
       <svg viewBox={`0 0 ${size} ${size}`} className="block h-full w-full overflow-visible -rotate-90" aria-hidden>
-        <circle cx={c} cy={c} r={r} fill="none" stroke={color} opacity={0.15} strokeWidth={stroke} />
+        <circle cx={c} cy={c} r={r} fill="none" stroke={chartColor(color)} opacity={0.15} strokeWidth={stroke} />
         {ratio > 0.004 && (
           <motion.circle
             cx={c}
             cy={c}
             r={r}
             fill="none"
-            stroke={color}
+            stroke={chartColor(color)}
             strokeWidth={stroke}
             strokeLinecap="round"
             strokeDasharray={circumference}
@@ -1276,7 +1277,7 @@ export function ProgressRing({
               cy={c}
               r={r}
               fill="none"
-              stroke={color}
+              stroke={chartColor(color)}
               strokeWidth={stroke}
               strokeLinecap="round"
               strokeDasharray={circumference}
@@ -1302,7 +1303,7 @@ export function ProgressRing({
               cx={capX}
               cy={capY}
               r={stroke / 2}
-              fill={color}
+              fill={chartColor(color)}
               style={{ opacity: capOpacity }}
             />
             <motion.circle
