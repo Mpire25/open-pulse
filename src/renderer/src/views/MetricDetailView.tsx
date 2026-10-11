@@ -231,7 +231,7 @@ export function MetricDetailView({
       <motion.header custom={0} variants={fade} initial="hidden" animate="show" className="pt-2">
         <button
           onClick={onBack}
-          className="-ml-1.5 mb-2 flex items-center gap-1.5 rounded-lg px-1.5 py-1 text-[12.5px] font-medium text-ink-dim transition-colors hover:bg-white/[0.05] hover:text-ink"
+          className="-ml-1.5 mb-2 flex items-center gap-1.5 rounded-lg px-1.5 py-1 text-[12.5px] font-medium text-ink-dim transition-colors hover:bg-surface-tint/[0.05] hover:text-ink"
         >
           <ArrowLeft size={13} weight="bold" />
           Back
@@ -405,7 +405,7 @@ function RangeTabs({
   onChange: (r: MetricRange) => void
 }): React.JSX.Element {
   return (
-    <div className="flex rounded-xl border border-hairline bg-white/[0.03] p-0.5">
+    <div className="flex rounded-xl border border-hairline bg-surface-tint/[0.03] p-0.5">
       {RANGES.map((r) => (
         <button
           key={r.id}
@@ -418,7 +418,7 @@ function RangeTabs({
           {range === r.id && (
             <motion.span
               layoutId="range-active"
-              className="absolute inset-0 rounded-[10px] border border-hairline bg-white/[0.08]"
+              className="absolute inset-0 rounded-[10px] border border-hairline bg-surface-tint/[0.08]"
               transition={{ type: 'spring', stiffness: 400, damping: 34 }}
             />
           )}
@@ -997,8 +997,8 @@ function HistoryList({
             {withValues.map((row) => {
               const rowClassName = cn(
                 'flex w-full items-center justify-between px-5 py-2.5 text-left',
-                onSelectDate && 'transition-colors hover:bg-white/[0.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/50',
-                row.date === selected && 'bg-white/[0.03]'
+                onSelectDate && 'transition-colors hover:bg-surface-tint/[0.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/50',
+                row.date === selected && 'bg-surface-tint/[0.03]'
               )
               const content = (
                 <>

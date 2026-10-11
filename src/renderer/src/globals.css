@@ -58,6 +58,88 @@
   --color-accent-soft: rgb(125 123 240 / 0.16);
 
   --color-danger: #e0544e;
+
+  /* Neutral effects use a theme-aware tint; white foregrounds on brand tiles stay white. */
+  --color-surface-tint: #ffffff;
+  --color-field: rgb(0 0 0 / 0.25);
+  --color-scrim: rgb(0 0 0 / 0.55);
+  --color-panel-hover: #26262e;
+  --color-accent-hover: #2b95ff;
+  --color-accent-highlight: #a5a3ff;
+  --color-success: #4fd979;
+  --color-success-fill: #30d158;
+  --shadow-panel: 0 20px 50px -30px rgb(0 0 0 / 0.8);
+  --shadow-popover: 0 24px 60px -20px rgb(0 0 0 / 0.9);
+  --shadow-tooltip: 0 10px 30px -12px rgb(0 0 0 / 0.9);
+  --shadow-dialog: 0 40px 100px -40px rgb(0 0 0 / 0.9);
+  --shadow-composer: 0 12px 40px -24px rgb(0 0 0 / 0.9);
+  --shadow-assistant: 0 20px 50px -30px rgb(0 0 0 / 0.8), inset 0 1px 0 rgb(255 255 255 / 0.05);
+  --shadow-workout: 0 18px 24px rgb(0 0 0 / 0.22);
+}
+
+:root {
+  color-scheme: dark;
+}
+
+:root[data-appearance='light'] {
+  color-scheme: light;
+  --color-canvas: #f3f4f8;
+  --color-panel: #ffffff;
+  --color-panel-2: #eceef5;
+  --color-hairline: rgb(24 30 48 / 0.09);
+  --color-hairline-strong: rgb(24 30 48 / 0.18);
+  --color-ink: #202430;
+  --color-ink-dim: #575e70;
+  --color-ink-faint: #646b7d;
+  --color-surface-tint: #182030;
+  --color-field: rgb(255 255 255 / 0.8);
+  --color-scrim: rgb(24 30 48 / 0.3);
+  --color-panel-hover: #e2e5ef;
+  --color-accent: #5b56cf;
+  --color-accent-soft: rgb(91 86 207 / 0.1);
+  --color-accent-hover: #4943b5;
+  --color-accent-highlight: #4943b5;
+  --color-danger: #b93832;
+  --color-success: #127b3d;
+  --color-success-fill: #148443;
+
+  /* Keep each metric's hue identity, with darker marks/text on pale surfaces. */
+  --color-activity: #91600e;
+  --color-activity-soft: rgb(145 96 14 / 0.1);
+  --color-heart: #b83e31;
+  --color-heart-soft: rgb(184 62 49 / 0.1);
+  --color-recovery: #087855;
+  --color-recovery-soft: rgb(8 120 85 / 0.1);
+  --color-sleep: #5b56cf;
+  --color-sleep-soft: rgb(91 86 207 / 0.1);
+  --color-hydration: #176c99;
+  --color-hydration-soft: rgb(23 108 153 / 0.1);
+  --color-body-metric: #963c8b;
+  --color-body-metric-soft: rgb(150 60 139 / 0.1);
+  --color-workout-walking: #087855;
+  --color-workout-running: #a94c21;
+  --color-workout-strength: #91600e;
+  --color-workout-cycling: #176c99;
+  --color-workout-swimming: #5b56cf;
+  --color-workout-mobility: #217a71;
+  --color-workout-cardio: #b83e31;
+  --color-workout-tennis: #617720;
+  --color-workout-badminton: #13798a;
+  --color-workout-football: #963c8b;
+  --color-workout-treadmill: #ad3a5c;
+  --color-workout-other: #626b7b;
+  --color-stage-deep: #4944b5;
+  --color-stage-light: #7779d8;
+  --color-stage-rem: #187c9a;
+  --color-stage-awake: #91600e;
+
+  --shadow-panel: 0 20px 50px -30px rgb(54 65 99 / 0.2);
+  --shadow-popover: 0 24px 60px -20px rgb(54 65 99 / 0.25);
+  --shadow-tooltip: 0 10px 30px -12px rgb(54 65 99 / 0.25);
+  --shadow-dialog: 0 40px 100px -40px rgb(54 65 99 / 0.25);
+  --shadow-composer: 0 12px 40px -24px rgb(54 65 99 / 0.2);
+  --shadow-assistant: 0 20px 50px -30px rgb(54 65 99 / 0.2), inset 0 1px 0 rgb(255 255 255 / 0.6);
+  --shadow-workout: 0 18px 24px rgb(54 65 99 / 0.12);
 }
 
 html,
@@ -84,7 +166,7 @@ body {
 }
 
 ::selection {
-  background: rgb(125 123 240 / 0.35);
+  background: color-mix(in srgb, var(--color-accent) 35%, transparent);
 }
 
 /* macOS window chrome */
@@ -567,13 +649,13 @@ body {
   height: 9px;
 }
 *::-webkit-scrollbar-thumb {
-  background: rgb(255 255 255 / 0.14);
+  background: color-mix(in srgb, var(--color-surface-tint) 14%, transparent);
   border-radius: 9999px;
   border: 2px solid transparent;
   background-clip: content-box;
 }
 *::-webkit-scrollbar-thumb:hover {
-  background: rgb(255 255 255 / 0.28);
+  background: color-mix(in srgb, var(--color-surface-tint) 28%, transparent);
   background-clip: content-box;
 }
 *::-webkit-scrollbar-corner {
@@ -586,7 +668,7 @@ body {
 
 .dashboard-edit-controls { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px 16px; }
 .dashboard-home-ring { display: flex; flex-direction: column; align-items: center; gap: 8px; border-radius: 16px; margin: -20px; padding: 20px; cursor: pointer; transition: background-color 200ms, box-shadow 200ms, transform 200ms; }
-.dashboard-home-ring:hover { background: rgb(255 255 255 / .05); box-shadow: inset 0 0 0 1px rgb(255 255 255 / .07); }
+.dashboard-home-ring:hover { background: color-mix(in srgb, var(--color-surface-tint) 5%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-surface-tint) 7%, transparent); }
 .dashboard-home-ring:active { transform: scale(.985); }
 .dashboard-home-ring:focus-visible, .dashboard-retry:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 3px; }
 .dashboard-ring-slot { display: flex; flex-direction: column; align-items: center; min-width: 0; }
@@ -655,7 +737,7 @@ body {
 .dashboard-slot-change:hover,
 .dashboard-slot-change[aria-busy="true"] { color: var(--color-ink); }
 .dashboard-slot-change:hover::before,
-.dashboard-slot-change[aria-busy="true"]::before { background: #26262e; }
+.dashboard-slot-change[aria-busy="true"]::before { background: var(--color-panel-hover); }
 .dashboard-slot-change:disabled { opacity: .4; cursor: default; }
 .dashboard-slot--home.dashboard-slot--chart > .dashboard-slot-change,
 .dashboard-slot--home.dashboard-slot--wide > .dashboard-slot-change { top: -10px; right: -10px; }

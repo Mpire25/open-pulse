@@ -90,7 +90,7 @@ export function WorkoutsView({
         <button
           type="button"
           onClick={onBack}
-          className="-ml-1.5 mb-2 flex items-center gap-1.5 rounded-lg px-1.5 py-1 text-[12.5px] font-medium text-ink-dim transition-colors hover:bg-white/[0.05] hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+          className="-ml-1.5 mb-2 flex items-center gap-1.5 rounded-lg px-1.5 py-1 text-[12.5px] font-medium text-ink-dim transition-colors hover:bg-surface-tint/[0.05] hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
         >
           <ArrowLeft size={13} weight="bold" />
           Back
@@ -300,7 +300,7 @@ function TrainingSplit({
       {types.length > 0 ? (
         fullWidth ? (
           <>
-            <div className="mt-6 flex h-2.5 overflow-hidden rounded-full bg-white/[0.04]">
+            <div className="mt-6 flex h-2.5 overflow-hidden rounded-full bg-surface-tint/[0.04]">
               {types.map((type) => (
                 <span
                   key={type.label}
@@ -342,9 +342,9 @@ function TrainingSplitPie({ types }: { types: DisplayedWorkoutType[] }): React.J
       viewBox="0 0 120 120"
       role="img"
       aria-label={label}
-      className="h-36 w-36 shrink-0 drop-shadow-[0_18px_24px_rgb(0_0_0/0.22)]"
+      className="h-36 w-36 shrink-0 drop-shadow-(--shadow-workout)"
     >
-      <circle cx="60" cy="60" r="51" fill="rgb(255 255 255 / 0.035)" />
+      <circle cx="60" cy="60" r="51" fill="color-mix(in srgb, var(--color-surface-tint) 3.5%, transparent)" />
       {slices.map(({ type, start: sliceStart, end }) => {
         const color = workoutTone(type.label).color
         return type.share >= 99.999 ? (
@@ -421,7 +421,7 @@ function WorkoutRangeTabs({
   onChange: (range: MetricRange) => void
 }): React.JSX.Element {
   return (
-    <div className="flex rounded-xl border border-hairline bg-white/[0.03] p-0.5">
+    <div className="flex rounded-xl border border-hairline bg-surface-tint/[0.03] p-0.5">
       {RANGES.map((candidate) => (
         <button
           key={candidate.id}
@@ -435,7 +435,7 @@ function WorkoutRangeTabs({
           {range === candidate.id && (
             <motion.span
               layoutId="workout-range-active"
-              className="absolute inset-0 rounded-[10px] border border-hairline bg-white/[0.08]"
+              className="absolute inset-0 rounded-[10px] border border-hairline bg-surface-tint/[0.08]"
               transition={{ type: 'spring', stiffness: 400, damping: 34 }}
             />
           )}

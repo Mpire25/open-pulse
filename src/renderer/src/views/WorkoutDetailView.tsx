@@ -98,7 +98,7 @@ export function WorkoutDetailView({ workout, date, onBack }: WorkoutDetailViewPr
         <button
           type="button"
           onClick={onBack}
-          className="-ml-1.5 mb-2 flex items-center gap-1.5 rounded-lg px-1.5 py-1 text-[12.5px] font-medium text-ink-dim transition-colors hover:bg-white/[0.05] hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+          className="-ml-1.5 mb-2 flex items-center gap-1.5 rounded-lg px-1.5 py-1 text-[12.5px] font-medium text-ink-dim transition-colors hover:bg-surface-tint/[0.05] hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
         >
           <ArrowLeft size={13} weight="bold" />
           Back to workouts
@@ -119,7 +119,7 @@ export function WorkoutDetailView({ workout, date, onBack }: WorkoutDetailViewPr
             </div>
           </div>
           {(workout.deviceName || workout.recordingSource) && (
-            <div className="rounded-full border border-hairline bg-white/[0.025] px-3 py-1.5 text-[11px] text-ink-dim">
+            <div className="rounded-full border border-hairline bg-surface-tint/[0.025] px-3 py-1.5 text-[11px] text-ink-dim">
               {workout.deviceName ?? titleCase(workout.recordingSource ?? '')}
             </div>
           )}
@@ -163,8 +163,8 @@ export function WorkoutDetailView({ workout, date, onBack }: WorkoutDetailViewPr
                         transition={{ type: 'spring', stiffness: 350, damping: 24 }}
                         className={`inline-flex h-8 items-center gap-1.5 rounded-[9px] border px-2.5 text-[10.5px] font-semibold transition-[background-color,border-color,color,box-shadow] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-heart/40 ${
                           showHeartRateZones
-                            ? 'border-heart/30 bg-heart-soft text-ink shadow-[inset_0_1px_0_rgb(255_255_255/0.06)]'
-                            : 'border-hairline bg-white/[0.02] text-ink-dim hover:border-hairline-strong hover:bg-white/[0.045] hover:text-ink'
+                            ? 'border-heart/30 bg-heart-soft text-ink shadow-[inset_0_1px_0_color-mix(in_srgb,var(--color-surface-tint)_6%,transparent)]'
+                            : 'border-hairline bg-surface-tint/[0.02] text-ink-dim hover:border-hairline-strong hover:bg-surface-tint/[0.045] hover:text-ink'
                         }`}
                       >
                         <StackSimple
@@ -285,7 +285,7 @@ export function WorkoutDetailView({ workout, date, onBack }: WorkoutDetailViewPr
                 {workout.events?.map((event, index) => (
                   <span
                     key={`${event.time}-${event.type}-${index}`}
-                    className="rounded-full border border-hairline bg-white/[0.025] px-2.5 py-1 text-[10.5px] text-ink-dim"
+                    className="rounded-full border border-hairline bg-surface-tint/[0.025] px-2.5 py-1 text-[10.5px] text-ink-dim"
                   >
                     {titleCase(event.type)} · {event.minute != null ? formatMinuteOfDay(event.minute) : formatClock(event.time)}
                   </span>
@@ -348,7 +348,7 @@ export function WorkoutDetailView({ workout, date, onBack }: WorkoutDetailViewPr
 
 function DetailStat({ item, color }: { item: DetailItem; color: string }): React.JSX.Element {
   return (
-    <div className="min-w-0 rounded-[16px] bg-white/[0.025] px-4 py-4">
+    <div className="min-w-0 rounded-[16px] bg-surface-tint/[0.025] px-4 py-4">
       <div className="flex items-center gap-2 text-[11px] text-ink-faint">
         <span style={{ color }}>{item.icon}</span>
         <span className="truncate">{item.label}</span>
@@ -385,7 +385,7 @@ function HeartRateZones({ zones }: { zones: ReturnType<typeof zoneItems> }): Rea
         hint={`${formatMinutes(total)} with a classified zone`}
         icon={<Lightning size={18} weight="fill" className="text-heart" />}
       />
-      <div className="mt-5 flex h-3 overflow-hidden rounded-full bg-white/[0.035]">
+      <div className="mt-5 flex h-3 overflow-hidden rounded-full bg-surface-tint/[0.035]">
         {zones.map((zone) => (
           <span key={zone.label} style={{ width: `${(zone.minutes / total) * 100}%`, background: zone.color }} />
         ))}

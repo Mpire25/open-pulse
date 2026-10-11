@@ -54,7 +54,7 @@ function CopyRedirectUri(): React.JSX.Element {
     <button
       type="button"
       onClick={() => void copy()}
-      className="no-drag ml-1 inline-flex items-center gap-1 rounded-md border border-hairline bg-white/[0.04] px-1.5 py-0.5 font-mono text-[11px] leading-none text-ink transition-colors hover:border-accent/50 hover:bg-accent/10"
+      className="no-drag ml-1 inline-flex items-center gap-1 rounded-md border border-hairline bg-surface-tint/[0.04] px-1.5 py-0.5 font-mono text-[11px] leading-none text-ink transition-colors hover:border-accent/50 hover:bg-accent/10"
       title="Copy redirect URI"
     >
       {copied ? <Check size={11} weight="bold" /> : <Copy size={11} weight="bold" />}
@@ -134,7 +134,7 @@ export function GoogleSetup({
       <ol className="flex flex-col gap-3.5">
         {STEPS.map((step, i) => (
           <li key={i} className="flex gap-2.5">
-            <span className="mt-px grid h-5 w-5 shrink-0 place-items-center rounded-full bg-white/[0.06] font-mono text-[11px] font-semibold text-ink-dim">
+            <span className="mt-px grid h-5 w-5 shrink-0 place-items-center rounded-full bg-surface-tint/[0.06] font-mono text-[11px] font-semibold text-ink-dim">
               {i + 1}
             </span>
             <div className="flex-1">

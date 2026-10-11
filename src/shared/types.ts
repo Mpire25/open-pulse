@@ -466,6 +466,7 @@ export interface ModelCatalog {
 export const ASSISTANT_MODEL_PATTERN = /^[a-zA-Z0-9._:-]{1,100}$/
 
 export interface AppSettings {
+  appearance: import('./appearance').AppearanceMode
   menuBarEnabled: boolean
   responseNotificationsEnabled: boolean
   responseNotificationSound: boolean

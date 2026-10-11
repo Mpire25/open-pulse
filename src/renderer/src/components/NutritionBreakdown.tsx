@@ -143,7 +143,7 @@ function BreakdownRow({
           <div className="mt-0.5 font-mono text-[10.5px] text-ink-faint">{formatShare(share)}</div>
         </div>
       </div>
-      <div className="mt-2 h-1 overflow-hidden rounded-full bg-white/[0.04]">
+      <div className="mt-2 h-1 overflow-hidden rounded-full bg-surface-tint/[0.04]">
         <div
           className="h-full rounded-full"
           style={{ width: `${Math.min(share, 1) * 100}%`, background: color }}

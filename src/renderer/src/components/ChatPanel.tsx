@@ -319,7 +319,7 @@ export function ChatPanel({
       </div>
 
       <div className={cn('pb-4 pt-1', compact ? 'px-3' : 'mx-auto w-full max-w-[820px] px-6')}>
-        <div className="flex items-end gap-2 rounded-[18px] border border-hairline bg-panel/80 p-2 pl-4 shadow-[0_12px_40px_-24px_rgb(0_0_0/0.9)] backdrop-blur-xl transition-colors focus-within:border-hairline-strong">
+        <div className="flex items-end gap-2 rounded-[18px] border border-hairline bg-panel/80 p-2 pl-4 shadow-(--shadow-composer) backdrop-blur-xl transition-colors focus-within:border-hairline-strong">
           <textarea
             ref={inputRef}
             value={draft}
@@ -467,7 +467,7 @@ const Bubble = memo(function Bubble({
               onClick={() => setEditedText(turn.text)}
               aria-label="Edit message"
               title="Edit message"
-              className="grid size-7 place-items-center rounded-lg text-ink-faint transition-colors hover:bg-white/[0.06] hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+              className="grid size-7 place-items-center rounded-lg text-ink-faint transition-colors hover:bg-surface-tint/[0.06] hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
             >
               <PencilSimple size={14} />
             </button>
@@ -508,7 +508,7 @@ function CopyMessageButton({ text }: { text: string }): React.JSX.Element {
       onClick={() => void copy()}
       className={cn(
         'grid size-7 place-items-center rounded-lg transition-colors',
-        'hover:bg-white/[0.06] hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50',
+        'hover:bg-surface-tint/[0.06] hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50',
         copied ? 'text-accent' : 'text-ink-faint'
       )}
       aria-label={copied ? 'Message copied' : 'Copy message'}
@@ -549,7 +549,7 @@ function EmptyState({ compact, onPick }: { compact?: boolean; onPick: (s: string
         initial={{ opacity: 0, scale: 0.9 }}
         animate={{ opacity: 1, scale: 1 }}
         transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
-        className="grid h-12 w-12 place-items-center rounded-2xl bg-gradient-to-br from-accent to-[#a5a3ff] shadow-[0_10px_30px_-10px_rgb(125_123_240/0.7),inset_0_1px_0_rgb(255_255_255/0.3)]"
+        className="grid h-12 w-12 place-items-center rounded-2xl bg-gradient-to-br from-accent to-accent-highlight shadow-[0_10px_30px_-10px_rgb(125_123_240/0.7),inset_0_1px_0_rgb(255_255_255/0.3)]"
       >
         <Sparkle size={24} weight="fill" className="text-white" />
       </motion.div>
@@ -568,7 +568,7 @@ function EmptyState({ compact, onPick }: { compact?: boolean; onPick: (s: string
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.1 + i * 0.06, duration: 0.4 }}
               onClick={() => onPick(suggestion.text)}
-              className="group flex items-start gap-3 rounded-2xl border border-hairline bg-white/[0.03] px-3.5 py-3 text-left text-[12.5px] leading-snug text-ink-dim transition-all duration-200 hover:-translate-y-px hover:border-hairline-strong hover:bg-white/[0.06] hover:text-ink"
+              className="group flex items-start gap-3 rounded-2xl border border-hairline bg-surface-tint/[0.03] px-3.5 py-3 text-left text-[12.5px] leading-snug text-ink-dim transition-all duration-200 hover:-translate-y-px hover:border-hairline-strong hover:bg-surface-tint/[0.06] hover:text-ink"
             >
               <span
                 className={cn(

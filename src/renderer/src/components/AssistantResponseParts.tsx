@@ -431,7 +431,7 @@ function ComparisonCell({
     <div
       className={cn(
         'flex min-w-0 flex-col gap-2 px-5 py-4',
-        current && 'bg-white/[0.025]'
+        current && 'bg-surface-tint/[0.025]'
       )}
     >
       <div className="flex items-center justify-between gap-2">
@@ -506,7 +506,7 @@ function ComparisonChange({
     <span
       className={cn(
         'inline-flex items-center gap-1.5 rounded-full px-2 py-1 text-[10.5px] font-semibold leading-none',
-        tone === 'neutral' && 'bg-white/[0.06] text-ink-dim',
+        tone === 'neutral' && 'bg-surface-tint/[0.06] text-ink-dim',
         tone === 'good' && 'bg-recovery-soft text-recovery',
         tone === 'bad' && 'bg-heart-soft text-heart'
       )}

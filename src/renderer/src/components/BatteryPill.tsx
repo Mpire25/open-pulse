@@ -21,7 +21,7 @@ export function BatteryPill({ enabled, onClick }: { enabled: boolean; onClick?: 
     </div>
   )
   return onClick ? (
-    <button onClick={onClick} aria-label={`${device.name} battery ${pct}%. Open devices`} className="rounded-lg transition-colors hover:bg-white/[0.06]">
+    <button onClick={onClick} aria-label={`${device.name} battery ${pct}%. Open devices`} className="rounded-lg transition-colors hover:bg-surface-tint/[0.06]">
       {meter}
     </button>
   ) : meter

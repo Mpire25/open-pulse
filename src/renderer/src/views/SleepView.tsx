@@ -64,7 +64,7 @@ export function SleepView({ date, goals, sessionId, onSelectSession, onOpenMetri
             type="button"
             onClick={sleepDays.isPending ? undefined : () => onOpenMetric('sleepMinutes', 'D')}
             disabled={sleepDays.isPending}
-            className="group/drill relative flex min-w-0 flex-col items-center justify-center gap-3 rounded-[18px] p-4 transition-colors hover:bg-white/[0.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+            className="group/drill relative flex min-w-0 flex-col items-center justify-center gap-3 rounded-[18px] p-4 transition-colors hover:bg-surface-tint/[0.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
             aria-label="Open sleep duration details"
           >
             {!sleepDays.isPending && (
@@ -108,7 +108,7 @@ export function SleepView({ date, goals, sessionId, onSelectSession, onOpenMetri
               type="button"
               onClick={sleepDays.isPending ? undefined : () => onOpenStages(night ? sleepSessionId(night) : undefined)}
               disabled={sleepDays.isPending}
-              className="group/drill flex min-w-0 flex-col justify-center rounded-[18px] p-4 text-left transition-colors hover:bg-white/[0.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+              className="group/drill flex min-w-0 flex-col justify-center rounded-[18px] p-4 text-left transition-colors hover:bg-surface-tint/[0.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
               aria-label="Open sleep stages details"
             >
               <DrillHeader

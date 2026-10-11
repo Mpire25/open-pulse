@@ -217,7 +217,7 @@ export function DashboardSummary({
         <button
           type="button"
           onClick={open}
-          className="home-hero-stat -mx-2 flex min-h-[70px] items-start gap-2.5 rounded-xl px-2 py-1.5 text-left transition-colors hover:bg-white/[0.04]"
+          className="home-hero-stat -mx-2 flex min-h-[70px] items-start gap-2.5 rounded-xl px-2 py-1.5 text-left transition-colors hover:bg-surface-tint/[0.04]"
           aria-label={`Open ${def.shortLabel ?? def.label} details`}
         >
           <span className="mt-0.5">
@@ -513,7 +513,7 @@ function SleepWidget({ date, enabled = true, compact, onSleep }: ChartProps): Re
               {STAGES.map((stage) => (
                 <div key={stage}>
                   <span>
-                    <i style={{ background: sleep.isPending ? 'rgb(255 255 255 / 0.055)' : STAGE_COLOR[stage] }} />
+                    <i style={{ background: sleep.isPending ? 'color-mix(in srgb, var(--color-surface-tint) 5.5%, transparent)' : STAGE_COLOR[stage] }} />
                     {STAGE_LABEL[stage]}
                   </span>
                   <strong>{sleep.isPending ? <SkeletonText className="h-2.5 w-10" /> : formatMinutes(night?.stageMinutes[stage] ?? 0)}</strong>

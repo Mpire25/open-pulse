@@ -10,7 +10,7 @@ export const Panel = forwardRef<HTMLDivElement, HTMLAttributes<HTMLDivElement>>(
     <div
       ref={ref}
       className={cn(
-        'rounded-[22px] border border-hairline bg-panel shadow-[0_20px_50px_-30px_rgb(0_0_0/0.8)]',
+        'rounded-[22px] border border-hairline bg-panel shadow-(--shadow-panel)',
         className
       )}
       {...props}
@@ -131,7 +131,7 @@ export function DrillHeader({ title, hint, icon, action, onOpen }: DrillHeaderPr
     <button
       type="button"
       onClick={onOpen}
-      className="group/drill -mx-2 -my-1 flex w-[calc(100%+1rem)] items-center justify-between gap-3 rounded-xl px-2 py-1 text-left transition-colors hover:bg-white/[0.04]"
+      className="group/drill -mx-2 -my-1 flex w-[calc(100%+1rem)] items-center justify-between gap-3 rounded-xl px-2 py-1 text-left transition-colors hover:bg-surface-tint/[0.04]"
     >
       {content}
     </button>

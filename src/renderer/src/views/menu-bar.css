@@ -20,7 +20,7 @@
 .menu-icon-button:hover { background: var(--color-panel-2); color: var(--color-ink); }
 .menu-icon-button:disabled { opacity: .5; cursor: default; }
 .menu-quit { align-self: flex-end; flex-shrink: 0; padding: 4px 6px; border-radius: 5px; font-size: 10px; line-height: 1.2; color: var(--color-danger); }
-.menu-quit:hover { background: rgb(224 84 78 / 0.12); }
+.menu-quit:hover { background: color-mix(in srgb, var(--color-danger) 12%, transparent); }
 .menu-day { margin-bottom: 8px; }
 .menu-day h1 { font-size: 23px; font-weight: 650; letter-spacing: -.7px; }
 .menu-day > span { font-size: 12px; color: var(--color-ink-dim); }

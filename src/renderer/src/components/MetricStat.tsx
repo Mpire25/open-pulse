@@ -108,7 +108,7 @@ export function MetricStat({
         onClick={loading ? undefined : onOpen}
         disabled={loading}
         aria-busy={loading}
-        className="group/stat flex min-h-[107px] w-full min-w-0 overflow-hidden flex-col gap-2 px-5 py-4 text-left transition-colors hover:bg-white/[0.03]"
+        className="group/stat flex min-h-[107px] w-full min-w-0 overflow-hidden flex-col gap-2 px-5 py-4 text-left transition-colors hover:bg-surface-tint/[0.03]"
       >
         {body}
       </button>

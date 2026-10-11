@@ -9,6 +9,9 @@ Built with Electron + React 19, Radix primitives, Tailwind v4, and Framer Motion
 
 ## Features
 
+- **Appearance** — choose Light, Dark, or System under Settings. The preference
+  applies across the app and macOS menu bar popup, persists between launches,
+  and follows operating-system changes live in System mode. Dark is the default.
 - **Date traversal** — each health dashboard is anchored to a selected day.
   Step back and forward, jump anywhere with the title-bar calendar, or use
   trackpad history gestures to retrace pages and drill-downs.

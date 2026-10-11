@@ -6,6 +6,7 @@ import { motion } from 'framer-motion'
 import * as Dialog from '@radix-ui/react-dialog'
 import { Bell, Brain, ChatCircleDots, CheckCircle, GoogleLogo, Sparkle, Target, ArrowClockwise, Trash, Warning } from '@phosphor-icons/react'
 import { Panel, SectionHeader } from '@/components/Panel'
+import { AppearanceCard } from '@/components/AppearanceCard'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
 import { Input } from '@/components/ui/input'
@@ -53,6 +54,7 @@ export function SettingsView({
         <p className="mt-1 text-[13px] text-ink-dim">Accounts, daily goals, and app preferences.</p>
       </motion.header>
 
+      <Card index={0}><AppearanceCard /></Card>
       {window.pulse.app.platform === 'darwin' && (
         <MenuBarCard
           settings={settings}
@@ -282,7 +284,7 @@ function ChatRetentionCard({
         hint="Applies globally to chats that you haven't kept"
         icon={<ChatCircleDots size={18} weight="fill" className="text-accent" />}
       />
-      <div className="flex w-fit flex-wrap rounded-xl border border-hairline bg-white/[0.03] p-0.5">
+      <div className="flex w-fit flex-wrap rounded-xl border border-hairline bg-surface-tint/[0.03] p-0.5">
         {RETENTION_OPTIONS.map((option) => (
           <Pill
             key={option.value}
@@ -308,7 +310,7 @@ function ChatRetentionCard({
 
       <Dialog.Root open={pending != null} onOpenChange={(open) => !open && setPending(null)}>
         <Dialog.Portal>
-          <Dialog.Overlay className="fixed inset-0 z-40 bg-black/55 backdrop-blur-sm" />
+          <Dialog.Overlay className="fixed inset-0 z-40 bg-scrim backdrop-blur-sm" />
           <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-[min(380px,calc(100vw-32px))] -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-hairline bg-panel p-5 shadow-2xl outline-none">
             <Dialog.Title className="display text-[16px] font-semibold text-ink">
               Delete {pending?.count} {pending?.count === 1 ? 'chat' : 'chats'}?
@@ -373,7 +375,7 @@ function Pill({
       {active && (
         <motion.span
           layoutId={layoutId}
-          className="absolute inset-0 rounded-[10px] border border-hairline bg-white/[0.08]"
+          className="absolute inset-0 rounded-[10px] border border-hairline bg-surface-tint/[0.08]"
           transition={{ type: 'spring', stiffness: 400, damping: 34 }}
         />
       )}
@@ -531,7 +533,7 @@ function AssistantCard({
         </div>
         {catalog.error && <p className="text-[12px] text-ink-faint">{catalog.error}{catalog.models.length > 0 ? ' Showing saved choices.' : ''}</p>}
         {!loading && !custom && !presetIds.has(assistant.model) && <p className="text-[12px] text-ink-faint">Saved selection: {assistant.model}. {catalog.stale ? 'Availability has not been checked.' : 'This model is not in the current catalog. Choose another model or use Custom.'}</p>}
-        <div className="flex w-fit flex-wrap rounded-xl border border-hairline bg-white/[0.03] p-0.5">
+        <div className="flex w-fit flex-wrap rounded-xl border border-hairline bg-surface-tint/[0.03] p-0.5">
           {presets.map((m) => (
             <Pill
               key={m.id}
@@ -584,7 +586,7 @@ function AssistantCard({
         <div className="flex min-w-0 flex-1 basis-80 flex-col gap-2">
           {!loading && assistant.reasoningEffort && assistant.reasoningEffort !== 'auto' && !efforts.includes(assistant.reasoningEffort) && <p className="text-[12px] text-ink-faint">Saved effort: {effortLabel(assistant.reasoningEffort)}. Choose a level supported by this model.</p>}
           <span className="text-[11px] font-medium text-ink-faint">Reasoning effort</span>
-          {efforts.length > 0 && <div className="flex w-fit flex-wrap rounded-xl border border-hairline bg-white/[0.03] p-0.5">
+          {efforts.length > 0 && <div className="flex w-fit flex-wrap rounded-xl border border-hairline bg-surface-tint/[0.03] p-0.5">
             {efforts.map((effort) => (
               <Pill
                 key={effort}
@@ -605,7 +607,7 @@ function AssistantCard({
         {serviceTiers.length > 0 && (
           <div role="group" aria-labelledby="assistant-speed-label" className="flex w-48 max-w-full flex-col gap-2">
             <span id="assistant-speed-label" className="text-[11px] font-medium text-ink-faint">Speed</span>
-            <div className="flex w-fit flex-wrap rounded-xl border border-hairline bg-white/[0.03] p-0.5">
+            <div className="flex w-fit flex-wrap rounded-xl border border-hairline bg-surface-tint/[0.03] p-0.5">
               {[{ id: 'default', label: 'Standard' }, ...serviceTiers].map((tier) => (
                 <Pill
                   key={tier.id}
@@ -694,10 +696,10 @@ function StatusPill({ connected, text }: { connected: boolean; text: string }): 
   return (
     <span
       className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium ${
-        connected ? 'bg-[#30d158]/15 text-[#4fd979]' : 'bg-white/8 text-ink-dim'
+        connected ? 'bg-success-fill/15 text-success' : 'bg-surface-tint/8 text-ink-dim'
       }`}
     >
-      <span className={`h-1.5 w-1.5 rounded-full ${connected ? 'bg-[#30d158]' : 'bg-ink-faint'}`} />
+      <span className={`h-1.5 w-1.5 rounded-full ${connected ? 'bg-success-fill' : 'bg-ink-faint'}`} />
       {text}
     </span>
   )
@@ -731,7 +733,7 @@ function GoogleCard({
       {google.connected ? (
         <div className="flex flex-col gap-4">
           <div className="flex items-center gap-2 text-[13px] text-ink-dim">
-            <CheckCircle size={16} weight="fill" className="text-[#4fd979]" />
+            <CheckCircle size={16} weight="fill" className="text-success" />
             Signed in{google.email ? ` as ${google.email}` : ''}
           </div>
           <div>
@@ -816,7 +818,7 @@ function CodexCard({
       {codex.signedIn ? (
         <div className="flex flex-col gap-4">
           <div className="flex items-center gap-2 text-[13px] text-ink-dim">
-            <CheckCircle size={16} weight="fill" className="text-[#4fd979]" />
+            <CheckCircle size={16} weight="fill" className="text-success" />
             Signed in{codex.email ? ` as ${codex.email}` : ''}
           </div>
           <div className="flex flex-wrap items-center gap-3">

@@ -30,7 +30,7 @@ export function DeltaChip({
     <span
       className={cn(
         'inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10.5px] font-semibold leading-none',
-        good == null && 'bg-white/[0.06] text-ink-dim',
+        good == null && 'bg-surface-tint/[0.06] text-ink-dim',
         good === true && 'bg-recovery-soft text-recovery',
         good === false && 'bg-heart-soft text-heart',
         className

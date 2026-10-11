@@ -29,7 +29,7 @@ export function NutritionMacroBar({
     .join(', ')
   return (
     <div
-      className={cn('flex overflow-hidden rounded-full bg-white/[0.04]', compact ? 'h-1' : 'h-2', className)}
+      className={cn('flex overflow-hidden rounded-full bg-surface-tint/[0.04]', compact ? 'h-1' : 'h-2', className)}
       role="img"
       aria-label={ariaLabel || 'No macro details'}
     >

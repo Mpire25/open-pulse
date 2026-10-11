@@ -114,7 +114,7 @@ export function DevicesView({ connected, today }: DevicesViewProps): React.JSX.E
                 const Icon = row.icon
                 return (
                   <div key={row.label} className="flex items-center gap-3 border-b border-hairline py-3 last:border-0">
-                    <div className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-white/[0.04]">
+                    <div className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-surface-tint/[0.04]">
                       <Icon size={16} weight="fill" className="text-ink-dim" />
                     </div>
                     <div className="min-w-0 flex-1">
@@ -150,7 +150,7 @@ function DeviceHero({ device, connected }: { device: PairedDevice; connected: bo
       <div
         className="relative grid place-items-center px-6 pb-2 pt-8"
         style={{
-          background: 'radial-gradient(ellipse 65% 80% at 50% 45%, rgb(125 123 240 / 0.08), transparent 70%)'
+          background: 'radial-gradient(ellipse 65% 80% at 50% 45%, color-mix(in srgb, var(--color-accent) 8%, transparent), transparent 70%)'
         }}
       >
         <img
@@ -245,7 +245,7 @@ function Capabilities({ features }: { features: string[] }): React.JSX.Element {
           {features.map((f) => (
             <span
               key={f}
-              className="rounded-full border border-hairline bg-white/[0.03] px-2.5 py-1 text-[10.5px] font-medium tracking-wide text-ink-dim"
+              className="rounded-full border border-hairline bg-surface-tint/[0.03] px-2.5 py-1 text-[10.5px] font-medium tracking-wide text-ink-dim"
             >
               {titleCase(f)}
             </span>

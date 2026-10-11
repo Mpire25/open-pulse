@@ -77,7 +77,7 @@ export function Sidebar({ view, onSelect, connected }: SidebarProps): React.JSX.
 
         <div className="no-drag mt-auto flex w-[180px] flex-col gap-0.5">
           {!connected && (
-            <div className="mb-2 mx-1 rounded-xl border border-hairline bg-white/[0.03] px-3 py-2.5">
+            <div className="mb-2 mx-1 rounded-xl border border-hairline bg-surface-tint/[0.03] px-3 py-2.5">
               <div className="flex items-center gap-1.5">
                 <span className="h-1.5 w-1.5 rounded-full bg-activity" />
                 <p className="text-[11px] font-medium text-ink-dim">Not connected</p>
@@ -118,7 +118,7 @@ function NavButton({
       {active && (
         <motion.span
           layoutId="nav-active"
-          className="absolute inset-0 rounded-[11px] border border-hairline bg-white/[0.07]"
+          className="absolute inset-0 rounded-[11px] border border-hairline bg-surface-tint/[0.07]"
           transition={{ type: 'spring', stiffness: 380, damping: 32 }}
         />
       )}

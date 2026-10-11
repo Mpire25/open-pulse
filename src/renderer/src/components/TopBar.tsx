@@ -40,7 +40,7 @@ export function TopBar({
         onClick={onToggleSidebar}
         aria-label={sidebarOpen ? 'Close sidebar' : 'Open sidebar'}
         title={sidebarOpen ? 'Close sidebar' : 'Open sidebar'}
-        className="no-drag fixed left-24 top-3 grid h-7 w-7 place-items-center rounded-lg text-ink-dim transition-colors hover:bg-white/[0.06] hover:text-ink"
+        className="no-drag fixed left-24 top-3 grid h-7 w-7 place-items-center rounded-lg text-ink-dim transition-colors hover:bg-surface-tint/[0.06] hover:text-ink"
       >
         <SidebarSimple size={16} weight="bold" />
       </button>
@@ -55,7 +55,7 @@ export function TopBar({
           aria-label="Toggle assistant"
           className={cn(
             'no-drag flex h-7 items-center gap-1.5 rounded-lg px-2.5 text-[12px] font-semibold transition-colors',
-            chatOpen ? 'bg-accent-soft text-accent' : 'text-ink-dim hover:bg-white/[0.06] hover:text-ink'
+            chatOpen ? 'bg-accent-soft text-accent' : 'text-ink-dim hover:bg-surface-tint/[0.06] hover:text-ink'
           )}
         >
           <Sparkle size={14} weight="fill" />
@@ -82,7 +82,7 @@ function RefreshButton({ onRefreshDate }: { onRefreshDate: () => void }): React.
       title={busy ? 'Syncing…' : 'Refresh data'}
       className={cn(
         'no-drag grid h-7 w-7 place-items-center rounded-lg transition-colors',
-        busy ? 'text-accent' : 'text-ink-dim hover:bg-white/[0.06] hover:text-ink'
+        busy ? 'text-accent' : 'text-ink-dim hover:bg-surface-tint/[0.06] hover:text-ink'
       )}
     >
       <ArrowClockwise size={15} weight="bold" className={cn(busy && 'animate-spin')} />

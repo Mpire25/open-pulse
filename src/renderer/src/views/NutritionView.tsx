@@ -144,7 +144,7 @@ export function NutritionView({ date, goals, onOpenMetric, onSelectDate }: Nutri
                   onClick={intakePending ? undefined : () => onOpenMetric('caloriesIn', 'D')}
                   disabled={intakePending}
                   aria-busy={intakePending}
-                  className="group -m-2 flex flex-col items-center gap-2 rounded-2xl p-3 outline-none transition-[background-color,box-shadow,transform] duration-200 hover:bg-white/[0.05] hover:shadow-[inset_0_0_0_1px_rgb(255_255_255/0.07)] focus-visible:bg-white/[0.05] focus-visible:ring-2 focus-visible:ring-accent/60 active:scale-[0.98]"
+                  className="group -m-2 flex flex-col items-center gap-2 rounded-2xl p-3 outline-none transition-[background-color,box-shadow,transform] duration-200 hover:bg-surface-tint/[0.05] hover:shadow-[inset_0_0_0_1px_var(--color-hairline)] focus-visible:bg-surface-tint/[0.05] focus-visible:ring-2 focus-visible:ring-accent/60 active:scale-[0.98]"
                   aria-label="Open calories eaten details"
                 >
                   {intakePending ? (
@@ -273,7 +273,7 @@ function NutritionDayRow({
       </div>
       <div className="min-w-0 flex-1">
         <div
-          className="flex h-2.5 gap-[2px] overflow-hidden rounded-full bg-white/[0.04]"
+          className="flex h-2.5 gap-[2px] overflow-hidden rounded-full bg-surface-tint/[0.04]"
           role="img"
           aria-label={parts
             .filter((part) => part.grams != null)
@@ -370,7 +370,7 @@ function MealGroupSection({ label, entries }: { label: NutritionMealGroup; entri
             transition={{ height: { duration: 0.36, ease: MEAL_REVEAL_EASE }, opacity: { duration: 0.22 } }}
             className="overflow-hidden"
           >
-            <div className="divide-y divide-hairline border-t border-hairline bg-white/[0.012]">
+            <div className="divide-y divide-hairline border-t border-hairline bg-surface-tint/[0.012]">
               {entries.map((entry, index) => (
                 <motion.div
                   key={entry.id}
@@ -441,7 +441,7 @@ function MealSummary({
       aria-expanded={isOpen}
       aria-controls={contentId}
       onClick={onToggle}
-      className="w-full cursor-pointer px-5 py-4 text-left transition-colors hover:bg-white/[0.025] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/50 active:bg-white/[0.04]"
+      className="w-full cursor-pointer px-5 py-4 text-left transition-colors hover:bg-surface-tint/[0.025] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/50 active:bg-surface-tint/[0.04]"
     >
       <div className="flex items-baseline justify-between gap-4">
         <div className="flex items-baseline gap-2">
@@ -515,7 +515,7 @@ function MacroBreakdownSkeleton(): React.JSX.Element {
                 <SkeletonBlock className="h-4 w-12" />
                 <SkeletonText className="w-16" />
               </div>
-              <div className="h-12 w-12 shrink-0 animate-pulse rounded-full border-[6px] border-white/[0.055]" />
+              <div className="h-12 w-12 shrink-0 animate-pulse rounded-full border-[6px] border-surface-tint/[0.055]" />
             </div>
           </div>
         ))}
@@ -564,7 +564,7 @@ function MacroBreakdown({
     <div className="flex h-full flex-col justify-center gap-4">
       {/* Stacked share bar */}
       <div
-        className="flex h-3 gap-[2px] overflow-hidden rounded-full bg-white/[0.045]"
+        className="flex h-3 gap-[2px] overflow-hidden rounded-full bg-surface-tint/[0.045]"
         role="img"
         aria-label={showEmptyNutrients ? 'No macro details recorded' : 'Daily macro calorie share'}
       >
@@ -581,7 +581,7 @@ function MacroBreakdown({
             key={p.key}
             type="button"
             onClick={() => onOpenMetric(p.key, 'D')}
-            className="group -m-1 min-w-0 rounded-xl p-3 text-left outline-none transition-[background-color,box-shadow,transform] duration-200 hover:bg-white/[0.05] hover:shadow-[inset_0_0_0_1px_rgb(255_255_255/0.07)] focus-visible:bg-white/[0.05] focus-visible:ring-2 focus-visible:ring-accent/60 active:scale-[0.98]"
+            className="group -m-1 min-w-0 rounded-xl p-3 text-left outline-none transition-[background-color,box-shadow,transform] duration-200 hover:bg-surface-tint/[0.05] hover:shadow-[inset_0_0_0_1px_var(--color-hairline)] focus-visible:bg-surface-tint/[0.05] focus-visible:ring-2 focus-visible:ring-accent/60 active:scale-[0.98]"
           >
             <div className="flex items-center gap-1.5">
               <span className="h-2 w-2 rounded-full" style={{ background: p.color }} />
@@ -610,7 +610,7 @@ function MacroBreakdown({
               key={nutrient.key}
               type="button"
               onClick={() => onOpenMetric(nutrient.key, 'D')}
-              className="group min-w-0 rounded-xl px-2 py-1 text-left outline-none transition-colors hover:bg-white/[0.04] focus-visible:ring-2 focus-visible:ring-accent/60 active:scale-[0.98]"
+              className="group min-w-0 rounded-xl px-2 py-1 text-left outline-none transition-colors hover:bg-surface-tint/[0.04] focus-visible:ring-2 focus-visible:ring-accent/60 active:scale-[0.98]"
             >
               <div className="flex items-center gap-1.5 text-[10.5px] font-medium text-ink-faint">
                 <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: nutrient.color }} />

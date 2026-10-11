@@ -81,7 +81,7 @@ function MarkdownishBase({ text }: { text: string }): React.JSX.Element {
         ),
         hr: () => <hr className="my-5 border-0 border-t border-hairline" />,
         pre: ({ children }) => (
-          <pre className="my-3 overflow-x-auto rounded-xl border border-hairline bg-black/25 p-3.5 font-mono text-[12px] leading-relaxed text-ink">
+          <pre className="my-3 overflow-x-auto rounded-xl border border-hairline bg-field p-3.5 font-mono text-[12px] leading-relaxed text-ink">
             {children}
           </pre>
         ),
@@ -89,14 +89,14 @@ function MarkdownishBase({ text }: { text: string }): React.JSX.Element {
           className || String(children).includes('\n') ? (
             <code className={className}>{children}</code>
           ) : (
-            <code className="rounded bg-white/10 px-1 py-0.5 font-mono text-[12px] text-ink">{children}</code>
+            <code className="rounded bg-surface-tint/10 px-1 py-0.5 font-mono text-[12px] text-ink">{children}</code>
           ),
         table: ({ children }) => (
           <div className="my-3 overflow-x-auto rounded-xl border border-hairline">
             <table className="w-full min-w-max border-collapse text-left text-[12.5px]">{children}</table>
           </div>
         ),
-        thead: ({ children }) => <thead className="bg-white/[0.045] text-ink">{children}</thead>,
+        thead: ({ children }) => <thead className="bg-surface-tint/[0.045] text-ink">{children}</thead>,
         tbody: ({ children }) => <tbody className="divide-y divide-hairline text-ink-dim">{children}</tbody>,
         tr: ({ children }) => <tr className="divide-x divide-hairline">{children}</tr>,
         th: ({ children, style }) => (

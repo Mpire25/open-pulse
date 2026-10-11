@@ -50,7 +50,7 @@ function Tip({ tip, width }: { tip: TipState; width: number }): React.JSX.Elemen
   const onLeft = tip.x > width - 130
   return (
     <div
-      className="pointer-events-none absolute z-20 min-w-[92px] rounded-[10px] border border-hairline bg-panel-2/95 px-2.5 py-2 shadow-[0_10px_30px_-12px_rgb(0_0_0/0.9)] backdrop-blur-md"
+      className="pointer-events-none absolute z-20 min-w-[92px] rounded-[10px] border border-hairline bg-panel-2/95 px-2.5 py-2 shadow-(--shadow-tooltip) backdrop-blur-md"
       style={{
         left: tip.x,
         top: tip.y,

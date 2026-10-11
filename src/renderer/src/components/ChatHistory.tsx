@@ -112,7 +112,7 @@ export function ChatHistory({ chat, onNavigate, onDeleteDialogOpenChange, onDele
 
       <Dialog.Root open={deleteTarget != null} onOpenChange={(open) => !open && closeDeleteDialog()}>
         <Dialog.Portal>
-          <Dialog.Overlay className="fixed inset-0 z-40 bg-black/55 backdrop-blur-sm" />
+          <Dialog.Overlay className="fixed inset-0 z-40 bg-scrim backdrop-blur-sm" />
           <Dialog.Content
             className="fixed left-1/2 top-1/2 z-50 w-[min(380px,calc(100vw-32px))] -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-hairline bg-panel p-5 shadow-2xl outline-none"
             onEscapeKeyDown={(event) => event.stopPropagation()}
@@ -205,8 +205,8 @@ function SessionRow({ session, selected, streaming, onSelect, onPin, onKeep, onD
       className={cn(
         'group relative flex w-full items-center rounded-[10px] border pr-3 text-left transition-colors hover:pr-1 focus-within:pr-1',
         selected
-          ? 'border-hairline bg-white/[0.065] text-ink'
-          : 'border-transparent text-ink-dim hover:bg-white/[0.035] hover:text-ink'
+          ? 'border-hairline bg-surface-tint/[0.065] text-ink'
+          : 'border-transparent text-ink-dim hover:bg-surface-tint/[0.035] hover:text-ink'
       )}
     >
       <button
@@ -235,7 +235,7 @@ function SessionRow({ session, selected, streaming, onSelect, onPin, onKeep, onD
           aria-label={`${session.kept ? 'Stop keeping' : 'Keep'} ${session.title}`}
           onClick={onKeep}
           className={cn(
-            'grid size-7 shrink-0 place-items-center rounded-lg transition-colors hover:bg-white/[0.08] hover:text-ink',
+            'grid size-7 shrink-0 place-items-center rounded-lg transition-colors hover:bg-surface-tint/[0.08] hover:text-ink',
             session.kept ? 'text-accent' : 'text-ink-faint'
           )}
         >
@@ -246,7 +246,7 @@ function SessionRow({ session, selected, streaming, onSelect, onPin, onKeep, onD
           title={session.pinned ? 'Unpin chat' : 'Pin chat'}
           aria-label={`${session.pinned ? 'Unpin' : 'Pin'} ${session.title}`}
           onClick={onPin}
-          className="grid size-7 shrink-0 place-items-center rounded-lg text-ink-faint transition-colors hover:bg-white/[0.08] hover:text-ink"
+          className="grid size-7 shrink-0 place-items-center rounded-lg text-ink-faint transition-colors hover:bg-surface-tint/[0.08] hover:text-ink"
         >
           {session.pinned ? <PushPinSlash size={13} /> : <PushPin size={13} />}
         </button>
