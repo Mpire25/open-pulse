@@ -85,6 +85,54 @@ test('history shows immediately; replacing a live response discards the pending 
   expect(frames.size).toBe(0)
 })
 
+for (const marker of ['**', '*', '~~', '***']) {
+  test(`closing ${marker} preserves settled word fades and still fades new words`, async () => {
+    const prefix = `${marker}These words were already visible for a full second`
+    await render(prefix)
+    await advance(1000)
+    const settledWords = container.querySelectorAll('.assistant-stream-word').length
+
+    await render(prefix + marker + ' ')
+    await advance(48)
+    const words = [...container.querySelectorAll<HTMLElement>('.assistant-stream-word')]
+    expect(container.textContent).toBe('These words were already visible for a full second')
+    for (const word of words.slice(0, settledWords)) {
+      expect(Number.parseFloat(word.style.animationDelay)).toBeLessThanOrEqual(-180)
+    }
+    // The final word was held until its closing delimiter arrived.
+    expect(Number.parseFloat(words.at(-1)!.style.animationDelay)).toBeGreaterThan(-180)
+  })
+}
+
+test('repeated words retain distinct fade times when emphasis resolves', async () => {
+  await render('echo **echo echo')
+  await advance(1000)
+  const first = container.querySelector<HTMLElement>('.assistant-stream-word')!
+  const firstStyle = first.getAttribute('style')
+  await render('echo **echo echo** echo ')
+  await advance(96)
+  const words = [...container.querySelectorAll<HTMLElement>('.assistant-stream-word')]
+  expect(words.map((word) => word.textContent)).toEqual(['echo', 'echo', 'echo', 'echo'])
+  expect(words[0]).toBe(first)
+  expect(words[0].getAttribute('style')).toBe(firstStyle)
+  expect(Number.parseFloat(words[1].style.animationDelay)).toBeLessThanOrEqual(-180)
+  for (const word of words.slice(2)) {
+    expect(Number.parseFloat(word.style.animationDelay)).toBeGreaterThan(-180)
+  }
+})
+
+test('resolving emphasis preserves the progress of a word that is still fading', async () => {
+  await render('**one two')
+  await advance(48)
+  await render('**one two** ')
+  await advance(32)
+  const first = container.querySelector<HTMLElement>('strong .assistant-stream-word')!
+  expect(first.textContent).toBe('one')
+  const delay = Number.parseFloat(first.style.animationDelay)
+  expect(delay).toBeLessThan(0)
+  expect(delay).toBeGreaterThan(-180)
+})
+
 test('Reduce Motion flushes pending text and disables fades during the stream', async () => {
   const source = 'A long reply still waiting to be revealed '
   await render(source)
