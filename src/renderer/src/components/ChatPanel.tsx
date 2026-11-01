@@ -120,7 +120,7 @@ export function ChatPanel({
     actionRef.current = onAssistantAction
   }, [onAssistantAction])
 
-  useLayoutEffect(() => {
+  const updateConversationScroll = useCallback(() => {
     const container = scrollRef.current
     const spacer = responseSpaceRef.current
     if (!container || !spacer || !activeChatId) return
@@ -173,6 +173,18 @@ export function ChatPanel({
       if (target > container.scrollTop) container.scrollTop = target
     }
   }, [activeChatId, busy, turns])
+
+  useLayoutEffect(updateConversationScroll, [updateConversationScroll])
+
+  useLayoutEffect(() => {
+    const container = scrollRef.current
+    const content = container?.firstElementChild
+    if (!content || typeof ResizeObserver === 'undefined') return
+    // Word reveal grows the response between network events and after EOF.
+    const observer = new ResizeObserver(updateConversationScroll)
+    observer.observe(content)
+    return () => observer.disconnect()
+  }, [updateConversationScroll])
 
   // Only scrolls that follow real user input can change following; the app's own
   // scrolls, scroll anchoring and clamping move scrollTop without user intent.
@@ -437,7 +449,7 @@ const Bubble = memo(function Bubble({
           ) : (
             <>
               <div className={cn(!compact && 'max-w-[720px]')}>
-                {turn.text && <Markdownish text={turn.text} />}
+                {turn.text && <Markdownish text={turn.text} streaming={Boolean(turn.streaming)} />}
                 {turn.streaming && turn.toolLabel && (
                   <div className="mt-3"><ToolThinking label={turn.toolLabel} /></div>
                 )}

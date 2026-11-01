@@ -50,6 +50,9 @@ Built with Electron + React 19, Radix primitives, Tailwind v4, and Framer Motion
   is needed. Available as a full page and as a slide-over panel on every view,
   with account-scoped conversation history, automatic chat names, retry for
   failed or timed-out answers, and editing/resending your latest message.
+  Replies reveal words at a steady pace with a brief fade, catching up when
+  chunks arrive in bursts. Reduce Motion shows incoming text directly;
+  saved and copied messages retain the original Markdown.
   Pin or keep chats to protect them from configurable retention cleanup.
 - **Assistant notifications** — opt in under Settings to receive a generic desktop
   notification when an answer finishes while you are away from that chat. Click
