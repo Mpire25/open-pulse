@@ -28,6 +28,7 @@ let disconnects = 0
 let modelRequests = 0
 let modelResult: unknown
 let exports: HealthExportOptions[] = []
+let cancels = 0
 let root: ReturnType<typeof createRoot>
 let container: HTMLDivElement
 
@@ -81,7 +82,7 @@ test('failed notification preference save leaves the switch unchanged and report
   expect(document.querySelector('[role="alert"]')?.textContent).toContain('Could not save the notification preference')
 })
 beforeEach(() => {
-  backendStatus = { connected: false }; disconnects = 0; modelRequests = 0; exports = []
+  backendStatus = { connected: false }; disconnects = 0; modelRequests = 0; exports = []; cancels = 0
   window.localStorage.clear()
   modelResult = { models: [{ id: 'future-model', label: 'Future Model', efforts: ['low'] }], stale: false }
   Object.assign(dom, { pulse: {
@@ -96,7 +97,7 @@ beforeEach(() => {
       export: async (_id: string, options: HealthExportOptions) => { exports.push(options); return { status: 'saved', path: '/tmp/export/pulse.json', bytes: 2_400_000 } },
       onExportProgress: () => () => {},
       revealExport: async () => {},
-      cancel: async () => {}
+      cancel: async () => { cancels++ }
     }
   } })
   container = document.createElement('div'); document.body.append(container); root = createRoot(container)
@@ -433,4 +434,37 @@ test('a domain checkbox ticks its whole group', async () => {
   await act(async () => button('Export…')!.click())
   expect(exports[0].metrics).toEqual(METRIC_KEYS.filter((metric) => ['waterMl', 'caloriesIn', 'proteinG', 'carbsG', 'fatG', 'fiberG', 'saturatedFatG', 'sodiumG', 'sugarG'].includes(metric)))
   expect(exports[0].sections).toEqual(['workouts'])
+})
+
+test('leaving Settings keeps a running export going', async () => {
+  let finish!: () => void
+  window.pulse.health.export = (async (_id: string, options: HealthExportOptions) => {
+    exports.push(options)
+    await new Promise<void>((resolve) => { finish = resolve })
+    return { status: 'saved', path: '/tmp/export/later.json', bytes: 5_000 }
+  }) as typeof window.pulse.health.export
+  await act(async () => root.render(<Harness />))
+  await act(async () => { button('Export…')!.click() })
+  await act(async () => root.unmount())
+  expect(cancels).toBe(0)
+  root = createRoot(container)
+  await act(async () => root.render(<Harness />))
+  expect(Boolean(button('Cancel'))).toBe(true)
+  await act(async () => finish())
+  expect(container.textContent).toContain('Saved later.json (5 KB)')
+})
+
+test('a custom range is remembered', async () => {
+  await act(async () => root.render(<Harness />))
+  await act(async () => button('Custom')!.click())
+  const [from] = Array.from(container.querySelectorAll('input[type="date"]')) as HTMLInputElement[]
+  const setValue = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!
+  await act(async () => {
+    setValue.call(from, '2026-01-05')
+    from.dispatchEvent(new window.Event('input', { bubbles: true }))
+  })
+  await act(async () => root.unmount())
+  root = createRoot(container)
+  await act(async () => root.render(<Harness />))
+  expect((container.querySelector('input[type="date"]') as HTMLInputElement).value).toBe('2026-01-05')
 })

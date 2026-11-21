@@ -13,6 +13,7 @@ import { Input } from '@/components/ui/input'
 import { GoogleSetup } from '@/components/GoogleSetup'
 import { cn } from '@/lib/utils'
 import { shiftDate } from '@/lib/format'
+import { cancelHealthExport, clearHealthExportResult, startHealthExport, useHealthExportRun } from '@/lib/health-export-run'
 import {
   EXPORT_FULL_HEART_RATE_MAX_DAYS,
   EXPORT_PRESETS,
@@ -748,7 +749,12 @@ interface ExportSelection {
   metrics: MetricKey[]
   sections: HealthExportSection[]
   fullHeartRate: boolean
+  /** The Custom range, kept with the rest so picking Custom brings it back. */
+  customStart?: string
+  customEnd?: string
 }
+
+const isIsoDate = (value: unknown): value is string => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)
 
 const DEFAULT_EXPORT_SELECTION: ExportSelection = {
   preset: 90,
@@ -768,7 +774,9 @@ function readExportSelection(): ExportSelection {
       preset: presets.includes(stored.preset as number | 'custom') ? (stored.preset as number | 'custom') : DEFAULT_EXPORT_SELECTION.preset,
       mode: stored.mode === 'choose' ? 'choose' : 'everything',
       ...normalizeExportSelection(stored.metrics, stored.sections),
-      fullHeartRate: stored.fullHeartRate === true
+      fullHeartRate: stored.fullHeartRate === true,
+      customStart: isIsoDate(stored.customStart) ? stored.customStart : undefined,
+      customEnd: isIsoDate(stored.customEnd) ? stored.customEnd : undefined
     }
   } catch {
     return DEFAULT_EXPORT_SELECTION
@@ -830,38 +838,37 @@ function ExportCheckbox({
 
 function exportSelectionSummary(
   metrics: MetricKey[],
-  sections: HealthExportSection[]
+  sections: HealthExportSection[],
+  fullHeartRate: boolean
 ): { headline: string; items: string } {
   const names = METRIC_KEYS.filter((metric) => metrics.includes(metric)).map((metric) => METRIC_DESCRIPTIONS[metric].label)
   const detail = EXPORT_SECTIONS.filter((section) => sections.includes(section)).map((section) => EXPORT_SECTION_LABELS[section])
   if (!names.length && !detail.length) {
-    return { headline: 'Nothing chosen yet', items: 'Pick the metrics and detail you want in the file.' }
+    return fullHeartRate
+      ? { headline: 'Full-resolution heart rate only', items: 'No daily metrics or detail sections.' }
+      : { headline: 'Nothing chosen yet', items: 'Pick the metrics and detail you want in the file.' }
   }
   const metricText = `${names.length} daily ${names.length === 1 ? 'metric' : 'metrics'}`
   const detailText = detail.length ? `${detail.length} detail ${detail.length === 1 ? 'section' : 'sections'}` : 'no detail'
   return { headline: `${metricText} · ${detailText}`, items: [...names, ...detail].join(', ') }
 }
 
+// The last File-menu focus request handled; the card remounts on every visit to
+// Settings, and only a new request should scroll it into view.
+let handledExportFocus = 0
+
 function ExportCard({ connected, focusRequest }: { connected: boolean; focusRequest: number }): React.JSX.Element {
   const [today] = useCurrentDay()
   const [selection, setSelectionState] = useState(readExportSelection)
-  const [customStart, setCustomStart] = useState(() => shiftDate(today, -29))
-  const [customEnd, setCustomEnd] = useState(today)
-  const [running, setRunning] = useState(false)
-  const [progress, setProgress] = useState<HealthExportProgress | null>(null)
-  const [saved, setSaved] = useState<{ name: string; bytes: number } | null>(null)
-  const [failure, setFailure] = useState<string | null>(null)
+  const { running, progress, saved, failure } = useHealthExportRun()
   const [picking, setPicking] = useState(false)
-  const requestId = useRef<string | null>(null)
   const anchor = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    if (focusRequest > 0) anchor.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    if (focusRequest <= handledExportFocus) return
+    handledExportFocus = focusRequest
+    anchor.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
   }, [focusRequest])
-  useEffect(() => window.pulse.health.onExportProgress(setProgress), [])
-  useEffect(() => () => {
-    if (requestId.current) void window.pulse.health.cancel(requestId.current)
-  }, [])
 
   const update = (patch: Partial<ExportSelection>): void => {
     setSelectionState((current) => {
@@ -869,8 +876,13 @@ function ExportCard({ connected, focusRequest }: { connected: boolean; focusRequ
       writeExportSelection(next)
       return next
     })
-    setSaved(null)
+    clearHealthExportResult()
   }
+  // A remembered Custom range is kept, but never reaches past today.
+  const customEnd = selection.customEnd && selection.customEnd <= today ? selection.customEnd : today
+  const customStart = selection.customStart && selection.customStart <= customEnd ? selection.customStart : shiftDate(customEnd, -29)
+  const setCustomStart = (customStart: string): void => update({ customStart, customEnd })
+  const setCustomEnd = (customEnd: string): void => update({ customStart, customEnd })
   const toggle = <T extends string>(list: readonly T[], keys: readonly T[], on: boolean): T[] =>
     on ? [...new Set([...list, ...keys])] : list.filter((key) => !keys.includes(key))
 
@@ -890,35 +902,13 @@ function ExportCard({ connected, focusRequest }: { connected: boolean; focusRequ
     fullHeartRate: selection.fullHeartRate && fullHeartRateAvailable
   }
   const problem = exportOptionsProblem(options, today)
-  const summary = exportSelectionSummary(selection.metrics, selection.sections)
+  const summary = exportSelectionSummary(selection.metrics, selection.sections, options.fullHeartRate)
 
-  const run = async (): Promise<void> => {
+  const run = (): void => {
     if (running || problem) return
-    const id = `export-${Date.now()}`
-    requestId.current = id
-    setRunning(true)
-    setProgress(null)
-    setSaved(null)
-    setFailure(null)
-    try {
-      const result = await window.pulse.health.export(id, options)
-      if (result.status === 'saved') {
-        setSaved({ name: result.path.split(/[\\/]/).pop() ?? result.path, bytes: result.bytes })
-      }
-    } catch (error) {
-      if (!(error instanceof DOMException && error.name === 'AbortError')) {
-        setFailure(error instanceof Error && error.message.trim() ? error.message : 'The export could not be completed.')
-      }
-    } finally {
-      if (requestId.current === id) requestId.current = null
-      setRunning(false)
-      setProgress(null)
-    }
+    void startHealthExport(options)
   }
-
-  const cancel = (): void => {
-    if (requestId.current) void window.pulse.health.cancel(requestId.current)
-  }
+  const cancel = cancelHealthExport
 
   return (
     <div ref={anchor}>
@@ -1098,7 +1088,7 @@ function ExportCard({ connected, focusRequest }: { connected: boolean; focusRequ
               </>
             ) : (
               <>
-                <Button disabled={!connected || problem != null} onClick={() => void run()}>
+                <Button disabled={!connected || problem != null} onClick={run}>
                   <DownloadSimple size={14} weight="bold" /> Export…
                 </Button>
                 <span className="text-[12px] text-ink-faint">
