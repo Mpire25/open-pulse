@@ -468,3 +468,12 @@ test('a custom range is remembered', async () => {
   await act(async () => root.render(<Harness />))
   expect((container.querySelector('input[type="date"]') as HTMLInputElement).value).toBe('2026-01-05')
 })
+
+test('an export stopped by the app, not the user, says why', async () => {
+  window.pulse.health.export = (async () => {
+    throw new DOMException('Cancelled', 'AbortError')
+  }) as unknown as typeof window.pulse.health.export
+  await act(async () => root.render(<Harness />))
+  await act(async () => button('Export…')!.click())
+  expect(container.textContent).toContain('connection changed')
+})

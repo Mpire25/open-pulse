@@ -14,6 +14,8 @@ const IDLE: HealthExportRunState = { running: false, progress: null, saved: null
 
 let state = IDLE
 let requestId: string | null = null
+// Only a cancel the user asked for ends quietly; any other abort is explained.
+let userCancelled = false
 const listeners = new Set<() => void>()
 
 function set(patch: Partial<HealthExportRunState>): void {
@@ -36,6 +38,7 @@ export async function startHealthExport(options: HealthExportOptions): Promise<v
   if (state.running) return
   const id = `export-${Date.now()}`
   requestId = id
+  userCancelled = false
   set({ running: true, progress: null, saved: null, failure: null })
   const stopProgress = window.pulse.health.onExportProgress((progress) => {
     if (requestId === id) set({ progress })
@@ -48,6 +51,8 @@ export async function startHealthExport(options: HealthExportOptions): Promise<v
   } catch (error) {
     if (!(error instanceof DOMException && error.name === 'AbortError')) {
       set({ failure: error instanceof Error && error.message.trim() ? error.message : 'The export could not be completed.' })
+    } else if (!userCancelled) {
+      set({ failure: 'The export stopped because the Google Health connection changed. Try again.' })
     }
   } finally {
     stopProgress()
@@ -57,7 +62,9 @@ export async function startHealthExport(options: HealthExportOptions): Promise<v
 }
 
 export function cancelHealthExport(): void {
-  if (requestId) void window.pulse.health.cancel(requestId)
+  if (!requestId) return
+  userCancelled = true
+  void window.pulse.health.cancel(requestId)
 }
 
 /** Forgets the last result once the choices change, so it can't be mistaken for the new ones. */
