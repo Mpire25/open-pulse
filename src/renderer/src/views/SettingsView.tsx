@@ -4,7 +4,7 @@ import { useCurrentDay } from '@/hooks/useCurrentDay'
 import { useEffect, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
 import * as Dialog from '@radix-ui/react-dialog'
-import { Bell, Brain, ChatCircleDots, CheckCircle, GoogleLogo, Sparkle, Target, ArrowClockwise, Trash, Warning } from '@phosphor-icons/react'
+import { Bell, Brain, ChatCircleDots, Check, CheckCircle, DownloadSimple, Minus, GoogleLogo, Sparkle, Target, ArrowClockwise, Trash, Warning } from '@phosphor-icons/react'
 import { Panel, SectionHeader } from '@/components/Panel'
 import { AppearanceCard } from '@/components/AppearanceCard'
 import { Button } from '@/components/ui/button'
@@ -12,6 +12,23 @@ import { Switch } from '@/components/ui/switch'
 import { Input } from '@/components/ui/input'
 import { GoogleSetup } from '@/components/GoogleSetup'
 import { cn } from '@/lib/utils'
+import { shiftDate } from '@/lib/format'
+import {
+  EXPORT_FULL_HEART_RATE_MAX_DAYS,
+  EXPORT_PRESETS,
+  EXPORT_SECTION_LABELS,
+  EXPORT_SECTIONS,
+  estimateExportBytes,
+  exportOptionsProblem,
+  exportRangeDays,
+  formatExportBytes,
+  normalizeExportSelection,
+  type HealthExportOptions,
+  type HealthExportPhase,
+  type HealthExportProgress,
+  type HealthExportSection
+} from '@shared/health-export'
+import { METRIC_DESCRIPTIONS } from '@shared/metric-descriptions'
 import {
   ASSISTANT_MODEL_PATTERN,
   serviceTierKey,
@@ -22,7 +39,9 @@ import {
   type CodexAuthStatus,
   type Goals,
   type GoogleAuthStatus,
-  type ReasoningEffort
+  type MetricKey,
+  type ReasoningEffort,
+  METRIC_KEYS
 } from '@shared/types'
 
 interface SettingsViewProps {
@@ -32,6 +51,8 @@ interface SettingsViewProps {
   onSettingsChange: (settings: AppSettings) => void
   onGoogleChange: (status: GoogleAuthStatus) => void
   onCodexChange: (status: CodexAuthStatus) => void
+  /** Changes when File → Export Health Data asks for the export card. */
+  exportFocusRequest?: number
 }
 
 export function SettingsView({
@@ -40,7 +61,8 @@ export function SettingsView({
   codex,
   onSettingsChange,
   onGoogleChange,
-  onCodexChange
+  onCodexChange,
+  exportFocusRequest = 0
 }: SettingsViewProps): React.JSX.Element {
   return (
     <div className="mx-auto flex max-w-[760px] flex-col gap-5 px-8 pb-12">
@@ -73,6 +95,7 @@ export function SettingsView({
       <ResponseNotificationsCard settings={settings} onSettingsChange={onSettingsChange} />
       <ChatRetentionCard settings={settings} onSettingsChange={onSettingsChange} />
       <GoalsCard settings={settings} onSettingsChange={onSettingsChange} />
+      <ExportCard connected={google.connected} focusRequest={exportFocusRequest} />
     </div>
   )
 }
@@ -689,6 +712,423 @@ function GoalsCard({
         </div>
       )}
     </Card>
+  )
+}
+
+const EXPORT_PHASE_LABELS: Record<HealthExportPhase, string> = {
+  daily: 'Reading daily metrics…',
+  sleep: 'Reading sleep…',
+  workouts: 'Reading workouts…',
+  nutrition: 'Reading nutrition logs…',
+  body: 'Reading body measurements…',
+  intraday: 'Reading heart rate and steps…',
+  writing: 'Writing file…'
+}
+
+function exportProgressText(progress: HealthExportProgress | null): string {
+  if (!progress) return 'Preparing…'
+  const label = EXPORT_PHASE_LABELS[progress.phase]
+  return progress.phase === 'intraday' && progress.total
+    ? `${label} ${progress.done ?? 0} of ${progress.total} days`
+    : label
+}
+
+const EXPORT_SELECTION_KEY = 'open-pulse-export-selection-v1'
+const EXPORT_DOMAINS = [
+  { domain: 'activity', label: 'Activity' },
+  { domain: 'heart', label: 'Heart' },
+  { domain: 'sleep', label: 'Sleep' },
+  { domain: 'body', label: 'Body' },
+  { domain: 'nutrition', label: 'Nutrition' }
+] as const
+
+interface ExportSelection {
+  preset: number | 'custom'
+  mode: 'everything' | 'choose'
+  metrics: MetricKey[]
+  sections: HealthExportSection[]
+  fullHeartRate: boolean
+}
+
+const DEFAULT_EXPORT_SELECTION: ExportSelection = {
+  preset: 90,
+  mode: 'everything',
+  metrics: [],
+  sections: [],
+  fullHeartRate: false
+}
+
+/** The last export's choices, a per-Mac convenience; any problem falls back to the defaults. */
+function readExportSelection(): ExportSelection {
+  try {
+    const stored = JSON.parse(window.localStorage.getItem(EXPORT_SELECTION_KEY) ?? 'null') as Partial<ExportSelection> | null
+    if (!stored || typeof stored !== 'object') return DEFAULT_EXPORT_SELECTION
+    const presets: Array<number | 'custom'> = [...EXPORT_PRESETS.map((entry) => entry.days), 'custom']
+    return {
+      preset: presets.includes(stored.preset as number | 'custom') ? (stored.preset as number | 'custom') : DEFAULT_EXPORT_SELECTION.preset,
+      mode: stored.mode === 'choose' ? 'choose' : 'everything',
+      ...normalizeExportSelection(stored.metrics, stored.sections),
+      fullHeartRate: stored.fullHeartRate === true
+    }
+  } catch {
+    return DEFAULT_EXPORT_SELECTION
+  }
+}
+
+function writeExportSelection(selection: ExportSelection): void {
+  try {
+    window.localStorage.setItem(EXPORT_SELECTION_KEY, JSON.stringify(selection))
+  } catch {
+    // Remembering the choice is optional.
+  }
+}
+
+function ExportCheckbox({
+  checked,
+  indeterminate = false,
+  disabled,
+  onChange,
+  emphasis = false,
+  children
+}: {
+  checked: boolean
+  indeterminate?: boolean
+  disabled: boolean
+  onChange: (checked: boolean) => void
+  emphasis?: boolean
+  children: React.ReactNode
+}): React.JSX.Element {
+  const input = useRef<HTMLInputElement>(null)
+  useEffect(() => {
+    if (input.current) input.current.indeterminate = indeterminate
+  }, [indeterminate])
+  const marked = checked || indeterminate
+  return (
+    <label className={cn('flex w-fit cursor-default items-center gap-2', emphasis ? 'text-[13px] font-medium text-ink' : 'text-[12.5px] text-ink-dim', disabled && 'opacity-60')}>
+      {/* The native input keeps keyboard and screen reader behaviour; the box is drawn to match the app. */}
+      <input
+        ref={input}
+        type="checkbox"
+        className="peer sr-only"
+        checked={checked}
+        disabled={disabled}
+        onChange={(event) => onChange(event.target.checked)}
+      />
+      <span
+        aria-hidden="true"
+        className={cn(
+          'flex h-[15px] w-[15px] shrink-0 items-center justify-center rounded-[4px] border transition-colors peer-focus-visible:ring-2 peer-focus-visible:ring-focus',
+          marked ? 'border-accent bg-accent text-white' : 'border-ink-faint/50 bg-field'
+        )}
+      >
+        {indeterminate ? <Minus size={10} weight="bold" /> : checked ? <Check size={10} weight="bold" /> : null}
+      </span>
+      {children}
+    </label>
+  )
+}
+
+function exportSelectionSummary(
+  metrics: MetricKey[],
+  sections: HealthExportSection[]
+): { headline: string; items: string } {
+  const names = METRIC_KEYS.filter((metric) => metrics.includes(metric)).map((metric) => METRIC_DESCRIPTIONS[metric].label)
+  const detail = EXPORT_SECTIONS.filter((section) => sections.includes(section)).map((section) => EXPORT_SECTION_LABELS[section])
+  if (!names.length && !detail.length) {
+    return { headline: 'Nothing chosen yet', items: 'Pick the metrics and detail you want in the file.' }
+  }
+  const metricText = `${names.length} daily ${names.length === 1 ? 'metric' : 'metrics'}`
+  const detailText = detail.length ? `${detail.length} detail ${detail.length === 1 ? 'section' : 'sections'}` : 'no detail'
+  return { headline: `${metricText} · ${detailText}`, items: [...names, ...detail].join(', ') }
+}
+
+function ExportCard({ connected, focusRequest }: { connected: boolean; focusRequest: number }): React.JSX.Element {
+  const [today] = useCurrentDay()
+  const [selection, setSelectionState] = useState(readExportSelection)
+  const [customStart, setCustomStart] = useState(() => shiftDate(today, -29))
+  const [customEnd, setCustomEnd] = useState(today)
+  const [running, setRunning] = useState(false)
+  const [progress, setProgress] = useState<HealthExportProgress | null>(null)
+  const [saved, setSaved] = useState<{ name: string; bytes: number } | null>(null)
+  const [failure, setFailure] = useState<string | null>(null)
+  const [picking, setPicking] = useState(false)
+  const requestId = useRef<string | null>(null)
+  const anchor = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (focusRequest > 0) anchor.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }, [focusRequest])
+  useEffect(() => window.pulse.health.onExportProgress(setProgress), [])
+  useEffect(() => () => {
+    if (requestId.current) void window.pulse.health.cancel(requestId.current)
+  }, [])
+
+  const update = (patch: Partial<ExportSelection>): void => {
+    setSelectionState((current) => {
+      const next = { ...current, ...patch }
+      writeExportSelection(next)
+      return next
+    })
+    setSaved(null)
+  }
+  const toggle = <T extends string>(list: readonly T[], keys: readonly T[], on: boolean): T[] =>
+    on ? [...new Set([...list, ...keys])] : list.filter((key) => !keys.includes(key))
+
+  const { preset } = selection
+  const start = preset === 'custom' ? customStart : shiftDate(today, -(preset - 1))
+  const end = preset === 'custom' ? customEnd : today
+  const days = exportRangeDays(start, end)
+  const fullHeartRateAvailable = days > 0 && days <= EXPORT_FULL_HEART_RATE_MAX_DAYS
+  const choosing = selection.mode === 'choose'
+  const options: HealthExportOptions = {
+    start,
+    end,
+    ...normalizeExportSelection(
+      choosing ? selection.metrics : METRIC_KEYS,
+      choosing ? selection.sections : EXPORT_SECTIONS
+    ),
+    fullHeartRate: selection.fullHeartRate && fullHeartRateAvailable
+  }
+  const problem = exportOptionsProblem(options, today)
+  const summary = exportSelectionSummary(selection.metrics, selection.sections)
+
+  const run = async (): Promise<void> => {
+    if (running || problem) return
+    const id = `export-${Date.now()}`
+    requestId.current = id
+    setRunning(true)
+    setProgress(null)
+    setSaved(null)
+    setFailure(null)
+    try {
+      const result = await window.pulse.health.export(id, options)
+      if (result.status === 'saved') {
+        setSaved({ name: result.path.split(/[\\/]/).pop() ?? result.path, bytes: result.bytes })
+      }
+    } catch (error) {
+      if (!(error instanceof DOMException && error.name === 'AbortError')) {
+        setFailure(error instanceof Error && error.message.trim() ? error.message : 'The export could not be completed.')
+      }
+    } finally {
+      if (requestId.current === id) requestId.current = null
+      setRunning(false)
+      setProgress(null)
+    }
+  }
+
+  const cancel = (): void => {
+    if (requestId.current) void window.pulse.health.cancel(requestId.current)
+  }
+
+  return (
+    <div ref={anchor}>
+      <Card index={4}>
+        <SectionHeader
+          title="Export data"
+          hint="Save your health data as a file for ChatGPT or other tools"
+          icon={<DownloadSimple size={18} weight="bold" className="text-ink-dim" />}
+        />
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-wrap items-end gap-x-8 gap-y-4">
+            <div className="flex flex-col gap-2">
+              <span className="text-[11px] font-medium text-ink-faint">Range</span>
+              <div className="flex w-fit flex-wrap rounded-xl border border-hairline bg-surface-tint/[0.03] p-0.5">
+                {[...EXPORT_PRESETS.map((entry) => ({ value: entry.days as number | 'custom', label: entry.label })), { value: 'custom' as const, label: 'Custom' }].map((option) => (
+                  <Pill
+                    key={option.value}
+                    active={preset === option.value}
+                    layoutId="export-range-active"
+                    disabled={running}
+                    onClick={() => update({ preset: option.value })}
+                  >
+                    {option.label}
+                  </Pill>
+                ))}
+              </div>
+            </div>
+            <div className="flex flex-col gap-2">
+              <span className="text-[11px] font-medium text-ink-faint">Include</span>
+              <div className="flex w-fit flex-wrap rounded-xl border border-hairline bg-surface-tint/[0.03] p-0.5">
+                <Pill active={!choosing} layoutId="export-content-active" disabled={running} onClick={() => update({ mode: 'everything' })}>
+                  Everything
+                </Pill>
+                <Pill
+                  active={choosing}
+                  layoutId="export-content-active"
+                  disabled={running}
+                  onClick={() => {
+                    update({ mode: 'choose' })
+                    setPicking(true)
+                  }}
+                >
+                  Choose…
+                </Pill>
+              </div>
+            </div>
+          </div>
+          {preset === 'custom' && (
+            <div className="grid grid-cols-2 gap-4 sm:max-w-[360px]">
+              <label className="flex flex-col gap-1.5">
+                <span className="text-[11px] font-medium text-ink-faint">From</span>
+                <Input type="date" value={customStart} max={customEnd || today} disabled={running} onChange={(e) => setCustomStart(e.target.value)} />
+              </label>
+              <label className="flex flex-col gap-1.5">
+                <span className="text-[11px] font-medium text-ink-faint">To</span>
+                <Input type="date" value={customEnd} min={customStart} max={today} disabled={running} onChange={(e) => setCustomEnd(e.target.value)} />
+              </label>
+            </div>
+          )}
+        </div>
+        <Dialog.Root open={picking && choosing} onOpenChange={setPicking}>
+          <Dialog.Portal>
+            <Dialog.Overlay className="fixed inset-0 z-40 bg-scrim backdrop-blur-sm" />
+            <Dialog.Content className="fixed left-1/2 top-1/2 z-50 flex max-h-[min(640px,calc(100vh-48px))] w-[min(560px,calc(100vw-32px))] -translate-x-1/2 -translate-y-1/2 flex-col rounded-2xl border border-hairline bg-panel shadow-2xl outline-none">
+              <div className="px-5 pt-5">
+                <Dialog.Title className="display text-[16px] font-semibold text-ink">Choose what to export</Dialog.Title>
+                <Dialog.Description className="mt-1.5 text-[12.5px] leading-relaxed text-ink-dim">
+                  Daily metrics give one value per day. Detail adds individual records, which make the file larger.
+                </Dialog.Description>
+              </div>
+              <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5" data-export-checklist>
+                <div className="grid grid-cols-1 gap-x-8 gap-y-5 sm:grid-cols-2">
+                  {EXPORT_DOMAINS.map(({ domain, label }) => {
+                    const keys = METRIC_KEYS.filter((metric) => METRIC_DESCRIPTIONS[metric].domain === domain)
+                    const picked = keys.filter((metric) => selection.metrics.includes(metric)).length
+                    return (
+                      <div key={domain} className="flex flex-col gap-2">
+                        <ExportCheckbox
+                          emphasis
+                          checked={picked === keys.length}
+                          indeterminate={picked > 0 && picked < keys.length}
+                          disabled={running}
+                          onChange={(on) => update({ metrics: toggle(selection.metrics, keys, on) })}
+                        >
+                          {label}
+                        </ExportCheckbox>
+                        <div className="flex flex-col gap-1.5 pl-[23px]">
+                          {keys.map((metric) => (
+                            <ExportCheckbox
+                              key={metric}
+                              checked={selection.metrics.includes(metric)}
+                              disabled={running}
+                              onChange={(on) => update({ metrics: toggle(selection.metrics, [metric], on) })}
+                            >
+                              {METRIC_DESCRIPTIONS[metric].label}
+                            </ExportCheckbox>
+                          ))}
+                        </div>
+                      </div>
+                    )
+                  })}
+                  <div className="flex flex-col gap-2">
+                    <ExportCheckbox
+                      emphasis
+                      checked={selection.sections.length === EXPORT_SECTIONS.length}
+                      indeterminate={selection.sections.length > 0 && selection.sections.length < EXPORT_SECTIONS.length}
+                      disabled={running}
+                      onChange={(on) => update({ sections: toggle(selection.sections, EXPORT_SECTIONS, on) })}
+                    >
+                      Detail
+                    </ExportCheckbox>
+                    <div className="flex flex-col gap-1.5 pl-[23px]">
+                      {EXPORT_SECTIONS.map((section) => (
+                        <ExportCheckbox
+                          key={section}
+                          checked={selection.sections.includes(section)}
+                          disabled={running}
+                          onChange={(on) => update({ sections: toggle(selection.sections, [section], on) })}
+                        >
+                          {EXPORT_SECTION_LABELS[section]}
+                        </ExportCheckbox>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="flex items-center justify-between gap-3 border-t border-hairline px-5 py-3.5">
+                <span className="text-[12px] text-ink-faint">{summary.headline}</span>
+                <Dialog.Close asChild>
+                  <Button size="sm">Done</Button>
+                </Dialog.Close>
+              </div>
+            </Dialog.Content>
+          </Dialog.Portal>
+        </Dialog.Root>
+        <div className="flex flex-col divide-y divide-hairline border-y border-hairline">
+          {choosing && (
+            <div className="flex items-center justify-between gap-6 py-4">
+              <div className="min-w-0">
+                <p className="text-[13px] font-medium text-ink">{summary.headline}</p>
+                <p className="mt-1 truncate text-[12px] leading-relaxed text-ink-dim" title={summary.items}>
+                  {summary.items || 'Pick the daily metrics and detail to include.'}
+                </p>
+              </div>
+              <Button variant="secondary" className="shrink-0" disabled={running} onClick={() => setPicking(true)}>
+                Edit selection
+              </Button>
+            </div>
+          )}
+          <div className="flex items-center justify-between gap-6 py-4">
+          <div className="min-w-0">
+            <label htmlFor="export-full-heart-rate" className="text-[13px] font-medium text-ink">Full-resolution heart rate</label>
+            <p id="export-full-heart-rate-description" className="mt-1 text-[12px] leading-relaxed text-ink-dim">
+              {fullHeartRateAvailable
+                ? 'Every heart rate sample, not just hourly averages. Useful for looking closely at a workout or a night.'
+                : `Available for ranges of ${EXPORT_FULL_HEART_RATE_MAX_DAYS} days or less.`}
+            </p>
+          </div>
+          <Switch
+            id="export-full-heart-rate"
+            checked={options.fullHeartRate}
+            disabled={running || !fullHeartRateAvailable}
+            aria-describedby="export-full-heart-rate-description"
+            onCheckedChange={(fullHeartRate) => update({ fullHeartRate })}
+          />
+          </div>
+        </div>
+        <div className="flex flex-col gap-3">
+          <div className="flex flex-wrap items-center gap-3">
+            {running ? (
+              <>
+                <Button variant="secondary" onClick={cancel}>Cancel</Button>
+                <span role="status" className="flex items-center gap-2 text-[12px] text-ink-dim">
+                  <ArrowClockwise size={13} className="animate-spin" />
+                  {exportProgressText(progress)}
+                </span>
+              </>
+            ) : (
+              <>
+                <Button disabled={!connected || problem != null} onClick={() => void run()}>
+                  <DownloadSimple size={14} weight="bold" /> Export…
+                </Button>
+                <span className="text-[12px] text-ink-faint">
+                  {!connected
+                    ? 'Connect Google Health to export.'
+                    : problem ?? `${days} ${days === 1 ? 'day' : 'days'} · about ${formatExportBytes(estimateExportBytes(options, days))}`}
+                </span>
+              </>
+            )}
+          </div>
+          {saved && !running && (
+            <div className="flex flex-wrap items-center gap-2 text-[12px] text-ink-dim">
+              <CheckCircle size={15} weight="fill" className="text-success-icon" />
+              Saved {saved.name} ({formatExportBytes(saved.bytes)})
+              <Button variant="ghost" size="sm" onClick={() => void window.pulse.health.revealExport()}>Show in Finder</Button>
+            </div>
+          )}
+          {failure && (
+            <div className="flex items-start gap-2 rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-[12px] text-danger">
+              <Warning size={15} weight="fill" className="mt-0.5 shrink-0 text-danger-icon" />
+              {failure}
+            </div>
+          )}
+          <p className="text-[11px] text-ink-faint">
+            Missing days are fetched from Google first, so long ranges with hourly or full heart rate can take a few
+            minutes. The file isn&rsquo;t encrypted; keep it somewhere private.
+          </p>
+        </div>
+      </Card>
+    </div>
   )
 }
 

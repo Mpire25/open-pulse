@@ -3,10 +3,11 @@ import { afterAll, afterEach, beforeEach, expect, mock, test } from 'bun:test'
 import { Window } from 'happy-dom'
 import React, { act, useState } from 'react'
 import * as framerMotion from 'framer-motion'
-import { DEFAULT_ASSISTANT, DEFAULT_GOALS, type AppSettings, type CodexAuthStatus } from '../../src/shared/types'
+import { EXPORT_SECTIONS, type HealthExportOptions } from '../../src/shared/health-export'
+import { DEFAULT_ASSISTANT, DEFAULT_GOALS, METRIC_KEYS, type AppSettings, type CodexAuthStatus } from '../../src/shared/types'
 
 const dom = new Window({ url: 'http://localhost:49173' })
-for (const name of ['window', 'document', 'navigator', 'HTMLElement', 'Element', 'Node', 'SVGElement', 'Document', 'HTMLInputElement', 'HTMLFormElement', 'HTMLButtonElement', 'HTMLSelectElement', 'Event', 'MouseEvent', 'MutationObserver', 'getComputedStyle', 'requestAnimationFrame', 'cancelAnimationFrame']) {
+for (const name of ['window', 'document', 'navigator', 'HTMLElement', 'Element', 'Node', 'SVGElement', 'Document', 'HTMLInputElement', 'HTMLFormElement', 'HTMLButtonElement', 'HTMLSelectElement', 'Event', 'CustomEvent', 'NodeFilter', 'HTMLDivElement', 'HTMLLabelElement', 'ShadowRoot', 'KeyboardEvent', 'FocusEvent', 'MouseEvent', 'MutationObserver', 'getComputedStyle', 'requestAnimationFrame', 'cancelAnimationFrame']) {
   Object.defineProperty(globalThis, name, { configurable: true, value: name === 'window' ? dom : (dom as unknown as Record<string, unknown>)[name] })
 }
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
@@ -26,6 +27,7 @@ let resolveConnect!: (value: CodexAuthStatus) => void
 let disconnects = 0
 let modelRequests = 0
 let modelResult: unknown
+let exports: HealthExportOptions[] = []
 let root: ReturnType<typeof createRoot>
 let container: HTMLDivElement
 
@@ -79,7 +81,8 @@ test('failed notification preference save leaves the switch unchanged and report
   expect(document.querySelector('[role="alert"]')?.textContent).toContain('Could not save the notification preference')
 })
 beforeEach(() => {
-  backendStatus = { connected: false }; disconnects = 0; modelRequests = 0
+  backendStatus = { connected: false }; disconnects = 0; modelRequests = 0; exports = []
+  window.localStorage.clear()
   modelResult = { models: [{ id: 'future-model', label: 'Future Model', efforts: ['low'] }], stale: false }
   Object.assign(dom, { pulse: {
     app: { platform: 'linux' }, settings: { update: async () => settings },
@@ -88,6 +91,12 @@ beforeEach(() => {
       disconnect: async () => { disconnects++; backendStatus = { connected: false }; return {} },
       status: async () => backendStatus,
       models: async () => { modelRequests++; return modelResult }
+    },
+    health: {
+      export: async (_id: string, options: HealthExportOptions) => { exports.push(options); return { status: 'saved', path: '/tmp/export/pulse.json', bytes: 2_400_000 } },
+      onExportProgress: () => () => {},
+      revealExport: async () => {},
+      cancel: async () => {}
     }
   } })
   container = document.createElement('div'); document.body.append(container); root = createRoot(container)
@@ -359,4 +368,69 @@ test('switching models with a stale catalog keeps a saved speed preference', asy
   await act(async () => root.render(<Harness initialSettings={saved} />))
   await act(async () => button('Other Model')!.click())
   expect(saved.assistant).toEqual({ model: 'other-model', reasoningEffort: 'low', serviceTier: 'priority' })
+})
+
+test('export defaults to the last 90 days and reports the saved file', async () => {
+  await act(async () => root.render(<Harness />))
+  expect((document.getElementById('export-full-heart-rate') as HTMLButtonElement).disabled).toBe(false)
+  await act(async () => button('Export…')!.click())
+  expect(exports).toHaveLength(1)
+  const days = (Date.parse(`${exports[0].end}T00:00:00Z`) - Date.parse(`${exports[0].start}T00:00:00Z`)) / 86_400_000 + 1
+  expect(days).toBe(90)
+  expect(exports[0].fullHeartRate).toBe(false)
+  expect(exports[0].metrics).toHaveLength(METRIC_KEYS.length)
+  expect(exports[0].sections).toEqual([...EXPORT_SECTIONS])
+  expect(container.textContent).toContain('Saved pulse.json (2.4 MB)')
+  expect(Boolean(button('Show in Finder'))).toBe(true)
+})
+
+test('full-resolution heart rate is unavailable for a one-year export', async () => {
+  await act(async () => root.render(<Harness />))
+  await act(async () => button('1 year')!.click())
+  expect((document.getElementById('export-full-heart-rate') as HTMLButtonElement).disabled).toBe(true)
+  expect(document.getElementById('export-full-heart-rate-description')?.textContent).toContain('90 days or less')
+  await act(async () => button('Export…')!.click())
+  expect(exports[0].fullHeartRate).toBe(false)
+})
+
+function checkbox(label: string): HTMLInputElement {
+  const found = Array.from(document.querySelectorAll('[data-export-checklist] label')).find((element) => element.textContent?.trim() === label)
+  return found!.querySelector('input')!
+}
+
+test('a chosen export sends only the ticked metrics and is remembered', async () => {
+  await act(async () => root.render(<Harness />))
+  await act(async () => button('Choose…')!.click())
+  expect(button('Export…')?.disabled).toBe(true)
+  expect(container.textContent).toContain('Choose at least one thing to export.')
+  for (const label of ['Calories burned', 'Calories eaten', 'Weight']) await act(async () => checkbox(label).click())
+  expect(checkbox('Body').indeterminate).toBe(true)
+  await act(async () => button('Done')!.click())
+  expect(document.querySelector('[data-export-checklist]')).toBeNull()
+  expect(container.textContent).toContain('3 daily metrics · no detail')
+  expect(container.textContent).toContain('Calories burned, Weight, Calories eaten')
+  await act(async () => button('Export…')!.click())
+  expect(exports[0].metrics).toEqual(['caloriesOut', 'weightKg', 'caloriesIn'])
+  expect(exports[0].sections).toEqual([])
+
+  await act(async () => root.unmount())
+  root = createRoot(container)
+  await act(async () => root.render(<Harness />))
+  expect(document.querySelector('[data-export-checklist]')).toBeNull()
+  await act(async () => button('Edit selection')!.click())
+  expect(checkbox('Weight').checked).toBe(true)
+  expect(checkbox('Steps').checked).toBe(false)
+})
+
+test('a domain checkbox ticks its whole group', async () => {
+  await act(async () => root.render(<Harness />))
+  await act(async () => button('Choose…')!.click())
+  await act(async () => checkbox('Nutrition').click())
+  await act(async () => checkbox('Workouts').click())
+  expect(checkbox('Detail').indeterminate).toBe(true)
+  await act(async () => button('Done')!.click())
+  expect(container.textContent).toContain('9 daily metrics · 1 detail section')
+  await act(async () => button('Export…')!.click())
+  expect(exports[0].metrics).toEqual(METRIC_KEYS.filter((metric) => ['waterMl', 'caloriesIn', 'proteinG', 'carbsG', 'fatG', 'fiberG', 'saturatedFatG', 'sodiumG', 'sugarG'].includes(metric)))
+  expect(exports[0].sections).toEqual(['workouts'])
 })
