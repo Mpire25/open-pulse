@@ -31,11 +31,13 @@ async function readIntraday(
   scope: IntradayScope,
   signal: AbortSignal,
   onProgress: (progress: HealthExportProgress) => void
-): Promise<HealthExportIntradayDay[]> {
+): Promise<{ days: HealthExportIntradayDay[]; failedDates: string[] }> {
   const dates: string[] = []
   for (let date = start; date <= end; date = shiftIsoDate(date, 1)) dates.push(date)
   const days: HealthExportIntradayDay[] = new Array(dates.length)
+  const failedDates: string[] = []
   // The first failure stops every worker, so a failed export stops asking Google.
+  signal.throwIfAborted()
   const stop = new AbortController()
   const forward = (): void => stop.abort(signal.reason)
   signal.addEventListener('abort', forward, { once: true })
@@ -48,6 +50,7 @@ async function readIntraday(
       try {
         const snapshot = await getIntraday(dates[index], false, stop.signal, scope, INTRADAY_PRIORITY)
         days[index] = { date: snapshot.date, stepsHourly: snapshot.stepsHourly, heartRate: snapshot.heartRate }
+        if (snapshot.failed?.length) failedDates.push(snapshot.date)
       } catch (error) {
         stop.abort(error)
         throw error
@@ -61,7 +64,7 @@ async function readIntraday(
     signal.removeEventListener('abort', forward)
   }
   signal.throwIfAborted()
-  return days
+  return { days, failedDates: failedDates.sort() }
 }
 
 /** Reads the range (cache first, Google for anything stale) and writes one JSON file. */
@@ -82,7 +85,7 @@ export async function exportHealthData(
     } catch (error) {
       if (signal.aborted) throw error
       console.error(`[export] ${section} failed:`, error)
-      warnings.push(`${section} could not be read from Google Health for this export, so that section is empty.`)
+      warnings.push(`${section} could not be read from Google Health for this export, so that part is empty.`)
       return fallback
     }
   }
@@ -91,7 +94,7 @@ export async function exportHealthData(
   // day-by-day intraday fetch.
   onProgress({ phase: 'daily' })
   const [devices, series] = await Promise.all([
-    getDevices(false, signal),
+    optional('Devices', () => getDevices(false, signal), []),
     metrics.length ? getSeries(metrics, start, end, false, signal, EXPORT_SYNC) : null
   ])
   if (has('sleepSessions')) onProgress({ phase: 'sleep' })
@@ -113,6 +116,11 @@ export async function exportHealthData(
   const intraday = has('hourly') || fullHeartRate
     ? await readIntraday(start, end, has('hourly') ? 'both' : 'heart', signal, onProgress)
     : undefined
+  if (intraday?.failedDates.length) {
+    const { failedDates } = intraday
+    const listed = failedDates.length <= 10 ? failedDates.join(', ') : `${failedDates.slice(0, 10).join(', ')} and ${failedDates.length - 10} more`
+    warnings.push(`Intraday data could not be read from Google Health for ${listed}, so those days may be missing or partial rather than empty.`)
+  }
 
   onProgress({ phase: 'writing' })
   const document = buildHealthExport({
@@ -130,7 +138,7 @@ export async function exportHealthData(
     workouts: workouts?.workouts,
     nutrition,
     body,
-    intraday,
+    intraday: intraday?.days,
     warnings,
     provisionalSleepDates: sleep?.provisionalDates
   })

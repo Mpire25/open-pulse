@@ -219,6 +219,20 @@ describe('health export file', () => {
     expect((doc.body as { heightCm: number }).heightCm).toBe(180.34)
   })
 
+  test('writes sleep stages on the clock the night was recorded on', () => {
+    const travelled = { ...night, startTime: '2026-11-20T07:00:00Z', endTime: '2026-11-20T15:00:00Z', startCivilDate: '2026-11-19', startCivilMinute: 23 * 60, endCivilMinute: 7 * 60,
+      stages: [{ type: 'LIGHT', startTime: '2026-11-20T07:00:00Z', endTime: '2026-11-20T07:30:00Z' }],
+      outOfBedSegments: [{ startTime: '2026-11-20T09:00:00Z', endTime: '2026-11-20T09:05:00Z' }] }
+    const doc = buildHealthExport(input({
+      timeZone: 'Europe/London',
+      sleep: [{ date: '2026-11-20', sessions: [travelled as never], mainSessionId: 'night-1', minutesAsleep: 440, minutesInSleepPeriod: 480, efficiency: 92, complete: true }]
+    }))
+    const session = (doc.sleep as { sessions: Array<Record<string, unknown>> }).sessions[0]
+    expect(session.localStartTime).toBe('2026-11-19 23:00')
+    expect(session.stages).toEqual([['LIGHT', '2026-11-19 23:00', 30]])
+    expect(session.outOfBedSegments).toEqual([{ localStartTime: '2026-11-20 01:00', localEndTime: '2026-11-20 01:05' }])
+  })
+
   test('notes provisional sleep and never writes a 24:00 clock time', () => {
     const doc = buildHealthExport(input({
       provisionalSleepDates: ['2026-11-21'],

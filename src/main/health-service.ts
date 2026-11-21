@@ -1705,16 +1705,19 @@ export async function getIntraday(
   const token = await requireGoogleAccessToken()
   assertCurrentAccount(generation)
   const jobs: Array<Promise<void>> = []
+  const failed: Array<'steps' | 'heart'> = []
   if (scope === 'steps' || scope === 'both') {
     jobs.push(ensureIntradaySteps(token, d, force, generation, signal, priority).catch((err) => {
       rethrowIfAborted(err)
       console.error(`[health] intraday steps failed for ${d}:`, err)
+      failed.push('steps')
     }))
   }
   if (scope === 'heart' || scope === 'both') {
     jobs.push(ensureIntradayHeart(token, d, force, generation, signal, priority).catch((err) => {
       rethrowIfAborted(err)
       console.error(`[health] intraday heart failed for ${d}:`, err)
+      failed.push('heart')
     }))
   }
   await Promise.all(jobs)
@@ -1726,7 +1729,8 @@ export async function getIntraday(
     source: 'live',
     stepsHourly: scope === 'heart' ? [] : (record?.stepsHourly ?? []),
     heartRate,
-    currentHeartRate: d === todayIso() ? (heartRate.at(-1)?.bpm ?? null) : null
+    currentHeartRate: d === todayIso() ? (heartRate.at(-1)?.bpm ?? null) : null,
+    ...(failed.length ? { failed } : {})
   }
 }
 

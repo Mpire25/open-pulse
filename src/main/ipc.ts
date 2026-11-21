@@ -144,6 +144,7 @@ const healthControllers = new Map<string, AbortController>()
 let legacyHealthRequestSequence = 0
 let googleDisconnectedNotified = false
 let lastExportPath: string | null = null
+let exportRunning = false
 
 function abortAllHealthRequests(): void {
   for (const controller of healthControllers.values()) controller.abort()
@@ -370,19 +371,26 @@ export function registerIpc(commands: { open: (destination: MenuBarDestination) 
     const today = new Date(now.getTime() - now.getTimezoneOffset() * 60_000).toISOString().slice(0, 10)
     const problem = exportOptionsProblem(options, today)
     if (problem) throw new Error(problem)
-    const window = BrowserWindow.fromWebContents(event.sender)
-    const dialogOptions = {
-      title: 'Export health data',
-      defaultPath: join(app.getPath('downloads'), `openpulse-health-${options.start}-to-${options.end}.json`),
-      filters: [{ name: 'JSON', extensions: ['json'] }]
+    // One at a time: a second window or a reloaded renderer can't double the load on Google.
+    if (exportRunning) throw new Error('An export is already running.')
+    exportRunning = true
+    try {
+      const window = BrowserWindow.fromWebContents(event.sender)
+      const dialogOptions = {
+        title: 'Export health data',
+        defaultPath: join(app.getPath('downloads'), `openpulse-health-${options.start}-to-${options.end}.json`),
+        filters: [{ name: 'JSON', extensions: ['json'] }]
+      }
+      const choice = window ? await dialog.showSaveDialog(window, dialogOptions) : await dialog.showSaveDialog(dialogOptions)
+      if (choice.canceled || !choice.filePath) return { status: 'cancelled' }
+      const bytes = await exportHealthData(options, choice.filePath, signal, (progress) => {
+        if (!event.sender.isDestroyed()) event.sender.send('health:export-progress', progress)
+      })
+      lastExportPath = choice.filePath
+      return { status: 'saved', path: choice.filePath, bytes }
+    } finally {
+      exportRunning = false
     }
-    const choice = window ? await dialog.showSaveDialog(window, dialogOptions) : await dialog.showSaveDialog(dialogOptions)
-    if (choice.canceled || !choice.filePath) return { status: 'cancelled' }
-    const bytes = await exportHealthData(options, choice.filePath, signal, (progress) => {
-      if (!event.sender.isDestroyed()) event.sender.send('health:export-progress', progress)
-    })
-    lastExportPath = choice.filePath
-    return { status: 'saved', path: choice.filePath, bytes }
   })
   // Only the file this session just wrote can be revealed.
   handle('health:export-reveal', () => {

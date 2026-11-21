@@ -156,6 +156,8 @@ export interface IntradaySnapshot {
   stepsHourly: HourlySteps[]
   heartRate: HeartRatePoint[]
   currentHeartRate: number | null // latest one-minute average; only set when date is today
+  /** Parts that couldn't be read from Google this time; their values are whatever was cached. */
+  failed?: Array<'steps' | 'heart'>
 }
 
 export type IntradayScope = 'steps' | 'heart' | 'both'

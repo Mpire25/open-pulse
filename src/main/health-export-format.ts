@@ -129,6 +129,15 @@ function compactRecord(value: unknown): unknown {
   return out
 }
 
+/** The UTC offset a night was recorded at, from its civil and physical start. */
+function sleepOffsetSeconds(night: SleepDay['sessions'][number]): number | null {
+  if (!night.startCivilDate || night.startCivilMinute == null) return null
+  const civil = Date.parse(`${night.startCivilDate}T00:00:00Z`) + night.startCivilMinute * 60_000
+  const physical = Date.parse(night.startTime)
+  if (!Number.isFinite(civil) || !Number.isFinite(physical)) return null
+  return Math.round((civil - physical) / 60_000) * 60
+}
+
 function sleepSection(days: SleepDay[], timeZone: string): Record<string, unknown> {
   const sessions = days.flatMap((day) =>
     [...day.sessions].sort((a, b) => a.startTime.localeCompare(b.startTime))
@@ -145,14 +154,25 @@ function sleepSection(days: SleepDay[], timeZone: string): Record<string, unknow
       sessionCount: daySessions.length
     })),
     stageColumns: ['stage', 'localStartTime', 'minutes'],
-    sessions: modelNights.map(({ stageSegmentCount: _count, timeZone: _zone, id: _id, ...night }, index) => ({
-      ...(compactRecord(night) as Record<string, unknown>),
-      stages: sessions[index].stages.map((stage) => [
-        stage.type,
-        localTime(stage.startTime, timeZone),
-        round((Date.parse(stage.endTime) - Date.parse(stage.startTime)) / 60_000)
-      ])
-    }))
+    // Stages and out-of-bed times use the night's own clock, like its start and
+    // end, so a night recorded while travelling stays consistent.
+    sessions: modelNights.map(({ stageSegmentCount: _count, timeZone: _zone, id: _id, ...night }, index) => {
+      const offset = sleepOffsetSeconds(sessions[index])
+      return {
+        ...(compactRecord({
+          ...night,
+          outOfBedSegments: sessions[index].outOfBedSegments.map((segment) => ({
+            localStartTime: offsetTime(segment.startTime, offset, timeZone),
+            localEndTime: offsetTime(segment.endTime, offset, timeZone)
+          }))
+        }) as Record<string, unknown>),
+        stages: sessions[index].stages.map((stage) => [
+          stage.type,
+          offsetTime(stage.startTime, offset, timeZone),
+          round((Date.parse(stage.endTime) - Date.parse(stage.startTime)) / 60_000)
+        ])
+      }
+    })
   }
 }
 
