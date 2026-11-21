@@ -182,6 +182,53 @@ describe('health export file', () => {
     expect(nutrition[0].entries[0]).not.toHaveProperty('id')
   })
 
+  test('writes workout times on the clock where the workout was recorded', () => {
+    const workouts = buildHealthExport(input({
+      timeZone: 'Europe/London',
+      workouts: [{
+        id: 'w-1',
+        name: 'Run',
+        startTime: '2026-11-20T22:05:00Z',
+        startMinute: 845,
+        startUtcOffset: '-28800s',
+        durationMin: 30,
+        calories: null,
+        distanceKm: 5,
+        avgHeartRate: null,
+        steps: null,
+        activeZoneMinutes: null,
+        splits: [{ startTime: '2026-11-20T22:05:00Z', endTime: '2026-11-20T22:11:00Z', durationMin: 6, splitType: 'distance', calories: null, distanceKm: 1, steps: null, avgHeartRate: null, averageSpeedKph: null, averagePaceSecPerKm: null, elevationGainM: null }],
+        events: [{ time: '2026-11-20T22:20:00Z', type: 'PAUSE', minute: 860 }]
+      }]
+    })).workouts as Array<Record<string, unknown>>
+    expect(workouts[0]).toMatchObject({
+      localStartTime: '2026-11-20 14:05',
+      splits: [{ localStartTime: '2026-11-20 14:05', localEndTime: '2026-11-20 14:11', distanceKm: 1 }],
+      events: [{ localTime: '2026-11-20 14:20', type: 'PAUSE' }]
+    })
+    expect(JSON.stringify(workouts)).not.toContain('T22:')
+  })
+
+  test('prefers a food log\'s recorded clock time and tidies height', () => {
+    const base = input()
+    const doc = buildHealthExport(input({
+      nutrition: [{ date: '2026-11-20', entries: [{ ...base.nutrition![0].entries[0], civilStartTime: '2026-11-20 23:40', startTime: '2026-11-21T07:40:00Z' }] }],
+      body: { heightCm: 180.33999633789062, measurements: [] } as never
+    }))
+    expect((doc.nutrition as Array<{ entries: Array<Record<string, unknown>> }>)[0].entries[0].localTime).toBe('2026-11-20 23:40')
+    expect((doc.body as { heightCm: number }).heightCm).toBe(180.34)
+  })
+
+  test('notes provisional sleep and never writes a 24:00 clock time', () => {
+    const doc = buildHealthExport(input({
+      provisionalSleepDates: ['2026-11-21'],
+      fullHeartRate: true,
+      intraday: [{ date: '2026-11-20', stepsHourly: [], heartRate: [{ minute: 1439.995, bpm: 60 }] }]
+    }))
+    expect((doc.about as { notes: string[] }).notes.some((note) => note.includes('2026-11-21 may not be final'))).toBe(true)
+    expect((doc.intraday as { heartRate: Table }).heartRate.rows).toEqual([['2026-11-20', '23:59:59', 60]])
+  })
+
   test('rolls heart rate up by hour and skips days with no intraday data', () => {
     const { hourly } = buildHealthExport(input()).intraday as { hourly: Table }
     expect(hourly.rows).toHaveLength(24)

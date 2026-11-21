@@ -1,5 +1,5 @@
 import type { BodyMeasurement, DayValues, NutritionLogEntry } from '../shared/types'
-import { dateFromCivil, type CivilDateTime, type RawDataPoint } from './health-api'
+import { civilText, dateFromCivil, type CivilDateTime, type RawDataPoint } from './health-api'
 import { gramsFromNutrientNode, nutrientGrams, nutrientMineralGrams } from './nutrition'
 
 export const NUTRITION_DAY_METRICS = [
@@ -57,6 +57,7 @@ export function parseNutritionLogs(points: RawDataPoint[]): NutritionLogEntry[] 
         id: resourceId(point, `${startTime}-${index}`),
         startTime,
         endTime,
+        civilStartTime: civilText(interval?.civilStartTime as CivilDateTime | undefined),
         foodName,
         mealType: typeof log.mealType === 'string' ? log.mealType : null,
         servingLabel: servingLabel(log.serving),

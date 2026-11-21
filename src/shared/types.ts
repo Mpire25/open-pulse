@@ -326,6 +326,8 @@ export interface NutritionLogEntry {
   id: string
   startTime: string
   endTime: string
+  /** "YYYY-MM-DD HH:MM" on the clock where it was logged, when Google reports it. */
+  civilStartTime?: string | null
   foodName: string
   mealType: string | null
   servingLabel: string | null

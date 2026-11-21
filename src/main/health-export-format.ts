@@ -49,6 +49,8 @@ export interface HealthExportInput {
   intraday?: HealthExportIntradayDay[]
   /** Sections that could not be read; they are named in about.notes. */
   warnings?: string[]
+  /** Dates whose sleep detail may still change. */
+  provisionalSleepDates?: string[]
 }
 
 function localTime(value: string | null | undefined, timeZone: string): string | null {
@@ -69,8 +71,24 @@ function localTime(value: string | null | undefined, timeZone: string): string |
   return `${part('year')}-${part('month')}-${part('day')} ${part('hour')}:${part('minute')}`
 }
 
+/** Google writes offsets as seconds, e.g. "-28800s". */
+function utcOffsetSeconds(value: string | null | undefined): number | null {
+  if (typeof value !== 'string' || !value.endsWith('s')) return null
+  const seconds = Number(value.slice(0, -1))
+  return Number.isFinite(seconds) ? seconds : null
+}
+
+/** Formats an instant at a fixed UTC offset, i.e. the clock where it was recorded. */
+function offsetTime(value: string | null | undefined, offsetSeconds: number | null, timeZone: string): string | null {
+  if (offsetSeconds == null) return localTime(value, timeZone)
+  const timestamp = value ? Date.parse(value) : Number.NaN
+  if (Number.isNaN(timestamp)) return null
+  return new Date(timestamp + offsetSeconds * 1_000).toISOString().slice(0, 16).replace('T', ' ')
+}
+
 function clockTime(minuteOfDay: number): string {
-  const seconds = Math.round(minuteOfDay * 60)
+  // Floored so a sample late in the last minute never reads as 24:00:00.
+  const seconds = Math.min(86_399, Math.max(0, Math.floor(minuteOfDay * 60)))
   const h = Math.floor(seconds / 3_600)
   const m = Math.floor((seconds % 3_600) / 60)
   const s = seconds % 60
@@ -192,6 +210,9 @@ export function buildHealthExport(input: HealthExportInput): Record<string, unkn
     notes.push('intraday.hourly heart rate columns are the average, minimum and maximum of that hour’s heart rate samples.')
   }
   notes.push(...(input.warnings ?? []))
+  if (input.provisionalSleepDates?.length && (has('sleepSessions') || metrics.some((metric) => METRIC_DESCRIPTIONS[metric].domain === 'sleep'))) {
+    notes.push(`Sleep for ${input.provisionalSleepDates.join(', ')} may not be final yet; Google can still revise it.`)
+  }
   if (input.end >= input.today) {
     notes.push(`${input.today} was still in progress when this was exported, so its values are partial.`)
   }
@@ -234,16 +255,30 @@ export function buildHealthExport(input: HealthExportInput): Record<string, unkn
   }
   if (has('sleepSessions')) document.sleep = sleepSection(input.sleep ?? [], timeZone)
   if (has('workouts')) {
-    document.workouts = (input.workouts ?? []).map(({ id: _id, startTime, ...workout }) => compactRecord({
-      localStartTime: localTime(startTime, timeZone),
-      ...workout
-    }))
+    // Times use the workout's own UTC offset, so one recorded while travelling
+    // keeps the clock time it had there.
+    document.workouts = (input.workouts ?? []).map(({ id: _id, startTime, startMinute: _minute, splits, events, ...workout }) => {
+      const offset = utcOffsetSeconds(workout.startUtcOffset)
+      return compactRecord({
+        localStartTime: offsetTime(startTime, offset, timeZone),
+        ...workout,
+        splits: splits?.map(({ startTime: splitStart, endTime: splitEnd, ...split }) => ({
+          localStartTime: offsetTime(splitStart, offset, timeZone),
+          localEndTime: offsetTime(splitEnd, offset, timeZone),
+          ...split
+        })),
+        events: events?.map(({ time, minute: _eventMinute, ...event }) => ({
+          localTime: offsetTime(time, offset, timeZone),
+          ...event
+        }))
+      })
+    })
   }
   if (has('nutritionLogs')) {
     document.nutrition = (input.nutrition ?? []).map(({ date, entries }) => ({
       date,
-      entries: entries.map(({ id: _id, startTime, endTime: _end, ...entry }) => compactRecord({
-        localTime: localTime(startTime, timeZone),
+      entries: entries.map(({ id: _id, startTime, endTime: _end, civilStartTime, ...entry }) => compactRecord({
+        localTime: civilStartTime ?? localTime(startTime, timeZone),
         ...entry
       }))
     }))
@@ -251,7 +286,7 @@ export function buildHealthExport(input: HealthExportInput): Record<string, unkn
   if (has('bodyMeasurements')) {
     document.body = input.body
       ? {
-          heightCm: input.body.heightCm,
+          heightCm: tidyCell(input.body.heightCm),
           measurements: input.body.measurements.map(({ id: _id, time, ...measurement }) => compactRecord({
             localTime: localTime(time, timeZone),
             ...measurement

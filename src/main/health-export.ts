@@ -35,18 +35,32 @@ async function readIntraday(
   const dates: string[] = []
   for (let date = start; date <= end; date = shiftIsoDate(date, 1)) dates.push(date)
   const days: HealthExportIntradayDay[] = new Array(dates.length)
+  // The first failure stops every worker, so a failed export stops asking Google.
+  const stop = new AbortController()
+  const forward = (): void => stop.abort(signal.reason)
+  signal.addEventListener('abort', forward, { once: true })
   let next = 0
   let done = 0
   onProgress({ phase: 'intraday', done, total: dates.length })
   const worker = async (): Promise<void> => {
-    while (next < dates.length) {
+    while (next < dates.length && !stop.signal.aborted) {
       const index = next++
-      const snapshot = await getIntraday(dates[index], false, signal, scope, INTRADAY_PRIORITY)
-      days[index] = { date: snapshot.date, stepsHourly: snapshot.stepsHourly, heartRate: snapshot.heartRate }
-      onProgress({ phase: 'intraday', done: ++done, total: dates.length })
+      try {
+        const snapshot = await getIntraday(dates[index], false, stop.signal, scope, INTRADAY_PRIORITY)
+        days[index] = { date: snapshot.date, stepsHourly: snapshot.stepsHourly, heartRate: snapshot.heartRate }
+      } catch (error) {
+        stop.abort(error)
+        throw error
+      }
+      if (!stop.signal.aborted) onProgress({ phase: 'intraday', done: ++done, total: dates.length })
     }
   }
-  await Promise.all(Array.from({ length: Math.min(INTRADAY_CONCURRENCY, dates.length) }, worker))
+  try {
+    await Promise.all(Array.from({ length: Math.min(INTRADAY_CONCURRENCY, dates.length) }, worker))
+  } finally {
+    signal.removeEventListener('abort', forward)
+  }
+  signal.throwIfAborted()
   return days
 }
 
@@ -59,8 +73,8 @@ export async function exportHealthData(
 ): Promise<number> {
   const { start, end, metrics, sections, fullHeartRate } = options
   const has = (section: HealthExportOptions['sections'][number]): boolean => sections.includes(section)
-  // Nutrition and body logs are optional extras; losing one shouldn't lose the
-  // export, but the file says so rather than implying nothing was logged.
+  // Detail sections are optional extras; losing one shouldn't lose the export,
+  // but the file says so rather than implying nothing was recorded.
   const warnings: string[] = []
   const optional = async <T>(section: string, read: () => Promise<T>, fallback: T): Promise<T> => {
     try {
@@ -81,9 +95,13 @@ export async function exportHealthData(
     metrics.length ? getSeries(metrics, start, end, false, signal, EXPORT_SYNC) : null
   ])
   if (has('sleepSessions')) onProgress({ phase: 'sleep' })
-  const sleep = has('sleepSessions') ? await getSleepRange(start, end, false, signal, EXPORT_SYNC) : null
+  const sleep = has('sleepSessions')
+    ? await optional('Sleep sessions', () => getSleepRange(start, end, false, signal, EXPORT_SYNC), null)
+    : null
   if (has('workouts')) onProgress({ phase: 'workouts' })
-  const workouts = has('workouts') ? await getWorkoutsRange(start, end, false, signal, EXPORT_SYNC) : null
+  const workouts = has('workouts')
+    ? await optional('Workouts', () => getWorkoutsRange(start, end, false, signal, EXPORT_SYNC), null)
+    : null
   if (has('nutritionLogs')) onProgress({ phase: 'nutrition' })
   const nutrition = has('nutritionLogs')
     ? await optional('Nutrition logs', () => getNutritionLogRange(start, end, signal), [])
@@ -113,7 +131,8 @@ export async function exportHealthData(
     nutrition,
     body,
     intraday,
-    warnings
+    warnings,
+    provisionalSleepDates: sleep?.provisionalDates
   })
   const json = JSON.stringify(document)
   signal.throwIfAborted()
