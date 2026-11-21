@@ -3,6 +3,7 @@ import type { MenuBarDestination } from '../shared/menu-bar'
 import { contextBridge, ipcRenderer } from 'electron'
 import type { AppearanceMode, AppearanceState } from '../shared/appearance'
 import { healthWireArgs, unwrapHealthResult } from '../shared/health-ipc'
+import type { HealthExportOptions, HealthExportProgress, HealthExportResult } from '../shared/health-export'
 import type {
   ActivityIntradayMetric,
   ActivityIntradayResult,
@@ -218,6 +219,14 @@ const api = {
       invokeHealth('health:body-measurements', [start, end], requestId),
     devices: (requestId: string, force?: boolean): Promise<PairedDevice[]> =>
       invokeHealth('health:devices', [force], requestId),
+    export: (requestId: string, options: HealthExportOptions): Promise<HealthExportResult> =>
+      invokeHealth('health:export', [options], requestId),
+    revealExport: (): Promise<void> => ipcRenderer.invoke('health:export-reveal'),
+    onExportProgress: (callback: (progress: HealthExportProgress) => void): (() => void) => {
+      const listener = (_: unknown, progress: HealthExportProgress): void => callback(progress)
+      ipcRenderer.on('health:export-progress', listener)
+      return () => ipcRenderer.removeListener('health:export-progress', listener)
+    },
     cancel: (requestId: string): Promise<void> => ipcRenderer.invoke('health:cancel', requestId),
     refresh: (): Promise<void> => ipcRenderer.invoke('health:refresh'),
     onInvalidated: (callback: () => void): (() => void) => {
