@@ -213,10 +213,11 @@ describe('health export file', () => {
     const base = input()
     const doc = buildHealthExport(input({
       nutrition: [{ date: '2026-11-20', entries: [{ ...base.nutrition![0].entries[0], civilStartTime: '2026-11-20 23:40', startTime: '2026-11-21T07:40:00Z' }] }],
-      body: { heightCm: 180.33999633789062, measurements: [] } as never
+      body: { heightCm: 180.33999633789062, measurements: [{ id: 'm', time: '2026-11-20T12:30:00Z', civilTime: '2026-11-20 07:30', weightKg: 80, bodyFatPct: null, notes: null }] } as never
     }))
     expect((doc.nutrition as Array<{ entries: Array<Record<string, unknown>> }>)[0].entries[0].localTime).toBe('2026-11-20 23:40')
     expect((doc.body as { heightCm: number }).heightCm).toBe(180.34)
+    expect((doc.body as { measurements: unknown[] }).measurements).toEqual([{ localTime: '2026-11-20 07:30', weightKg: 80 }])
   })
 
   test('writes sleep stages on the clock the night was recorded on', () => {

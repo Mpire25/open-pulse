@@ -374,6 +374,11 @@ export function registerIpc(commands: { open: (destination: MenuBarDestination) 
     // One at a time: a second window or a reloaded renderer can't double the load on Google.
     if (exportRunning) throw new Error('An export is already running.')
     exportRunning = true
+    // A reloaded window has lost track of this export and can't cancel it, so stop it.
+    const reload = new AbortController()
+    const onReload = (): void => reload.abort()
+    event.sender.once('did-start-loading', onReload)
+    const exportSignal = AbortSignal.any([signal, reload.signal])
     try {
       const window = BrowserWindow.fromWebContents(event.sender)
       const dialogOptions = {
@@ -383,13 +388,14 @@ export function registerIpc(commands: { open: (destination: MenuBarDestination) 
       }
       const choice = window ? await dialog.showSaveDialog(window, dialogOptions) : await dialog.showSaveDialog(dialogOptions)
       if (choice.canceled || !choice.filePath) return { status: 'cancelled' }
-      const bytes = await exportHealthData(options, choice.filePath, signal, (progress) => {
+      const bytes = await exportHealthData(options, choice.filePath, exportSignal, (progress) => {
         if (!event.sender.isDestroyed()) event.sender.send('health:export-progress', progress)
       })
       lastExportPath = choice.filePath
       return { status: 'saved', path: choice.filePath, bytes }
     } finally {
       exportRunning = false
+      if (!event.sender.isDestroyed()) event.sender.removeListener('did-start-loading', onReload)
     }
   })
   // Only the file this session just wrote can be revealed.

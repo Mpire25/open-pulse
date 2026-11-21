@@ -56,6 +56,8 @@ export interface SeriesResult {
   start: string
   end: string
   days: DailySeries
+  /** Metrics Google couldn't be read for this time; their values are whatever was cached. */
+  failedMetrics?: MetricKey[]
 }
 
 // ---------------------------------------------------------------------------
@@ -135,6 +137,8 @@ export interface SleepRangeResult {
   source: DataSource
   /** Requested dates whose sleep detail isn't confirmed current; their cached detail is provisional. */
   provisionalDates: string[]
+  /** Google couldn't be read this time; the result is whatever was cached. */
+  failed?: boolean
 }
 
 // ---------------------------------------------------------------------------
@@ -322,6 +326,8 @@ export interface WorkoutTrackResult {
 export interface WorkoutsResult {
   source: DataSource
   workouts: Workout[]
+  /** Google couldn't be read this time; the result is whatever was cached. */
+  failed?: boolean
 }
 
 export interface NutritionLogEntry {
@@ -352,6 +358,8 @@ export interface NutritionLogsResult {
 export interface BodyMeasurement {
   id: string
   time: string
+  /** "YYYY-MM-DD HH:MM" on the clock where it was recorded, when Google reports it. */
+  civilTime?: string
   weightKg: number | null
   bodyFatPct: number | null
   notes: string | null
@@ -362,6 +370,8 @@ export interface BodyMeasurementsResult {
   measurements: BodyMeasurement[]
   /** Latest recorded height, used only to derive BMI from weight. */
   heightCm: number | null
+  /** Weight or height couldn't be read this time. */
+  failed?: boolean
 }
 
 // ---------------------------------------------------------------------------

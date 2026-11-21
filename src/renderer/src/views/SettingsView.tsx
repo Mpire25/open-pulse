@@ -880,7 +880,7 @@ function ExportCard({ connected, focusRequest }: { connected: boolean; focusRequ
   }
   // A remembered Custom range is kept, but never reaches past today.
   const customEnd = selection.customEnd && selection.customEnd <= today ? selection.customEnd : today
-  const customStart = selection.customStart && selection.customStart <= customEnd ? selection.customStart : shiftDate(customEnd, -29)
+  const customStart = selection.customStart ?? shiftDate(customEnd, -29)
   const setCustomStart = (customStart: string): void => update({ customStart, customEnd })
   const setCustomEnd = (customEnd: string): void => update({ customStart, customEnd })
   const toggle = <T extends string>(list: readonly T[], keys: readonly T[], on: boolean): T[] =>

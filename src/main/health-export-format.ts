@@ -161,10 +161,11 @@ function sleepSection(days: SleepDay[], timeZone: string): Record<string, unknow
       return {
         ...(compactRecord({
           ...night,
-          outOfBedSegments: sessions[index].outOfBedSegments.map((segment) => ({
-            localStartTime: offsetTime(segment.startTime, offset, timeZone),
-            localEndTime: offsetTime(segment.endTime, offset, timeZone)
-          }))
+          outOfBedSegments: sessions[index].outOfBedSegments.flatMap((segment) => {
+            const localStartTime = offsetTime(segment.startTime, offset, timeZone)
+            const localEndTime = offsetTime(segment.endTime, offset, timeZone)
+            return localStartTime && localEndTime ? [{ localStartTime, localEndTime }] : []
+          })
         }) as Record<string, unknown>),
         stages: sessions[index].stages.map((stage) => [
           stage.type,
@@ -206,11 +207,14 @@ export function buildHealthExport(input: HealthExportInput): Record<string, unkn
   const has = (section: HealthExportSection): boolean => input.sections.includes(section)
   const intraday = input.intraday ?? []
   const notes = [
-    `All dates are local calendar dates and all times are local clock times in ${timeZone}, written as "YYYY-MM-DD HH:MM", unless a field name says otherwise.`,
+    `All dates are local calendar dates and all times are local clock times in ${timeZone}, written as "YYYY-MM-DD HH:MM", unless a field name or another note says otherwise.`,
     'A null value means nothing was recorded, not zero.'
   ]
   if (input.sections.some((section) => section !== 'hourly')) {
-    notes.push('In individual records (workouts, sleep sessions, food logs, weigh-ins), fields that were not recorded are left out entirely.')
+    notes.push(
+      'In individual records (workouts, sleep sessions, food logs, weigh-ins), fields that were not recorded are left out entirely.',
+      `Times in individual records are on the clock where each was recorded, which differs from ${timeZone} only if the wearer was travelling.`
+    )
   }
   if (!isFullExport(input) || !input.fullHeartRate) {
     notes.push(
@@ -307,8 +311,8 @@ export function buildHealthExport(input: HealthExportInput): Record<string, unkn
     document.body = input.body
       ? {
           heightCm: tidyCell(input.body.heightCm),
-          measurements: input.body.measurements.map(({ id: _id, time, ...measurement }) => compactRecord({
-            localTime: localTime(time, timeZone),
+          measurements: input.body.measurements.map(({ id: _id, time, civilTime, ...measurement }) => compactRecord({
+            localTime: civilTime ?? localTime(time, timeZone),
             ...measurement
           }))
         }

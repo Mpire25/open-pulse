@@ -92,6 +92,8 @@ export async function exportHealthData(
 
   // Only what was asked for is read, so a narrow export never waits on the
   // day-by-day intraday fetch.
+  // Read now: if the export runs past midnight, the last day was still read while partial.
+  const today = localIsoDate(new Date())
   onProgress({ phase: 'daily' })
   const [devices, series] = await Promise.all([
     optional('Devices', () => getDevices(false, signal), []),
@@ -116,6 +118,12 @@ export async function exportHealthData(
   const intraday = has('hourly') || fullHeartRate
     ? await readIntraday(start, end, has('hourly') ? 'both' : 'heart', signal, onProgress)
     : undefined
+  const partly = (section: string): string =>
+    `${section} could not be fully read from Google Health for this export, so some of it may be missing rather than unrecorded.`
+  if (series?.failedMetrics?.length) warnings.push(partly(`Daily ${series.failedMetrics.join(', ')}`))
+  if (sleep?.failed) warnings.push(partly('Sleep sessions'))
+  if (workouts?.failed) warnings.push(partly('Workouts'))
+  if (body?.failed) warnings.push(partly('Body measurements'))
   if (intraday?.failedDates.length) {
     const { failedDates } = intraday
     const listed = failedDates.length <= 10 ? failedDates.join(', ') : `${failedDates.slice(0, 10).join(', ')} and ${failedDates.length - 10} more`
@@ -126,7 +134,7 @@ export async function exportHealthData(
   const document = buildHealthExport({
     start,
     end,
-    today: localIsoDate(new Date()),
+    today,
     exportedAt: new Date(),
     timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
     metrics,
