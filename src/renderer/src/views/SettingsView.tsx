@@ -848,7 +848,7 @@ function exportSelectionSummary(
       ? { headline: 'Full-resolution heart rate only', items: 'No daily metrics or detail sections.' }
       : { headline: 'Nothing chosen yet', items: 'Pick the metrics and detail you want in the file.' }
   }
-  const metricText = `${names.length} daily ${names.length === 1 ? 'metric' : 'metrics'}`
+  const metricText = names.length ? `${names.length} daily ${names.length === 1 ? 'metric' : 'metrics'}` : 'no daily metrics'
   const detailText = detail.length ? `${detail.length} detail ${detail.length === 1 ? 'section' : 'sections'}` : 'no detail'
   return { headline: `${metricText} · ${detailText}`, items: [...names, ...detail].join(', ') }
 }

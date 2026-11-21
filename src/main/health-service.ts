@@ -1923,6 +1923,7 @@ export async function getBodyMeasurements(
     getLatestHeight(token, 1, signal)
   ])
   assertCurrentAccount(generation)
+  for (const result of [weightResult, heightResult]) if (result.status === 'rejected') rethrowIfAborted(result.reason)
   if (weightResult.status === 'rejected' && heightResult.status === 'rejected') throw weightResult.reason
   const weightPoints = weightResult.status === 'fulfilled' ? weightResult.value : []
   return {

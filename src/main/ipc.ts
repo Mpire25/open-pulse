@@ -387,7 +387,7 @@ export function registerIpc(commands: { open: (destination: MenuBarDestination) 
         filters: [{ name: 'JSON', extensions: ['json'] }]
       }
       const choice = window ? await dialog.showSaveDialog(window, dialogOptions) : await dialog.showSaveDialog(dialogOptions)
-      if (choice.canceled || !choice.filePath) return { status: 'cancelled' }
+      if (choice.canceled || !choice.filePath) return { status: 'cancelled', reason: 'dialog' }
       const bytes = await exportHealthData(options, choice.filePath, exportSignal, (progress) => {
         if (!event.sender.isDestroyed()) event.sender.send('health:export-progress', progress)
       })

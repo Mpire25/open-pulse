@@ -44,7 +44,8 @@ export interface HealthExportProgress {
 
 export type HealthExportResult =
   | { status: 'saved'; path: string; bytes: number }
-  | { status: 'cancelled' }
+  /** 'dialog' when no file was chosen; 'aborted' when the export was stopped. */
+  | { status: 'cancelled'; reason: 'dialog' | 'aborted' }
 
 /** Keeps only known keys, deduplicated and in canonical order. */
 export function normalizeExportSelection(

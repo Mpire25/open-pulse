@@ -47,13 +47,11 @@ export async function startHealthExport(options: HealthExportOptions): Promise<v
     const result = await window.pulse.health.export(id, options)
     if (result.status === 'saved') {
       set({ saved: { name: result.path.split(/[\\/]/).pop() ?? result.path, bytes: result.bytes } })
-    }
-  } catch (error) {
-    if (!(error instanceof DOMException && error.name === 'AbortError')) {
-      set({ failure: error instanceof Error && error.message.trim() ? error.message : 'The export could not be completed.' })
-    } else if (!userCancelled) {
+    } else if (result.reason === 'aborted' && !userCancelled) {
       set({ failure: 'The export stopped because the Google Health connection changed. Try again.' })
     }
+  } catch (error) {
+    set({ failure: error instanceof Error && error.message.trim() ? error.message : 'The export could not be completed.' })
   } finally {
     stopProgress()
     if (requestId === id) requestId = null

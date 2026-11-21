@@ -2,7 +2,7 @@ import type { DashboardLayout, DashboardLayouts, DashboardSurface, DashboardWidg
 import type { MenuBarDestination } from '../shared/menu-bar'
 import { contextBridge, ipcRenderer } from 'electron'
 import type { AppearanceMode, AppearanceState } from '../shared/appearance'
-import { healthWireArgs, unwrapHealthResult } from '../shared/health-ipc'
+import { healthWireArgs, isHealthCancelled, unwrapHealthResult } from '../shared/health-ipc'
 import type { HealthExportOptions, HealthExportProgress, HealthExportResult } from '../shared/health-export'
 import type {
   ActivityIntradayMetric,
@@ -219,8 +219,12 @@ const api = {
       invokeHealth('health:body-measurements', [start, end], requestId),
     devices: (requestId: string, force?: boolean): Promise<PairedDevice[]> =>
       invokeHealth('health:devices', [force], requestId),
-    export: (requestId: string, options: HealthExportOptions): Promise<HealthExportResult> =>
-      invokeHealth('health:export', [options], requestId),
+    // A cancel resolves rather than rejects: the bridge strips an error down to
+    // its message, so the renderer couldn't tell a cancel from a failure.
+    export: async (requestId: string, options: HealthExportOptions): Promise<HealthExportResult> => {
+      const result: unknown = await ipcRenderer.invoke('health:export', ...healthWireArgs([options], requestId))
+      return isHealthCancelled(result) ? { status: 'cancelled', reason: 'aborted' } : unwrapHealthResult<HealthExportResult>(result)
+    },
     revealExport: (): Promise<void> => ipcRenderer.invoke('health:export-reveal'),
     onExportProgress: (callback: (progress: HealthExportProgress) => void): (() => void) => {
       const listener = (_: unknown, progress: HealthExportProgress): void => callback(progress)
