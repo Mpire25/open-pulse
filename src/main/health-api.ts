@@ -190,6 +190,14 @@ export function dateFromCivil(value?: CivilDateTime | ApiDate | null): string | 
   return `${date.year}-${String(date.month).padStart(2, '0')}-${String(date.day).padStart(2, '0')}`
 }
 
+/** "YYYY-MM-DD HH:MM" as the wearer's clock read when it was recorded. */
+export function civilText(value?: CivilDateTime | null): string | null {
+  const date = dateFromCivil(value)
+  const time = value?.time
+  if (!date || !time) return null
+  return `${date} ${String(time.hours ?? 0).padStart(2, '0')}:${String(time.minutes ?? 0).padStart(2, '0')}`
+}
+
 export function minuteFromCivil(value?: CivilDateTime | null): number | null {
   const time = value?.time
   if (!time) return null

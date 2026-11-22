@@ -1,6 +1,7 @@
 import { chooseDashboardWidget } from './dashboard-menu'
 import { isMenuBarDestination, type MenuBarDestination } from '../shared/menu-bar'
-import { app, ipcMain } from 'electron'
+import { join } from 'node:path'
+import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron'
 import { applyAppearancePreference, getAppearanceState, setAppearanceMode } from './appearance'
 import type { AppearanceState } from '../shared/appearance'
 import type { IpcMainInvokeEvent, WebContents } from 'electron'
@@ -44,6 +45,8 @@ import {
   resetHealthAccount
 } from './health-service'
 import { setApiActivityListener } from './health-api'
+import { exportHealthData } from './health-export'
+import { exportOptionsProblem, normalizeExportSelection, type HealthExportOptions, type HealthExportResult } from '../shared/health-export'
 import { getDashboardLayouts, updateDashboardLayout, getSettings, updateSettings } from './store'
 import { cancelAllChats, cancelChat, runChat } from './codex-chat'
 import type { ResponseNotificationController } from './response-notification-controller'
@@ -140,6 +143,8 @@ function handle<Args extends unknown[], Result>(
 const healthControllers = new Map<string, AbortController>()
 let legacyHealthRequestSequence = 0
 let googleDisconnectedNotified = false
+let lastExportPath: string | null = null
+let exportRunning = false
 
 function abortAllHealthRequests(): void {
   for (const controller of healthControllers.values()) controller.abort()
@@ -354,6 +359,49 @@ export function registerIpc(commands: { open: (destination: MenuBarDestination) 
     getBodyMeasurements(start, end, signal)
   )
   healthHandle('health:devices', (_e, signal, force?: boolean) => getDevices(force, signal))
+  healthHandle('health:export', async (event, signal, raw: unknown): Promise<HealthExportResult> => {
+    const input = (raw ?? {}) as Partial<HealthExportOptions>
+    const options: HealthExportOptions = {
+      start: String(input.start ?? ''),
+      end: String(input.end ?? ''),
+      ...normalizeExportSelection(input.metrics, input.sections),
+      fullHeartRate: input.fullHeartRate === true
+    }
+    const now = new Date()
+    const today = new Date(now.getTime() - now.getTimezoneOffset() * 60_000).toISOString().slice(0, 10)
+    const problem = exportOptionsProblem(options, today)
+    if (problem) throw new Error(problem)
+    // One at a time: a second window or a reloaded renderer can't double the load on Google.
+    if (exportRunning) throw new Error('An export is already running.')
+    exportRunning = true
+    // A reloaded window has lost track of this export and can't cancel it, so stop it.
+    const reload = new AbortController()
+    const onReload = (): void => reload.abort()
+    event.sender.once('did-start-loading', onReload)
+    const exportSignal = AbortSignal.any([signal, reload.signal])
+    try {
+      const window = BrowserWindow.fromWebContents(event.sender)
+      const dialogOptions = {
+        title: 'Export health data',
+        defaultPath: join(app.getPath('downloads'), `openpulse-health-${options.start}-to-${options.end}.json`),
+        filters: [{ name: 'JSON', extensions: ['json'] }]
+      }
+      const choice = window ? await dialog.showSaveDialog(window, dialogOptions) : await dialog.showSaveDialog(dialogOptions)
+      if (choice.canceled || !choice.filePath) return { status: 'cancelled', reason: 'dialog' }
+      const bytes = await exportHealthData(options, choice.filePath, exportSignal, (progress) => {
+        if (!event.sender.isDestroyed()) event.sender.send('health:export-progress', progress)
+      })
+      lastExportPath = choice.filePath
+      return { status: 'saved', path: choice.filePath, bytes }
+    } finally {
+      exportRunning = false
+      if (!event.sender.isDestroyed()) event.sender.removeListener('did-start-loading', onReload)
+    }
+  })
+  // Only the file this session just wrote can be revealed.
+  handle('health:export-reveal', () => {
+    if (lastExportPath) shell.showItemInFolder(lastExportPath)
+  })
   handle('health:refresh', (event) => {
     clearHealthCache()
     // The caller awaits this request and invalidates its own query cache.

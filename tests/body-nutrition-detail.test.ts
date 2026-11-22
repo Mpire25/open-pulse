@@ -13,7 +13,7 @@ describe('body and nutrition record normalization', () => {
     const entries = parseNutritionLogs([{ 
       name: 'users/me/dataTypes/nutrition-log/dataPoints/lunch',
       nutritionLog: {
-        interval: { startTime: '2026-07-10T12:35:00Z', endTime: '2026-07-10T12:40:00Z' },
+        interval: { startTime: '2026-07-10T12:35:00Z', endTime: '2026-07-10T12:40:00Z', civilStartTime: { date: { year: 2026, month: 7, day: 10 }, time: { hours: 13, minutes: 35 } } },
         foodDisplayName: 'Chicken pesto pasta',
         mealType: 'LUNCH',
         serving: { amount: 1.5, foodMeasurementUnitDisplayName: 'bowl' },
@@ -34,6 +34,7 @@ describe('body and nutrition record normalization', () => {
       id: 'users/me/dataTypes/nutrition-log/dataPoints/lunch',
       startTime: '2026-07-10T12:35:00Z',
       endTime: '2026-07-10T12:40:00Z',
+      civilStartTime: '2026-07-10 13:35',
       foodName: 'Chicken pesto pasta',
       mealType: 'LUNCH',
       servingLabel: '1.5 bowls',

@@ -29,7 +29,7 @@ mock.module('electron', () => ({
   nativeTheme,
   app: { getPath: () => directory, once: () => {} },
   ipcMain: { handle: (channel: string, handler: (event: unknown, ...args: unknown[]) => unknown) => handlers.set(channel, handler) },
-  BrowserWindow: {}, Menu: {}, shell: {},
+  BrowserWindow: {}, Menu: {}, dialog: {}, shell: {},
   safeStorage: new Proxy({}, { get: () => { throw new Error('Appearance must not access secure storage') } })
 }))
 const store = await import('../../src/main/store')

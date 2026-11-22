@@ -22,6 +22,7 @@ import type {
   IntradaySnapshot,
   IntradayScope,
   MetricKey,
+  NutritionLogEntry,
   NutritionLogsResult,
   PairedDevice,
   SeriesResult,
@@ -1374,7 +1375,8 @@ async function intradayRollupSource(
   date: string,
   windowSeconds: number,
   generation: number,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  priority: Priority = 0
 ): Promise<IntradayRollupSource> {
   const { startTime, endTime } = physicalDayRange(date)
   const kind = dataType === 'steps' ? 'interval' : 'sample'
@@ -1386,7 +1388,7 @@ async function intradayRollupSource(
       date,
       shiftIsoDate(date, 1),
       'google-wearables',
-      0,
+      priority,
       signal
     ).catch((error) => {
       rethrowIfAborted(error)
@@ -1400,7 +1402,7 @@ async function intradayRollupSource(
       endTime,
       windowSeconds,
       'google-wearables',
-      0,
+      priority,
       signal
     )
   ])
@@ -1424,7 +1426,7 @@ async function intradayRollupSource(
     date,
     shiftIsoDate(date, 1),
     'google-wearables',
-    0,
+    priority,
     signal
   )
   assertCurrentAccount(generation)
@@ -1489,7 +1491,8 @@ async function ensureIntradaySteps(
   date: string,
   force: boolean,
   generation: number,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  priority: Priority = 0
 ): Promise<void> {
   const group = INTRADAY_STEPS_GROUP
   if (!force && isFresh(group, date)) return
@@ -1499,7 +1502,8 @@ async function ensureIntradaySteps(
     date,
     STEPS_ROLLUP_WINDOW_SECONDS,
     generation,
-    signal
+    signal,
+    priority
   )
   assertCurrentAccount(generation)
   setIntradaySteps(
@@ -1516,7 +1520,8 @@ async function ensureIntradayHeart(
   date: string,
   force: boolean,
   generation: number,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  priority: Priority = 0
 ): Promise<void> {
   const group = INTRADAY_HEART_GROUP
   if (!force && isFresh(group, date)) return
@@ -1526,7 +1531,8 @@ async function ensureIntradayHeart(
     date,
     HEART_RATE_ROLLUP_WINDOW_SECONDS,
     generation,
-    signal
+    signal,
+    priority
   )
   assertCurrentAccount(generation)
   const series = source.rawPoints
@@ -1610,10 +1616,12 @@ export async function getSeries(
   assertCurrentAccount(generation)
 
   const groups = [...new Set(metrics.map((m) => GROUP_BY_METRIC.get(m)).filter((g): g is FetchGroup => g != null))]
+  const failedMetrics = new Set<MetricKey>()
   const jobs: Array<Promise<unknown>> = groups.map((group) =>
     ensureGroupOnce(token, group, s, e, force, generation, options, signal).catch((err) => {
       rethrowIfAborted(err)
       console.error(`[health] ${group.id} failed for ${s}..${e}:`, err)
+      for (const metric of metrics) if (GROUP_BY_METRIC.get(metric) === group) failedMetrics.add(metric)
       return 'failed'
     })
   )
@@ -1622,6 +1630,7 @@ export async function getSeries(
       ensureSleepSummaryOnce(token, s, e, force, generation, options, signal).catch((err) => {
         rethrowIfAborted(err)
         console.error(`[health] sleep failed for ${s}..${e}:`, err)
+        for (const metric of metrics) if (SLEEP_METRICS.includes(metric)) failedMetrics.add(metric)
         return 'failed'
       })
     )
@@ -1641,7 +1650,13 @@ export async function getSeries(
     for (const metric of metrics) out[metric] = record?.values[metric] ?? null
     days[date] = out
   }
-  return { source: 'live', start: s, end: e, days }
+  return {
+    source: 'live',
+    start: s,
+    end: e,
+    days,
+    ...(failedMetrics.size ? { failedMetrics: metrics.filter((metric) => failedMetrics.has(metric)) } : {})
+  }
 }
 
 export async function getSleepRange(
@@ -1655,14 +1670,17 @@ export async function getSleepRange(
   const [s, e] = normalizeRange(start, end)
   const token = await requireGoogleAccessToken()
   assertCurrentAccount(generation)
+  let failed = false
   try {
     await ensureSleepOnce(token, s, e, force, generation, options, signal)
   } catch (err) {
     rethrowIfAborted(err)
     console.error(`[health] sleep range failed for ${s}..${e}:`, err)
+    failed = true
   }
   assertCurrentAccount(generation)
-  return getArchivedSleepHistory(s, e)
+  const history = getArchivedSleepHistory(s, e)
+  return failed ? { ...history, failed } : history
 }
 
 export async function getWorkoutsRange(
@@ -1676,38 +1694,44 @@ export async function getWorkoutsRange(
   const [s, e] = normalizeRange(start, end)
   const token = await requireGoogleAccessToken()
   assertCurrentAccount(generation)
+  let failed = false
   try {
     await ensureWorkoutsRange(token, s, e, force, generation, options, signal)
   } catch (err) {
     rethrowIfAborted(err)
     console.error(`[health] workouts failed for ${s}..${e}:`, err)
+    failed = true
   }
   assertCurrentAccount(generation)
   const workouts = listDates(s, e).flatMap((d) => peekDay(d)?.workouts ?? [])
-  return { source: 'live', workouts }
+  return failed ? { source: 'live', workouts, failed } : { source: 'live', workouts }
 }
 
 export async function getIntraday(
   date: string,
   force = false,
   signal?: AbortSignal,
-  scope: IntradayScope = 'both'
+  scope: IntradayScope = 'both',
+  priority: Priority = 0
 ): Promise<IntradaySnapshot> {
   const generation = healthAccountGeneration
   const [d] = normalizeRange(date, date)
   const token = await requireGoogleAccessToken()
   assertCurrentAccount(generation)
   const jobs: Array<Promise<void>> = []
+  const failed: Array<'steps' | 'heart'> = []
   if (scope === 'steps' || scope === 'both') {
-    jobs.push(ensureIntradaySteps(token, d, force, generation, signal).catch((err) => {
+    jobs.push(ensureIntradaySteps(token, d, force, generation, signal, priority).catch((err) => {
       rethrowIfAborted(err)
       console.error(`[health] intraday steps failed for ${d}:`, err)
+      failed.push('steps')
     }))
   }
   if (scope === 'heart' || scope === 'both') {
-    jobs.push(ensureIntradayHeart(token, d, force, generation, signal).catch((err) => {
+    jobs.push(ensureIntradayHeart(token, d, force, generation, signal, priority).catch((err) => {
       rethrowIfAborted(err)
       console.error(`[health] intraday heart failed for ${d}:`, err)
+      failed.push('heart')
     }))
   }
   await Promise.all(jobs)
@@ -1719,7 +1743,8 @@ export async function getIntraday(
     source: 'live',
     stepsHourly: scope === 'heart' ? [] : (record?.stepsHourly ?? []),
     heartRate,
-    currentHeartRate: d === todayIso() ? (heartRate.at(-1)?.bpm ?? null) : null
+    currentHeartRate: d === todayIso() ? (heartRate.at(-1)?.bpm ?? null) : null,
+    ...(failed.length ? { failed } : {})
   }
 }
 
@@ -1858,6 +1883,30 @@ export async function getNutritionLogs(date: string, signal?: AbortSignal): Prom
   return { date: d, source: 'live', entries: parseNutritionLogs(points) }
 }
 
+/** Every nutrition log entry in a range, keyed by the civil date it was logged on. */
+export async function getNutritionLogRange(
+  start: string,
+  end: string,
+  signal?: AbortSignal,
+  priority: Priority = 2
+): Promise<Array<{ date: string; entries: NutritionLogEntry[] }>> {
+  const generation = healthAccountGeneration
+  const [s, e] = normalizeRange(start, end)
+  const token = await requireGoogleAccessToken()
+  assertCurrentAccount(generation)
+  const points = await nutritionRawRange(token, s, shiftIsoDate(e, 1), priority, signal)
+  assertCurrentAccount(generation)
+  const byDate = new Map<string, RawDataPoint[]>()
+  for (const point of points) {
+    const date = nutritionLogDate(point)
+    if (!date || date < s || date > e) continue
+    byDate.set(date, [...(byDate.get(date) ?? []), point])
+  }
+  return [...byDate.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([date, datePoints]) => ({ date, entries: parseNutritionLogs(datePoints) }))
+}
+
 export async function getBodyMeasurements(
   start: string,
   end: string,
@@ -1874,12 +1923,14 @@ export async function getBodyMeasurements(
     getLatestHeight(token, 1, signal)
   ])
   assertCurrentAccount(generation)
+  for (const result of [weightResult, heightResult]) if (result.status === 'rejected') rethrowIfAborted(result.reason)
   if (weightResult.status === 'rejected' && heightResult.status === 'rejected') throw weightResult.reason
   const weightPoints = weightResult.status === 'fulfilled' ? weightResult.value : []
   return {
     source: 'live',
     measurements: parseBodyMeasurements(weightPoints, []),
-    heightCm: heightResult.status === 'fulfilled' ? heightResult.value : null
+    heightCm: heightResult.status === 'fulfilled' ? heightResult.value : null,
+    ...(weightResult.status === 'rejected' || heightResult.status === 'rejected' ? { failed: true } : {})
   }
 }
 

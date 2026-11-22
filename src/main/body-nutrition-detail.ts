@@ -1,5 +1,5 @@
 import type { BodyMeasurement, DayValues, NutritionLogEntry } from '../shared/types'
-import { dateFromCivil, type CivilDateTime, type RawDataPoint } from './health-api'
+import { civilText, dateFromCivil, type CivilDateTime, type RawDataPoint } from './health-api'
 import { gramsFromNutrientNode, nutrientGrams, nutrientMineralGrams } from './nutrition'
 
 export const NUTRITION_DAY_METRICS = [
@@ -57,6 +57,7 @@ export function parseNutritionLogs(points: RawDataPoint[]): NutritionLogEntry[] 
         id: resourceId(point, `${startTime}-${index}`),
         startTime,
         endTime,
+        civilStartTime: civilText(interval?.civilStartTime as CivilDateTime | undefined),
         foodName,
         mealType: typeof log.mealType === 'string' ? log.mealType : null,
         servingLabel: servingLabel(log.serving),
@@ -129,9 +130,11 @@ export function parseBodyMeasurements(
     const time = typeof sampleTime?.physicalTime === 'string' ? sampleTime.physicalTime : null
     const grams = numberValue(weight?.weightGrams)
     if (!weight || !time || grams == null) return []
+    const civilTime = civilText(sampleTime?.civilTime as CivilDateTime | undefined)
     return [{
       id: resourceId(point, `weight-${time}-${index}`),
       time,
+      ...(civilTime ? { civilTime } : {}),
       timestamp: Date.parse(time),
       weightKg: +(grams / 1000).toFixed(2),
       bodyFatPct: null,
@@ -153,9 +156,11 @@ export function parseBodyMeasurements(
       nearest.bodyFatPct = percentage
       nearest.id = `${nearest.id}|${resourceId(point, `body-fat-${time}-${index}`)}`
     } else {
+      const civilTime = civilText(sampleTime?.civilTime as CivilDateTime | undefined)
       measurements.push({
         id: resourceId(point, `body-fat-${time}-${index}`),
         time,
+        ...(civilTime ? { civilTime } : {}),
         timestamp,
         weightKg: null,
         bodyFatPct: percentage,

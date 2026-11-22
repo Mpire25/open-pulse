@@ -88,6 +88,7 @@ export default function App(): React.JSX.Element {
   const [workoutRange, setWorkoutRange] = useState<MetricRange>('D')
   const [selectedWorkout, setSelectedWorkout] = useState<Workout | null>(null)
   const [settings, setSettings] = useState<AppSettings | null>(null)
+  const [exportFocusRequest, setExportFocusRequest] = useState(0)
   const [startupError, setStartupError] = useState<string | null>(null)
   const [google, setGoogle] = useState<GoogleAuthStatus>({ connected: false })
   const [codex, setCodex] = useState<CodexAuthStatus>({ connected: false })
@@ -367,10 +368,13 @@ export default function App(): React.JSX.Element {
   }, [chat.loading])
 
   useEffect(() => window.pulse.app.onNavigate((destination) => {
+    const current = currentNavigationEntry()
+    if (destination.focus === 'export') setExportFocusRequest((request) => request + 1)
     navigate({
-      ...currentNavigationEntry(),
+      ...current,
       view: destination.view,
-      selectedDate: destination.date,
+      // Opening a Settings card shouldn't move the date the data views show.
+      selectedDate: destination.focus ? current.selectedDate : destination.date,
       detailMetric: destination.metric ? { metric: destination.metric, range: destination.range ?? 'D' } : null,
       sleepSessionId: undefined,
       sleepStagesOpen: false,
@@ -721,6 +725,7 @@ export default function App(): React.JSX.Element {
                     }}
                     onGoogleChange={handleGoogleChange}
                     onCodexChange={handleCodexChange}
+                    exportFocusRequest={exportFocusRequest}
                   />
                 )}
               </motion.div>

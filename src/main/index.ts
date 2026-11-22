@@ -281,6 +281,15 @@ function installApplicationMenu(target: RendererTarget): void {
           accelerator: 'CmdOrCtrl+N',
           click: () => sendNewChatCommand(target)
         },
+        {
+          label: 'Export Health Data…',
+          accelerator: 'CmdOrCtrl+Shift+E',
+          click: () => {
+            const now = new Date()
+            const date = new Date(now.getTime() - now.getTimezoneOffset() * 60_000).toISOString().slice(0, 10)
+            openDestination(target, { view: 'settings', date, focus: 'export' })
+          }
+        },
         { type: 'separator' },
         process.platform === 'darwin' ? { role: 'close' } : { role: 'quit' }
       ]

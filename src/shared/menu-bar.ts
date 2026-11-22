@@ -6,6 +6,8 @@ export interface MenuBarDestination {
   date: string
   metric?: typeof MENU_BAR_METRICS[number]
   range?: 'D' | 'W' | 'M' | '3M' | 'Y'
+  /** A Settings card to bring into view. */
+  focus?: 'export'
 }
 
 export function isMenuBarDestination(value: unknown): value is MenuBarDestination {
@@ -15,7 +17,8 @@ export function isMenuBarDestination(value: unknown): value is MenuBarDestinatio
   return MENU_BAR_VIEWS.includes(v.view) && date !== null && Number.isFinite(date.getTime()) &&
     date.toISOString().slice(0, 10) === v.date &&
     (v.metric === undefined || MENU_BAR_METRICS.includes(v.metric)) &&
-    (v.range === undefined || v.range === 'D' || v.range === 'W' || v.range === 'M' || v.range === '3M' || v.range === 'Y')
+    (v.range === undefined || v.range === 'D' || v.range === 'W' || v.range === 'M' || v.range === '3M' || v.range === 'Y') &&
+    (v.focus === undefined || (v.focus === 'export' && v.view === 'settings'))
 }
 
 /** Keep the panel within the display containing the tray, including small displays. */
