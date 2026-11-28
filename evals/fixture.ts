@@ -616,6 +616,18 @@ export function createHealthFixture(record: HealthCallListener, now = evalNow, o
       return { source: 'live', workouts }
     },
 
+    async getWorkoutHeartRateFor(workout: Workout): Promise<HeartRatePoint[]> {
+      await read({ fn: 'getWorkoutHeartRateFor', date: workout.startTime.slice(0, 10) })
+      const start = workout.startMinute ?? 0
+      const points: HeartRatePoint[] = []
+      for (let second = 0; second < workout.durationMin * 60; second += 5) {
+        const warmup = Math.min(1, second / 300)
+        const bpm = (workout.avgHeartRate ?? 140) - 20 * (1 - warmup) + noise('workout-hr', second) * 4
+        points.push({ minute: start + second / 60, bpm: round(bpm) })
+      }
+      return points
+    },
+
     async getIntraday(date: string, _force?: boolean, _signal?: AbortSignal, scope: 'steps' | 'heart' | 'both' = 'both'): Promise<IntradaySnapshot> {
       await read({ fn: `getIntraday:${scope}`, date })
       const at = now()

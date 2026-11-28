@@ -481,6 +481,46 @@ describe('health request budgets', () => {
     ])
   })
 
+  test('gives the assistant a workout\'s heart-rate curve in buckets', async () => {
+    const startTime = new Date(2026, 6, 2, 10).toISOString()
+    const endTime = new Date(2026, 6, 2, 11).toISOString()
+    const id = 'users/me/dataTypes/exercise/dataPoints/assistant-workout'
+    const at = (seconds: number): string => new Date(Date.parse(startTime) + seconds * 1000).toISOString()
+    globalThis.fetch = (async (input) => {
+      requests.push(String(input))
+      if (String(input).includes('/exercise/dataPoints:reconcile')) {
+        return new Response(JSON.stringify({ dataPoints: [workoutPoint(id, startTime, endTime)] }), { status: 200 })
+      }
+      return new Response(JSON.stringify({
+        rollupDataPoints: [
+          { startTime: at(0), heartRate: { beatsPerMinuteAvg: 100 } },
+          { startTime: at(5), heartRate: { beatsPerMinuteAvg: 110 } },
+          { startTime: at(1800), heartRate: { beatsPerMinuteAvg: 170 } }
+        ]
+      }), { status: 200 })
+    }) as typeof fetch
+
+    const result = JSON.parse(await runHealthAgentTool(
+      'query_workout_heart_rate',
+      { date: '2026-07-02', workoutId: id },
+      new AbortController().signal
+    ))
+
+    expect(result).toMatchObject({
+      workoutId: id,
+      sampleCount: 3,
+      summary: { minBpm: 100, avgBpm: 127, maxBpm: 170 },
+      bucketSeconds: 30,
+      columns: ['elapsedMin', 'avgBpm', 'maxBpm'],
+      rows: [[0, 105, 110], [30, 170, 170]]
+    })
+    await expect(runHealthAgentTool(
+      'query_workout_heart_rate',
+      { date: '2026-07-02', workoutId: 'missing' },
+      new AbortController().signal
+    )).rejects.toThrow('No workout with that id')
+  })
+
   test('keeps a travelled workout on its civil date and clock', async () => {
     const date = '2026-07-01'
     const startTime = '2026-07-02T03:00:00.000Z'

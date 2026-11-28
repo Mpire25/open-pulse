@@ -1,6 +1,6 @@
 import { METRIC_UNITS } from '../shared/health-metric-units'
 export { METRIC_UNITS } from '../shared/health-metric-units'
-import { METRIC_KEYS, type MetricKey } from '../shared/types'
+import { METRIC_KEYS, type HeartRatePoint, type MetricKey, type Workout } from '../shared/types'
 import {
   type SyncOptions,
   getBodyMeasurements,
@@ -9,6 +9,7 @@ import {
   getNutritionLogs,
   getSeries,
   getSleepRange,
+  getWorkoutHeartRateFor,
   getWorkoutsRange
 } from './health-service'
 import { shiftIsoDate } from './health-api'
@@ -112,6 +113,22 @@ export const AGENT_TOOLS: AgentToolSpec[] = [
   },
   {
     type: 'function',
+    name: 'query_workout_heart_rate',
+    description:
+      'Read heart rate through one workout: low, average and high, plus the curve in short time buckets (average and peak bpm per bucket). Use it for intervals, effort, drift or recovery within a workout. workoutId and date come from the workouts in the health data block or query_workouts.',
+    strict: true,
+    parameters: {
+      type: 'object',
+      properties: {
+        date: { ...DATE_SCHEMA, description: 'The workout\'s local date, YYYY-MM-DD.' },
+        workoutId: { type: 'string', minLength: 1, maxLength: 500, description: 'The workout id.' }
+      },
+      required: ['date', 'workoutId'],
+      additionalProperties: false
+    }
+  },
+  {
+    type: 'function',
     name: 'query_intraday',
     description:
       'Read one intraday signal for one day. Use hourly_steps for the activity pattern or heart_rate for raw heart samples. Never use this for a multi-day trend.',
@@ -164,6 +181,7 @@ export const AGENT_TOOL_LABELS: Record<string, string> = {
   analyze_daily_metrics: 'Analysing health trends',
   query_sleep: 'Reading sleep history',
   query_workouts: 'Reading workouts',
+  query_workout_heart_rate: 'Reading workout heart rate',
   query_intraday: 'Reading intraday data',
   query_nutrition_logs: 'Reading nutrition log',
   query_body_measurements: 'Reading body measurements',
@@ -215,6 +233,44 @@ export function dailyPayload(metrics: MetricKey[], result: Awaited<ReturnType<ty
     units: Object.fromEntries(metrics.map((metric) => [metric, METRIC_UNITS[metric]])),
     observations,
     days: result.days
+  }
+}
+
+/** At most this many buckets, so a long workout stays a small read. */
+const WORKOUT_HEART_RATE_BUCKETS = 120
+const MIN_WORKOUT_HEART_RATE_BUCKET_SECONDS = 30
+
+export function workoutHeartRatePayload(workout: Workout, points: HeartRatePoint[]): Record<string, unknown> {
+  const start = new Date(workout.startTime)
+  const startMinute = workout.startMinute ?? start.getHours() * 60 + start.getMinutes()
+  const durationSeconds = Math.max(1, (workout.elapsedDurationMin ?? workout.durationMin) * 60)
+  const bucketSeconds = Math.max(
+    MIN_WORKOUT_HEART_RATE_BUCKET_SECONDS,
+    Math.ceil(durationSeconds / WORKOUT_HEART_RATE_BUCKETS / MIN_WORKOUT_HEART_RATE_BUCKET_SECONDS) * MIN_WORKOUT_HEART_RATE_BUCKET_SECONDS
+  )
+  const buckets = new Map<number, number[]>()
+  for (const point of points) {
+    const elapsed = Math.max(0, (point.minute - startMinute) * 60)
+    const index = Math.floor(elapsed / bucketSeconds)
+    buckets.set(index, [...(buckets.get(index) ?? []), point.bpm])
+  }
+  const values = points.map((point) => point.bpm)
+  const average = (list: number[]): number => Math.round(list.reduce((sum, value) => sum + value, 0) / list.length)
+  return {
+    workoutId: workout.id,
+    name: workout.name,
+    startTime: workout.startTime,
+    durationMin: workout.durationMin,
+    sampleCount: points.length,
+    sampleResolutionSeconds: 5,
+    ...(values.length
+      ? { summary: { minBpm: Math.min(...values), avgBpm: average(values), maxBpm: Math.max(...values) } }
+      : { note: 'No heart-rate samples were recorded during this workout.' }),
+    bucketSeconds,
+    columns: ['elapsedMin', 'avgBpm', 'maxBpm'],
+    rows: [...buckets.entries()]
+      .sort(([a], [b]) => a - b)
+      .map(([index, bpm]) => [+((index * bucketSeconds) / 60).toFixed(1), average(bpm), Math.max(...bpm)])
   }
 }
 
@@ -319,6 +375,15 @@ export async function runHealthAgentTool(
           hasNotes: Boolean(notes)
         }))
       })
+    }
+    case 'query_workout_heart_rate': {
+      const date = parseDate(args.date, 'date')
+      const workoutId = typeof args.workoutId === 'string' ? args.workoutId : ''
+      if (!workoutId) throw new Error('workoutId is required.')
+      const { workouts } = await getWorkoutsRange(date, date, false, signal, ASSISTANT_SYNC)
+      const workout = workouts.find((candidate) => candidate.id === workoutId)
+      if (!workout) throw new Error(`No workout with that id on ${date}. Check the id and date with query_workouts.`)
+      return JSON.stringify(workoutHeartRatePayload(workout, await getWorkoutHeartRateFor(workout, signal)))
     }
     case 'query_intraday': {
       const date = parseDate(args.date, 'date')
