@@ -209,6 +209,41 @@ describe('health export file', () => {
     expect(JSON.stringify(workouts)).not.toContain('T22:')
   })
 
+  test('writes each workout\'s heart rate as seconds since its start, across midnight', () => {
+    const workout = {
+      id: 'w-late',
+      name: 'Run',
+      startTime: '2026-11-20T23:58:00Z',
+      startMinute: 23 * 60 + 58,
+      startUtcOffset: '0s',
+      durationMin: 5,
+      calories: null,
+      distanceKm: null,
+      avgHeartRate: 140,
+      steps: null,
+      activeZoneMinutes: null
+    }
+    const doc = buildHealthExport(input({
+      fullHeartRate: true,
+      workouts: [workout, { ...workout, id: 'w-empty', startTime: '2026-11-20T08:00:00Z', startMinute: 480 }],
+      workoutHeartRate: {
+        'w-late': [
+          { minute: 23 * 60 + 58, bpm: 120 },
+          { minute: 23 * 60 + 58 + 5 / 60, bpm: 124 },
+          { minute: 24 * 60 + 1, bpm: 150 }
+        ],
+        'w-empty': []
+      }
+    }))
+    const [late, empty] = doc.workouts as Array<Record<string, unknown>>
+    expect(late.heartRate).toEqual({ columns: ['elapsedSeconds', 'bpm'], rows: [[0, 120], [5, 124], [180, 150]] })
+    expect(empty).not.toHaveProperty('heartRate')
+    expect((doc.about as { notes: string[] }).notes.some((note) => note.startsWith('workouts[].heartRate'))).toBe(true)
+    expect(buildHealthExport(input({ workouts: [workout] })).workouts).toEqual([
+      expect.not.objectContaining({ heartRate: expect.anything() })
+    ])
+  })
+
   test('prefers a food log\'s recorded clock time and tidies height', () => {
     const base = input()
     const doc = buildHealthExport(input({

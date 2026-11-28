@@ -44,6 +44,8 @@ export interface HealthExportInput {
   daily?: DailySeries
   sleep?: SleepDay[]
   workouts?: Workout[]
+  /** Each workout's heart-rate series by workout id, read with full-resolution heart rate. */
+  workoutHeartRate?: Record<string, HeartRatePoint[]>
   nutrition?: Array<{ date: string; entries: NutritionLogEntry[] }>
   body?: BodyMeasurementsResult | null
   intraday?: HealthExportIntradayDay[]
@@ -200,6 +202,13 @@ function hourlyRows(days: HealthExportIntradayDay[]): Array<Array<string | numbe
   })
 }
 
+/** Seconds since the workout started, from the series' civil minutes. */
+function workoutHeartRateRows(points: HeartRatePoint[], startTime: string, startMinute: number | null | undefined): Array<[number, number]> {
+  const start = new Date(startTime)
+  const origin = startMinute ?? start.getHours() * 60 + start.getMinutes()
+  return points.map((point) => [Math.max(0, Math.round((point.minute - origin) * 60)), point.bpm])
+}
+
 /** One self-describing document ChatGPT (or anyone) can read without OpenPulse. */
 export function buildHealthExport(input: HealthExportInput): Record<string, unknown> {
   const { timeZone } = input
@@ -229,6 +238,9 @@ export function buildHealthExport(input: HealthExportInput): Record<string, unkn
   }
   if (metrics.length || has('hourly') || input.fullHeartRate) {
     notes.push('Tables are stored as a "columns" list plus "rows" of values in the same order, to keep the file small.')
+  }
+  if (has('workouts') && input.workoutHeartRate) {
+    notes.push('workouts[].heartRate is that workout’s heart rate as 5-second averages, in a table of seconds since its localStartTime and bpm. Missing seconds had no sample.')
   }
   if (has('hourly')) {
     notes.push('intraday.hourly heart rate columns are the average, minimum and maximum of that hour’s heart rate samples.')
@@ -281,11 +293,15 @@ export function buildHealthExport(input: HealthExportInput): Record<string, unkn
   if (has('workouts')) {
     // Times use the workout's own UTC offset, so one recorded while travelling
     // keeps the clock time it had there.
-    document.workouts = (input.workouts ?? []).map(({ id: _id, startTime, startMinute: _minute, splits, events, ...workout }) => {
+    document.workouts = (input.workouts ?? []).map(({ id, startTime, startMinute, splits, events, ...workout }) => {
       const offset = utcOffsetSeconds(workout.startUtcOffset)
+      const heartRate = input.workoutHeartRate?.[id]
       return compactRecord({
         localStartTime: offsetTime(startTime, offset, timeZone),
         ...workout,
+        heartRate: heartRate?.length
+          ? { columns: ['elapsedSeconds', 'bpm'], rows: workoutHeartRateRows(heartRate, startTime, startMinute) }
+          : undefined,
         splits: splits?.map(({ startTime: splitStart, endTime: splitEnd, ...split }) => ({
           localStartTime: offsetTime(splitStart, offset, timeZone),
           localEndTime: offsetTime(splitEnd, offset, timeZone),
