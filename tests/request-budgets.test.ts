@@ -475,8 +475,8 @@ describe('health request budgets', () => {
     expect(bodies).toEqual([
       expect.objectContaining({
         range: { startTime, endTime },
-        windowSize: '60s',
-        pageSize: 60
+        windowSize: '5s',
+        pageSize: 720
       })
     ])
   })
@@ -580,7 +580,7 @@ describe('health request budgets', () => {
     expect(requests[0]).toContain('/heart-rate/dataPoints:rollUp')
   })
 
-  test('reuses cached full-day heart rate for a workout without another request', async () => {
+  test('reads 5-second workout heart rate even when the day\'s one-minute series is cached', async () => {
     const startTime = new Date(2026, 6, 1, 10).toISOString()
     const endTime = new Date(2026, 6, 1, 11).toISOString()
     const heartTime = new Date(2026, 6, 1, 10, 30).toISOString()
@@ -619,10 +619,11 @@ describe('health request budgets', () => {
     await expect(getWorkoutHeartRate('2026-07-01', id)).resolves.toEqual([
       { minute: 10 * 60 + 30, bpm: 120 }
     ])
-    expect(requests).toHaveLength(0)
+    expect(requests).toHaveLength(1)
+    expect(requests[0]).toContain('/heart-rate/dataPoints:rollUp')
   })
 
-  test('refreshes stale recent full-day heart rate before using it for a workout', async () => {
+  test('reuses a fresh workout heart-rate series without another request', async () => {
     const now = Date.now()
     const recent = new Date(now)
     recent.setDate(recent.getDate() - 1)
@@ -663,10 +664,9 @@ describe('health request budgets', () => {
     }) as typeof fetch
 
     await getWorkoutsRange(date, date)
-    await getIntraday(date, false, undefined, 'heart')
-    markFetched('intraday-heart-v5', [date], now - 31 * 60_000)
     requests = []
 
+    await getWorkoutHeartRate(date, id)
     await getWorkoutHeartRate(date, id)
 
     expect(requests).toHaveLength(1)
