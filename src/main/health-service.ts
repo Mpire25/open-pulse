@@ -1236,7 +1236,7 @@ export async function getWorkoutHeartRate(
     workout = peekDay(d)?.workouts?.find((candidate) => candidate.id === workoutId)
   }
   if (!workout) throw new Error('The selected workout is no longer available.')
-  return workoutHeartRateSeries(token, d, workout, generation, 0, signal)
+  return workoutHeartRateSeries(token, workout, generation, 0, signal)
 }
 
 /** The civil date a workout was recorded on, on its own clock. */
@@ -1259,7 +1259,7 @@ export async function getWorkoutHeartRateFor(
   const token = await requireGoogleAccessToken()
   assertCurrentAccount(generation)
   if (!Number.isFinite(Date.parse(workout.startTime))) return []
-  return workoutHeartRateSeries(token, workoutCivilDate(workout), workout, generation, priority, signal)
+  return workoutHeartRateSeries(token, workout, generation, priority, signal)
 }
 
 /**
@@ -1268,7 +1268,6 @@ export async function getWorkoutHeartRateFor(
  */
 async function workoutHeartRateSeries(
   token: string,
-  date: string,
   workout: Workout,
   generation: number,
   priority: Priority,
@@ -1294,20 +1293,37 @@ async function workoutHeartRateSeries(
   const inWorkoutWindow = (point: HeartRatePoint): boolean =>
     point.minute >= startMinute && point.minute <= endMinute
 
-  const cacheKey = `${date}:${workout.id}`
+  // Keyed and aged by the workout's own date, so every caller shares one entry.
+  const date = workoutCivilDate(workout)
+  const cacheKey = workout.id
   const cached = workoutHeartRateCache.get(cacheKey)
   if (cached && isHealthCacheTimestampFresh(date, cached.fetchedAt)) return cached.points
 
-  const rollups = await physicalRollUp(
-    token,
-    'heart-rate',
-    start.toISOString(),
-    end.toISOString(),
-    WORKOUT_HEART_RATE_WINDOW_SECONDS,
-    'google-wearables',
-    priority,
-    signal
-  )
+  let rollups: RollupPoint[]
+  try {
+    rollups = await physicalRollUp(
+      token,
+      'heart-rate',
+      start.toISOString(),
+      end.toISOString(),
+      WORKOUT_HEART_RATE_WINDOW_SECONDS,
+      'google-wearables',
+      priority,
+      signal
+    )
+  } catch (error) {
+    rethrowIfAborted(error)
+    // Offline or rate-limited: the day's cached one-minute series is coarser
+    // but still shows the workout. It is on the Mac's clock, so it only
+    // lines up when the workout was recorded on that clock.
+    const dayHeartRate = peekDay(date)?.heartRate
+    const offset = utcOffsetSeconds(workout.startUtcOffset)
+    if (dayHeartRate?.length && endMinute <= 1440 && offset === -start.getTimezoneOffset() * 60) {
+      console.warn(`[health] workout heart rate failed; using the cached day series:`, error)
+      return dayHeartRate.filter(inWorkoutWindow)
+    }
+    throw error
+  }
   assertCurrentAccount(generation)
   const points = heartRatePointsFromRollups(rollups, {
     physicalTime: start.toISOString(),

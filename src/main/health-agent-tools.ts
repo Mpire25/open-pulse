@@ -380,8 +380,11 @@ export async function runHealthAgentTool(
       const date = parseDate(args.date, 'date')
       const workoutId = typeof args.workoutId === 'string' ? args.workoutId : ''
       if (!workoutId) throw new Error('workoutId is required.')
-      const { workouts } = await getWorkoutsRange(date, date, false, signal, ASSISTANT_SYNC)
+      // Workouts are filed under the date where they were recorded, which can
+      // be a day off the date the model was shown after travel.
+      const { workouts, failed } = await getWorkoutsRange(shiftIsoDate(date, -1), shiftIsoDate(date, 1), false, signal, ASSISTANT_SYNC)
       const workout = workouts.find((candidate) => candidate.id === workoutId)
+      if (!workout && failed) throw new Error('Workouts could not be read from Google Health right now, so this workout could not be found.')
       if (!workout) throw new Error(`No workout with that id on ${date}. Check the id and date with query_workouts.`)
       return JSON.stringify(workoutHeartRatePayload(workout, await getWorkoutHeartRateFor(workout, signal)))
     }

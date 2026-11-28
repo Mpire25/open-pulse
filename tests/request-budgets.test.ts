@@ -514,6 +514,13 @@ describe('health request budgets', () => {
       columns: ['elapsedMin', 'avgBpm', 'maxBpm'],
       rows: [[0, 105, 110], [30, 170, 170]]
     })
+    // After travel the model can be shown a date a day off where the workout is filed.
+    const nextDay = JSON.parse(await runHealthAgentTool(
+      'query_workout_heart_rate',
+      { date: '2026-07-03', workoutId: id },
+      new AbortController().signal
+    ))
+    expect(nextDay).toMatchObject({ workoutId: id, sampleCount: 3 })
     await expect(runHealthAgentTool(
       'query_workout_heart_rate',
       { date: '2026-07-02', workoutId: 'missing' },
@@ -661,6 +668,40 @@ describe('health request budgets', () => {
     ])
     expect(requests).toHaveLength(1)
     expect(requests[0]).toContain('/heart-rate/dataPoints:rollUp')
+  })
+
+  test('falls back to the cached day series when the workout read fails', async () => {
+    const startTime = new Date(2026, 6, 5, 10).toISOString()
+    const endTime = new Date(2026, 6, 5, 11).toISOString()
+    const heartTime = new Date(2026, 6, 5, 10, 30).toISOString()
+    const id = 'users/me/dataTypes/exercise/dataPoints/offline-workout'
+    let failWorkoutRead = false
+    globalThis.fetch = (async (input, init) => {
+      requests.push(String(input))
+      if (String(input).includes('/exercise/dataPoints:reconcile')) {
+        return new Response(JSON.stringify({ dataPoints: [workoutPoint(id, startTime, endTime)] }), { status: 200 })
+      }
+      if (String(input).includes('/heart-rate/dataPoints:reconcile')) {
+        return new Response(JSON.stringify({
+          dataPoints: [{ heartRate: { sampleTime: { physicalTime: heartTime, utcOffset: `${-new Date(heartTime).getTimezoneOffset() * 60}s` } } }]
+        }), { status: 200 })
+      }
+      const body = JSON.parse(String(init?.body)) as { windowSize?: string }
+      if (failWorkoutRead && body.windowSize === '5s') {
+        return new Response(JSON.stringify({ error: { code: 400, message: 'bad' } }), { status: 400 })
+      }
+      return new Response(JSON.stringify({
+        rollupDataPoints: [{ startTime: heartTime, heartRate: { beatsPerMinuteAvg: 120 } }]
+      }), { status: 200 })
+    }) as typeof fetch
+
+    await getWorkoutsRange('2026-07-05', '2026-07-05')
+    await getIntraday('2026-07-05', false, undefined, 'heart')
+    failWorkoutRead = true
+
+    await expect(getWorkoutHeartRate('2026-07-05', id)).resolves.toEqual([
+      { minute: 10 * 60 + 30, bpm: 120 }
+    ])
   })
 
   test('reuses a fresh workout heart-rate series without another request', async () => {

@@ -1,7 +1,7 @@
 import { rename, rm, writeFile } from 'node:fs/promises'
 import type { HeartRatePoint, IntradayScope, Workout } from '../shared/types'
 import type { HealthExportOptions, HealthExportProgress } from '../shared/health-export'
-import { shiftIsoDate } from './health-api'
+import { HealthApiError, shiftIsoDate } from './health-api'
 import {
   getBodyMeasurements,
   getDevices,
@@ -89,6 +89,12 @@ async function readWorkoutHeartRate(
         series[workout.id] = await getWorkoutHeartRateFor(workout, signal, INTRADAY_PRIORITY)
       } catch (error) {
         if (signal.aborted) throw error
+        // Google refusing one workout's range isn't a reason to stop the rest.
+        if (error instanceof HealthApiError && [400, 404].includes(error.status)) {
+          console.warn('[export] workout heart rate rejected for one workout:', error)
+          onProgress({ phase: 'workoutHeartRate', done: ++done, total: workouts.length })
+          continue
+        }
         console.error('[export] workout heart rate failed:', error)
         failed = true
         return
