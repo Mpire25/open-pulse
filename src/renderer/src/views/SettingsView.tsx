@@ -720,6 +720,7 @@ const EXPORT_PHASE_LABELS: Record<HealthExportPhase, string> = {
   daily: 'Reading daily metrics…',
   sleep: 'Reading sleep…',
   workouts: 'Reading workouts…',
+  workoutHeartRate: 'Reading workout heart rate…',
   nutrition: 'Reading nutrition logs…',
   body: 'Reading body measurements…',
   intraday: 'Reading heart rate and steps…',
@@ -729,9 +730,10 @@ const EXPORT_PHASE_LABELS: Record<HealthExportPhase, string> = {
 function exportProgressText(progress: HealthExportProgress | null): string {
   if (!progress) return 'Preparing…'
   const label = EXPORT_PHASE_LABELS[progress.phase]
-  return progress.phase === 'intraday' && progress.total
-    ? `${label} ${progress.done ?? 0} of ${progress.total} days`
-    : label
+  if (!progress.total) return label
+  if (progress.phase === 'intraday') return `${label} ${progress.done ?? 0} of ${progress.total} days`
+  if (progress.phase === 'workoutHeartRate') return `${label} ${progress.done ?? 0} of ${progress.total}`
+  return label
 }
 
 const EXPORT_SELECTION_KEY = 'open-pulse-export-selection-v1'
@@ -1063,7 +1065,7 @@ function ExportCard({ connected, focusRequest }: { connected: boolean; focusRequ
             <label htmlFor="export-full-heart-rate" className="text-[13px] font-medium text-ink">Full-resolution heart rate</label>
             <p id="export-full-heart-rate-description" className="mt-1 text-[12px] leading-relaxed text-ink-dim">
               {fullHeartRateAvailable
-                ? 'Every heart rate sample, not just hourly averages. Useful for looking closely at a workout or a night.'
+                ? 'Minute-by-minute heart rate, not just hourly averages, plus 5-second heart rate through each exported workout.'
                 : `Available for ranges of ${EXPORT_FULL_HEART_RATE_MAX_DAYS} days or less.`}
             </p>
           </div>

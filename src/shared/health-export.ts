@@ -33,11 +33,19 @@ export interface HealthExportOptions {
   fullHeartRate: boolean
 }
 
-export type HealthExportPhase = 'daily' | 'sleep' | 'workouts' | 'nutrition' | 'body' | 'intraday' | 'writing'
+export type HealthExportPhase =
+  | 'daily'
+  | 'sleep'
+  | 'workouts'
+  | 'workoutHeartRate'
+  | 'nutrition'
+  | 'body'
+  | 'intraday'
+  | 'writing'
 
 export interface HealthExportProgress {
   phase: HealthExportPhase
-  /** Only set while reading intraday days, the slow part. */
+  /** Only set while reading intraday days or workout heart rate, the slow parts. */
   done?: number
   total?: number
 }
@@ -99,11 +107,15 @@ const SECTION_BYTES_PER_DAY: Record<HealthExportSection, number> = {
   hourly: 900
 }
 const FULL_HEART_RATE_BYTES_PER_DAY = 1_440 * 22
+// About one 45-minute workout every other day, at 5-second samples.
+const WORKOUT_HEART_RATE_BYTES_PER_DAY = 2_500
 
 export function estimateExportBytes(options: Pick<HealthExportOptions, 'metrics' | 'sections' | 'fullHeartRate'>, days: number): number {
   const daily = options.metrics.length ? DAILY_ROW_BYTES + options.metrics.length * DAILY_VALUE_BYTES : 0
   const sections = options.sections.reduce((sum, section) => sum + SECTION_BYTES_PER_DAY[section], 0)
-  const heart = options.fullHeartRate ? FULL_HEART_RATE_BYTES_PER_DAY : 0
+  const heart = options.fullHeartRate
+    ? FULL_HEART_RATE_BYTES_PER_DAY + (options.sections.includes('workouts') ? WORKOUT_HEART_RATE_BYTES_PER_DAY : 0)
+    : 0
   return HEADER_BYTES + days * (daily + sections + heart)
 }
 

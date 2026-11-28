@@ -475,10 +475,57 @@ describe('health request budgets', () => {
     expect(bodies).toEqual([
       expect.objectContaining({
         range: { startTime, endTime },
-        windowSize: '60s',
-        pageSize: 60
+        windowSize: '5s',
+        pageSize: 720
       })
     ])
+  })
+
+  test('gives the assistant a workout\'s heart-rate curve in buckets', async () => {
+    const startTime = new Date(2026, 6, 2, 10).toISOString()
+    const endTime = new Date(2026, 6, 2, 11).toISOString()
+    const id = 'users/me/dataTypes/exercise/dataPoints/assistant-workout'
+    const at = (seconds: number): string => new Date(Date.parse(startTime) + seconds * 1000).toISOString()
+    globalThis.fetch = (async (input) => {
+      requests.push(String(input))
+      if (String(input).includes('/exercise/dataPoints:reconcile')) {
+        return new Response(JSON.stringify({ dataPoints: [workoutPoint(id, startTime, endTime)] }), { status: 200 })
+      }
+      return new Response(JSON.stringify({
+        rollupDataPoints: [
+          { startTime: at(0), heartRate: { beatsPerMinuteAvg: 100 } },
+          { startTime: at(5), heartRate: { beatsPerMinuteAvg: 110 } },
+          { startTime: at(1800), heartRate: { beatsPerMinuteAvg: 170 } }
+        ]
+      }), { status: 200 })
+    }) as typeof fetch
+
+    const result = JSON.parse(await runHealthAgentTool(
+      'query_workout_heart_rate',
+      { date: '2026-07-02', workoutId: id },
+      new AbortController().signal
+    ))
+
+    expect(result).toMatchObject({
+      workoutId: id,
+      sampleCount: 3,
+      summary: { minBpm: 100, avgBpm: 127, maxBpm: 170 },
+      bucketSeconds: 30,
+      columns: ['elapsedMin', 'avgBpm', 'maxBpm'],
+      rows: [[0, 105, 110], [30, 170, 170]]
+    })
+    // After travel the model can be shown a date a day off where the workout is filed.
+    const nextDay = JSON.parse(await runHealthAgentTool(
+      'query_workout_heart_rate',
+      { date: '2026-07-03', workoutId: id },
+      new AbortController().signal
+    ))
+    expect(nextDay).toMatchObject({ workoutId: id, sampleCount: 3 })
+    await expect(runHealthAgentTool(
+      'query_workout_heart_rate',
+      { date: '2026-07-02', workoutId: 'missing' },
+      new AbortController().signal
+    )).rejects.toThrow('No workout with that id')
   })
 
   test('keeps a travelled workout on its civil date and clock', async () => {
@@ -580,7 +627,7 @@ describe('health request budgets', () => {
     expect(requests[0]).toContain('/heart-rate/dataPoints:rollUp')
   })
 
-  test('reuses cached full-day heart rate for a workout without another request', async () => {
+  test('reads 5-second workout heart rate even when the day\'s one-minute series is cached', async () => {
     const startTime = new Date(2026, 6, 1, 10).toISOString()
     const endTime = new Date(2026, 6, 1, 11).toISOString()
     const heartTime = new Date(2026, 6, 1, 10, 30).toISOString()
@@ -619,10 +666,45 @@ describe('health request budgets', () => {
     await expect(getWorkoutHeartRate('2026-07-01', id)).resolves.toEqual([
       { minute: 10 * 60 + 30, bpm: 120 }
     ])
-    expect(requests).toHaveLength(0)
+    expect(requests).toHaveLength(1)
+    expect(requests[0]).toContain('/heart-rate/dataPoints:rollUp')
   })
 
-  test('refreshes stale recent full-day heart rate before using it for a workout', async () => {
+  test('falls back to the cached day series when the workout read fails', async () => {
+    const startTime = new Date(2026, 6, 5, 10).toISOString()
+    const endTime = new Date(2026, 6, 5, 11).toISOString()
+    const heartTime = new Date(2026, 6, 5, 10, 30).toISOString()
+    const id = 'users/me/dataTypes/exercise/dataPoints/offline-workout'
+    let failWorkoutRead = false
+    globalThis.fetch = (async (input, init) => {
+      requests.push(String(input))
+      if (String(input).includes('/exercise/dataPoints:reconcile')) {
+        return new Response(JSON.stringify({ dataPoints: [workoutPoint(id, startTime, endTime)] }), { status: 200 })
+      }
+      if (String(input).includes('/heart-rate/dataPoints:reconcile')) {
+        return new Response(JSON.stringify({
+          dataPoints: [{ heartRate: { sampleTime: { physicalTime: heartTime, utcOffset: `${-new Date(heartTime).getTimezoneOffset() * 60}s` } } }]
+        }), { status: 200 })
+      }
+      const body = JSON.parse(String(init?.body)) as { windowSize?: string }
+      if (failWorkoutRead && body.windowSize === '5s') {
+        return new Response(JSON.stringify({ error: { code: 400, message: 'bad' } }), { status: 400 })
+      }
+      return new Response(JSON.stringify({
+        rollupDataPoints: [{ startTime: heartTime, heartRate: { beatsPerMinuteAvg: 120 } }]
+      }), { status: 200 })
+    }) as typeof fetch
+
+    await getWorkoutsRange('2026-07-05', '2026-07-05')
+    await getIntraday('2026-07-05', false, undefined, 'heart')
+    failWorkoutRead = true
+
+    await expect(getWorkoutHeartRate('2026-07-05', id)).resolves.toEqual([
+      { minute: 10 * 60 + 30, bpm: 120 }
+    ])
+  })
+
+  test('reuses a fresh workout heart-rate series without another request', async () => {
     const now = Date.now()
     const recent = new Date(now)
     recent.setDate(recent.getDate() - 1)
@@ -663,10 +745,9 @@ describe('health request budgets', () => {
     }) as typeof fetch
 
     await getWorkoutsRange(date, date)
-    await getIntraday(date, false, undefined, 'heart')
-    markFetched('intraday-heart-v5', [date], now - 31 * 60_000)
     requests = []
 
+    await getWorkoutHeartRate(date, id)
     await getWorkoutHeartRate(date, id)
 
     expect(requests).toHaveLength(1)

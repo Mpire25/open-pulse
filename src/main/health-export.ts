@@ -1,7 +1,7 @@
 import { rename, rm, writeFile } from 'node:fs/promises'
-import type { IntradayScope } from '../shared/types'
+import type { HeartRatePoint, IntradayScope, Workout } from '../shared/types'
 import type { HealthExportOptions, HealthExportProgress } from '../shared/health-export'
-import { shiftIsoDate } from './health-api'
+import { HealthApiError, shiftIsoDate } from './health-api'
 import {
   getBodyMeasurements,
   getDevices,
@@ -9,6 +9,7 @@ import {
   getNutritionLogRange,
   getSeries,
   getSleepRange,
+  getWorkoutHeartRateFor,
   getWorkoutsRange,
   type SyncOptions
 } from './health-service'
@@ -67,6 +68,45 @@ async function readIntraday(
   return { days, failedDates: failedDates.sort() }
 }
 
+/**
+ * Each workout's own heart-rate series. The first failure stops the rest, so a
+ * failing export stops asking Google; what was read is kept.
+ */
+async function readWorkoutHeartRate(
+  workouts: Workout[],
+  signal: AbortSignal,
+  onProgress: (progress: HealthExportProgress) => void
+): Promise<{ series: Record<string, HeartRatePoint[]>; unread: number }> {
+  const series: Record<string, HeartRatePoint[]> = {}
+  let next = 0
+  let done = 0
+  let failed = false
+  onProgress({ phase: 'workoutHeartRate', done, total: workouts.length })
+  const worker = async (): Promise<void> => {
+    while (next < workouts.length && !failed) {
+      const workout = workouts[next++]
+      try {
+        series[workout.id] = await getWorkoutHeartRateFor(workout, signal, INTRADAY_PRIORITY)
+      } catch (error) {
+        if (signal.aborted) throw error
+        // Google refusing one workout's range isn't a reason to stop the rest.
+        if (error instanceof HealthApiError && [400, 404].includes(error.status)) {
+          console.warn('[export] workout heart rate rejected for one workout:', error)
+          onProgress({ phase: 'workoutHeartRate', done: ++done, total: workouts.length })
+          continue
+        }
+        console.error('[export] workout heart rate failed:', error)
+        failed = true
+        return
+      }
+      onProgress({ phase: 'workoutHeartRate', done: ++done, total: workouts.length })
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(INTRADAY_CONCURRENCY, workouts.length) }, worker))
+  signal.throwIfAborted()
+  return { series, unread: workouts.length - Object.keys(series).length }
+}
+
 /** Reads the range (cache first, Google for anything stale) and writes one JSON file. */
 export async function exportHealthData(
   options: HealthExportOptions,
@@ -115,6 +155,9 @@ export async function exportHealthData(
   const body = has('bodyMeasurements')
     ? await optional('Body measurements', () => getBodyMeasurements(start, end, signal), null)
     : undefined
+  const workoutHeartRate = fullHeartRate && workouts?.workouts.length
+    ? await readWorkoutHeartRate(workouts.workouts, signal, onProgress)
+    : undefined
   const intraday = has('hourly') || fullHeartRate
     ? await readIntraday(start, end, has('hourly') ? 'both' : 'heart', signal, onProgress)
     : undefined
@@ -124,6 +167,10 @@ export async function exportHealthData(
   if (sleep?.failed) warnings.push(partly('Sleep sessions'))
   if (workouts?.failed) warnings.push(partly('Workouts'))
   if (body?.failed) warnings.push(partly('Body measurements'))
+  if (workoutHeartRate?.unread) {
+    const count = workoutHeartRate.unread
+    warnings.push(`Heart rate could not be read from Google Health for ${count} workout${count === 1 ? '' : 's'}, so ${count === 1 ? 'its' : 'their'} heartRate is missing rather than unrecorded.`)
+  }
   if (intraday?.failedDates.length) {
     const { failedDates } = intraday
     const listed = failedDates.length <= 10 ? failedDates.join(', ') : `${failedDates.slice(0, 10).join(', ')} and ${failedDates.length - 10} more`
@@ -144,6 +191,7 @@ export async function exportHealthData(
     daily: series?.days,
     sleep: sleep?.days,
     workouts: workouts?.workouts,
+    workoutHeartRate: workoutHeartRate?.series,
     nutrition,
     body,
     intraday: intraday?.days,

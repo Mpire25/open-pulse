@@ -2,6 +2,10 @@ import type { HeartRatePoint } from '../shared/types'
 import type { RollupPoint } from './health-api'
 
 export const HEART_RATE_ROLLUP_WINDOW_SECONDS = 60
+/** Workouts are short, so they get enough detail to show intervals and
+ * recoveries. Google stores heart rate at 1 s, but the tracker samples
+ * unevenly, so 1 s windows add noise and empty buckets rather than detail. */
+export const WORKOUT_HEART_RATE_WINDOW_SECONDS = 5
 
 interface HeartRateClockAnchor {
   physicalTime: string

@@ -91,6 +91,7 @@ import {
 import { parseHeartZones } from './heart-detail'
 import {
   HEART_RATE_ROLLUP_WINDOW_SECONDS,
+  WORKOUT_HEART_RATE_WINDOW_SECONDS,
   heartRatePointsFromRollups
 } from './heart-rate-rollup'
 import {
@@ -1235,7 +1236,43 @@ export async function getWorkoutHeartRate(
     workout = peekDay(d)?.workouts?.find((candidate) => candidate.id === workoutId)
   }
   if (!workout) throw new Error('The selected workout is no longer available.')
+  return workoutHeartRateSeries(token, workout, generation, 0, signal)
+}
 
+/** The civil date a workout was recorded on, on its own clock. */
+function workoutCivilDate(workout: Workout): string {
+  const start = Date.parse(workout.startTime)
+  const offset = utcOffsetSeconds(workout.startUtcOffset)
+  const shifted = offset == null
+    ? start - new Date(start).getTimezoneOffset() * 60_000
+    : start + offset * 1_000
+  return new Date(shifted).toISOString().slice(0, 10)
+}
+
+/** Workout heart rate for a workout already in hand, e.g. from getWorkoutsRange. */
+export async function getWorkoutHeartRateFor(
+  workout: Workout,
+  signal?: AbortSignal,
+  priority: Priority = 0
+): Promise<HeartRatePoint[]> {
+  const generation = healthAccountGeneration
+  const token = await requireGoogleAccessToken()
+  assertCurrentAccount(generation)
+  if (!Number.isFinite(Date.parse(workout.startTime))) return []
+  return workoutHeartRateSeries(token, workout, generation, priority, signal)
+}
+
+/**
+ * Heart rate across one workout at WORKOUT_HEART_RATE_WINDOW_SECONDS. The
+ * day's one-minute series is never reused: it is too coarse to show intervals.
+ */
+async function workoutHeartRateSeries(
+  token: string,
+  workout: Workout,
+  generation: number,
+  priority: Priority,
+  signal?: AbortSignal
+): Promise<HeartRatePoint[]> {
   const start = new Date(workout.startTime)
   const durationMinutes = workout.elapsedDurationMin ?? workout.durationMin
   const end = new Date(Math.min(
@@ -1256,36 +1293,37 @@ export async function getWorkoutHeartRate(
   const inWorkoutWindow = (point: HeartRatePoint): boolean =>
     point.minute >= startMinute && point.minute <= endMinute
 
-  const dayRecord = peekDay(d)
-  const dayHeartRateFetchedAt = fetchedAt(INTRADAY_HEART_GROUP, d)
-  const workoutOffsetSeconds = utcOffsetSeconds(workout.startUtcOffset)
-  const workoutUsesMachineTime =
-    workoutOffsetSeconds != null &&
-    workoutOffsetSeconds === -start.getTimezoneOffset() * 60
-  if (
-    endMinute <= 1440 &&
-    workoutUsesMachineTime &&
-    dayRecord?.heartRate !== undefined &&
-    dayHeartRateFetchedAt != null &&
-    isHealthCacheTimestampFresh(d, dayHeartRateFetchedAt)
-  ) {
-    return dayRecord.heartRate.filter(inWorkoutWindow)
-  }
-
-  const cacheKey = `${d}:${workoutId}`
+  // Keyed and aged by the workout's own date, so every caller shares one entry.
+  const date = workoutCivilDate(workout)
+  const cacheKey = workout.id
   const cached = workoutHeartRateCache.get(cacheKey)
-  if (cached && isHealthCacheTimestampFresh(d, cached.fetchedAt)) return cached.points
+  if (cached && isHealthCacheTimestampFresh(date, cached.fetchedAt)) return cached.points
 
-  const rollups = await physicalRollUp(
-    token,
-    'heart-rate',
-    start.toISOString(),
-    end.toISOString(),
-    HEART_RATE_ROLLUP_WINDOW_SECONDS,
-    'google-wearables',
-    0,
-    signal
-  )
+  let rollups: RollupPoint[]
+  try {
+    rollups = await physicalRollUp(
+      token,
+      'heart-rate',
+      start.toISOString(),
+      end.toISOString(),
+      WORKOUT_HEART_RATE_WINDOW_SECONDS,
+      'google-wearables',
+      priority,
+      signal
+    )
+  } catch (error) {
+    rethrowIfAborted(error)
+    // Offline or rate-limited: the day's cached one-minute series is coarser
+    // but still shows the workout. It is on the Mac's clock, so it only
+    // lines up when the workout was recorded on that clock.
+    const dayHeartRate = peekDay(date)?.heartRate
+    const offset = utcOffsetSeconds(workout.startUtcOffset)
+    if (dayHeartRate?.length && endMinute <= 1440 && offset === -start.getTimezoneOffset() * 60) {
+      console.warn(`[health] workout heart rate failed; using the cached day series:`, error)
+      return dayHeartRate.filter(inWorkoutWindow)
+    }
+    throw error
+  }
   assertCurrentAccount(generation)
   const points = heartRatePointsFromRollups(rollups, {
     physicalTime: start.toISOString(),
